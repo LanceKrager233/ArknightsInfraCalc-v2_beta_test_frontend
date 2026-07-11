@@ -42,6 +42,7 @@ import {
 import { copyText, downloadJson } from "./download";
 import { countOwned, readOperboxFile } from "./operbox";
 import { planToRows, RoomRow } from "./schedule";
+import { RotationSummary } from "./rotation-summary";
 import {
   BaseBlueprint,
   FeedbackApiResponse,
@@ -443,6 +444,7 @@ function WorkbenchApp() {
               </div>
               <ShiftTabs maaJson={result?.maaJson} active={activeShift} onChange={setActiveShift} />
             </div>
+            <RotationSummary rotation={scheduleResult?.rotationJson} active={activeShift} />
             <ScheduleBoard
               rows={rows}
               layout={layout}
