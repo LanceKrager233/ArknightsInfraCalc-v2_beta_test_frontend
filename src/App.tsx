@@ -44,6 +44,8 @@ import {
 import { copyText, downloadJson } from "./download";
 import { countOwned, readOperboxFile } from "./operbox";
 import { planToRows, RoomRow } from "./schedule";
+import { SklandImport } from "./skland-import";
+import { importSklandCultivation } from "./skland";
 import {
   BaseBlueprint,
   BlueprintRoom,
@@ -310,6 +312,29 @@ function WorkbenchApp() {
     }
   }
 
+  async function handleSklandImport(credentials: string) {
+    setInputError(null);
+    setResult(null);
+    clearIssueState();
+    try {
+      let catalog = operbox;
+      if (!catalog || catalog.length < 100) {
+        const sample = await getSampleOperbox();
+        if (!sample.success || !sample.operbox) {
+          throw new Error(sample.error ?? "无法载入干员目录。");
+        }
+        catalog = sample.operbox;
+      }
+      const imported = await importSklandCultivation(credentials, catalog);
+      setOperbox(imported.operbox);
+      setFileName(`森空岛 · ${imported.nickname} · ${imported.ownedCount} 名干员`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "森空岛练度读取失败。";
+      setInputError(message);
+      throw error;
+    }
+  }
+
   function handleDownloadMaa() {
     if (result?.maaJson) downloadJson("infra-calc-beta-maa.json", result.maaJson);
   }
@@ -449,6 +474,7 @@ function WorkbenchApp() {
         <aside className="min-w-0 space-y-4">
           <Panel title="输入" icon={<Database className="size-4" />}>
             <FileDrop fileName={fileName} onFile={handleFile} />
+            <SklandImport onImport={handleSklandImport} />
             <Button type="button" variant="outline" className="mt-2 w-full" onClick={handleLoadSample}>
               <FlaskConical />
               载入 243 全精二样例
