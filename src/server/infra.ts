@@ -14,6 +14,7 @@ import type {
   OperBoxEntry,
   PlanApiResponse,
 } from "@/types";
+import { parseTeamShiftV1 } from "./shift-schema";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -229,11 +230,11 @@ async function readShiftFiles(outputDir: string) {
     const shifts: unknown[] = [];
     const errors: string[] = [];
     for (const file of files) {
-      const parsed = await readJsonIfExists(file);
-      if (parsed) {
-        shifts.push(parsed);
-      } else {
-        errors.push(`无法读取 ${path.basename(file)}`);
+      try {
+        shifts.push(parseTeamShiftV1(await readFile(file, "utf-8")));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "无法解析";
+        errors.push(`${path.basename(file)}：${message}`);
       }
     }
 
