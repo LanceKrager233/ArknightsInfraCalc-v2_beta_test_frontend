@@ -64,6 +64,10 @@ const KNOWN_ISSUES = [
 ];
 
 type OperatorReplacement = Record<string, { name: string; portrait?: string }>;
+type OperatorReplacementUndo = {
+  key: string;
+  previous?: { name: string; portrait?: string };
+};
 
 function safeParseJson(value: string | null): unknown {
   if (!value) return null;
@@ -236,6 +240,7 @@ function WorkbenchApp() {
   const [feedbackResult, setFeedbackResult] = useState<FeedbackApiResponse | null>(initialSession?.feedback ?? null);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [operatorReplacements, setOperatorReplacements] = useState<OperatorReplacement>({});
+  const [, setOperatorReplacementUndoStack] = useState<OperatorReplacementUndo[]>([]);
 
   const scheduleResult = result?.success ? result : null;
   const activePlan = scheduleResult?.maaJson?.plans?.[activeShift];
@@ -694,11 +699,46 @@ function WorkbenchApp() {
   }
 
   function handleOperatorReplace(rowKey: string, slotIndex: number, operator: { name: string; portrait?: string }) {
-    setOperatorReplacements((current) => ({
-      ...current,
-      [`${rowKey}:${slotIndex}`]: operator,
-    }));
+    const replacementKey = `${rowKey}:${slotIndex}`;
+    setOperatorReplacements((current) => {
+      setOperatorReplacementUndoStack((stack) => [...stack, { key: replacementKey, previous: current[replacementKey] }].slice(-20));
+      return {
+        ...current,
+        [replacementKey]: operator,
+      };
+    });
   }
+
+  useEffect(() => {
+    function handleUndoShortcut(event: KeyboardEvent) {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "z" || event.shiftKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      const isTextInput =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target?.isContentEditable;
+      if (isTextInput) return;
+
+      setOperatorReplacementUndoStack((stack) => {
+        const last = stack.at(-1);
+        if (!last) return stack;
+        event.preventDefault();
+        setOperatorReplacements((current) => {
+          const next = { ...current };
+          if (last.previous) {
+            next[last.key] = last.previous;
+          } else {
+            delete next[last.key];
+          }
+          return next;
+        });
+        return stack.slice(0, -1);
+      });
+    }
+
+    window.addEventListener("keydown", handleUndoShortcut);
+    return () => window.removeEventListener("keydown", handleUndoShortcut);
+  }, []);
 
   const issueForPanel = useMemo(
     () => savedIssue ?? (issueDraftRow && issueOpen ? { row: issueDraftRow, note: issueDraftNote } : null),
