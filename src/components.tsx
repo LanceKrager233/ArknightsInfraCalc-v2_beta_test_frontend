@@ -737,9 +737,11 @@ function RoomProductControls({
 function OperatorSlot({
   slot,
   currentMorale,
+  missing = false,
 }: {
   slot: RoomRow["operatorSlots"][number] | undefined;
   currentMorale?: number;
+  missing?: boolean;
 }) {
   if (!slot) {
     return (
@@ -752,7 +754,10 @@ function OperatorSlot({
 
   return (
     <div
-      className="relative aspect-square h-[clamp(70px,7.3vw,88px)] min-w-0 shrink overflow-hidden border-2 border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)] max-sm:h-[clamp(32px,11vw,40px)] max-sm:border"
+      className={cn(
+        "relative aspect-square h-[clamp(70px,7.3vw,88px)] min-w-0 shrink overflow-hidden border-2 border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)] max-sm:h-[clamp(32px,11vw,40px)] max-sm:border",
+        missing && "border-amber-300 shadow-[0_0_0_2px_rgba(251,191,36,0.25),0_0_18px_rgba(251,191,36,0.28),inset_0_0_18px_rgba(255,255,255,0.16)]"
+      )}
       title={slot.label}
     >
       {slot.portrait ? (
@@ -763,6 +768,14 @@ function OperatorSlot({
         </div>
       )}
       <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/60" />
+      {missing ? (
+        <span
+          className="absolute right-1 top-1 rounded-sm bg-amber-300 px-1 py-0.5 text-[10px] font-semibold leading-none text-[#313131] shadow-[0_1px_3px_rgba(0,0,0,0.45)] max-sm:right-0.5 max-sm:top-0.5 max-sm:text-[8px]"
+          title={`${slot.name} 不在当前 Box 中`}
+        >
+          缺失
+        </span>
+      ) : null}
       {typeof currentMorale === "number" ? (
         <span
           className="absolute bottom-1 left-1 flex items-center gap-0.5 rounded-sm bg-black/72 px-1 py-0.5 text-[10px] font-semibold leading-none text-white shadow-[0_1px_3px_rgba(0,0,0,0.5)] [&_svg]:size-2.5 max-sm:bottom-0.5 max-sm:left-0.5 max-sm:px-0.5 max-sm:text-[8px] max-sm:[&_svg]:size-2"
@@ -781,6 +794,7 @@ function OperatorSlot({
 export function ScheduleBoard({
   rows,
   layout,
+  ownedOperatorNames,
   currentMoraleByOperator,
   onIssue,
   onFactoryRecipeChange,
@@ -788,6 +802,7 @@ export function ScheduleBoard({
 }: {
   rows: RoomRow[];
   layout: BaseBlueprint;
+  ownedOperatorNames?: ReadonlySet<string>;
   currentMoraleByOperator?: ReadonlyMap<string, number>;
   onIssue: (row: RoomRow) => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
@@ -810,9 +825,21 @@ export function ScheduleBoard({
     }
     return groups;
   }, []);
+  const missingOperatorNames = ownedOperatorNames
+    ? new Set(
+        rows
+          .flatMap((row) => row.operatorSlots.map((slot) => slot.name))
+          .filter((name) => !ownedOperatorNames.has(name))
+      )
+    : new Set<string>();
 
   return (
     <div className="flex flex-col gap-7">
+      {missingOperatorNames.size ? (
+        <div className="border-y border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          当前排班包含 Box 中未拥有的干员：{Array.from(missingOperatorNames).join("、")}
+        </div>
+      ) : null}
       {rowGroups.map((group) => {
         const visual = roomVisualFor(group.rows[0]?.group ?? "default");
         const groupStyle = {
@@ -882,6 +909,7 @@ export function ScheduleBoard({
                           <OperatorSlot
                             key={`${slot?.name ?? "empty"}-${index}`}
                             slot={slot}
+                            missing={Boolean(slot && missingOperatorNames.has(slot.name))}
                             currentMorale={slot ? currentMoraleByOperator?.get(slot.name) : undefined}
                           />
                         ))}

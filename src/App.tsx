@@ -237,6 +237,7 @@ function WorkbenchApp() {
   const activePlan = scheduleResult?.maaJson?.plans?.[activeShift];
   const activeRotationShift = scheduleResult?.rotationJson?.shifts?.[activeShift];
   const rows = useMemo(() => planToRows(activePlan, activeRotationShift, layout), [activePlan, activeRotationShift, layout]);
+  const ownedOperatorNames = useMemo(() => new Set((operbox ?? []).filter((operator) => operator.own).map((operator) => operator.name)), [operbox]);
   const currentMoraleByOperator = useMemo(() => {
     if (boxSource !== "skland" || !sklandSnapshot) return undefined;
 
@@ -736,6 +737,7 @@ function WorkbenchApp() {
             <ScheduleBoard
               rows={rows}
               layout={layout}
+              ownedOperatorNames={ownedOperatorNames}
               currentMoraleByOperator={currentMoraleByOperator}
               onIssue={handleMarkIssue}
               onFactoryRecipeChange={handleFactoryRecipeChange}
