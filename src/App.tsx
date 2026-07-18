@@ -62,18 +62,61 @@ const KNOWN_ISSUES = [
   "如遇到 CLI 运行失败，请先下载调试包并保留本次运行记录。",
 ];
 
-function FiammettaMoraleCard({ plan }: { plan: NonNullable<PlanApiResponse["maaJson"]>["plans"][number] | undefined }) {
+function FiammettaMoraleCard({
+  plan,
+  candidates,
+  onTargetChange,
+  onOrderChange,
+}: {
+  plan: NonNullable<PlanApiResponse["maaJson"]>["plans"][number] | undefined;
+  candidates: string[];
+  onTargetChange: (target: string) => void;
+  onOrderChange: (order: "pre" | "post") => void;
+}) {
   const target = plan?.Fiammetta?.enable ? plan.Fiammetta.target : null;
+  const order = plan?.Fiammetta?.order ?? "pre";
 
   return (
     <Panel title="菲亚梅塔" icon={<HeartPulse className="size-4" />}>
-      <div className="border border-[#A91D2A]/25 bg-[#A91D2A]/8 px-3 py-2">
+      <div className="grid gap-2 border border-[#A91D2A]/25 bg-[#A91D2A]/8 px-3 py-2">
         <span className="block text-[11px] font-medium uppercase tracking-normal text-muted-foreground">
           替换心情目标
         </span>
         <strong className="mt-1 block truncate text-base font-semibold leading-tight text-[#A91D2A]">
           {target ?? "本班未启用"}
         </strong>
+        <select
+          className="h-8 w-full border border-border bg-background px-2 text-xs text-foreground outline-none transition-colors focus:border-[#A91D2A]"
+          value={target ?? ""}
+          onChange={(event) => onTargetChange(event.target.value)}
+          disabled={!plan || candidates.length === 0}
+          aria-label="选择菲亚梅塔心情替换目标"
+        >
+          <option value="">本班未启用</option>
+          {candidates.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
+        <div className="grid grid-cols-2 gap-1">
+          <button
+            type="button"
+            className={`h-7 border px-2 text-xs transition-colors ${order === "pre" ? "border-[#A91D2A] bg-[#A91D2A] text-white" : "border-border bg-background text-foreground"}`}
+            onClick={() => onOrderChange("pre")}
+            disabled={!target}
+          >
+            换班前
+          </button>
+          <button
+            type="button"
+            className={`h-7 border px-2 text-xs transition-colors ${order === "post" ? "border-[#A91D2A] bg-[#A91D2A] text-white" : "border-border bg-background text-foreground"}`}
+            onClick={() => onOrderChange("post")}
+            disabled={!target}
+          >
+            换班后
+          </button>
+        </div>
       </div>
     </Panel>
   );
@@ -254,6 +297,10 @@ function WorkbenchApp() {
   const activePlan = scheduleResult?.maaJson?.plans?.[activeShift];
   const activeRotationShift = scheduleResult?.rotationJson?.shifts?.[activeShift];
   const rows = useMemo(() => planToRows(activePlan, activeRotationShift, layout), [activePlan, activeRotationShift, layout]);
+  const fiammettaCandidates = useMemo(
+    () => [...new Set(rows.flatMap((row) => row.operatorSlots.map((slot) => slot.name).filter(Boolean)))].sort((left, right) => left.localeCompare(right, "zh-Hans-CN")),
+    [rows]
+  );
   const currentMoraleByOperator = useMemo(() => {
     if (boxSource !== "skland" || !sklandSnapshot) return undefined;
 
@@ -513,6 +560,50 @@ function WorkbenchApp() {
     if (result?.maaJson) downloadJson("infra-calc-beta-maa.json", result.maaJson);
   }
 
+  function handleFiammettaTargetChange(target: string) {
+    setResult((current) => {
+      if (!current?.maaJson?.plans?.[activeShift]) return current;
+      const plans = current.maaJson.plans.map((plan, index) =>
+        index === activeShift
+          ? {
+              ...plan,
+              Fiammetta: target ? { enable: true, target, order: plan.Fiammetta?.order ?? "pre" } : { enable: false },
+            }
+          : plan
+      );
+      return {
+        ...current,
+        maaJson: {
+          ...current.maaJson,
+          plans,
+        },
+      };
+    });
+  }
+
+  function handleFiammettaOrderChange(order: "pre" | "post") {
+    setResult((current) => {
+      if (!current?.maaJson?.plans?.[activeShift]) return current;
+      const plans = current.maaJson.plans.map((plan, index) =>
+        index === activeShift
+          ? {
+              ...plan,
+              Fiammetta: plan.Fiammetta?.target
+                ? { enable: true, target: plan.Fiammetta.target, order }
+                : { enable: false },
+            }
+          : plan
+      );
+      return {
+        ...current,
+        maaJson: {
+          ...current.maaJson,
+          plans,
+        },
+      };
+    });
+  }
+
   function handleDownloadBundle() {
     if (result?.debugBundle) downloadJson("infra-calc-beta-debug-bundle.json", result.debugBundle);
   }
@@ -767,7 +858,14 @@ function WorkbenchApp() {
               <InfrastructureSnapshot snapshot={sklandSnapshot} layoutMatches={sklandLayoutMatches} onApplyLayout={handleApplySklandLayout} />
             </Panel>
           ) : null}
-          {scheduleResult?.maaJson ? <FiammettaMoraleCard plan={activePlan} /> : null}
+          {scheduleResult?.maaJson ? (
+            <FiammettaMoraleCard
+              plan={activePlan}
+              candidates={fiammettaCandidates}
+              onTargetChange={handleFiammettaTargetChange}
+              onOrderChange={handleFiammettaOrderChange}
+            />
+          ) : null}
           <Panel title="问题上下文" icon={<FileJson className="size-4" />}>
             <IssuePanel
               issue={issueForPanel}

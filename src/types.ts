@@ -87,7 +87,7 @@ export interface MaaPlan {
   name: string;
   description?: string;
   rooms: MaaRooms;
-  Fiammetta?: { enable: boolean; target?: string };
+  Fiammetta?: { enable: boolean; target?: string; order?: "pre" | "post" };
   drones?: { room: string; index: number; order: string };
 }
 
