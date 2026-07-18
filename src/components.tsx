@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   Check,
   CheckCircle2,
+  ChevronDown,
   CircleHelp,
   Download,
   FileWarning,
@@ -11,7 +12,7 @@ import {
   Smile,
   Upload,
 } from "lucide-react";
-import { CSSProperties, ChangeEvent, ReactNode } from "react";
+import { CSSProperties, ChangeEvent, ReactNode, useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -793,6 +794,8 @@ export function ScheduleBoard({
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
 }) {
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
   if (rows.length === 0) {
     return (
       <div className="flex min-h-[420px] items-center justify-center border-y border-dashed border-border/70 py-6 text-center text-sm text-muted-foreground">
@@ -818,14 +821,21 @@ export function ScheduleBoard({
         const groupStyle = {
           "--room-accent": visual.accent,
         } as CSSProperties;
+        const collapsed = collapsedGroups[group.label];
 
         return (
           <section key={group.label} className="min-w-0" aria-label={group.label} style={groupStyle}>
-            <div className="mb-2 flex items-center gap-2.5">
+            <button
+              type="button"
+              className="mb-2 flex items-center gap-2.5 text-left"
+              onClick={() => setCollapsedGroups((current) => ({ ...current, [group.label]: !current[group.label] }))}
+            >
               <span className="h-7 w-1.5 bg-[var(--room-accent)]" aria-hidden="true" />
               <h3 className="text-[21px] font-medium leading-none text-[#313131]">{group.label}</h3>
-            </div>
-            <div className="grid min-w-0 gap-3 pb-2">
+              <span className="text-xs text-[#313131]/52">{group.rows.length}</span>
+              <ChevronDown className={cn("size-4 text-[#313131]/45 transition-transform", collapsed && "-rotate-90")} />
+            </button>
+            <div className={cn("grid min-w-0 gap-3 pb-2", collapsed && "hidden")}>
               {group.rows.map((row) => {
                 const layoutRoom = layout.rooms.find((room) => room.id === row.roomId);
                 const rowVisual = roomVisualFor(row.group);
