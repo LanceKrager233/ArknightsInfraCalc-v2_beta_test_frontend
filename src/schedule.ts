@@ -25,6 +25,7 @@ export interface RoomOperatorSlot {
   label: string;
   skill?: number;
   portrait?: string;
+  previewReplacement?: boolean;
 }
 
 const GROUP_LABELS: Record<RoomGroup, string> = {

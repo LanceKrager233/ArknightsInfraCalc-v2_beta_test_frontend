@@ -767,6 +767,14 @@ function OperatorSlot({
         </div>
       )}
       <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/60" />
+      {slot.previewReplacement ? (
+        <span
+          className="absolute right-1 top-1 rounded-sm bg-[#FFD800] px-1 py-0.5 text-[10px] font-semibold leading-none text-[#313131] shadow-[0_1px_3px_rgba(0,0,0,0.45)] max-sm:right-0.5 max-sm:top-0.5 max-sm:text-[8px]"
+          title="手动试排替换"
+        >
+          试排
+        </span>
+      ) : null}
       {typeof currentMorale === "number" ? (
         <span
           className="absolute bottom-1 left-1 flex items-center gap-0.5 rounded-sm bg-black/72 px-1 py-0.5 text-[10px] font-semibold leading-none text-white shadow-[0_1px_3px_rgba(0,0,0,0.5)] [&_svg]:size-2.5 max-sm:bottom-0.5 max-sm:left-0.5 max-sm:px-0.5 max-sm:text-[8px] max-sm:[&_svg]:size-2"
