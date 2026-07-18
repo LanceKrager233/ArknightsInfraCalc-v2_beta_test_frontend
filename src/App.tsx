@@ -240,7 +240,7 @@ function WorkbenchApp() {
   const [feedbackResult, setFeedbackResult] = useState<FeedbackApiResponse | null>(initialSession?.feedback ?? null);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [operatorReplacements, setOperatorReplacements] = useState<OperatorReplacement>({});
-  const [, setOperatorReplacementUndoStack] = useState<OperatorReplacementUndo[]>([]);
+  const operatorReplacementUndoStack = useRef<OperatorReplacementUndo[]>([]);
 
   const scheduleResult = result?.success ? result : null;
   const activePlan = scheduleResult?.maaJson?.plans?.[activeShift];
@@ -701,7 +701,10 @@ function WorkbenchApp() {
   function handleOperatorReplace(rowKey: string, slotIndex: number, operator: { name: string; portrait?: string }) {
     const replacementKey = `${rowKey}:${slotIndex}`;
     setOperatorReplacements((current) => {
-      setOperatorReplacementUndoStack((stack) => [...stack, { key: replacementKey, previous: current[replacementKey] }].slice(-20));
+      operatorReplacementUndoStack.current = [
+        ...operatorReplacementUndoStack.current,
+        { key: replacementKey, previous: current[replacementKey] },
+      ].slice(-20);
       return {
         ...current,
         [replacementKey]: operator,
@@ -719,20 +722,18 @@ function WorkbenchApp() {
         target?.isContentEditable;
       if (isTextInput) return;
 
-      setOperatorReplacementUndoStack((stack) => {
-        const last = stack.at(-1);
-        if (!last) return stack;
-        event.preventDefault();
-        setOperatorReplacements((current) => {
-          const next = { ...current };
-          if (last.previous) {
-            next[last.key] = last.previous;
-          } else {
-            delete next[last.key];
-          }
-          return next;
-        });
-        return stack.slice(0, -1);
+      const last = operatorReplacementUndoStack.current.at(-1);
+      if (!last) return;
+      event.preventDefault();
+      operatorReplacementUndoStack.current = operatorReplacementUndoStack.current.slice(0, -1);
+      setOperatorReplacements((current) => {
+        const next = { ...current };
+        if (last.previous) {
+          next[last.key] = last.previous;
+        } else {
+          delete next[last.key];
+        }
+        return next;
       });
     }
 
