@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Database, FileJson, HeartPulse, Settings2, ShieldCheck, Terminal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
 import {
@@ -39,6 +41,7 @@ import {
 import { copyText, downloadJson } from "./download";
 import { ONBOARDING_STORAGE_KEY, initialSetupStep, shouldAutoOpenSetup, type SetupStep } from "./onboarding";
 import { readOperboxFile, readOperboxText } from "./operbox";
+import { operatorPortraitFor } from "./operatorPortraits";
 import { planToRows, RoomRow } from "./schedule";
 import { SetupDialog } from "./setup-dialog";
 import { closestShift, compareShifts } from "./skland";
@@ -69,12 +72,18 @@ function FiammettaMoraleCard({
   onOrderChange,
 }: {
   plan: NonNullable<PlanApiResponse["maaJson"]>["plans"][number] | undefined;
-  candidates: string[];
+  candidates: { name: string; portrait?: string }[];
   onTargetChange: (target: string) => void;
   onOrderChange: (order: "pre" | "post") => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const target = plan?.Fiammetta?.enable ? plan.Fiammetta.target : null;
   const order = plan?.Fiammetta?.order ?? "pre";
+  const selected = candidates.find((candidate) => candidate.name === target);
+  const filteredCandidates = candidates
+    .filter((candidate) => candidate.name.includes(query.trim()))
+    .slice(0, 80);
 
   return (
     <Panel title="菲亚梅塔" icon={<HeartPulse className="size-4" />}>
@@ -82,23 +91,23 @@ function FiammettaMoraleCard({
         <span className="block text-[11px] font-medium uppercase tracking-normal text-muted-foreground">
           替换心情目标
         </span>
-        <strong className="mt-1 block truncate text-base font-semibold leading-tight text-[#A91D2A]">
-          {target ?? "本班未启用"}
-        </strong>
-        <select
-          className="h-8 w-full border border-border bg-background px-2 text-xs text-foreground outline-none transition-colors focus:border-[#A91D2A]"
-          value={target ?? ""}
-          onChange={(event) => onTargetChange(event.target.value)}
-          disabled={!plan || candidates.length === 0}
-          aria-label="选择菲亚梅塔心情替换目标"
-        >
-          <option value="">本班未启用</option>
-          {candidates.map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2 border border-[#A91D2A]/20 bg-background/80 p-1.5">
+          <div className="size-10 shrink-0 overflow-hidden bg-[#313131]">
+            {selected?.portrait ? (
+              <img src={selected.portrait} alt={selected.name} className="h-full w-full object-cover" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold text-white/70">
+                菲
+              </div>
+            )}
+          </div>
+          <strong className="min-w-0 flex-1 truncate text-sm font-semibold leading-tight text-[#A91D2A]">
+            {target ?? "本班未启用"}
+          </strong>
+          <Button type="button" variant="outline" size="sm" disabled={!plan || candidates.length === 0} onClick={() => setOpen(true)}>
+            选择干员
+          </Button>
+        </div>
         <div className="grid grid-cols-2 gap-1">
           <button
             type="button"
@@ -118,6 +127,59 @@ function FiammettaMoraleCard({
           </button>
         </div>
       </div>
+      <Dialog
+        open={open}
+        onOpenChange={(nextOpen) => {
+          setOpen(nextOpen);
+          if (!nextOpen) setQuery("");
+        }}
+      >
+        <DialogContent className="max-w-[min(720px,calc(100vw-2rem))]">
+          <DialogHeader>
+            <DialogDescription>写入当前班次的 MAA Fiammetta.target。</DialogDescription>
+            <DialogTitle>选择菲亚梅塔心情目标</DialogTitle>
+          </DialogHeader>
+          <Input
+            autoFocus
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="搜索干员"
+            className="h-10"
+          />
+          <div className="grid max-h-[420px] grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-2 overflow-y-auto pr-1">
+            <button
+              type="button"
+              className="min-w-0 border border-border bg-background p-2 text-left transition-[border-color,background-color] hover:border-primary hover:bg-muted/60"
+              onClick={() => {
+                onTargetChange("");
+                setOpen(false);
+                setQuery("");
+              }}
+            >
+              <div className="flex h-10 items-center gap-2">
+                <span className="min-w-0 truncate text-sm font-medium">不使用菲亚梅塔</span>
+              </div>
+            </button>
+            {filteredCandidates.map((operator) => (
+              <button
+                key={operator.name}
+                type="button"
+                className="min-w-0 border border-border bg-background p-2 text-left transition-[border-color,background-color] hover:border-primary hover:bg-muted/60"
+                onClick={() => {
+                  onTargetChange(operator.name);
+                  setOpen(false);
+                  setQuery("");
+                }}
+              >
+                <div className="flex items-center gap-2">
+                  {operator.portrait ? <img src={operator.portrait} alt="" className="size-10 shrink-0 object-cover" /> : null}
+                  <span className="min-w-0 truncate text-sm font-medium">{operator.name}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </Panel>
   );
 }
@@ -298,8 +360,15 @@ function WorkbenchApp() {
   const activeRotationShift = scheduleResult?.rotationJson?.shifts?.[activeShift];
   const rows = useMemo(() => planToRows(activePlan, activeRotationShift, layout), [activePlan, activeRotationShift, layout]);
   const fiammettaCandidates = useMemo(
-    () => [...new Set(rows.flatMap((row) => row.operatorSlots.map((slot) => slot.name).filter(Boolean)))].sort((left, right) => left.localeCompare(right, "zh-Hans-CN")),
-    [rows]
+    () =>
+      (operbox ?? [])
+        .filter((operator) => operator.own)
+        .map((operator) => ({
+          name: operator.name,
+          portrait: operatorPortraitFor(operator.name),
+        }))
+        .sort((left, right) => left.name.localeCompare(right.name, "zh-Hans-CN")),
+    [operbox]
   );
   const currentMoraleByOperator = useMemo(() => {
     if (boxSource !== "skland" || !sklandSnapshot) return undefined;
