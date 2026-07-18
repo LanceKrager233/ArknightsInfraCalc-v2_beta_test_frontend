@@ -3,6 +3,7 @@ import {
   Check,
   CheckCircle2,
   CircleHelp,
+  Clipboard,
   Download,
   FileWarning,
   Loader2,
@@ -11,7 +12,7 @@ import {
   Smile,
   Upload,
 } from "lucide-react";
-import { CSSProperties, ChangeEvent, ReactNode } from "react";
+import { CSSProperties, ChangeEvent, ReactNode, useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -675,6 +676,19 @@ function RoomEfficiencyReadout({ value }: { value: RoomEfficiencyPresentation })
   );
 }
 
+function roomSummaryText(row: RoomRow, efficiency: RoomEfficiencyPresentation | null) {
+  const operators = row.operators.length ? row.operators.join(" / ") : "空置";
+  const parts = [`${row.title}：${operators}`];
+  if (row.product) parts.push(row.product);
+  if (efficiency) {
+    parts.push(`${efficiency.primaryLabel} ${efficiency.primaryValue}`);
+    if (efficiency.details.length) {
+      parts.push(efficiency.details.map((detail) => `${detail.label} ${detail.value}`).join("，"));
+    }
+  }
+  return parts.join("，");
+}
+
 function RoomProductControls({
   row,
   layoutRoom,
@@ -793,6 +807,8 @@ export function ScheduleBoard({
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
 }) {
+  const [copiedRoomKey, setCopiedRoomKey] = useState<string | null>(null);
+
   if (rows.length === 0) {
     return (
       <div className="flex min-h-[420px] items-center justify-center border-y border-dashed border-border/70 py-6 text-center text-sm text-muted-foreground">
@@ -810,6 +826,12 @@ export function ScheduleBoard({
     }
     return groups;
   }, []);
+
+  async function copyRoomSummary(row: RoomRow, efficiency: RoomEfficiencyPresentation | null) {
+    await navigator.clipboard.writeText(roomSummaryText(row, efficiency));
+    setCopiedRoomKey(row.key);
+    window.setTimeout(() => setCopiedRoomKey((current) => (current === row.key ? null : current)), 1600);
+  }
 
   return (
     <div className="flex flex-col gap-7">
@@ -887,6 +909,24 @@ export function ScheduleBoard({
                         ))}
                       </div>
                     </div>
+
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            className="absolute right-12 top-2 border border-white/10 bg-[#3C3C3C]/55 text-white/70 hover:bg-[#4B4B4B] hover:text-white"
+                            aria-label={`${row.title} 复制摘要`}
+                            onClick={() => void copyRoomSummary(row, efficiency)}
+                          >
+                            {copiedRoomKey === row.key ? <Check /> : <Clipboard />}
+                          </Button>
+                        }
+                      />
+                      <TooltipContent side="left">{copiedRoomKey === row.key ? "已复制" : "复制摘要"}</TooltipContent>
+                    </Tooltip>
 
                     <Tooltip>
                       <TooltipTrigger
