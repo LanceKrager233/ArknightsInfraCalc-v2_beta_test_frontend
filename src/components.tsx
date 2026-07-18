@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   ChevronDown,
   CircleHelp,
+  Clipboard,
   Download,
   FileWarning,
   Loader2,
@@ -701,7 +702,7 @@ function RoomEfficiencyDetails({ value }: { value: RoomEfficiencyPresentation | 
   return (
     <div
       className="ml-6 grid min-w-[160px] max-w-[240px] gap-1 text-sm leading-tight text-white/62 max-sm:hidden"
-      title={value.details.map((detail) => `${detail.label} ${detail.value}`).join(" · ")}
+      title={value.details.map((detail) => `${detail.label} ${detail.value}`).join(" / ")}
     >
       {value.details.map((detail) => (
         <span
@@ -716,6 +717,20 @@ function RoomEfficiencyDetails({ value }: { value: RoomEfficiencyPresentation | 
       ))}
     </div>
   );
+}
+
+function roomSummaryText(row: RoomRow, efficiency: RoomEfficiencyPresentation | null) {
+  const operators = row.operators.length ? row.operators.join(" / ") : "空置";
+  const parts = [`${row.title}：${operators}`];
+  if (row.product) parts.push(row.product);
+  if (efficiency) {
+    parts.push(`${efficiency.primaryLabel} ${efficiency.primaryValue}`);
+    if (efficiency.details.length) {
+      parts.push(efficiency.details.map((detail) => `${detail.label} ${detail.value}`).join("，"));
+    }
+  }
+  return parts.join("，");
+}
 }
 
 function RoomProductControls({
@@ -838,6 +853,7 @@ export function ScheduleBoard({
 }) {
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [hiddenGroups, setHiddenGroups] = useState<Record<string, boolean>>({});
+  const [copiedRoomKey, setCopiedRoomKey] = useState<string | null>(null);
 
   if (rows.length === 0) {
     return (
@@ -898,6 +914,12 @@ export function ScheduleBoard({
       });
       return next;
     });
+  }
+
+  async function copyRoomSummary(row: RoomRow, efficiency: RoomEfficiencyPresentation | null) {
+    await navigator.clipboard.writeText(roomSummaryText(row, efficiency));
+    setCopiedRoomKey(row.key);
+    window.setTimeout(() => setCopiedRoomKey((current) => (current === row.key ? null : current)), 1600);
   }
 
   return (
@@ -1020,6 +1042,24 @@ export function ScheduleBoard({
                       </div>
                       <RoomEfficiencyDetails value={efficiency} />
                     </div>
+
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            className="absolute right-12 top-2 border border-white/10 bg-[#3C3C3C]/55 text-white/70 hover:bg-[#4B4B4B] hover:text-white"
+                            aria-label={`${row.title} 复制摘要`}
+                            onClick={() => void copyRoomSummary(row, efficiency)}
+                          >
+                            {copiedRoomKey === row.key ? <Check /> : <Clipboard />}
+                          </Button>
+                        }
+                      />
+                      <TooltipContent side="left">{copiedRoomKey === row.key ? "已复制" : "复制摘要"}</TooltipContent>
+                    </Tooltip>
 
                     <Tooltip>
                       <TooltipTrigger
