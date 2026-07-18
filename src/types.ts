@@ -430,6 +430,21 @@ export interface FeedbackApiResponse {
   error?: string;
 }
 
+export interface AssignmentEvalApiResponse {
+  success: boolean;
+  startedAt?: string;
+  durationMs?: number;
+  tradeEfficiency?: number;
+  manufactureEfficiency?: number;
+  durinInBase?: boolean;
+  stdout?: string;
+  stderr?: string;
+  runId?: string;
+  runPath?: string;
+  relativeRunPath?: string;
+  error?: string;
+}
+
 export interface PlanApiResponse {
   success: boolean;
   startedAt?: string;

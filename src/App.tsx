@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
 import {
+  evaluateAssignment,
   getHealth,
   getSampleOperbox,
   getSklandSession,
@@ -46,6 +47,7 @@ import { closestShift, compareShifts } from "./skland";
 import { InfrastructureSnapshot, ShiftComparisonCard, SklandAccount } from "./skland-components";
 import {
   BaseBlueprint,
+  AssignmentEvalApiResponse,
   BoxSource,
   BlueprintRoom,
   FeedbackApiResponse,
@@ -68,6 +70,10 @@ type OperatorReplacementUndo = {
   key: string;
   previous?: { name: string; portrait?: string };
 };
+
+function compactNumber(value: number, digits = 2): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(digits).replace(/\.?0+$/, "");
+}
 
 function safeParseJson(value: string | null): unknown {
   if (!value) return null;
@@ -240,6 +246,8 @@ function WorkbenchApp() {
   const [feedbackResult, setFeedbackResult] = useState<FeedbackApiResponse | null>(initialSession?.feedback ?? null);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [operatorReplacements, setOperatorReplacements] = useState<OperatorReplacement>({});
+  const [assignmentEval, setAssignmentEval] = useState<AssignmentEvalApiResponse | null>(null);
+  const [assignmentEvalLoading, setAssignmentEvalLoading] = useState(false);
   const operatorReplacementUndoStack = useRef<OperatorReplacementUndo[]>([]);
 
   const scheduleResult = result?.success ? result : null;
@@ -702,6 +710,7 @@ function WorkbenchApp() {
 
   function handleOperatorReplace(rowKey: string, slotIndex: number, operator: { name: string; portrait?: string }) {
     const replacementKey = `${rowKey}:${slotIndex}`;
+    setAssignmentEval(null);
     setOperatorReplacements((current) => {
       operatorReplacementUndoStack.current = [
         ...operatorReplacementUndoStack.current,
@@ -717,6 +726,44 @@ function WorkbenchApp() {
   function handleClearOperatorReplacements() {
     operatorReplacementUndoStack.current = [];
     setOperatorReplacements({});
+    setAssignmentEval(null);
+  }
+
+  async function handleEvaluateOperatorReplacements() {
+    if (!operbox || !scheduleResult?.maaJson || !hasOperatorReplacements) return;
+    const assignment = {
+      rooms: displayRows
+        .map((row) => ({
+          room_id: row.roomId,
+          operators: row.operatorSlots
+            .filter((slot): slot is NonNullable<typeof slot> => Boolean(slot?.name))
+            .map((slot) => ({ name: slot.name })),
+        }))
+        .filter((room) => room.operators.length > 0),
+    };
+
+    setAssignmentEvalLoading(true);
+    setAssignmentEval(null);
+    setInputError(null);
+    setApiError(null);
+    try {
+      const response = await evaluateAssignment({
+        layout,
+        operbox,
+        sourceName: fileName,
+        assignment,
+      });
+      setAssignmentEval(response);
+      if (!response.success) {
+        setApiError(response.error ?? "临时试排计算失败。");
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "临时试排计算失败。";
+      setAssignmentEval({ success: false, error: message });
+      setApiError(message);
+    } finally {
+      setAssignmentEvalLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -806,9 +853,26 @@ function WorkbenchApp() {
                 <Button type="button" variant="outline" size="sm" disabled={!hasOperatorReplacements} onClick={handleClearOperatorReplacements}>
                   清除试排
                 </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!hasOperatorReplacements || assignmentEvalLoading || !scheduleResult?.maaJson}
+                  onClick={() => void handleEvaluateOperatorReplacements()}
+                >
+                  {assignmentEvalLoading ? "计算中..." : "临时计算"}
+                </Button>
                 <ShiftTabs maaJson={result?.maaJson} active={activeShift} closest={closestComparison?.planIndex} onChange={setActiveShift} />
               </div>
             </div>
+            {assignmentEval?.success ? (
+              <div className="mb-3 border border-primary/25 bg-primary/8 px-3 py-2 text-sm text-foreground">
+                临时试排总效率：
+                贸易 {assignmentEval.tradeEfficiency === undefined ? "-" : compactNumber(assignmentEval.tradeEfficiency)}
+                {" / "}
+                制造 {assignmentEval.manufactureEfficiency === undefined ? "-" : compactNumber(assignmentEval.manufactureEfficiency)}
+              </div>
+            ) : null}
             {!operbox ? (
               <div className="mb-5 flex flex-wrap items-center justify-between gap-4 border-y border-dashed border-border/70 py-6">
                 <div>
