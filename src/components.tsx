@@ -737,9 +737,11 @@ function RoomProductControls({
 function OperatorSlot({
   slot,
   currentMorale,
+  highlighted = false,
 }: {
   slot: RoomRow["operatorSlots"][number] | undefined;
   currentMorale?: number;
+  highlighted?: boolean;
 }) {
   if (!slot) {
     return (
@@ -752,7 +754,10 @@ function OperatorSlot({
 
   return (
     <div
-      className="relative aspect-square h-[clamp(70px,7.3vw,88px)] min-w-0 shrink overflow-hidden border-2 border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)] max-sm:h-[clamp(32px,11vw,40px)] max-sm:border"
+      className={cn(
+        "relative aspect-square h-[clamp(70px,7.3vw,88px)] min-w-0 shrink overflow-hidden border-2 border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)] max-sm:h-[clamp(32px,11vw,40px)] max-sm:border",
+        highlighted && "border-[#FFD800] shadow-[0_0_0_2px_rgba(255,216,0,0.35),0_0_18px_rgba(255,216,0,0.35),inset_0_0_18px_rgba(255,255,255,0.16)]"
+      )}
       title={slot.label}
     >
       {slot.portrait ? (
@@ -781,6 +786,7 @@ function OperatorSlot({
 export function ScheduleBoard({
   rows,
   layout,
+  operatorSearch = "",
   currentMoraleByOperator,
   onIssue,
   onFactoryRecipeChange,
@@ -788,6 +794,7 @@ export function ScheduleBoard({
 }: {
   rows: RoomRow[];
   layout: BaseBlueprint;
+  operatorSearch?: string;
   currentMoraleByOperator?: ReadonlyMap<string, number>;
   onIssue: (row: RoomRow) => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
@@ -801,6 +808,14 @@ export function ScheduleBoard({
     );
   }
 
+  const normalizedSearch = operatorSearch.trim().toLocaleLowerCase();
+  const hasOperatorSearch = normalizedSearch.length > 0;
+  const searchMatchCount = hasOperatorSearch
+    ? rows.reduce(
+        (count, row) => count + row.operatorSlots.filter((slot) => slot.name.toLocaleLowerCase().includes(normalizedSearch)).length,
+        0
+      )
+    : 0;
   const rowGroups = rows.reduce<{ label: string; rows: RoomRow[] }[]>((groups, row) => {
     const group = groups.find((item) => item.label === row.groupLabel);
     if (group) {
@@ -813,6 +828,11 @@ export function ScheduleBoard({
 
   return (
     <div className="flex flex-col gap-7">
+      {hasOperatorSearch && searchMatchCount === 0 ? (
+        <div className="border-y border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          没有在当前班次找到“{operatorSearch.trim()}”。
+        </div>
+      ) : null}
       {rowGroups.map((group) => {
         const visual = roomVisualFor(group.rows[0]?.group ?? "default");
         const groupStyle = {
@@ -882,6 +902,7 @@ export function ScheduleBoard({
                           <OperatorSlot
                             key={`${slot?.name ?? "empty"}-${index}`}
                             slot={slot}
+                            highlighted={Boolean(slot && hasOperatorSearch && slot.name.toLocaleLowerCase().includes(normalizedSearch))}
                             currentMorale={slot ? currentMoraleByOperator?.get(slot.name) : undefined}
                           />
                         ))}

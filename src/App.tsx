@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Database, FileJson, Settings2, ShieldCheck, Terminal } from "lucide-react";
+import { Database, FileJson, Search, Settings2, ShieldCheck, Terminal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
 import {
@@ -232,6 +233,7 @@ function WorkbenchApp() {
   const [feedbackSaving, setFeedbackSaving] = useState(false);
   const [feedbackResult, setFeedbackResult] = useState<FeedbackApiResponse | null>(initialSession?.feedback ?? null);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [operatorSearch, setOperatorSearch] = useState("");
 
   const scheduleResult = result?.success ? result : null;
   const activePlan = scheduleResult?.maaJson?.plans?.[activeShift];
@@ -733,9 +735,24 @@ function WorkbenchApp() {
               activeShift={activeShift}
             />
             <ShiftComparisonCard comparison={closestComparison} />
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-y border-border/70 py-3">
+              <div className="relative w-full max-w-sm">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={operatorSearch}
+                  onChange={(event) => setOperatorSearch(event.target.value)}
+                  placeholder="搜索当前排班干员"
+                  className="h-9 pl-9"
+                />
+              </div>
+              {operatorSearch.trim() ? (
+                <span className="text-xs text-muted-foreground">匹配的头像会用黄色描边标出</span>
+              ) : null}
+            </div>
             <ScheduleBoard
               rows={rows}
               layout={layout}
+              operatorSearch={operatorSearch}
               currentMoraleByOperator={currentMoraleByOperator}
               onIssue={handleMarkIssue}
               onFactoryRecipeChange={handleFactoryRecipeChange}
