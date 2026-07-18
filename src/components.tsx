@@ -737,9 +737,11 @@ function RoomProductControls({
 function OperatorSlot({
   slot,
   currentMorale,
+  conflict = false,
 }: {
   slot: RoomRow["operatorSlots"][number] | undefined;
   currentMorale?: number;
+  conflict?: boolean;
 }) {
   if (!slot) {
     return (
@@ -752,7 +754,10 @@ function OperatorSlot({
 
   return (
     <div
-      className="relative aspect-square h-[clamp(70px,7.3vw,88px)] min-w-0 shrink overflow-hidden border-2 border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)] max-sm:h-[clamp(32px,11vw,40px)] max-sm:border"
+      className={cn(
+        "relative aspect-square h-[clamp(70px,7.3vw,88px)] min-w-0 shrink overflow-hidden border-2 border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)] max-sm:h-[clamp(32px,11vw,40px)] max-sm:border",
+        conflict && "border-destructive shadow-[0_0_0_2px_rgba(239,68,68,0.28),0_0_18px_rgba(239,68,68,0.35),inset_0_0_18px_rgba(255,255,255,0.16)]"
+      )}
       title={slot.label}
     >
       {slot.portrait ? (
@@ -763,6 +768,14 @@ function OperatorSlot({
         </div>
       )}
       <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/60" />
+      {conflict ? (
+        <span
+          className="absolute right-1 top-1 rounded-sm bg-destructive px-1 py-0.5 text-[10px] font-semibold leading-none text-destructive-foreground shadow-[0_1px_3px_rgba(0,0,0,0.45)] max-sm:right-0.5 max-sm:top-0.5 max-sm:text-[8px]"
+          title={`${slot.name} 在当前班次重复出现`}
+        >
+          冲突
+        </span>
+      ) : null}
       {typeof currentMorale === "number" ? (
         <span
           className="absolute bottom-1 left-1 flex items-center gap-0.5 rounded-sm bg-black/72 px-1 py-0.5 text-[10px] font-semibold leading-none text-white shadow-[0_1px_3px_rgba(0,0,0,0.5)] [&_svg]:size-2.5 max-sm:bottom-0.5 max-sm:left-0.5 max-sm:px-0.5 max-sm:text-[8px] max-sm:[&_svg]:size-2"
@@ -810,9 +823,25 @@ export function ScheduleBoard({
     }
     return groups;
   }, []);
+  const operatorCounts = rows.reduce<Map<string, number>>((counts, row) => {
+    for (const slot of row.operatorSlots) {
+      counts.set(slot.name, (counts.get(slot.name) ?? 0) + 1);
+    }
+    return counts;
+  }, new Map<string, number>());
+  const conflictNames = new Set(
+    Array.from(operatorCounts.entries())
+      .filter(([, count]) => count > 1)
+      .map(([name]) => name)
+  );
 
   return (
     <div className="flex flex-col gap-7">
+      {conflictNames.size ? (
+        <div className="border-y border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          当前班次有重复干员：{Array.from(conflictNames).join("、")}
+        </div>
+      ) : null}
       {rowGroups.map((group) => {
         const visual = roomVisualFor(group.rows[0]?.group ?? "default");
         const groupStyle = {
@@ -841,7 +870,8 @@ export function ScheduleBoard({
                     key={row.key}
                     className={cn(
                       "relative flex h-[144px] w-full overflow-hidden bg-[#313131] text-white shadow-[0_10px_20px_rgba(0,0,0,0.24)]",
-                      row.suspicious && "ring-2 ring-destructive ring-offset-2"
+                      row.suspicious && "ring-2 ring-destructive ring-offset-2",
+                      row.operatorSlots.some((slot) => conflictNames.has(slot.name)) && "ring-2 ring-destructive/80 ring-offset-2"
                     )}
                     style={rowStyle}
                   >
@@ -882,6 +912,7 @@ export function ScheduleBoard({
                           <OperatorSlot
                             key={`${slot?.name ?? "empty"}-${index}`}
                             slot={slot}
+                            conflict={Boolean(slot && conflictNames.has(slot.name))}
                             currentMorale={slot ? currentMoraleByOperator?.get(slot.name) : undefined}
                           />
                         ))}
