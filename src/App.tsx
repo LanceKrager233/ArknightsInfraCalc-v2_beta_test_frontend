@@ -674,8 +674,16 @@ function WorkbenchApp() {
     <main className="min-h-screen bg-background px-4 py-4 text-foreground sm:px-5">
       <header className="mx-auto mb-4 max-w-[1760px] border-b pb-4">
         <h1 className="sr-only">明日方舟基建排班验收工作台</h1>
-        <div className="grid w-full grid-cols-[minmax(240px,1fr)_auto_auto_auto] items-center gap-2 max-sm:grid-cols-3">
+        <div className="grid w-full grid-cols-[minmax(240px,1fr)_auto_auto_auto_auto] items-center gap-2 max-sm:grid-cols-2">
           <StatusBar loading={loading} result={result} error={inputError ?? apiError} cliPath={cliPath} />
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 min-w-0 px-3 max-sm:w-full"
+            onClick={() => void handleLoadSample()}
+          >
+            全精二案例
+          </Button>
           <Button
             type="button"
             variant="outline"
