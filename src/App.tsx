@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Database, FileJson, Settings2, ShieldCheck, Terminal } from "lucide-react";
+import { Database, FileJson, HeartPulse, Settings2, ShieldCheck, Terminal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -61,6 +61,23 @@ const KNOWN_ISSUES = [
   "Beta 测试阶段仍可能出现排班策略和预期不一致的情况；请用“标记问题”提交上下文。",
   "如遇到 CLI 运行失败，请先下载调试包并保留本次运行记录。",
 ];
+
+function FiammettaMoraleCard({ plan }: { plan: NonNullable<PlanApiResponse["maaJson"]>["plans"][number] | undefined }) {
+  const target = plan?.Fiammetta?.enable ? plan.Fiammetta.target : null;
+
+  return (
+    <Panel title="菲亚梅塔" icon={<HeartPulse className="size-4" />}>
+      <div className="border border-[#A91D2A]/25 bg-[#A91D2A]/8 px-3 py-2">
+        <span className="block text-[11px] font-medium uppercase tracking-normal text-muted-foreground">
+          替换心情目标
+        </span>
+        <strong className="mt-1 block truncate text-base font-semibold leading-tight text-[#A91D2A]">
+          {target ?? "本班未启用"}
+        </strong>
+      </div>
+    </Panel>
+  );
+}
 
 function safeParseJson(value: string | null): unknown {
   if (!value) return null;
@@ -750,6 +767,7 @@ function WorkbenchApp() {
               <InfrastructureSnapshot snapshot={sklandSnapshot} layoutMatches={sklandLayoutMatches} onApplyLayout={handleApplySklandLayout} />
             </Panel>
           ) : null}
+          {scheduleResult?.maaJson ? <FiammettaMoraleCard plan={activePlan} /> : null}
           <Panel title="问题上下文" icon={<FileJson className="size-4" />}>
             <IssuePanel
               issue={issueForPanel}
