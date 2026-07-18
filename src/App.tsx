@@ -212,6 +212,7 @@ function WorkbenchApp() {
   const initialBoxSource = useRef(boxSource);
   const initialOperbox = useRef(operbox);
   const initialLayoutDirty = useRef(layoutDirty);
+  const scrollPositions = useRef<Record<number, number>>({});
   const [inputError, setInputError] = useState<string | null>(null);
   const [result, setResult] = useState<PlanApiResponse | null>(initialSession?.result ?? null);
   const [loading, setLoading] = useState(false);
@@ -661,6 +662,12 @@ function WorkbenchApp() {
     if (sklandSnapshot) applySklandSnapshot(sklandSnapshot, false);
   }
 
+  function handleShiftChange(nextShift: number) {
+    if (typeof window !== "undefined") scrollPositions.current[activeShift] = window.scrollY;
+    setActiveShift(nextShift);
+    window.setTimeout(() => window.scrollTo({ top: scrollPositions.current[nextShift] ?? 0, behavior: "auto" }), 0);
+  }
+
   const issueForPanel = useMemo(
     () => savedIssue ?? (issueDraftRow && issueOpen ? { row: issueDraftRow, note: issueDraftNote } : null),
     [issueDraftNote, issueDraftRow, issueOpen, savedIssue]
@@ -715,7 +722,7 @@ function WorkbenchApp() {
                   {activePlan?.description ?? "配置 Box 与基建布局后，即可生成三班排班。"}
                 </span>
               </div>
-              <ShiftTabs maaJson={result?.maaJson} active={activeShift} closest={closestComparison?.planIndex} onChange={setActiveShift} />
+              <ShiftTabs maaJson={result?.maaJson} active={activeShift} closest={closestComparison?.planIndex} onChange={handleShiftChange} />
             </div>
             {!operbox ? (
               <div className="mb-5 flex flex-wrap items-center justify-between gap-4 border-y border-dashed border-border/70 py-6">
