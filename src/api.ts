@@ -6,6 +6,7 @@ import {
   IssueReport,
   OperBoxEntry,
   PlanApiResponse,
+  RoomEfficiencyApiResponse,
   SklandQrStartResponse,
   SklandQrStatusResponse,
   SklandSessionResponse,
@@ -98,6 +99,28 @@ export async function saveFeedback(payload: {
     body: JSON.stringify(payload),
   });
   const body = (await response.json().catch(() => ({}))) as FeedbackApiResponse;
+
+  if (!response.ok && !body.error) {
+    return {
+      success: false,
+      error: `HTTP ${response.status}: ${response.statusText}`,
+    };
+  }
+  return body;
+}
+
+export async function calculateRoomEfficiency(payload: {
+  roomId: string;
+  roomTitle: string;
+  operators: string[];
+  product?: string;
+}): Promise<RoomEfficiencyApiResponse> {
+  const response = await fetch("/api/room-efficiency", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = (await response.json().catch(() => ({}))) as RoomEfficiencyApiResponse;
 
   if (!response.ok && !body.error) {
     return {
