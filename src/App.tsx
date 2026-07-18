@@ -246,6 +246,7 @@ function WorkbenchApp() {
   const activePlan = scheduleResult?.maaJson?.plans?.[activeShift];
   const activeRotationShift = scheduleResult?.rotationJson?.shifts?.[activeShift];
   const rows = useMemo(() => planToRows(activePlan, activeRotationShift, layout), [activePlan, activeRotationShift, layout]);
+  const hasOperatorReplacements = Object.keys(operatorReplacements).length > 0;
   const displayRows = useMemo(
     () =>
       rows.map((row) => ({
@@ -802,11 +803,9 @@ function WorkbenchApp() {
                 </span>
               </div>
               <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 max-sm:w-full max-sm:justify-start">
-                {Object.keys(operatorReplacements).length ? (
-                  <Button type="button" variant="outline" size="sm" onClick={handleClearOperatorReplacements}>
-                    清除试排
-                  </Button>
-                ) : null}
+                <Button type="button" variant="outline" size="sm" disabled={!hasOperatorReplacements} onClick={handleClearOperatorReplacements}>
+                  清除试排
+                </Button>
                 <ShiftTabs maaJson={result?.maaJson} active={activeShift} closest={closestComparison?.planIndex} onChange={setActiveShift} />
               </div>
             </div>
