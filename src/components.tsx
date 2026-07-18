@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  Calculator,
   Check,
   CheckCircle2,
   CircleHelp,
@@ -797,6 +798,7 @@ export function ScheduleBoard({
   layout,
   currentMoraleByOperator,
   onIssue,
+  onCalculateRoomEfficiency,
   onFactoryRecipeChange,
   onTradeOrderChange,
 }: {
@@ -804,6 +806,7 @@ export function ScheduleBoard({
   layout: BaseBlueprint;
   currentMoraleByOperator?: ReadonlyMap<string, number>;
   onIssue: (row: RoomRow) => void;
+  onCalculateRoomEfficiency: (row: RoomRow) => void | Promise<void>;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
 }) {
@@ -917,7 +920,7 @@ export function ScheduleBoard({
                             type="button"
                             variant="ghost"
                             size="icon-sm"
-                            className="absolute right-12 top-2 border border-white/10 bg-[#3C3C3C]/55 text-white/70 hover:bg-[#4B4B4B] hover:text-white"
+                            className="absolute right-[5.5rem] top-2 border border-white/10 bg-[#3C3C3C]/55 text-white/70 hover:bg-[#4B4B4B] hover:text-white"
                             aria-label={`${row.title} 复制摘要`}
                             onClick={() => void copyRoomSummary(row, efficiency)}
                           >
@@ -926,6 +929,24 @@ export function ScheduleBoard({
                         }
                       />
                       <TooltipContent side="left">{copiedRoomKey === row.key ? "已复制" : "复制摘要"}</TooltipContent>
+                    </Tooltip>
+
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            className="absolute right-12 top-2 border border-white/10 bg-[#3C3C3C]/55 text-white/70 hover:bg-[#4B4B4B] hover:text-white"
+                            aria-label={`${row.title} 临时计算效率`}
+                            onClick={() => void onCalculateRoomEfficiency(row)}
+                          >
+                            <Calculator />
+                          </Button>
+                        }
+                      />
+                      <TooltipContent side="left">临时计算效率</TooltipContent>
                     </Tooltip>
 
                     <Tooltip>

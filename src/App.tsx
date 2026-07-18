@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
 import {
+  calculateRoomEfficiency,
   getHealth,
   getSampleOperbox,
   getSklandSession,
@@ -232,6 +233,7 @@ function WorkbenchApp() {
   const [feedbackSaving, setFeedbackSaving] = useState(false);
   const [feedbackResult, setFeedbackResult] = useState<FeedbackApiResponse | null>(initialSession?.feedback ?? null);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [roomEfficiencyNotice, setRoomEfficiencyNotice] = useState<string | null>(null);
 
   const scheduleResult = result?.success ? result : null;
   const activePlan = scheduleResult?.maaJson?.plans?.[activeShift];
@@ -522,6 +524,17 @@ function WorkbenchApp() {
     setIssueOpen(true);
   }
 
+  async function handleCalculateRoomEfficiency(row: RoomRow) {
+    setRoomEfficiencyNotice(null);
+    const response = await calculateRoomEfficiency({
+      roomId: row.roomId,
+      roomTitle: row.title,
+      operators: row.operators,
+      product: row.product,
+    });
+    setRoomEfficiencyNotice(response.success ? `${row.title} 效率已更新。` : response.error ?? "当前房间效率计算失败。");
+  }
+
   async function handleSaveIssue() {
     if (!issueDraftRow || !issueDraftNote.trim()) return;
     if (!operbox || operbox.length === 0) {
@@ -733,11 +746,17 @@ function WorkbenchApp() {
               activeShift={activeShift}
             />
             <ShiftComparisonCard comparison={closestComparison} />
+            {roomEfficiencyNotice ? (
+              <div className="mb-3 border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                {roomEfficiencyNotice}
+              </div>
+            ) : null}
             <ScheduleBoard
               rows={rows}
               layout={layout}
               currentMoraleByOperator={currentMoraleByOperator}
               onIssue={handleMarkIssue}
+              onCalculateRoomEfficiency={handleCalculateRoomEfficiency}
               onFactoryRecipeChange={handleFactoryRecipeChange}
               onTradeOrderChange={handleTradeOrderChange}
             />

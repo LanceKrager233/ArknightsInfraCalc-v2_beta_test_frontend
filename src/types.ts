@@ -430,6 +430,13 @@ export interface FeedbackApiResponse {
   error?: string;
 }
 
+export interface RoomEfficiencyApiResponse {
+  success: boolean;
+  roomId?: string;
+  efficiency?: RoomEfficiency;
+  error?: string;
+}
+
 export interface PlanApiResponse {
   success: boolean;
   startedAt?: string;
