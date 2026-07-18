@@ -6,7 +6,6 @@ import path from "node:path";
 
 import type {
   BaseBlueprint,
-  AssignmentEvalApiResponse,
   CliCandidate,
   DebugBundle,
   FeedbackApiResponse,
@@ -43,15 +42,6 @@ type PlanRequestBody = {
   layout: BaseBlueprint;
   operbox: OperBoxEntry[];
   sourceName?: string | null;
-};
-
-type AssignmentEvalRequestBody = PlanRequestBody & {
-  assignment: {
-    rooms: {
-      room_id: string;
-      operators: { name: string }[];
-    }[];
-  };
 };
 
 type FeedbackRequestBody = {
@@ -205,13 +195,6 @@ function assertPlanBody(body: unknown): asserts body is PlanRequestBody {
   if (!Array.isArray(body.operbox) || body.operbox.length === 0) {
     throw new Error("请求缺少非空 operbox 数组。");
   }
-}
-
-function assertAssignmentEvalBody(body: unknown): asserts body is AssignmentEvalRequestBody {
-  if (!isObject(body) || !isObject(body.assignment) || !Array.isArray(body.assignment.rooms)) {
-    throw new Error("请求缺少 assignment.rooms 数组。");
-  }
-  assertPlanBody(body);
 }
 
 function assertFeedbackBody(body: unknown): asserts body is FeedbackRequestBody {
@@ -983,95 +966,6 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
       await writeJson(resultPath, errorPayload);
     }
     return errorPayload;
-  }
-}
-
-export async function evaluateAssignment(body: unknown): Promise<AssignmentEvalApiResponse> {
-  let runDir = "";
-  const startedAt = new Date().toISOString();
-  const start = performance.now();
-
-  try {
-    assertAssignmentEvalBody(body);
-
-    const cliPath = resolveCliPath();
-    const runId = randomUUID();
-    runDir = path.join(cliRunRoot, makeStampedDirName(startedAt, `${body.sourceName ?? "assignment"}-eval`, runId));
-    await mkdir(runDir, { recursive: true });
-
-    const layoutPath = path.join(runDir, "layout.json");
-    const operboxPath = path.join(runDir, "operbox.json");
-    const assignmentPath = path.join(runDir, "assignment.json");
-    await writeJson(layoutPath, body.layout);
-    await writeJson(operboxPath, body.operbox);
-    await writeJson(assignmentPath, body.assignment);
-
-    const dataDir = resolveRuntimeDataDir(cliPath);
-    const env = { ...process.env };
-    if (dataDir) {
-      env.ARKNIGHTS_INFRA_DATA_DIR = dataDir;
-    }
-
-    const result = await new Promise<{ stdout: string; stderr: string; code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
-      const child = spawn(
-        cliPath,
-        ["layout", "eval", "--layout", layoutPath, "--operbox", operboxPath, "--assignment", assignmentPath],
-        { cwd: path.dirname(cliPath), env, windowsHide: true, shell: false }
-      );
-      let stdout = "";
-      let stderr = "";
-      const timer = setTimeout(() => {
-        child.kill();
-        reject(new Error(`infra-cli layout eval 请求超时（${timeoutMs}ms）。`));
-      }, timeoutMs);
-
-      child.stdout.on("data", (chunk) => {
-        stdout += chunk.toString();
-      });
-      child.stderr.on("data", (chunk) => {
-        stderr += chunk.toString();
-      });
-      child.on("error", (error) => {
-        clearTimeout(timer);
-        reject(error);
-      });
-      child.on("close", (code, signal) => {
-        clearTimeout(timer);
-        resolve({ stdout, stderr, code, signal });
-      });
-    });
-
-    const parsed = JSON.parse(result.stdout || "{}") as {
-      trade_efficiency?: number;
-      manufacture_efficiency?: number;
-      durin_in_base?: boolean;
-    };
-    const success = result.code === 0;
-    const payload: AssignmentEvalApiResponse = {
-      success,
-      startedAt,
-      durationMs: Math.round(performance.now() - start),
-      tradeEfficiency: parsed.trade_efficiency,
-      manufactureEfficiency: parsed.manufacture_efficiency,
-      durinInBase: parsed.durin_in_base,
-      stdout: result.stdout,
-      stderr: result.stderr,
-      runId,
-      runPath: runDir,
-      relativeRunPath: path.relative(repoRoot, runDir),
-      error: success ? undefined : result.stderr || `infra-cli layout eval failed with code ${result.code ?? "null"}`,
-    };
-    await writeJson(path.join(runDir, "result.json"), payload);
-    return payload;
-  } catch (error) {
-    return {
-      success: false,
-      startedAt,
-      durationMs: Math.round(performance.now() - start),
-      runPath: runDir || undefined,
-      relativeRunPath: runDir ? path.relative(repoRoot, runDir) : undefined,
-      error: error instanceof Error ? error.message : String(error),
-    };
   }
 }
 

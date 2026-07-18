@@ -1,6 +1,5 @@
 import {
   BaseBlueprint,
-  AssignmentEvalApiResponse,
   DebugBundle,
   FeedbackApiResponse,
   HealthApiResponse,
@@ -23,33 +22,6 @@ export async function runPlan(payload: {
     body: JSON.stringify(payload),
   });
   const body = (await response.json().catch(() => ({}))) as PlanApiResponse;
-
-  if (!response.ok && !body.error) {
-    return {
-      success: false,
-      error: `HTTP ${response.status}: ${response.statusText}`,
-    };
-  }
-  return body;
-}
-
-export async function evaluateAssignment(payload: {
-  layout: BaseBlueprint;
-  operbox: OperBoxEntry[];
-  sourceName: string | null;
-  assignment: {
-    rooms: {
-      room_id: string;
-      operators: { name: string }[];
-    }[];
-  };
-}): Promise<AssignmentEvalApiResponse> {
-  const response = await fetch("/api/assignment-eval", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const body = (await response.json().catch(() => ({}))) as AssignmentEvalApiResponse;
 
   if (!response.ok && !body.error) {
     return {
