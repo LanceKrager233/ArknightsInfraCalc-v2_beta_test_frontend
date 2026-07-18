@@ -11,7 +11,7 @@ import {
   Smile,
   Upload,
 } from "lucide-react";
-import { CSSProperties, ChangeEvent, ReactNode } from "react";
+import { CSSProperties, ChangeEvent, ReactNode, useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -737,9 +737,11 @@ function RoomProductControls({
 function OperatorSlot({
   slot,
   currentMorale,
+  onClick,
 }: {
   slot: RoomRow["operatorSlots"][number] | undefined;
   currentMorale?: number;
+  onClick?: () => void;
 }) {
   if (!slot) {
     return (
@@ -751,9 +753,11 @@ function OperatorSlot({
   }
 
   return (
-    <div
-      className="relative aspect-square h-[clamp(70px,7.3vw,88px)] min-w-0 shrink overflow-hidden border-2 border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)] max-sm:h-[clamp(32px,11vw,40px)] max-sm:border"
+    <button
+      type="button"
+      className="relative aspect-square h-[clamp(70px,7.3vw,88px)] min-w-0 shrink overflow-hidden border-2 border-[#7F7F7F] bg-[#3C3C3C] text-left shadow-[inset_0_0_18px_rgba(255,255,255,0.16)] transition-[border-color,box-shadow,scale] hover:border-[var(--room-accent)] hover:shadow-[0_0_0_1px_var(--room-accent),inset_0_0_18px_rgba(255,255,255,0.16)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--room-accent)] max-sm:h-[clamp(32px,11vw,40px)] max-sm:border"
       title={slot.label}
+      onClick={onClick}
     >
       {slot.portrait ? (
         <img src={slot.portrait} alt={slot.name} className="absolute inset-0 h-full w-full object-cover outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10" />
@@ -774,7 +778,7 @@ function OperatorSlot({
           <span>{currentMorale}</span>
         </span>
       ) : null}
-    </div>
+    </button>
   );
 }
 
@@ -782,17 +786,27 @@ export function ScheduleBoard({
   rows,
   layout,
   currentMoraleByOperator,
+  operatorOptions,
   onIssue,
+  onOperatorReplace,
   onFactoryRecipeChange,
   onTradeOrderChange,
 }: {
   rows: RoomRow[];
   layout: BaseBlueprint;
   currentMoraleByOperator?: ReadonlyMap<string, number>;
+  operatorOptions: { name: string; portrait?: string }[];
   onIssue: (row: RoomRow) => void;
+  onOperatorReplace: (rowKey: string, slotIndex: number, operator: { name: string; portrait?: string }) => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
 }) {
+  const [replacementTarget, setReplacementTarget] = useState<{ row: RoomRow; slotIndex: number } | null>(null);
+  const [replacementQuery, setReplacementQuery] = useState("");
+  const replacementCandidates = operatorOptions
+    .filter((operator) => operator.name.includes(replacementQuery.trim()))
+    .slice(0, 80);
+
   if (rows.length === 0) {
     return (
       <div className="flex min-h-[420px] items-center justify-center border-y border-dashed border-border/70 py-6 text-center text-sm text-muted-foreground">
@@ -812,6 +826,7 @@ export function ScheduleBoard({
   }, []);
 
   return (
+    <>
     <div className="flex flex-col gap-7">
       {rowGroups.map((group) => {
         const visual = roomVisualFor(group.rows[0]?.group ?? "default");
@@ -840,7 +855,7 @@ export function ScheduleBoard({
                   <div
                     key={row.key}
                     className={cn(
-                      "relative flex h-[144px] w-full overflow-hidden bg-[#313131] text-white shadow-[0_10px_20px_rgba(0,0,0,0.24)]",
+                      "relative flex h-[144px] w-full overflow-hidden bg-[#313131] text-white shadow-[0_10px_20px_rgba(0,0,0,0.24)] transition-[box-shadow,filter] hover:shadow-[0_14px_28px_rgba(0,0,0,0.3),inset_0_0_0_1px_var(--room-accent)]",
                       row.suspicious && "ring-2 ring-destructive ring-offset-2"
                     )}
                     style={rowStyle}
@@ -883,6 +898,7 @@ export function ScheduleBoard({
                             key={`${slot?.name ?? "empty"}-${index}`}
                             slot={slot}
                             currentMorale={slot ? currentMoraleByOperator?.get(slot.name) : undefined}
+                            onClick={slot ? () => setReplacementTarget({ row, slotIndex: index }) : undefined}
                           />
                         ))}
                       </div>
@@ -913,6 +929,51 @@ export function ScheduleBoard({
         );
       })}
     </div>
+    <Dialog
+      open={Boolean(replacementTarget)}
+      onOpenChange={(open) => {
+        if (!open) {
+          setReplacementTarget(null);
+          setReplacementQuery("");
+        }
+      }}
+    >
+      <DialogContent className="max-w-[min(720px,calc(100vw-2rem))]">
+        <DialogHeader>
+          <DialogDescription>仅替换当前页面展示，不会写回求解结果。</DialogDescription>
+          <DialogTitle>
+            替换 {replacementTarget?.row.title ?? "房间"} · 槽位 {(replacementTarget?.slotIndex ?? 0) + 1}
+          </DialogTitle>
+        </DialogHeader>
+        <Input
+          autoFocus
+          value={replacementQuery}
+          onChange={(event) => setReplacementQuery(event.target.value)}
+          placeholder="搜索干员"
+          className="h-10"
+        />
+        <div className="grid max-h-[420px] grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-2 overflow-y-auto pr-1">
+          {replacementCandidates.map((operator) => (
+            <button
+              key={operator.name}
+              type="button"
+              className="min-w-0 border border-border bg-background p-2 text-left transition-[border-color,background-color] hover:border-primary hover:bg-muted/60"
+              onClick={() => {
+                if (replacementTarget) onOperatorReplace(replacementTarget.row.key, replacementTarget.slotIndex, operator);
+                setReplacementTarget(null);
+                setReplacementQuery("");
+              }}
+            >
+              <div className="flex items-center gap-2">
+                {operator.portrait ? <img src={operator.portrait} alt="" className="size-10 shrink-0 object-cover" /> : null}
+                <span className="min-w-0 truncate text-sm font-medium">{operator.name}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
 

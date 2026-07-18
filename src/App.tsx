@@ -39,6 +39,7 @@ import {
 import { copyText, downloadJson } from "./download";
 import { ONBOARDING_STORAGE_KEY, initialSetupStep, shouldAutoOpenSetup, type SetupStep } from "./onboarding";
 import { readOperboxFile, readOperboxText } from "./operbox";
+import { operatorPortraitFor } from "./operatorPortraits";
 import { planToRows, RoomRow } from "./schedule";
 import { SetupDialog } from "./setup-dialog";
 import { closestShift, compareShifts } from "./skland";
@@ -61,6 +62,8 @@ const KNOWN_ISSUES = [
   "Beta 测试阶段仍可能出现排班策略和预期不一致的情况；请用“标记问题”提交上下文。",
   "如遇到 CLI 运行失败，请先下载调试包并保留本次运行记录。",
 ];
+
+type OperatorReplacement = Record<string, { name: string; portrait?: string }>;
 
 function safeParseJson(value: string | null): unknown {
   if (!value) return null;
@@ -232,11 +235,40 @@ function WorkbenchApp() {
   const [feedbackSaving, setFeedbackSaving] = useState(false);
   const [feedbackResult, setFeedbackResult] = useState<FeedbackApiResponse | null>(initialSession?.feedback ?? null);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [operatorReplacements, setOperatorReplacements] = useState<OperatorReplacement>({});
 
   const scheduleResult = result?.success ? result : null;
   const activePlan = scheduleResult?.maaJson?.plans?.[activeShift];
   const activeRotationShift = scheduleResult?.rotationJson?.shifts?.[activeShift];
   const rows = useMemo(() => planToRows(activePlan, activeRotationShift, layout), [activePlan, activeRotationShift, layout]);
+  const displayRows = useMemo(
+    () =>
+      rows.map((row) => ({
+        ...row,
+        operatorSlots: row.operatorSlots.map((slot, index) => {
+          const replacement = operatorReplacements[`${row.key}:${index}`];
+          if (!replacement) return slot;
+          return {
+            name: replacement.name,
+            label: `${replacement.name} · 试排替换`,
+            portrait: replacement.portrait,
+          };
+        }),
+        operators: row.operatorSlots.map((slot, index) => operatorReplacements[`${row.key}:${index}`]?.name ?? slot.name),
+      })),
+    [operatorReplacements, rows]
+  );
+  const operatorOptions = useMemo(
+    () =>
+      (operbox ?? [])
+        .filter((operator) => operator.own)
+        .map((operator) => ({
+          name: operator.name,
+          portrait: operatorPortraitFor(operator.name),
+        }))
+        .sort((left, right) => left.name.localeCompare(right.name, "zh-Hans-CN")),
+    [operbox]
+  );
   const currentMoraleByOperator = useMemo(() => {
     if (boxSource !== "skland" || !sklandSnapshot) return undefined;
 
@@ -661,6 +693,13 @@ function WorkbenchApp() {
     if (sklandSnapshot) applySklandSnapshot(sklandSnapshot, false);
   }
 
+  function handleOperatorReplace(rowKey: string, slotIndex: number, operator: { name: string; portrait?: string }) {
+    setOperatorReplacements((current) => ({
+      ...current,
+      [`${rowKey}:${slotIndex}`]: operator,
+    }));
+  }
+
   const issueForPanel = useMemo(
     () => savedIssue ?? (issueDraftRow && issueOpen ? { row: issueDraftRow, note: issueDraftNote } : null),
     [issueDraftNote, issueDraftRow, issueOpen, savedIssue]
@@ -734,10 +773,12 @@ function WorkbenchApp() {
             />
             <ShiftComparisonCard comparison={closestComparison} />
             <ScheduleBoard
-              rows={rows}
+              rows={displayRows}
               layout={layout}
               currentMoraleByOperator={currentMoraleByOperator}
+              operatorOptions={operatorOptions}
               onIssue={handleMarkIssue}
+              onOperatorReplace={handleOperatorReplace}
               onFactoryRecipeChange={handleFactoryRecipeChange}
               onTradeOrderChange={handleTradeOrderChange}
             />
