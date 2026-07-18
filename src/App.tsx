@@ -62,6 +62,15 @@ const KNOWN_ISSUES = [
   "如遇到 CLI 运行失败，请先下载调试包并保留本次运行记录。",
 ];
 
+type RunHistoryItem = {
+  id: string;
+  time: number;
+  success: boolean;
+  durationMs?: number;
+  layout: string;
+  source: string;
+};
+
 function safeParseJson(value: string | null): unknown {
   if (!value) return null;
   try {
@@ -171,6 +180,12 @@ function buildIssueReport(
   };
 }
 
+function sourceLabel(source: BoxSource): string {
+  if (source === "skland") return "森空岛";
+  if (source === "maa") return "MAA 导入";
+  return "样例";
+}
+
 function WorkbenchApp() {
   const initialSession = readSessionState() as
     | {
@@ -232,6 +247,7 @@ function WorkbenchApp() {
   const [feedbackSaving, setFeedbackSaving] = useState(false);
   const [feedbackResult, setFeedbackResult] = useState<FeedbackApiResponse | null>(initialSession?.feedback ?? null);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [runHistory, setRunHistory] = useState<RunHistoryItem[]>([]);
 
   const scheduleResult = result?.success ? result : null;
   const activePlan = scheduleResult?.maaJson?.plans?.[activeShift];
@@ -463,6 +479,17 @@ function WorkbenchApp() {
         sourceName: fileName,
       });
       setResult(response);
+      setRunHistory((current) => [
+        {
+          id: `${Date.now()}-${current.length}`,
+          time: Date.now(),
+          success: Boolean(response.success),
+          durationMs: response.durationMs,
+          layout: preset.label,
+          source: sourceLabel(boxSource),
+        },
+        ...current,
+      ].slice(0, 3));
       if (!response.success) {
         setApiError(response.error ?? "infra-cli 没有成功生成排班。");
       }
@@ -760,6 +787,21 @@ function WorkbenchApp() {
           </Panel>
 
           <Panel title="调试输出" icon={<Terminal className="size-4" />}>
+            {runHistory.length ? (
+              <div className="mb-3 grid gap-1.5 border-y border-border/70 py-3 text-xs">
+                {runHistory.map((item) => (
+                  <div key={item.id} className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate text-muted-foreground">
+                      {new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date(item.time))}
+                      {" · "}{item.layout} · {item.source}
+                    </span>
+                    <strong className={item.success ? "text-emerald-600" : "text-destructive"}>
+                      {item.success ? `${item.durationMs ?? "?"}ms` : "失败"}
+                    </strong>
+                  </div>
+                ))}
+              </div>
+            ) : null}
             <DebugActions
               result={result}
               onDownloadMaa={handleDownloadMaa}
