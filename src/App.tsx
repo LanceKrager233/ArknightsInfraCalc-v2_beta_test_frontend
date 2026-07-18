@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Database, FileJson, Settings2, ShieldCheck, Terminal } from "lucide-react";
+import { Camera, Database, FileJson, Loader2, Settings2, ShieldCheck, Terminal } from "lucide-react";
+import { toPng } from "html-to-image";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -232,6 +233,8 @@ function WorkbenchApp() {
   const [feedbackSaving, setFeedbackSaving] = useState(false);
   const [feedbackResult, setFeedbackResult] = useState<FeedbackApiResponse | null>(initialSession?.feedback ?? null);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [exportingPng, setExportingPng] = useState(false);
+  const scheduleExportRef = useRef<HTMLDivElement | null>(null);
 
   const scheduleResult = result?.success ? result : null;
   const activePlan = scheduleResult?.maaJson?.plans?.[activeShift];
@@ -504,6 +507,26 @@ function WorkbenchApp() {
     if (result?.command) void copyText(result.command);
   }
 
+  async function handleExportSchedulePng() {
+    if (!scheduleExportRef.current || exportingPng) return;
+    setExportingPng(true);
+    try {
+      const dataUrl = await toPng(scheduleExportRef.current, {
+        cacheBust: true,
+        pixelRatio: 2,
+        backgroundColor: "#ffffff",
+      });
+      const anchor = document.createElement("a");
+      anchor.href = dataUrl;
+      anchor.download = `infra-schedule-${layout.template}-shift-${activeShift + 1}.png`;
+      anchor.click();
+    } catch (error) {
+      setApiError(error instanceof Error ? `导出 PNG 失败：${error.message}` : "导出 PNG 失败。");
+    } finally {
+      setExportingPng(false);
+    }
+  }
+
   function clearIssueState() {
     setIssueDraftRow(null);
     setIssueDraftNote("");
@@ -715,7 +738,13 @@ function WorkbenchApp() {
                   {activePlan?.description ?? "配置 Box 与基建布局后，即可生成三班排班。"}
                 </span>
               </div>
-              <ShiftTabs maaJson={result?.maaJson} active={activeShift} closest={closestComparison?.planIndex} onChange={setActiveShift} />
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 max-sm:w-full max-sm:justify-start">
+                <Button type="button" variant="outline" size="sm" disabled={!rows.length || exportingPng} onClick={handleExportSchedulePng}>
+                  {exportingPng ? <Loader2 className="animate-spin" /> : <Camera />}
+                  导出 PNG
+                </Button>
+                <ShiftTabs maaJson={result?.maaJson} active={activeShift} closest={closestComparison?.planIndex} onChange={setActiveShift} />
+              </div>
             </div>
             {!operbox ? (
               <div className="mb-5 flex flex-wrap items-center justify-between gap-4 border-y border-dashed border-border/70 py-6">
@@ -726,21 +755,23 @@ function WorkbenchApp() {
                 <Button type="button" onClick={openSetup}><Settings2 />配置 Box 与布局</Button>
               </div>
             ) : null}
-            <PlanTelemetry
-              profile={scheduleResult?.profileJson}
-              rotation={scheduleResult?.rotationJson}
-              layout={layout}
-              activeShift={activeShift}
-            />
-            <ShiftComparisonCard comparison={closestComparison} />
-            <ScheduleBoard
-              rows={rows}
-              layout={layout}
-              currentMoraleByOperator={currentMoraleByOperator}
-              onIssue={handleMarkIssue}
-              onFactoryRecipeChange={handleFactoryRecipeChange}
-              onTradeOrderChange={handleTradeOrderChange}
-            />
+            <div ref={scheduleExportRef} className="bg-background">
+              <PlanTelemetry
+                profile={scheduleResult?.profileJson}
+                rotation={scheduleResult?.rotationJson}
+                layout={layout}
+                activeShift={activeShift}
+              />
+              <ShiftComparisonCard comparison={closestComparison} />
+              <ScheduleBoard
+                rows={rows}
+                layout={layout}
+                currentMoraleByOperator={currentMoraleByOperator}
+                onIssue={handleMarkIssue}
+                onFactoryRecipeChange={handleFactoryRecipeChange}
+                onTradeOrderChange={handleTradeOrderChange}
+              />
+            </div>
           </Panel>
         </section>
 
