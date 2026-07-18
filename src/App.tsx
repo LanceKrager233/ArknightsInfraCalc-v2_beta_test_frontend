@@ -172,6 +172,17 @@ function buildIssueReport(
   };
 }
 
+function compactTimestamp(date = new Date()) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}`;
+}
+
+function sourceNameForFile(source: BoxSource) {
+  if (source === "skland") return "skland";
+  if (source === "maa") return "maa";
+  return "sample";
+}
+
 function WorkbenchApp() {
   const initialSession = readSessionState() as
     | {
@@ -234,6 +245,7 @@ function WorkbenchApp() {
   const [feedbackResult, setFeedbackResult] = useState<FeedbackApiResponse | null>(initialSession?.feedback ?? null);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [exportingPng, setExportingPng] = useState(false);
+  const [exportNotice, setExportNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const scheduleExportRef = useRef<HTMLDivElement | null>(null);
 
   const scheduleResult = result?.success ? result : null;
@@ -510,18 +522,23 @@ function WorkbenchApp() {
   async function handleExportSchedulePng() {
     if (!scheduleExportRef.current || exportingPng) return;
     setExportingPng(true);
+    setExportNotice(null);
     try {
       const dataUrl = await toPng(scheduleExportRef.current, {
         cacheBust: true,
         pixelRatio: 2,
         backgroundColor: "#ffffff",
       });
+      const fileName = `${layout.template}-shift-${activeShift + 1}-${sourceNameForFile(boxSource)}-${compactTimestamp()}.png`;
       const anchor = document.createElement("a");
       anchor.href = dataUrl;
-      anchor.download = `infra-schedule-${layout.template}-shift-${activeShift + 1}.png`;
+      anchor.download = fileName;
       anchor.click();
+      setExportNotice({ type: "success", text: `PNG 已导出：${fileName}` });
     } catch (error) {
-      setApiError(error instanceof Error ? `导出 PNG 失败：${error.message}` : "导出 PNG 失败。");
+      const message = error instanceof Error ? `导出 PNG 失败：${error.message}` : "导出 PNG 失败。";
+      setApiError(message);
+      setExportNotice({ type: "error", text: message });
     } finally {
       setExportingPng(false);
     }
@@ -746,6 +763,17 @@ function WorkbenchApp() {
                 <ShiftTabs maaJson={result?.maaJson} active={activeShift} closest={closestComparison?.planIndex} onChange={setActiveShift} />
               </div>
             </div>
+            {exportNotice ? (
+              <div
+                className={
+                  exportNotice.type === "success"
+                    ? "mb-3 border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700"
+                    : "mb-3 border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                }
+              >
+                {exportNotice.text}
+              </div>
+            ) : null}
             {!operbox ? (
               <div className="mb-5 flex flex-wrap items-center justify-between gap-4 border-y border-dashed border-border/70 py-6">
                 <div>
