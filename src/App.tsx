@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Database, FileJson, Settings2, ShieldCheck, Terminal } from "lucide-react";
@@ -63,8 +63,8 @@ const SESSION_KEY = "arknights-infra-calc-beta-session-v3";
 const LEGACY_SESSION_KEY = "arknights-infra-calc-beta-session-v2";
 const RESULT_CLEAR_WARNING_DISMISSED_KEY = "arknights-infra-calc-result-clear-warning-dismissed";
 const KNOWN_ISSUES = [
-  "Beta 娴嬭瘯闃舵浠嶅彲鑳藉嚭鐜版帓鐝瓥鐣ュ拰棰勬湡涓嶄竴鑷寸殑鎯呭喌锛涜鐢ㄢ€滄爣璁伴棶棰樷€濇彁浜や笂涓嬫枃銆?,
-  "濡傞亣鍒?CLI 杩愯澶辫触锛岃鍏堜笅杞借皟璇曞寘骞朵繚鐣欐湰娆¤繍琛岃褰曘€?,
+  "Beta 测试阶段仍可能出现排班策略和预期不一致的情况；请用“标记问题”提交上下文。",
+  "如遇到 CLI 运行失败，请先下载调试包并保留本次运行记录。",
 ];
 
 type ProductChange =
@@ -116,14 +116,14 @@ function parseLayoutJson(value: unknown): BaseBlueprint | null {
 }
 
 function layoutValidationError(layout: BaseBlueprint): string | null {
-  if (!layout.rooms.some((room) => room.kind === "control_center")) return "甯冨眬蹇呴』鍖呭惈鎺у埗涓灑銆?;
+  if (!layout.rooms.some((room) => room.kind === "control_center")) return "布局必须包含控制中枢。";
   const invalid = layout.rooms.find((room) => {
     const maxLevel = room.kind === "control_center" || room.kind === "dormitory" ? 5 : 3;
     return !Number.isInteger(room.level) || room.level < 1 || room.level > maxLevel;
   });
   if (!invalid) return null;
   const maxLevel = invalid.kind === "control_center" || invalid.kind === "dormitory" ? 5 : 3;
-  return `${invalid.id} 鐨勮鏂界瓑绾у繀椤诲湪 1鈥?{maxLevel} 涔嬮棿銆俙;
+  return `${invalid.id} 的设施等级必须在 1–${maxLevel} 之间。`;
 }
 
 function restoreEditableProducts(baseLayout: BaseBlueprint, cachedLayout: BaseBlueprint | undefined): BaseBlueprint {
@@ -328,11 +328,11 @@ function WorkbenchApp() {
         } else {
           setCliReady(false);
           setCliPath(health.cliPath ?? null);
-          setApiError(health.serveError ?? health.error ?? "API 姝ｅ父锛屼絾鏈壘鍒板彲鎵ц鐨?infra-cli銆?);
+          setApiError(health.serveError ?? health.error ?? "API 正常，但未找到可执行的 infra-cli。");
         }
       } else {
         setCliReady(false);
-        setApiError(healthResult.reason instanceof Error ? healthResult.reason.message : "鏈湴 API 鏈嶅姟涓嶅彲鐢ㄣ€?);
+        setApiError(healthResult.reason instanceof Error ? healthResult.reason.message : "本地 API 服务不可用。");
       }
 
       if (sessionResult.status === "fulfilled") {
@@ -370,7 +370,7 @@ function WorkbenchApp() {
       setBoxSource("maa");
       return true;
     } catch (error) {
-      setInputError(error instanceof Error ? error.message : "缁冨害鏂囦欢瑙ｆ瀽澶辫触銆?);
+      setInputError(error instanceof Error ? error.message : "练度文件解析失败。");
       return false;
     }
   }
@@ -394,12 +394,12 @@ function WorkbenchApp() {
     try {
       const entries = readOperboxText(maaPaste);
       setOperbox(entries);
-      setFileName("绮樿创鐨?Arknights_OperBox_Export.json");
+      setFileName("粘贴的 Arknights_OperBox_Export.json");
       setBoxSource("maa");
       clearPlanResult();
       return true;
     } catch (error) {
-      setInputError(error instanceof Error ? error.message : "MAA JSON 瑙ｆ瀽澶辫触銆?);
+      setInputError(error instanceof Error ? error.message : "MAA JSON 解析失败。");
       return false;
     }
   }
@@ -409,10 +409,10 @@ function WorkbenchApp() {
     setInputError(null);
     try {
       const session = await syncSkland();
-      if (!session.authenticated || !session.snapshot) throw new Error(session.error ?? "妫┖宀涘悓姝ュけ璐ャ€?);
+      if (!session.authenticated || !session.snapshot) throw new Error(session.error ?? "森空岛同步失败。");
       applySklandSnapshot(session.snapshot, false);
     } catch (error) {
-      setInputError(error instanceof Error ? error.message : "妫┖宀涘悓姝ュけ璐ャ€?);
+      setInputError(error instanceof Error ? error.message : "森空岛同步失败。");
     } finally {
       setSklandBusy(false);
     }
@@ -423,10 +423,10 @@ function WorkbenchApp() {
     setInputError(null);
     try {
       const session = await selectSklandRole(uid);
-      if (!session.authenticated || !session.snapshot) throw new Error(session.error ?? "瑙掕壊鍒囨崲澶辫触銆?);
+      if (!session.authenticated || !session.snapshot) throw new Error(session.error ?? "角色切换失败。");
       applySklandSnapshot(session.snapshot, false);
     } catch (error) {
-      setInputError(error instanceof Error ? error.message : "瑙掕壊鍒囨崲澶辫触銆?);
+      setInputError(error instanceof Error ? error.message : "角色切换失败。");
     } finally {
       setSklandBusy(false);
     }
@@ -445,7 +445,7 @@ function WorkbenchApp() {
         clearPlanResult();
       }
     } catch (error) {
-      setInputError(error instanceof Error ? error.message : "閫€鍑烘．绌哄矝澶辫触銆?);
+      setInputError(error instanceof Error ? error.message : "退出森空岛失败。");
     } finally {
       setSklandBusy(false);
     }
@@ -468,7 +468,7 @@ function WorkbenchApp() {
       return;
     }
     if (!cliReady) {
-      setApiError("褰撳墠娌℃湁鍙繍琛岀殑 infra-cli锛沇indows 鏈湴璇疯缃?INFRA_CLI_PATH 鎸囧悜 infra-cli.exe銆?);
+      setApiError("当前没有可运行的 infra-cli；Windows 本地请设置 INFRA_CLI_PATH 指向 infra-cli.exe。");
       return;
     }
     setLoading(true);
@@ -487,10 +487,10 @@ function WorkbenchApp() {
       });
       setResult(response);
       if (!response.success) {
-        setApiError(response.error ?? "infra-cli 娌℃湁鎴愬姛鐢熸垚鎺掔彮銆?);
+        setApiError(response.error ?? "infra-cli 没有成功生成排班。");
       }
     } catch (error) {
-      setApiError(error instanceof Error ? error.message : "鎺掔彮璇锋眰澶辫触銆?);
+      setApiError(error instanceof Error ? error.message : "排班请求失败。");
     } finally {
       setLoading(false);
     }
@@ -503,14 +503,14 @@ function WorkbenchApp() {
     try {
       const sample = await getSampleOperbox();
       if (!sample.success || !sample.operbox) {
-        throw new Error(sample.error ?? "鏍蜂緥鏁版嵁璇诲彇澶辫触銆?);
+        throw new Error(sample.error ?? "样例数据读取失败。");
       }
       setOperbox(sample.operbox);
-      setFileName(sample.sourceName ?? "243 鍏ㄧ簿浜屾牱渚?);
+      setFileName(sample.sourceName ?? "243 全精二样例");
       setBoxSource("sample");
       return true;
     } catch (error) {
-      setInputError(error instanceof Error ? error.message : "鏍蜂緥鏁版嵁璇诲彇澶辫触銆?);
+      setInputError(error instanceof Error ? error.message : "样例数据读取失败。");
       return false;
     }
   }
@@ -559,7 +559,7 @@ function WorkbenchApp() {
   async function handleSaveIssue() {
     if (!issueDraftRow || !issueDraftNote.trim()) return;
     if (!operbox || operbox.length === 0) {
-      setFeedbackError("璇峰厛涓婁紶鎴栬浇鍏?operbox銆?);
+      setFeedbackError("请先上传或载入 operbox。");
       return;
     }
 
@@ -578,7 +578,7 @@ function WorkbenchApp() {
         debugBundle: result?.debugBundle,
       });
       if (!response.success) {
-        throw new Error(response.error ?? "鍙嶉淇濆瓨澶辫触銆?);
+        throw new Error(response.error ?? "反馈保存失败。");
       }
       setSavedIssue(issue);
       setFeedbackResult(response);
@@ -586,7 +586,7 @@ function WorkbenchApp() {
       setIssueDraftRow(null);
       setIssueDraftNote("");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "鍙嶉淇濆瓨澶辫触銆?;
+      const message = error instanceof Error ? error.message : "反馈保存失败。";
       setFeedbackError(message);
       setApiError(message);
     } finally {
@@ -625,7 +625,7 @@ function WorkbenchApp() {
 
   function showResultClearNotice(label: string | undefined) {
     if (resultClearWarningDismissed || !result?.success) return;
-    setResultClearNotice(label ? `宸插垏鎹㈠埌锛?{label}` : "閰嶇疆宸插垏鎹?);
+    setResultClearNotice(label ? `已切换到：${label}` : "配置已切换");
   }
 
   function requestProductChange(change: ProductChange) {
@@ -653,7 +653,7 @@ function WorkbenchApp() {
   }
 
   function handlePresetSelect(nextPreset: PresetDef) {
-    showResultClearNotice(`甯冨眬 ${nextPreset.label}`);
+    showResultClearNotice(`布局 ${nextPreset.label}`);
     setPreset(nextPreset);
     setLayout(buildBlueprint(nextPreset));
     setLayoutDirty(true);
@@ -677,13 +677,13 @@ function WorkbenchApp() {
   async function handleLayoutFile(file: File) {
     try {
       const parsed = parseLayoutJson(JSON.parse(await file.text()));
-      if (!parsed) throw new Error("layout JSON 鏍煎紡鏃犳晥锛氶渶瑕?rooms[].id銆乲ind 鍜屽悎娉曠殑璁炬柦绛夌骇銆?);
+      if (!parsed) throw new Error("layout JSON 格式无效：需要 rooms[].id、kind 和合法的设施等级。");
       setLayout(parsed);
       setLayoutDirty(true);
       clearPlanResult();
       setInputError(null);
     } catch (error) {
-      setInputError(error instanceof Error ? error.message : "甯冨眬 JSON 璇诲彇澶辫触銆?);
+      setInputError(error instanceof Error ? error.message : "布局 JSON 读取失败。");
     }
   }
 
@@ -750,19 +750,19 @@ function WorkbenchApp() {
   return (
     <main className="min-h-screen bg-background px-4 py-4 text-foreground sm:px-5">
       <header className="mx-auto mb-4 max-w-[1760px] border-b pb-4">
-        <h1 className="sr-only">鏄庢棩鏂硅垷鍩哄缓鎺掔彮楠屾敹宸ヤ綔鍙?/h1>
+        <h1 className="sr-only">明日方舟基建排班验收工作台</h1>
         <div className="grid w-full grid-cols-[minmax(240px,1fr)_auto_auto_auto] items-center gap-2 max-sm:grid-cols-3">
           <StatusBar loading={loading} result={result} error={inputError ?? apiError} cliPath={cliPath} />
           <Button
             type="button"
             variant="outline"
             className="h-10 min-w-0 px-3 max-sm:w-full"
-            aria-label="閰嶇疆 Box 涓庡竷灞€"
+            aria-label="配置 Box 与布局"
             onClick={openSetup}
           >
             <Settings2 />
-            <span className="hidden md:inline">閰嶇疆 Box 涓庡竷灞€</span>
-            <span className="md:hidden">閰嶇疆</span>
+            <span className="hidden md:inline">配置 Box 与布局</span>
+            <span className="md:hidden">配置</span>
           </Button>
           <SklandAccount
             open={sklandAccountOpen}
@@ -782,14 +782,14 @@ function WorkbenchApp() {
 
       <section className="mx-auto grid max-w-[1760px] grid-cols-[minmax(0,1fr)_430px] items-start max-[1100px]:block">
         <section className="min-w-0 pr-5 max-[1100px]:pr-0">
-          <Panel title="璁″垝瀹夋帓" icon={<ShieldCheck className="size-4" />} className="min-h-[calc(100vh-112px)]">
+          <Panel title="计划安排" icon={<ShieldCheck className="size-4" />} className="min-h-[calc(100vh-112px)]">
             <div className="mb-3 flex items-start justify-between gap-3 max-sm:flex-col">
               <div className="min-w-0">
                 <strong className="block truncate text-sm font-medium">
-                  {result?.maaJson?.title ?? "绛夊緟鐢熸垚鎺掔彮"}
+                  {result?.maaJson?.title ?? "等待生成排班"}
                 </strong>
                 <span className="mt-1 block text-sm text-muted-foreground">
-                  {activePlan?.description ?? "閰嶇疆 Box 涓庡熀寤哄竷灞€鍚庯紝鍗冲彲鐢熸垚涓夌彮鎺掔彮銆?}
+                  {activePlan?.description ?? "配置 Box 与基建布局后，即可生成三班排班。"}
                 </span>
               </div>
               <ShiftTabs maaJson={result?.maaJson} active={activeShift} closest={closestComparison?.planIndex} onChange={setActiveShift} />
@@ -797,10 +797,10 @@ function WorkbenchApp() {
             {!operbox ? (
               <div className="mb-5 flex flex-wrap items-center justify-between gap-4 border-y border-dashed border-border/70 py-6">
                 <div>
-                  <strong className="block text-sm">鍏堝畬鎴?Box 涓庡竷灞€閰嶇疆</strong>
-                  <p className="mt-1 text-sm text-muted-foreground">鏀寔妫┖宀涘悓姝ャ€丮AA 瀵煎叆鍜?243 鍏ㄧ簿浜屾牱渚嬨€?/p>
+                  <strong className="block text-sm">先完成 Box 与布局配置</strong>
+                  <p className="mt-1 text-sm text-muted-foreground">支持森空岛同步、MAA 导入和 243 全精二样例。</p>
                 </div>
-                <Button type="button" onClick={openSetup}><Settings2 />閰嶇疆 Box 涓庡竷灞€</Button>
+                <Button type="button" onClick={openSetup}><Settings2 />配置 Box 与布局</Button>
               </div>
             ) : null}
             <PlanTelemetry
@@ -829,11 +829,11 @@ function WorkbenchApp() {
 
         <aside className="min-w-0 divide-y divide-border/70 border-l border-border/70 pl-5 max-[1100px]:mt-5 max-[1100px]:grid max-[1100px]:grid-cols-[repeat(auto-fit,minmax(280px,1fr))] max-[1100px]:divide-x max-[1100px]:divide-y-0 max-[1100px]:border-l-0 max-[1100px]:border-t max-[1100px]:pl-0 max-[1100px]:[&>section]:px-5 max-[700px]:block max-[700px]:divide-x-0 max-[700px]:divide-y max-[700px]:[&>section]:px-0">
           {sklandSnapshot ? (
-            <Panel title="褰撳墠鐘舵€?路 妫┖宀涘熀寤? icon={<Database className="size-4" />}>
+            <Panel title="当前状态 · 森空岛基建" icon={<Database className="size-4" />}>
               <InfrastructureSnapshot snapshot={sklandSnapshot} layoutMatches={sklandLayoutMatches} onApplyLayout={handleApplySklandLayout} />
             </Panel>
           ) : null}
-          <Panel title="闂涓婁笅鏂? icon={<FileJson className="size-4" />}>
+          <Panel title="问题上下文" icon={<FileJson className="size-4" />}>
             <IssuePanel
               issue={issueForPanel}
               report={issueReport}
@@ -842,7 +842,7 @@ function WorkbenchApp() {
             />
           </Panel>
 
-          <Panel title="璋冭瘯杈撳嚭" icon={<Terminal className="size-4" />}>
+          <Panel title="调试输出" icon={<Terminal className="size-4" />}>
             <DebugActions
               result={result}
               onDownloadMaa={handleDownloadMaa}
@@ -853,7 +853,7 @@ function WorkbenchApp() {
               <summary className="cursor-pointer">stdout / stderr</summary>
               <Textarea
                 readOnly
-                value={result?.stdout || result?.stderr || "鏆傛棤杈撳嚭銆?}
+                value={result?.stdout || result?.stderr || "暂无输出。"}
                 className="mt-2 max-h-64 min-h-32 resize-y font-mono text-xs"
               />
             </details>
@@ -865,19 +865,19 @@ function WorkbenchApp() {
         <aside
           className="fixed left-1/2 top-4 z-[70] w-[min(720px,calc(100vw-2rem))] -translate-x-1/2 border border-[#FFD800]/70 bg-[#313131] px-4 py-3 text-white shadow-[0_16px_44px_rgba(0,0,0,0.35)]"
           aria-live="polite"
-          aria-label="鎺掔彮缁撴灉宸叉竻绌?
+          aria-label="排班结果已清空"
         >
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
-              <strong className="block text-sm font-semibold text-[#FFD800]">宸叉竻绌烘棫姹傝В缁撴灉</strong>
-              <span className="mt-0.5 block text-xs text-white/68">{resultClearNotice}锛岄渶瑕侀噸鏂拌繍琛屾眰瑙ｃ€?/span>
+              <strong className="block text-sm font-semibold text-[#FFD800]">已清空旧求解结果</strong>
+              <span className="mt-0.5 block text-xs text-white/68">{resultClearNotice}，需要重新运行求解。</span>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <Button type="button" size="sm" variant="ghost" className="text-white hover:bg-white/10 hover:text-white" onClick={() => setResultClearNotice(null)}>
-                鐭ラ亾浜?
+                知道了
               </Button>
               <Button type="button" size="sm" variant="outline" className="border-white/25 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={dismissResultClearWarning}>
-                涓嶅啀鎻愮ず
+                不再提示
               </Button>
             </div>
           </div>
@@ -934,9 +934,9 @@ function WorkbenchApp() {
 
       <aside
         className="fixed bottom-4 right-4 z-30 w-[min(360px,calc(100vw-2rem))] rounded-lg border border-amber-200 bg-background/95 p-3 text-sm shadow-lg backdrop-blur"
-        aria-label="鐩墠宸茬煡闂"
+        aria-label="目前已知问题"
       >
-        <strong className="block text-sm font-medium">鐩墠宸茬煡闂</strong>
+        <strong className="block text-sm font-medium">目前已知问题</strong>
         <ul className="mt-2 grid gap-1 pl-4 text-xs leading-5 text-muted-foreground">
           {KNOWN_ISSUES.map((issue) => (
             <li key={issue} className="list-disc">

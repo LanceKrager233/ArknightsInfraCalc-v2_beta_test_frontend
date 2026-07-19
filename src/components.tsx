@@ -732,7 +732,6 @@ function roomSummaryText(row: RoomRow, efficiency: RoomEfficiencyPresentation | 
   }
   return parts.join("，");
 }
-}
 
 function RoomProductControls({
   row,
