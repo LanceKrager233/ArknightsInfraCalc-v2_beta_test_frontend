@@ -816,7 +816,7 @@ function WorkbenchApp() {
           onApplyLayout={handleApplySklandLayout}
         />
       ) : (
-        <TrainingAdvice />
+        <TrainingAdvice operbox={operbox} layout={layout} />
       )}
       </div>
 
