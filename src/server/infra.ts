@@ -286,6 +286,53 @@ function buildRotationJson(profileJson: unknown, shifts: unknown[]) {
   };
 }
 
+/** plan.compute v1: result.rotation.shifts → 前端兼容格式 */
+function rotationShiftsFromServeNew(rotation: { shifts?: unknown[] } | undefined): unknown[] {
+  if (!rotation || !Array.isArray(rotation.shifts)) return [];
+  return rotation.shifts.map((shift) => {
+    if (!isObject(shift)) return shift;
+    const s = shift as Record<string, unknown>;
+    const efficiencies = isObject(s.efficiencies) ? (s.efficiencies as Record<string, unknown>) : null;
+    if (!efficiencies) {
+      // no efficiencies, clone as-is
+      return { ...s, scores: {} };
+    }
+    // map efficiencies → scores，并对 room_lines 做字段名归一化
+    const roomLines = Array.isArray(efficiencies.room_lines)
+      ? (efficiencies.room_lines as Record<string, unknown>[]).map(normalizeRoomLine)
+      : [];
+    const { efficiencies: _e, ...rest } = s;
+    return { ...rest, scores: { ...efficiencies, room_lines: roomLines } };
+  });
+}
+
+/** plan.compute 房间效率字段 → 前端 RoomEfficiency 命名（_pct / _score ×100） */
+function normalizeRoomLine(line: Record<string, unknown>): Record<string, unknown> {
+  const f = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+  const trade = f(line.trade_efficiency);
+  const tradeSkill = f(line.trade_skill_efficiency);
+  const tradeDisplay = f(line.trade_display_efficiency);
+  const manu = f(line.manufacture_efficiency);
+  const manuSkill = f(line.manufacture_skill_efficiency);
+  const manuDisplay = f(line.manufacture_display_efficiency);
+  const power = f(line.power_efficiency);
+  const powerSkill = f(line.power_skill_efficiency);
+  const powerDisplay = f(line.power_display_efficiency);
+
+  return {
+    room_id: typeof line.room_id === "string" ? line.room_id : "",
+    ...(trade !== undefined ? { trade_score: trade } : {}),
+    ...(tradeSkill !== undefined ? { trade_skill_pct: tradeSkill * 100 } : {}),
+    ...(tradeDisplay !== undefined ? { trade_display_pct: tradeDisplay * 100 } : {}),
+    ...(manu !== undefined ? { manu_score: manu * 100 } : {}),
+    ...(manuSkill !== undefined ? { manu_prod_skill: manuSkill * 100 } : {}),
+    ...(manuDisplay !== undefined ? { manu_display_pct: manuDisplay * 100 } : {}),
+    ...(power !== undefined ? { power_score: power * 100 } : {}),
+    ...(powerSkill !== undefined ? { power_skill_pct: powerSkill * 100 } : {}),
+    ...(powerDisplay !== undefined ? { power_display_pct: powerDisplay * 100 } : {}),
+  };
+}
+
 function rotationShiftsFromServe(response: JsonRecord): unknown[] {
   const result = response.result;
   if (!isObject(result) || !Array.isArray(result.shifts)) return [];
@@ -337,6 +384,20 @@ function serveErrorMessage(response: JsonRecord) {
   return "unknown error";
 }
 
+/** plan.compute v1 要求 operbox 内 name 唯一；阿米娅等重名干员加后缀去重 */
+function deduplicateOperboxNames(opbox: unknown[]): unknown[] {
+  const seen = new Map<string, number>();
+  return opbox.map((entry) => {
+    if (!entry || typeof entry !== "object" || !("name" in entry)) return entry;
+    const raw = entry as Record<string, unknown>;
+    const name = String(raw.name ?? "");
+    const count = seen.get(name) ?? 0;
+    seen.set(name, count + 1);
+    if (count > 0) return { ...raw, name: `${name}(${count + 1})` };
+    return entry;
+  });
+}
+
 function formatPlanFailure({
   layout,
   maaJson,
@@ -367,8 +428,6 @@ function formatPlanFailure({
         : undefined,
       layoutPowerRooms > got ? "处理方式：切换到 252/342 等 2 发电站布局，或补足可用于发电站的干员后重新导出 box。" : undefined,
       `原始错误：${message}`,
-      !profileJson && "profile.json 未生成",
-      !maaJson && "maa.json 未生成",
       stderr?.slice(0, 1200),
     ]
       .filter(Boolean)
@@ -377,8 +436,6 @@ function formatPlanFailure({
 
   return [
     !response.ok && `infra-cli serve error: ${message}`,
-    !profileJson && "profile.json 未生成",
-    !maaJson && "maa.json 未生成",
     stderr?.slice(0, 1200),
   ]
     .filter(Boolean)
@@ -832,17 +889,30 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
     await writeJson(layoutPath, body.layout);
     await writeJson(operboxPath, body.operbox);
 
+    // 写调试用文件（非协议所需）
+    await writeJson(layoutPath, body.layout);
+    await writeJson(operboxPath, body.operbox);
+
+    // plan.compute v1: inline layout + operbox + labels + options
+    // 去重 operator name（如阿米娅三种形态同名），给重名加后缀 (2)(3)
+    const dedupedOperbox = deduplicateOperboxNames(body.operbox);
+
     const planParams = {
-      layout: layoutPath,
-      operbox: operboxPath,
-      profile_out: profilePath,
-      maa_out: maaPath,
-      output_dir: shiftsDir,
-      top: 20,
-      maa_title: `${body.sourceName ?? "Arknights InfraCalc"} · ${String(body.layout.template ?? "layout")}`,
+      schema_version: 1,
+      layout: body.layout,
+      operbox: dedupedOperbox,
+      labels: {
+        layout: (body.layout as { template?: unknown }).template ?? null,
+        operbox: body.sourceName ?? null,
+      },
+      options: {
+        rotation: "abc_12_6_6",
+        top: 20,
+        maa_title: `${body.sourceName ?? "Arknights InfraCalc"} · ${String((body.layout as { template?: unknown }).template ?? "layout")}`,
+      },
     };
 
-    const serveResult = await getServeClient().send("plan", planParams);
+    const serveResult = await getServeClient().send("plan.compute", planParams);
     const durationMs = Math.round(performance.now() - start);
     const command = `${cliPath} serve < ${path.relative(repoRoot, serveRequestLinePath)}`;
     await writeFile(commandPath, command, "utf-8");
@@ -850,15 +920,17 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
     await writeFile(serveRequestLinePath, `${JSON.stringify(serveResult.request)}\n`, "utf-8");
     await writeJson(serveResponsePath, serveResult.response);
 
-    const profileJson = await readJsonIfExists(profilePath);
-    const maaJson = await readJsonIfExists(maaPath);
-    const shiftRead = await readShiftFiles(shiftsDir);
-    const serveShifts = rotationShiftsFromServe(serveResult.response);
-    const rotationJson = buildRotationJson(profileJson, serveShifts.length > 0 ? serveShifts : shiftRead.shifts);
+      // plan.compute 返回全部内联数据，不再读文件
+    const result = serveResult.response?.result as Record<string, unknown> | undefined;
+    const profileJson = result?.profile;
+    const maaJson = result?.maa;
+    const rotationResult = result?.rotation as { shifts?: unknown[] } | undefined;
+    const serveShifts = rotationShiftsFromServeNew(rotationResult);
+    const rotationJson = buildRotationJson(profileJson, serveShifts);
     await writeFile(stdoutPath, serveResult.stdout, "utf-8");
     await writeFile(stderrPath, serveResult.stderr, "utf-8");
 
-    const success = Boolean(serveResult.response?.ok) && Boolean(maaJson) && Boolean(profileJson);
+    const success = serveResult.response?.ok === true;
     const debugBundle: DebugBundle = {
       version: "beta-test-bundle-v2-next-serve",
       startedAt,
@@ -877,8 +949,8 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
       profileJson: profileJson as DebugBundle["profileJson"],
       maaJson: maaJson as DebugBundle["maaJson"],
       rotationJson: rotationJson as DebugBundle["rotationJson"],
-      shiftFiles: shiftRead.files.map((file) => path.relative(repoRoot, file)),
-      shiftReadErrors: shiftRead.errors,
+      shiftFiles: [],
+      shiftReadErrors: [],
       serveRequest: serveResult.request,
       serveResponse: serveResult.response,
       stdout: serveResult.stdout,
@@ -889,7 +961,7 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
         operbox: path.relative(repoRoot, operboxPath),
         profile: profileJson ? path.relative(repoRoot, profilePath) : undefined,
         maa: path.relative(repoRoot, maaPath),
-        shifts: path.relative(repoRoot, shiftsDir),
+        shifts: undefined,
         debugBundle: path.relative(repoRoot, debugBundlePath),
         stdout: path.relative(repoRoot, stdoutPath),
         stderr: path.relative(repoRoot, stderrPath),
