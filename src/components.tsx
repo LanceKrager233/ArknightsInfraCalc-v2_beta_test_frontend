@@ -696,12 +696,21 @@ function RoomEfficiencyReadout({ value, details = true }: { value: RoomEfficienc
   );
 }
 
-function RoomEfficiencyDetails({ value }: { value: RoomEfficiencyPresentation | null }) {
+function RoomEfficiencyDetails({
+  value,
+  compactFactory = false,
+}: {
+  value: RoomEfficiencyPresentation | null;
+  compactFactory?: boolean;
+}) {
   if (!value?.details.length) return null;
 
   return (
     <div
-      className="ml-6 grid min-w-[160px] max-w-[240px] gap-1 text-sm leading-tight text-white/62 max-sm:hidden"
+      className={cn(
+        "ml-6 grid min-w-[160px] max-w-[240px] gap-1 text-sm leading-tight text-white/62 max-sm:hidden",
+        compactFactory && "min-[1800px]:ml-0 min-[1800px]:flex min-[1800px]:min-w-0 min-[1800px]:max-w-none min-[1800px]:gap-3 min-[1800px]:text-xs"
+      )}
       title={value.details.map((detail) => `${detail.label} ${detail.value}`).join(" · ")}
     >
       {value.details.map((detail) => (
@@ -781,14 +790,19 @@ function RoomProductControls({
 function OperatorSlot({
   slot,
   currentMorale,
+  compactFactory = false,
 }: {
   slot: RoomRow["operatorSlots"][number] | undefined;
   currentMorale?: number;
+  compactFactory?: boolean;
 }) {
   if (!slot) {
     return (
       <div
-        className="relative aspect-square h-[clamp(70px,7.3vw,88px)] min-w-0 shrink overflow-hidden border-2 border-[#4B4B4B] bg-[#3C3C3C] after:absolute after:left-1/2 after:top-1/2 after:h-0.5 after:w-[78%] after:origin-center after:-translate-x-1/2 after:-translate-y-1/2 after:rotate-[-45deg] after:bg-[#4B4B4B] after:content-[''] max-sm:h-[clamp(32px,11vw,40px)] max-sm:border"
+        className={cn(
+          "relative aspect-square h-[clamp(70px,7.3vw,88px)] min-w-0 shrink overflow-hidden border-2 border-[#4B4B4B] bg-[#3C3C3C] after:absolute after:left-1/2 after:top-1/2 after:h-0.5 after:w-[78%] after:origin-center after:-translate-x-1/2 after:-translate-y-1/2 after:rotate-[-45deg] after:bg-[#4B4B4B] after:content-[''] max-sm:h-[clamp(32px,11vw,40px)] max-sm:border",
+          compactFactory && "min-[1800px]:h-[70px]"
+        )}
         aria-label="空置"
       />
     );
@@ -796,7 +810,10 @@ function OperatorSlot({
 
   return (
     <div
-      className="relative aspect-square h-[clamp(70px,7.3vw,88px)] min-w-0 shrink overflow-hidden border-2 border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)] max-sm:h-[clamp(32px,11vw,40px)] max-sm:border"
+      className={cn(
+        "relative aspect-square h-[clamp(70px,7.3vw,88px)] min-w-0 shrink overflow-hidden border-2 border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)] max-sm:h-[clamp(32px,11vw,40px)] max-sm:border",
+        compactFactory && "min-[1800px]:h-[70px]"
+      )}
       title={slot.label}
     >
       {slot.portrait ? (
@@ -959,12 +976,20 @@ export function ScheduleBoard({
                 </Button>
               ) : null}
             </div>
-            <div className={cn("grid min-w-0 gap-3 pb-2", group.label === "功能设施" && "xl:grid-cols-[repeat(auto-fit,minmax(300px,1fr))]", collapsed && "hidden")}>
+            <div
+              className={cn(
+                "grid min-w-0 gap-3 pb-2",
+                group.label === "功能设施" && "xl:grid-cols-[repeat(auto-fit,minmax(300px,1fr))]",
+                group.rows[0]?.group === "manufacture" && "min-[1800px]:grid-cols-2",
+                collapsed && "hidden"
+              )}
+            >
               {group.rows.map((row) => {
                 const layoutRoom = layout.rooms.find((room) => room.id === row.roomId);
                 const rowVisual = roomVisualFor(row.group);
                 const efficiency = presentRoomEfficiency(row.group, row.efficiency);
                 const compactInlineRoom = INLINE_MAIN_ROOM_GROUPS.has(row.group);
+                const compactFactoryRoom = row.group === "manufacture";
                 const slotCount = compactInlineRoom ? (row.group === "meeting" ? 2 : 1) : roomSlotCountFor(row.group);
                 const slots = Array.from({ length: slotCount }, (_, index) => row.operatorSlots[index]);
                 const rowStyle = {
@@ -978,12 +1003,12 @@ export function ScheduleBoard({
                     className={cn(
                       "relative flex h-[144px] w-full overflow-hidden bg-[#313131] text-white shadow-[0_10px_20px_rgba(0,0,0,0.24)] max-sm:h-auto max-sm:flex-col",
                       compactInlineRoom && "h-[112px]",
-                      row.group === "meeting" && "xl:col-span-2",
+                      row.group === "meeting" && "xl:col-span-2 [container-type:inline-size]",
                       row.suspicious && "ring-2 ring-destructive ring-offset-2"
                     )}
                     style={rowStyle}
                   >
-                    <div className={cn("relative w-[330px] shrink-0 overflow-hidden bg-[#313131] max-sm:min-h-[128px] max-sm:w-full", compactInlineRoom && "w-[210px]", row.group === "meeting" && "w-[360px]")}>
+                    <div className={cn("relative w-[330px] shrink-0 overflow-hidden bg-[#313131] max-sm:min-h-[128px] max-sm:w-full", compactInlineRoom && "w-[210px]")}>
                       <div
                         className="absolute inset-0 bg-left bg-no-repeat opacity-[0.52]"
                         style={{
@@ -1014,23 +1039,37 @@ export function ScheduleBoard({
                       </div>
                     </div>
 
-                    <div className={cn("flex min-w-0 flex-1 items-center gap-5 py-2 pl-12 pr-10 max-sm:flex-col max-sm:items-stretch max-sm:gap-2 max-sm:px-3 max-sm:pb-3 max-sm:pt-0", compactInlineRoom && "justify-center pl-4 pr-8")}>
+                    <div
+                      className={cn(
+                        "flex min-w-0 flex-1 items-center gap-5 py-2 pl-4 pr-10 max-sm:flex-col max-sm:items-stretch max-sm:gap-2 max-sm:px-3 max-sm:pb-3 max-sm:pt-0",
+                        compactInlineRoom && "justify-center pr-8",
+                        row.group === "meeting" && "xl:justify-start xl:pl-[max(0.5rem,calc(25cqw-10rem))]",
+                        compactFactoryRoom && "min-[1800px]:flex-col min-[1800px]:items-start min-[1800px]:justify-center min-[1800px]:gap-1 min-[1800px]:pr-3"
+                      )}
+                    >
                       <div
                         className={cn(
-                          "grid min-w-0 flex-1 items-center justify-items-center gap-2.5 max-sm:flex max-sm:overflow-x-auto max-sm:pb-1",
-                          compactInlineRoom && "flex-none",
-                          compactInlineRoom ? (slotCount === 2 ? "grid-cols-2" : "grid-cols-1") : slotCount === 3 ? "grid-cols-3" : "grid-cols-5"
+                          "grid min-w-0 items-center justify-start max-sm:flex max-sm:overflow-x-auto max-sm:pb-1",
+                          compactInlineRoom ? "flex-none" : "flex-1 grid-flow-col auto-cols-max",
+                          compactFactoryRoom && "min-[1800px]:flex-none",
+                          compactInlineRoom && (slotCount === 2 ? "grid-cols-2" : "grid-cols-1")
                         )}
+                        style={{
+                          columnGap: "clamp(0.75rem, 1.25vw, 1.25rem)",
+                        }}
                       >
                         {slots.map((slot, index) => (
                           <OperatorSlot
                             key={`${slot?.name ?? "empty"}-${index}`}
                             slot={slot}
                             currentMorale={slot ? currentMoraleByOperator?.get(slot.name) : undefined}
+                            compactFactory={compactFactoryRoom}
                           />
                         ))}
                       </div>
-                      {compactInlineRoom ? null : <RoomEfficiencyDetails value={efficiency} />}
+                      {compactInlineRoom ? null : (
+                        <RoomEfficiencyDetails value={efficiency} compactFactory={compactFactoryRoom} />
+                      )}
                     </div>
 
                     <Tooltip>
