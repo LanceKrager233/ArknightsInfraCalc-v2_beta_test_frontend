@@ -3,10 +3,18 @@ import test from "node:test";
 
 import {
   DEFAULT_LIST_COLLAPSED_GROUPS,
+  LIST_FUNCTIONAL_GROUP_GAP_PX,
+  LIST_MEETING_COLUMN_INSET_PX,
+  LIST_OPERATOR_FRAME_SIZE_PX,
+  LIST_OPERATOR_ORIGIN_PX,
   buildListScheduleGroups,
+  listFunctionalFacilityGridClass,
+  listFunctionalOperatorPosition,
+  listFunctionalOperatorPlacementClass,
+  listMeetingRoomSpanClass,
   listRoomHeightClass,
+  listRoomTitleSizeClass,
   listRoomUsesAlignedOperatorOrigin,
-  listRoomUsesPowerColumnAlignment,
 } from "./schedule-list-layout.ts";
 import type { RoomGroup, RoomRow } from "./schedule.ts";
 
@@ -66,8 +74,66 @@ test("adds breathing room only to manufacturing and functional facility cards", 
   assert.equal(listRoomHeightClass("trading"), "h-[144px]");
 });
 
-test("anchors the meeting-room operators to the second power-station column", () => {
-  assert.equal(listRoomUsesPowerColumnAlignment("meeting"), true);
-  assert.equal(listRoomUsesPowerColumnAlignment("power"), false);
-  assert.equal(listRoomUsesPowerColumnAlignment("manufacture"), false);
+test("uses 18px list room titles except for processing", () => {
+  for (const group of [
+    "control",
+    "trading",
+    "manufacture",
+    "dormitory",
+    "power",
+    "hire",
+    "meeting",
+  ] satisfies RoomGroup[]) {
+    assert.equal(
+      listRoomTitleSizeClass(group),
+      "text-[18px] max-sm:text-[16px]",
+    );
+  }
+
+  assert.equal(
+    listRoomTitleSizeClass("processing"),
+    "text-[24px] max-sm:text-[16px]",
+  );
+});
+
+test("positions functional operators at 248px and clamps before a frame clips", () => {
+  const singleSlotPosition = {
+    columnGap: "clamp(0.75rem, 1.25vw, 1.25rem)",
+    left: `max(0px, min(${LIST_OPERATOR_ORIGIN_PX}px, calc(100cqw - ${LIST_OPERATOR_FRAME_SIZE_PX}px)))`,
+  };
+
+  assert.deepEqual(listFunctionalOperatorPosition("power"), singleSlotPosition);
+  assert.deepEqual(listFunctionalOperatorPosition("hire"), singleSlotPosition);
+  assert.equal(listFunctionalOperatorPosition("manufacture"), undefined);
+});
+
+test("keeps meeting operators on the same origin and existing gap", () => {
+  assert.deepEqual(listFunctionalOperatorPosition("meeting"), {
+    columnGap: "clamp(0.75rem, 1.25vw, 1.25rem)",
+    left: `max(0px, min(${LIST_OPERATOR_ORIGIN_PX}px, calc(50cqw - ${LIST_MEETING_COLUMN_INSET_PX}px)))`,
+  });
+});
+
+test("activates functional positioning and the three-column grid at their responsive policies", () => {
+  assert.equal(LIST_OPERATOR_ORIGIN_PX, 248);
+  assert.equal(LIST_OPERATOR_FRAME_SIZE_PX, 88);
+  assert.equal(LIST_FUNCTIONAL_GROUP_GAP_PX, 12);
+  assert.equal(
+    LIST_MEETING_COLUMN_INSET_PX,
+    LIST_OPERATOR_FRAME_SIZE_PX + LIST_FUNCTIONAL_GROUP_GAP_PX / 2,
+  );
+  assert.equal(
+    listFunctionalOperatorPlacementClass("power"),
+    "xl:absolute xl:inset-y-0",
+  );
+  assert.equal(listFunctionalOperatorPlacementClass("manufacture"), undefined);
+  assert.equal(
+    listFunctionalFacilityGridClass(),
+    "min-[1800px]:grid-cols-3",
+  );
+  assert.equal(
+    listMeetingRoomSpanClass("meeting"),
+    "min-[1800px]:col-span-2",
+  );
+  assert.equal(listMeetingRoomSpanClass("power"), undefined);
 });
