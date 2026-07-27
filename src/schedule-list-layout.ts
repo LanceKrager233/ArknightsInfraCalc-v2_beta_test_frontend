@@ -31,6 +31,16 @@ export function listRoomUsesAlignedOperatorOrigin(group: RoomGroup): boolean {
   return LIST_ALIGNED_OPERATOR_ORIGIN_GROUPS.has(group);
 }
 
+export function listRoomHeightClass(group: RoomGroup): string {
+  if (group === "manufacture") return "h-[160px]";
+  if (isListFunctionalFacilityRoom(group)) return "h-[128px]";
+  return "h-[144px]";
+}
+
+export function listRoomUsesPowerColumnAlignment(group: RoomGroup): boolean {
+  return group === "meeting";
+}
+
 export function buildListScheduleGroups(rows: RoomRow[]): ListScheduleGroup[] {
   const groups = rows.reduce<ListScheduleGroup[]>((currentGroups, row) => {
     const groupLabel = isListFunctionalFacilityRoom(row.group)
