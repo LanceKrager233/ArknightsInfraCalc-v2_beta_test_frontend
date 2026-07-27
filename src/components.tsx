@@ -48,6 +48,12 @@ import { manufacturePoolReady, presentRoomEfficiency, profileEfficiency, RoomEff
 import { countElite2, countOwned, countSixStar } from "./operbox";
 import { RoomRow } from "./schedule";
 import {
+  DEFAULT_LIST_COLLAPSED_GROUPS,
+  buildListScheduleGroups,
+  isListFunctionalFacilityRoom,
+  listRoomUsesAlignedOperatorOrigin,
+} from "./schedule-list-layout";
+import {
   BaseBlueprint,
   FeedbackApiResponse,
   IssueReport,
@@ -594,7 +600,6 @@ type RoomVisual = {
 
 const ROOM_SLOT_COUNT = 5;
 const AUXILIARY_ROOM_GROUPS = new Set(["dormitory", "hire", "meeting", "processing"]);
-const INLINE_MAIN_ROOM_GROUPS = new Set(["hire", "power", "meeting", "processing"]);
 
 function roomSlotCountFor(group: string) {
   if (group === "trading" || group === "manufacture") return 3;
@@ -868,7 +873,9 @@ export function ScheduleBoard({
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
   onViewModeChange?: (viewMode: "list" | "compact") => void;
 }) {
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({
+    ...DEFAULT_LIST_COLLAPSED_GROUPS,
+  });
   const [hiddenGroups, setHiddenGroups] = useState<Record<string, boolean>>({});
   const [viewMode, setViewMode] = useState<"list" | "compact">("list");
   const [isDesktop, setIsDesktop] = useState(true);
@@ -894,16 +901,7 @@ export function ScheduleBoard({
     );
   }
 
-  const rowGroups = rows.reduce<{ label: string; rows: RoomRow[] }[]>((groups, row) => {
-    const groupLabel = INLINE_MAIN_ROOM_GROUPS.has(row.group) ? "功能设施" : row.groupLabel;
-    const group = groups.find((item) => item.label === groupLabel);
-    if (group) {
-      group.rows.push(row);
-    } else {
-      groups.push({ label: groupLabel, rows: [row] });
-    }
-    return groups;
-  }, []);
+  const rowGroups = buildListScheduleGroups(rows);
   const auxiliaryGroups = rowGroups.filter((group) => AUXILIARY_ROOM_GROUPS.has(group.rows[0]?.group ?? ""));
   const hiddenAuxiliaryCount = auxiliaryGroups.filter((group) => hiddenGroups[group.label]).length;
   const allAuxiliaryCollapsed =
@@ -1022,7 +1020,7 @@ export function ScheduleBoard({
             <div
               className={cn(
                 "grid min-w-0 gap-3 pb-2",
-                group.label === "功能设施" && "xl:grid-cols-[repeat(auto-fit,minmax(300px,1fr))]",
+                group.label === "功能设施" && "xl:grid-cols-3",
                 group.rows[0]?.group === "manufacture" && "min-[1800px]:grid-cols-2",
                 collapsed && "hidden"
               )}
@@ -1031,8 +1029,8 @@ export function ScheduleBoard({
                 const layoutRoom = layout.rooms.find((room) => room.id === row.roomId);
                 const rowVisual = roomVisualFor(row.group);
                 const efficiency = presentRoomEfficiency(row.group, row.efficiency);
-                const compactInlineRoom = INLINE_MAIN_ROOM_GROUPS.has(row.group);
-                const narrowLeftPanel = row.group === "control" || row.group === "dormitory";
+                const compactInlineRoom = isListFunctionalFacilityRoom(row.group);
+                const narrowLeftPanel = listRoomUsesAlignedOperatorOrigin(row.group);
                 const compactFactoryRoom = row.group === "manufacture";
                 const slotCount = compactInlineRoom ? (row.group === "meeting" ? 2 : 1) : roomSlotCountFor(row.group);
                 const slots = Array.from({ length: slotCount }, (_, index) => row.operatorSlots[index]);
