@@ -593,41 +593,6 @@ type RoomVisual = {
 const ROOM_SLOT_COUNT = 5;
 const AUXILIARY_ROOM_GROUPS = new Set(["dormitory", "hire", "meeting", "processing"]);
 const INLINE_MAIN_ROOM_GROUPS = new Set(["hire", "power", "meeting"]);
-const MEETING_CLUE_HINTS = [
-  { clue: "1", faction: "莱茵生命", operators: ["塞雷娅", "赫默", "伊芙利特", "白面鸮", "梅尔", "麦哲伦", "缪尔赛思", "多萝西", "星源", "淬羽赫默"] },
-  { clue: "2", faction: "企鹅物流", operators: ["能天使", "德克萨斯", "空", "可颂", "莫斯提马", "拜松", "拉普兰德"] },
-  { clue: "3", faction: "黑钢国际", operators: ["雷蛇", "芙兰卡", "杰西卡", "香草", "寒檀", "涤火杰西卡"] },
-  { clue: "4", faction: "乌萨斯学生自治团", operators: ["凛冬", "真理", "古米", "烈夏", "早露"] },
-  { clue: "5", faction: "格拉斯哥帮", operators: ["推进之王", "因陀罗", "达格达", "摩根"] },
-  { clue: "6", faction: "喀兰贸易", operators: ["银灰", "崖心", "初雪", "角峰", "讯使", "灵知", "耶拉", "极光", "锏"] },
-  { clue: "7", faction: "罗德岛制药", operators: ["阿米娅", "凯尔希", "杜宾", "临光", "闪灵", "夜莺", "华法琳", "嘉维尔", "Lancet-2", "Castle-3", "THRM-EX", "Friston-3"] },
-];
-
-function meetingClueHitsFor(slots: RoomRow["operatorSlots"]) {
-  return MEETING_CLUE_HINTS.filter((hint) =>
-    slots
-      .map((slot) => slot?.name)
-      .filter((name): name is string => Boolean(name))
-      .some((name) => hint.operators.some((operator) => name.includes(operator) || operator.includes(name)))
-  );
-}
-
-function meetingClueHintFor(slots: RoomRow["operatorSlots"]): string | null {
-  const hits = meetingClueHitsFor(slots);
-  if (!hits.length) return null;
-  return `更易获得线索：${hits.map((hint) => `${hint.clue} ${hint.faction}`).join(" / ")}`;
-}
-
-function meetingEfficiencyHintFor(level?: number): { label: string; title: string } {
-  const ambience = 15;
-  const roomLevel = level === 1 ? 7 : level === 2 ? 9 : 11;
-  const nonDistracted = 5;
-  const total = ambience + roomLevel + nonDistracted;
-  return {
-    label: `线索搜集效率 +${total}%`,
-    title: `默认最高气氛 +${ambience}% + 会客室 Lv.${level ?? 3} +${roomLevel}% + 非涣散 +${nonDistracted}% = +${total}%`,
-  };
-}
 
 function roomSlotCountFor(group: string) {
   if (group === "trading" || group === "manufacture") return 3;
@@ -880,8 +845,6 @@ export function ScheduleBoard({
 }) {
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [hiddenGroups, setHiddenGroups] = useState<Record<string, boolean>>({});
-  const [meetingClueDialogOpen, setMeetingClueDialogOpen] = useState(false);
-  const [selectedMeetingClues, setSelectedMeetingClues] = useState<string[]>([]);
 
   if (rows.length === 0) {
     return (
@@ -935,17 +898,6 @@ export function ScheduleBoard({
     });
   }
 
-  function toggleMeetingClueSelection(clue: string) {
-    setSelectedMeetingClues((current) => {
-      if (current.includes(clue)) return current.filter((item) => item !== clue);
-      if (current.length >= 2) return [current[1], clue];
-      return [...current, clue];
-    });
-  }
-
-  const selectedMeetingClueHints = selectedMeetingClues
-    .map((clue) => MEETING_CLUE_HINTS.find((hint) => hint.clue === clue))
-    .filter((hint): hint is (typeof MEETING_CLUE_HINTS)[number] => Boolean(hint));
   function restoreHiddenAuxiliaryGroups() {
     setHiddenGroups((current) => {
       const next = { ...current };
@@ -1015,8 +967,6 @@ export function ScheduleBoard({
                 const compactInlineRoom = INLINE_MAIN_ROOM_GROUPS.has(row.group);
                 const slotCount = compactInlineRoom ? (row.group === "meeting" ? 2 : 1) : roomSlotCountFor(row.group);
                 const slots = Array.from({ length: slotCount }, (_, index) => row.operatorSlots[index]);
-                const meetingClueHint = row.group === "meeting" ? meetingClueHintFor(slots) : null;
-                const meetingEfficiencyHint = row.group === "meeting" ? meetingEfficiencyHintFor(row.level) : null;
                 const rowStyle = {
                   "--room-accent": rowVisual.accent,
                   "--room-level": rowVisual.level,
@@ -1033,7 +983,7 @@ export function ScheduleBoard({
                     )}
                     style={rowStyle}
                   >
-                    <div className={cn("relative w-[330px] shrink-0 overflow-hidden bg-[#313131] max-sm:min-h-[128px] max-sm:w-full", compactInlineRoom && "w-[210px]", row.group === "meeting" && "w-[360px]")}> 
+                    <div className={cn("relative w-[330px] shrink-0 overflow-hidden bg-[#313131] max-sm:min-h-[128px] max-sm:w-full", compactInlineRoom && "w-[210px]", row.group === "meeting" && "w-[360px]")}>
                       <div
                         className="absolute inset-0 bg-left bg-no-repeat opacity-[0.52]"
                         style={{
@@ -1055,16 +1005,6 @@ export function ScheduleBoard({
                         </div>
                         <div className="h-2" />
                         {efficiency ? <RoomEfficiencyReadout value={efficiency} details={false} /> : null}
-                        {meetingClueHint ? (
-                          <div className="mt-1 max-h-8 overflow-hidden text-[10px] font-medium leading-4 text-white/70" title={meetingClueHint}>
-                            {meetingClueHint}
-                          </div>
-                        ) : null}
-                        {meetingEfficiencyHint ? (
-                          <div className="mt-0.5 truncate text-[10px] font-semibold leading-4 text-[#C8F75A]" title={meetingEfficiencyHint.title}>
-                            {meetingEfficiencyHint.label}
-                          </div>
-                        ) : null}
                         <RoomProductControls
                           row={row}
                           layoutRoom={layoutRoom}
@@ -1093,18 +1033,6 @@ export function ScheduleBoard({
                       {compactInlineRoom ? null : <RoomEfficiencyDetails value={efficiency} />}
                     </div>
 
-                    {row.group === "meeting" ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        className="absolute bottom-2 right-2 border border-white/10 bg-[#3C3C3C]/70 text-white/70 hover:bg-[#4B4B4B] hover:text-white"
-                        aria-label="会客室线索详情"
-                        onClick={() => setMeetingClueDialogOpen(true)}
-                      >
-                        <CircleHelp />
-                      </Button>
-                    ) : null}
                     <Tooltip>
                       <TooltipTrigger
                         render={
@@ -1129,55 +1057,6 @@ export function ScheduleBoard({
           </section>
         );
       })}
-      <Dialog open={meetingClueDialogOpen} onOpenChange={setMeetingClueDialogOpen}>
-        <DialogContent className="max-w-[720px] border-white/10 bg-[#242424] text-white sm:max-w-[720px]">
-          <DialogHeader>
-            <DialogTitle>会客室线索推荐</DialogTitle>
-            <DialogDescription className="text-white/60">选择想要获取的线索，最多选择 2 个。</DialogDescription>
-          </DialogHeader>
-          <div className="grid grid-cols-7 gap-2">
-            {MEETING_CLUE_HINTS.map((hint) => {
-              const active = selectedMeetingClues.includes(hint.clue);
-              return (
-                <Button
-                  key={hint.clue}
-                  type="button"
-                  variant={active ? "default" : "outline"}
-                  className={cn(
-                    "h-12 border-white/15 text-base font-semibold",
-                    active ? "bg-[#22BBFF] text-[#242424] hover:bg-[#22BBFF]" : "bg-[#303030] text-white hover:bg-[#3C3C3C] hover:text-white"
-                  )}
-                  onClick={() => toggleMeetingClueSelection(hint.clue)}
-                >
-                  {hint.clue}
-                </Button>
-              );
-            })}
-          </div>
-          <div className="min-h-[220px] rounded-lg border border-white/10 bg-black/18 p-3">
-            {selectedMeetingClueHints.length ? (
-              <div className="grid gap-3">
-                {selectedMeetingClueHints.map((hint) => (
-                  <section key={hint.clue} className="grid gap-2 border-b border-white/10 pb-3 last:border-b-0 last:pb-0">
-                    <div className="flex items-center gap-2">
-                      <span className="grid size-7 place-items-center bg-[#22BBFF] text-sm font-bold text-[#242424]">{hint.clue}</span>
-                      <strong className="text-sm">{hint.faction}</strong>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {hint.operators.map((name) => (
-                        <span key={name} className="rounded-sm border border-white/10 bg-white/8 px-2 py-1 text-xs text-white/78">{name}</span>
-                      ))}
-                    </div>
-                  </section>
-                ))}
-              </div>
-            ) : (
-              <div className="grid h-full min-h-[180px] place-items-center text-sm text-white/50">选择 1-2 个线索后显示推荐干员</div>
-            )}
-          </div>
-          <div className="text-xs leading-5 text-white/55">效率按默认最高气氛计算：最高气氛 +15%，会客室等级 +7%/+9%/+11%，非涣散 +5%。</div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
