@@ -9,6 +9,15 @@ import {
 } from "@/blueprint";
 import { OperatorSlot, roomVisualFor } from "@/components";
 import { presentRoomEfficiency } from "@/efficiency";
+import {
+  COMPACT_CARD_CLASS,
+  COMPACT_HEADER_CLASS,
+  COMPACT_OPERATOR_ROW_CLASS,
+  COMPACT_ROOM_LEVEL_CLASS,
+  COMPACT_ROOM_TITLE_CLASS,
+  compactFactoryAccent,
+  compactTradeAccent,
+} from "@/schedule-view-presentation";
 import type { RoomRow } from "@/schedule";
 import type { BaseBlueprint, MaaPlan } from "@/types";
 
@@ -20,18 +29,6 @@ export interface CompactScheduleViewProps {
   activePlan?: MaaPlan;
   onIssue: (row: RoomRow) => void;
 }
-
-const TRADE_ACCENT: Record<string, string> = {
-  gold: "border-transparent bg-[#22BBFF] text-[#313131]",
-  originium: "border-transparent bg-[#8F1E26] text-white",
-};
-
-const FACTORY_ACCENT: Record<string, string> = {
-  all: "border-transparent bg-[#FFD800] text-[#313131] ",
-  gold: "border-transparent bg-[#FFD800] text-[#313131]",
-  battle_record: "border-transparent bg-[#1F7DCE] text-white",
-  originium: "border-transparent bg-[#8F1E26] text-white",
-};
 
 /** 布局宽度百分比，自己改数值 */
 const GRID_LEFT_PCT = 55;   // 左大列宽度%
@@ -49,7 +46,6 @@ function CompactRoomCard({
   layoutRoom,
   visual,
   efficiency,
-  slotCount,
   slots,
   currentMoraleByOperator,
   className = "",
@@ -59,7 +55,6 @@ function CompactRoomCard({
   layoutRoom: BaseBlueprint["rooms"][number] | undefined;
   visual: ReturnType<typeof roomVisualFor>;
   efficiency: ReturnType<typeof presentRoomEfficiency>;
-  slotCount: number;
   slots: (RoomRow["operatorSlots"][number] | undefined)[];
   currentMoraleByOperator?: ReadonlyMap<string, number>;
   className?: string;
@@ -70,18 +65,18 @@ function CompactRoomCard({
   const rowStyle = { "--room-accent": visual.accent } as CSSProperties;
 
   return (
-    <div className={`flex flex-col justify-center gap-2 bg-[#313131] px-3 py-2 ${className}`} style={{ ...rowStyle, ...style }}>
-      <div className="flex items-center gap-2">
+    <div className={`${COMPACT_CARD_CLASS} ${className}`} style={{ ...rowStyle, ...style }}>
+      <div className={COMPACT_HEADER_CLASS}>
         <span className="h-5 w-1 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
-        <span className="text-sm font-medium text-white">{row.title}</span>
+        <span className={COMPACT_ROOM_TITLE_CLASS}>{row.title}</span>
         {row.level ? (
-          <span className="text-xs text-white/50">
+          <span className={COMPACT_ROOM_LEVEL_CLASS}>
             Lv.{row.level}/{layoutRoom ? maxRoomLevel(layoutRoom.kind) : row.level}
           </span>
         ) : null}
         {isTrade ? (() => {
           const order = tradeOrderFor(layoutRoom!);
-          const accent = TRADE_ACCENT[order] || "border-white/20 text-white bg-[#3C3C3C]/70";
+          const accent = compactTradeAccent(order);
           const label = order === "gold" ? "龙门商法" : order === "originium" ? "开采协力" : order;
           return (
             <div className={`ml-auto flex h-7 w-[90px] items-center justify-center rounded border px-2 text-xs ${accent}`}>
@@ -90,7 +85,7 @@ function CompactRoomCard({
           );
         })() : isFactory ? (() => {
           const recipe = factoryRecipeFor(layoutRoom!);
-          const accent = FACTORY_ACCENT[recipe] || "border-white/20 text-white bg-[#3C3C3C]/70";
+          const accent = compactFactoryAccent(recipe);
           const label = recipe === "all" ? "自动选择" : recipe === "gold" ? "贵金属" : recipe === "battle_record" ? "作战记录" : recipe === "originium" ? "源石碎片" : recipe;
           return (
             <div className={`ml-auto flex h-7 w-[90px] items-center justify-center rounded border px-2 text-xs ${accent}`}>
@@ -117,15 +112,13 @@ function CompactRoomCard({
           )}
         </div>
       ) : null}
-      <div
-        className="grid items-center justify-items-center gap-1.5"
-        style={{ gridTemplateColumns: `repeat(${slotCount}, minmax(0, 1fr))` }}
-      >
+      <div className={COMPACT_OPERATOR_ROW_CLASS}>
         {slots.map((slot, index) => (
           <OperatorSlot
             key={`${slot?.name ?? "empty"}-${index}`}
             slot={slot}
             currentMorale={slot ? currentMoraleByOperator?.get(slot.name) : undefined}
+            compactView
           />
         ))}
       </div>
@@ -170,7 +163,6 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
         layoutRoom={layoutRoom!}
         visual={visual}
         efficiency={efficiency}
-        slotCount={slotCount}
         slots={slots}
         currentMoraleByOperator={currentMoraleByOperator}
         className="min-w-0"
