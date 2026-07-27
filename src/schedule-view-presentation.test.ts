@@ -51,7 +51,7 @@ test("allocates the compact auxiliary row by operator capacity", () => {
   });
 });
 
-test("uses a horizontal power card with the operator aligned to the right", () => {
+test("right-aligns operators in horizontal power and auxiliary cards", () => {
   assert.equal(
     presentation.COMPACT_POWER_CARD_CLASS,
     "grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 bg-[#313131] px-3 py-2",

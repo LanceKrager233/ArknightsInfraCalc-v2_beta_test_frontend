@@ -125,7 +125,7 @@ Completed in commit `fe704e9`.
 - Modify: `src/schedule-view-presentation.ts`
 - Modify: `src/components/CompactScheduleView.tsx`
 
-- [ ] **Step 1: Write the failing two-column presentation test**
+- [x] **Step 1: Write the failing two-column presentation test**
 
 Replace the compact-grid test with:
 
@@ -146,7 +146,7 @@ test("widens the compact two-column stack and removes processing from that view"
 });
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -156,7 +156,7 @@ node --test --experimental-strip-types src/schedule-view-presentation.test.ts
 
 Expected: FAIL because `COMPACT_GRID_CLASS` still uses `grid` and `COMPACT_COLUMN_CLASS` is undefined.
 
-- [ ] **Step 3: Add the compact stack presentation constants**
+- [x] **Step 3: Add the compact stack presentation constants**
 
 Replace the old grid constant in `src/schedule-view-presentation.ts` with:
 
@@ -166,11 +166,11 @@ export const COMPACT_GRID_CLASS = "-mx-[80px] flex items-start gap-3";
 export const COMPACT_COLUMN_CLASS = "flex min-w-0 flex-col gap-3";
 ```
 
-- [ ] **Step 4: Run the focused test and verify GREEN**
+- [x] **Step 4: Run the focused test and verify GREEN**
 
 Run the focused command from Step 2. Expected: all presentation tests pass.
 
-- [ ] **Step 5: Render the left and right stacks independently**
+- [x] **Step 5: Render the left and right stacks independently**
 
 Remove the unused `Fragment` import, import `COMPACT_COLUMN_CLASS`, and replace the shared-row return block in `CompactScheduleView` with:
 
@@ -223,7 +223,7 @@ return (
 
 The fallback still allows two power rooms and a seventh workstation in the left stack. Dormitory 1 now begins exactly one `gap-3` below the auxiliary row.
 
-- [ ] **Step 6: Run all automated checks**
+- [x] **Step 6: Run all automated checks**
 
 ```powershell
 npm test
@@ -233,7 +233,7 @@ npm run build
 
 Expected: all repository tests pass; lint and production build exit with code 0.
 
-- [ ] **Step 7: Commit the independent-stack layout**
+- [x] **Step 7: Commit the independent-stack layout**
 
 ```powershell
 git add -- src/components/CompactScheduleView.tsx src/schedule-view-presentation.ts src/schedule-view-presentation.test.ts
@@ -247,7 +247,7 @@ git commit -m "fix: fill compact auxiliary column with dormitories"
 - Verify: `src/schedule-view-presentation.ts`
 - Verify: `src/schedule-view-presentation.test.ts`
 
-- [ ] **Step 1: Start the local application**
+- [x] **Step 1: Start the local application**
 
 ```powershell
 npm run dev
@@ -255,11 +255,11 @@ npm run dev
 
 Expected: Next dev server is ready at `http://127.0.0.1:5174`.
 
-- [ ] **Step 2: Load Full E2 and switch to compact view**
+- [x] **Step 2: Load Full E2 and switch to compact view**
 
 Load the 243 Full E2 sample, generate a schedule, and select the compact one-image layout.
 
-- [ ] **Step 3: Verify compact geometry at 1280px**
+- [x] **Step 3: Verify compact geometry at 1280px**
 
 With the sidebar expanded and then collapsed, measure:
 
@@ -270,11 +270,11 @@ With the sidebar expanded and then collapsed, measure:
 - no title, operator frame, or name overlaps another element;
 - the document has no horizontal overflow.
 
-- [ ] **Step 4: Verify compact geometry at 1920px**
+- [x] **Step 4: Verify compact geometry at 1920px**
 
 Repeat the height, spacing, clipping, stack-order, and overflow checks. Expected compact operator frames are 76px.
 
-- [ ] **Step 5: Verify list-view regression**
+- [x] **Step 5: Verify list-view regression**
 
 Switch to the list layout at 1280px and verify:
 
@@ -282,7 +282,7 @@ Switch to the list layout at 1280px and verify:
 - list operator frames remain 88px;
 - processing remains present and collapsed by default.
 
-- [ ] **Step 6: Stop the dev server and inspect the final diff**
+- [x] **Step 6: Stop the dev server and inspect the final diff**
 
 ```powershell
 git diff --check
