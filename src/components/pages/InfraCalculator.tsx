@@ -72,7 +72,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
 
   return (
     <>
-      <section className={showBetaPanels ? "grid grid-cols-[minmax(0,1fr)_430px] items-start max-[1100px]:block" : "block"}>
+      <section className={showBetaPanels ? "grid grid-cols-[minmax(0,1fr)_clamp(320px,22vw,360px)] items-start max-[1100px]:block" : "block"}>
         <section className={showBetaPanels ? "min-w-0 pr-5 max-[1100px]:pr-0" : "min-w-0"}>
           <Panel
             title="计划安排"
