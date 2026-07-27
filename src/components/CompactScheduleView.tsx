@@ -10,13 +10,18 @@ import {
 import { OperatorSlot, roomVisualFor } from "@/components";
 import { presentRoomEfficiency } from "@/efficiency";
 import {
+  COMPACT_AUXILIARY_WIDTHS,
   COMPACT_CARD_CLASS,
+  COMPACT_GRID_CLASS,
   COMPACT_HEADER_CLASS,
   COMPACT_OPERATOR_ROW_CLASS,
+  COMPACT_POWER_CARD_CLASS,
+  COMPACT_POWER_OPERATOR_ROW_CLASS,
   COMPACT_ROOM_LEVEL_CLASS,
   COMPACT_ROOM_TITLE_CLASS,
   compactFactoryAccent,
   compactTradeAccent,
+  isCompactScheduleGroupVisible,
 } from "@/schedule-view-presentation";
 import type { RoomRow } from "@/schedule";
 import type { BaseBlueprint, MaaPlan } from "@/types";
@@ -62,14 +67,14 @@ function CompactRoomCard({
 }) {
   const isTrade = layoutRoom?.kind === "trade_post";
   const isFactory = layoutRoom?.kind === "factory";
+  const isPower = row.group === "power";
   const rowStyle = { "--room-accent": visual.accent } as CSSProperties;
 
-  return (
-    <div className={`${COMPACT_CARD_CLASS} ${className}`} style={{ ...rowStyle, ...style }}>
-      <div className={COMPACT_HEADER_CLASS}>
-        <span className="h-5 w-1 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
-        <span className={COMPACT_ROOM_TITLE_CLASS}>{row.title}</span>
-        {row.level ? (
+  const header = (
+    <div className={COMPACT_HEADER_CLASS}>
+      <span className="h-5 w-1 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
+      <span className={COMPACT_ROOM_TITLE_CLASS}>{row.title}</span>
+      {row.level ? (
           <span className={COMPACT_ROOM_LEVEL_CLASS}>
             Lv.{row.level}/{layoutRoom ? maxRoomLevel(layoutRoom.kind) : row.level}
           </span>
@@ -92,35 +97,58 @@ function CompactRoomCard({
               {label}
             </div>
           );
-        })() : null}
-      </div>
-      {efficiency ? (
-        <div>
-          {row.group === "power" ? (
-            <span className="text-sm font-semibold tabular-nums text-[var(--room-accent)]">{efficiency.primaryValue}</span>
-          ) : row.group === "trading" || row.group === "manufacture" ? (
-            <div className="flex flex-wrap items-center gap-x-1.5 text-xs text-white/72">
-              <span className="font-semibold tabular-nums text-[var(--room-accent)]">{efficiency.primaryValue}</span>
-              {efficiency.details.map((detail) => (
-                <span key={detail.label} className={detail.kind === "cross-station" ? "text-[#C8F75A]" : undefined}>
-                  / {detail.label} {detail.value}
-                </span>
-              ))}
-            </div>
-          ) : (
-            <span className="text-sm tabular-nums text-white/60">{efficiency.primaryValue}</span>
-          )}
+      })() : null}
+    </div>
+  );
+
+  const efficiencyBlock = efficiency ? (
+    <div>
+      {isPower ? (
+        <span className="text-sm font-semibold tabular-nums text-[var(--room-accent)]">{efficiency.primaryValue}</span>
+      ) : row.group === "trading" || row.group === "manufacture" ? (
+        <div className="flex flex-wrap items-center gap-x-1.5 text-xs text-white/72">
+          <span className="font-semibold tabular-nums text-[var(--room-accent)]">{efficiency.primaryValue}</span>
+          {efficiency.details.map((detail) => (
+            <span key={detail.label} className={detail.kind === "cross-station" ? "text-[#C8F75A]" : undefined}>
+              / {detail.label} {detail.value}
+            </span>
+          ))}
         </div>
-      ) : null}
+      ) : (
+        <span className="text-sm tabular-nums text-white/60">{efficiency.primaryValue}</span>
+      )}
+    </div>
+  ) : null;
+
+  const operators = slots.map((slot, index) => (
+    <OperatorSlot
+      key={`${slot?.name ?? "empty"}-${index}`}
+      slot={slot}
+      currentMorale={slot ? currentMoraleByOperator?.get(slot.name) : undefined}
+      compactView
+    />
+  ));
+
+  if (isPower) {
+    return (
+      <div className={`${COMPACT_POWER_CARD_CLASS} ${className}`} style={{ ...rowStyle, ...style }}>
+        <div className="min-w-0">
+          {header}
+          <div className="mt-2">{efficiencyBlock}</div>
+        </div>
+        <div className={COMPACT_POWER_OPERATOR_ROW_CLASS}>
+          {operators}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`${COMPACT_CARD_CLASS} ${className}`} style={{ ...rowStyle, ...style }}>
+      {header}
+      {efficiencyBlock}
       <div className={COMPACT_OPERATOR_ROW_CLASS}>
-        {slots.map((slot, index) => (
-          <OperatorSlot
-            key={`${slot?.name ?? "empty"}-${index}`}
-            slot={slot}
-            currentMorale={slot ? currentMoraleByOperator?.get(slot.name) : undefined}
-            compactView
-          />
-        ))}
+        {operators}
       </div>
     </div>
   );
@@ -139,6 +167,7 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
 
   const byGroup = new Map<string, RoomRow[]>();
   for (const row of rows) {
+    if (!isCompactScheduleGroupVisible(row.group)) continue;
     const list = byGroup.get(row.group) ?? [];
     list.push(row);
     byGroup.set(row.group, list);
@@ -174,19 +203,17 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
   const ctrl = getGroup("control")[0];
   const meeting = getGroup("meeting")[0];
   const office = getGroup("hire")[0];
-  const workshop = getGroup("processing")[0];
 
   return (
     <div
-      className="-ml-10 -mr-10 grid gap-3"
+      className={COMPACT_GRID_CLASS}
       style={{ gridTemplateColumns: `${GRID_LEFT_PCT}% ${GRID_RIGHT_PCT}%` }}
     >
-      {/* Row 1: 控制中枢 | 会客室 办公室 加工站 */}
+      {/* Row 1: 控制中枢 | 会客室 办公室 */}
       {ctrl ? makeCard(ctrl) : <div />}
       <div className="flex justify-between gap-3">
-        {meeting && makeCard(meeting, 48)}
-        {office && makeCard(office, 26)}
-        {workshop && makeCard(workshop, 26)}
+        {meeting && makeCard(meeting, COMPACT_AUXILIARY_WIDTHS.meeting)}
+        {office && makeCard(office, COMPACT_AUXILIARY_WIDTHS.hire)}
       </div>
 
       {/* Row 2-4: 工作站×2(各50%) | 宿舍 */}
@@ -203,7 +230,7 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
       {/* Row 5 */}
       {powerCount === 3 ? (
         <>
-          <div className="flex justify-between gap-3">
+          <div className="flex items-start justify-between gap-3">
             {power.slice(0, 3).map((p) => makeCard(p, 33))}
           </div>
           {dorms[3] ? makeCard(dorms[3]) : <div />}
