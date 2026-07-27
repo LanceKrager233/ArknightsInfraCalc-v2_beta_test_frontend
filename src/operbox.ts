@@ -40,9 +40,12 @@ export function assertOperbox(value: unknown): OperBoxEntry[] {
     const rarity = Number(row.rarity);
     if (!id || !name) throw new Error(`第 ${index + 1} 项缺少 id 或 name。`);
     if (seen.has(id)) throw new Error(`干员 id ${id} 重复。`);
-    if (!Number.isInteger(elite) || elite < 0 || elite > 2) throw new Error(`${name} 的 elite 必须是 0–2 的整数。`);
-    if (!Number.isInteger(level) || level < 1 || level > 90) throw new Error(`${name} 的 level 必须是 1–90 的整数。`);
     if (typeof row.own !== "boolean") throw new Error(`${name} 的 own 必须是布尔值。`);
+    const owned = row.own as boolean;
+    if (owned) {
+      if (!Number.isInteger(elite) || elite < 0 || elite > 2) throw new Error(`${name} 的 elite 必须是 0–2 的整数。`);
+      if (!Number.isInteger(level) || level < 1 || level > 90) throw new Error(`${name} 的 level 必须是 1–90 的整数。`);
+    }
     if (!Number.isInteger(potential) || potential < 1 || potential > 6) throw new Error(`${name} 的 potential 必须是 1–6 的整数。`);
     if (!Number.isInteger(rarity) || rarity < 1 || rarity > 6) throw new Error(`${name} 的 rarity 必须是 1–6 的整数。`);
     seen.add(id);

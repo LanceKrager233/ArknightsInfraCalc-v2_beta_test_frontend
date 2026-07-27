@@ -52,6 +52,7 @@ import {
   FeedbackApiResponse,
   IssueReport,
   MaaJson,
+  MaaPlan,
   OperBoxEntry,
   PlanApiResponse,
   PresetDef,
@@ -76,7 +77,7 @@ export function ProductToggleGroup<T extends string>({
   value: T;
   options: Option<T>[];
   onChange: (value: T) => void;
-  columns: 2 | 3;
+  columns: 2 | 3 | 4;
   tone?: "default" | "trade" | "factory";
   surface?: "default" | "room";
   ariaLabel: string;
@@ -92,7 +93,7 @@ export function ProductToggleGroup<T extends string>({
       spacing={1}
       className={cn(
         "grid w-full",
-        columns === 2 ? "grid-cols-2" : "grid-cols-3"
+        columns === 4 ? "grid-cols-4 sm:grid-cols-2" : columns === 2 ? "grid-cols-2" : "grid-cols-3"
       )}
     >
       {options.map((option) => {
@@ -109,7 +110,7 @@ export function ProductToggleGroup<T extends string>({
             className={cn(
               "min-w-0 px-2 text-xs",
               surface === "default" && "min-h-10",
-              surface === "room" && "border-white/20 bg-[#3C3C3C]/70 px-1.5 text-[10px] text-white hover:bg-[#4B4B4B] hover:text-white sm:px-2 sm:text-xs",
+              surface === "room" && "max-w-[90px] max-sm:max-w-[50px] border-white/20 bg-[#3C3C3C]/70 px-1.5 text-[10px] text-white hover:bg-[#4B4B4B] hover:text-white sm:px-2 sm:text-xs",
               tone === "trade" &&
                 "aria-pressed:border-[#22BBFF] aria-pressed:bg-[#22BBFF] aria-pressed:text-[#313131] data-[state=on]:border-[#22BBFF] data-[state=on]:bg-[#22BBFF] data-[state=on]:text-[#313131]",
               isOriginiumTrade &&
@@ -321,7 +322,7 @@ export function LayoutEditor({
                       value: option.recipe,
                       label: option.label,
                     }))}
-                    columns={3}
+                    columns={2}
                     tone="factory"
                     onChange={(recipe) => onFactoryRecipeChange(room.id, recipe)}
                   />
@@ -738,7 +739,7 @@ export function RoomProductControls({
 
   if (isTrade && activeOrder) {
     return (
-      <div className="w-[178px] max-w-full max-sm:w-[106px]">
+      <div className="w-full max-sm:w-fit">
         <ProductToggleGroup
           ariaLabel={`${row.title} 订单`}
           value={activeOrder}
@@ -757,7 +758,7 @@ export function RoomProductControls({
 
   if (isFactory && activeRecipe) {
     return (
-      <div className="w-[288px] max-w-full max-sm:w-[174px]">
+      <div className="w-full max-w-[220px]">
         <ProductToggleGroup
           ariaLabel={`${row.title} 配方`}
           value={activeRecipe}
@@ -765,7 +766,7 @@ export function RoomProductControls({
             value: option.recipe,
             label: option.label,
           }))}
-          columns={3}
+          columns={4}
           tone="factory"
           surface="room"
           onChange={(recipe) => onFactoryRecipeChange(row.roomId, recipe)}
@@ -998,7 +999,7 @@ export function ScheduleBoard({
                     )}
                     style={rowStyle}
                   >
-                    <div className={cn("relative w-[330px] shrink-0 overflow-hidden bg-[#313131] max-sm:w-full", compactInlineRoom && "w-[210px]", narrowLeftPanel && "w-[240px]", row.group === "meeting" && "w-[360px]")}>
+                    <div className={cn("relative w-[220px] shrink-0 overflow-hidden bg-[#313131] max-sm:w-full", compactInlineRoom && "w-[210px]", narrowLeftPanel && "w-[240px]", row.group === "meeting" && "w-[360px]")}>
                       <div
                         className="absolute inset-0 bg-left bg-no-repeat opacity-[0.52]"
                         style={{
