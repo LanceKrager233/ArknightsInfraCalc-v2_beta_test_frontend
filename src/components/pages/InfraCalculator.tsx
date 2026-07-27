@@ -1,6 +1,6 @@
 "use client";
 
-import { Database, FileJson, FlaskConical, Loader2, Settings2, ShieldCheck, Terminal } from "lucide-react";
+import { FileJson, FlaskConical, Loader2, Settings2, ShieldCheck, Terminal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,7 +14,7 @@ import {
   ScheduleBoard,
   ShiftTabs,
 } from "@/components";
-import { InfrastructureSnapshot, ShiftComparisonCard } from "@/skland-components";
+import { ShiftComparisonCard } from "@/skland-components";
 import type { RoomRow } from "@/schedule";
 import type {
   BaseBlueprint,
@@ -24,14 +24,12 @@ import type {
   OperBoxEntry,
   PlanApiResponse,
   ShiftComparison,
-  SklandSnapshot,
 } from "@/types";
 
 interface InfraCalculatorProps {
   operbox: OperBoxEntry[] | null;
   layout: BaseBlueprint;
-  sklandSnapshot: SklandSnapshot | null;
-  sklandLayoutMatches: boolean | null;
+  showBetaPanels: boolean;
   result: PlanApiResponse | null;
   scheduleResult: PlanApiResponse | null;
   activeShift: number;
@@ -51,7 +49,6 @@ interface InfraCalculatorProps {
   onMarkIssue: (row: RoomRow) => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
-  onApplySklandLayout: () => void;
   onDownloadMaa: () => void;
   onDownloadBundle: () => void;
   onCopyCommand: () => void;
@@ -61,7 +58,7 @@ interface InfraCalculatorProps {
 
 export function InfraCalculator(props: InfraCalculatorProps) {
   const {
-    operbox, layout, sklandSnapshot, sklandLayoutMatches,
+    operbox, layout, showBetaPanels,
     result, scheduleResult, activeShift, rows, currentMoraleByOperator,
     activePlan, closestComparison,
     resultClearNotice,
@@ -69,14 +66,14 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     sampleLoading,
     onLoadSample, onOpenSetup, onSetActiveShift, onMarkIssue,
     onFactoryRecipeChange, onTradeOrderChange,
-    onApplySklandLayout, onDownloadMaa, onDownloadBundle, onCopyCommand,
+    onDownloadMaa, onDownloadBundle, onCopyCommand,
     onClearResultNotice, onDismissResultClearWarning,
   } = props;
 
   return (
     <>
-      <section className="grid grid-cols-[minmax(0,1fr)_430px] items-start max-[1100px]:block">
-        <section className="min-w-0 pr-5 max-[1100px]:pr-0">
+      <section className={showBetaPanels ? "grid grid-cols-[minmax(0,1fr)_430px] items-start max-[1100px]:block" : "block"}>
+        <section className={showBetaPanels ? "min-w-0 pr-5 max-[1100px]:pr-0" : "min-w-0"}>
           <Panel
             title="计划安排"
             icon={<ShieldCheck className="size-4" />}
@@ -128,23 +125,20 @@ export function InfraCalculator(props: InfraCalculatorProps) {
           </Panel>
         </section>
 
-        <aside className="min-w-0 divide-y divide-border/70 border-l border-border/70 pl-5 max-[1100px]:mt-5 max-[1100px]:grid max-[1100px]:grid-cols-[repeat(auto-fit,minmax(280px,1fr))] max-[1100px]:divide-x max-[1100px]:divide-y-0 max-[1100px]:border-l-0 max-[1100px]:border-t max-[1100px]:pl-0 max-[1100px]:[&>section]:px-5 max-[700px]:block max-[700px]:divide-x-0 max-[700px]:divide-y max-[700px]:[&>section]:px-0">
-          {sklandSnapshot ? (
-            <Panel title="当前状态 · 森空岛基建" icon={<Database className="size-4" />}>
-              <InfrastructureSnapshot snapshot={sklandSnapshot} layoutMatches={sklandLayoutMatches ?? false} onApplyLayout={onApplySklandLayout} />
+        {showBetaPanels ? (
+          <aside className="min-w-0 divide-y divide-border/70 border-l border-border/70 pl-5 max-[1100px]:mt-5 max-[1100px]:grid max-[1100px]:grid-cols-[repeat(auto-fit,minmax(280px,1fr))] max-[1100px]:divide-x max-[1100px]:divide-y-0 max-[1100px]:border-l-0 max-[1100px]:border-t max-[1100px]:pl-0 max-[1100px]:[&>section]:px-5 max-[700px]:block max-[700px]:divide-x-0 max-[700px]:divide-y max-[700px]:[&>section]:px-0">
+            <Panel title="问题上下文" icon={<FileJson className="size-4" />}>
+              <IssuePanel issue={issueForPanel} report={issueReport} feedback={feedbackResult} feedbackError={feedbackError} />
             </Panel>
-          ) : null}
-          <Panel title="问题上下文" icon={<FileJson className="size-4" />}>
-            <IssuePanel issue={issueForPanel} report={issueReport} feedback={feedbackResult} feedbackError={feedbackError} />
-          </Panel>
-          <Panel title="调试输出" icon={<Terminal className="size-4" />}>
-            <DebugActions result={result} onDownloadMaa={onDownloadMaa} onDownloadBundle={onDownloadBundle} onCopyCommand={onCopyCommand} />
-            <details className="mt-3 text-sm text-muted-foreground">
-              <summary className="cursor-pointer">stdout / stderr</summary>
-              <Textarea readOnly value={result?.stdout || result?.stderr || "暂无输出。"} className="mt-2 max-h-64 min-h-32 resize-y font-mono text-xs" />
-            </details>
-          </Panel>
-        </aside>
+            <Panel title="调试输出" icon={<Terminal className="size-4" />}>
+              <DebugActions result={result} onDownloadMaa={onDownloadMaa} onDownloadBundle={onDownloadBundle} onCopyCommand={onCopyCommand} />
+              <details className="mt-3 text-sm text-muted-foreground">
+                <summary className="cursor-pointer">stdout / stderr</summary>
+                <Textarea readOnly value={result?.stdout || result?.stderr || "暂无输出。"} className="mt-2 max-h-64 min-h-32 resize-y font-mono text-xs" />
+              </details>
+            </Panel>
+          </aside>
+        ) : null}
       </section>
 
       {resultClearNotice ? (
