@@ -3,7 +3,7 @@ export interface TradeProduct {
 }
 
 export interface FactoryProduct {
-  factory: { recipe: "gold" | "battle_record" | "originium" };
+  factory: { recipe: "all" | "gold" | "battle_record" | "originium" };
 }
 
 export type RoomProduct = TradeProduct | FactoryProduct;
@@ -161,6 +161,14 @@ export interface HealthApiResponse {
     pid?: number | null;
     running: boolean;
     restartCount: number;
+    protocolMode?: "plan.compute" | "legacy";
+    planCompute?: {
+      supported: boolean;
+      protocolVersion: number | null;
+      schemaVersion: number | null;
+      contractSha256: string | null;
+      reason: string | null;
+    };
   };
   serveError?: string | null;
   candidates?: CliCandidate[];
@@ -429,6 +437,22 @@ export interface FeedbackApiResponse {
   relativeOperboxPath?: string;
   relativeDebugBundlePath?: string;
   error?: string;
+}
+
+export interface PlanComputeParams {
+  schema_version: 1;
+  layout: BaseBlueprint;
+  operbox: OperBoxEntry[];
+  labels?: {
+    layout?: string | null;
+    operbox?: string | null;
+  };
+  options?: {
+    rotation?: "abc_12_6_6" | "main_backup_12_12" | "fiammetta_8_8_4_4" | "abyssal_7_5_7_5";
+    top?: number;
+    system_preferences?: Record<string, string>;
+    maa_title?: string | null;
+  };
 }
 
 export interface PlanApiResponse {

@@ -72,6 +72,7 @@ const BLUEPRINT_GROUP: Partial<Record<RoomKind, RoomGroup>> = {
 };
 
 const PRODUCT_LABELS: Record<string, string> = {
+  all: "由求解器选择",
   LMD: "龙门商法",
   "Pure Gold": "贵金属",
   "Battle Record": "作战记录",
@@ -89,6 +90,7 @@ const TRADE_PRODUCT_LABELS: Record<string, string> = {
 };
 
 const FACTORY_PRODUCT_LABELS: Record<string, string> = {
+  all: "由求解器选择",
   "Pure Gold": "贵金属",
   gold: "贵金属",
   "Battle Record": "作战记录",

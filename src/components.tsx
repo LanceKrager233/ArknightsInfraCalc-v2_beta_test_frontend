@@ -998,7 +998,7 @@ export function ScheduleBoard({
                     )}
                     style={rowStyle}
                   >
-                    <div className={cn("relative w-[320px] shrink-0 overflow-hidden bg-[#313131] max-sm:w-full", compactInlineRoom && "w-[210px]", narrowLeftPanel && "w-[240px]")}>
+                    <div className={cn("relative w-[330px] shrink-0 overflow-hidden bg-[#313131] max-sm:w-full", compactInlineRoom && "w-[210px]", narrowLeftPanel && "w-[240px]", row.group === "meeting" && "w-[360px]")}>
                       <div
                         className="absolute inset-0 bg-left bg-no-repeat opacity-[0.52]"
                         style={{
