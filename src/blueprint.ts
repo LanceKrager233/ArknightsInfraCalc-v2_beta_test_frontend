@@ -17,7 +17,7 @@ export const PRESETS: PresetDef[] = [
 ];
 
 export const FACTORY_RECIPE_OPTIONS: { recipe: FactoryRecipe; label: string }[] = [
-  { recipe: "all", label: "由求解器选择" },
+  { recipe: "all", label: "自动选择" },
   { recipe: "gold", label: "贵金属" },
   { recipe: "battle_record", label: "作战记录" },
   { recipe: "originium", label: "源石碎片" },
@@ -90,6 +90,19 @@ export function factoryRecipeFor(room: BlueprintRoom): FactoryRecipe {
 export function tradeOrderFor(room: BlueprintRoom): TradeOrder {
   if (room.product && "trade" in room.product) return room.product.trade.order;
   return "gold";
+}
+
+const MAA_PRODUCT_TO_RECIPE: Record<string, FactoryRecipe> = {
+  "Pure Gold": "gold",
+  "贵金属": "gold",
+  "Battle Record": "battle_record",
+  "作战记录": "battle_record",
+  "Originium Shard": "originium",
+  "源石碎片": "originium",
+};
+
+export function factoryRecipeFromMaaProduct(product: string): FactoryRecipe | null {
+  return MAA_PRODUCT_TO_RECIPE[product] ?? null;
 }
 
 export function productLabel(room: BlueprintRoom): string | undefined {

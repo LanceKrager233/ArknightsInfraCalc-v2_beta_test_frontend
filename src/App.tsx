@@ -25,6 +25,8 @@ import {
   buildBlueprint,
   computePowerBudget,
   FACTORY_RECIPE_OPTIONS,
+  factoryRecipeFor,
+  factoryRecipeFromMaaProduct,
   FactoryRecipe,
   PRESETS,
   TRADE_ORDER_OPTIONS,
@@ -494,6 +496,26 @@ function WorkbenchApp() {
         sourceName: fileName,
       });
       setResult(response);
+      if (response.success && response.maaJson?.plans[0]) {
+        const plan = response.maaJson.plans[0];
+        const maaFactoryRooms = plan.rooms?.manufacture;
+        if (maaFactoryRooms) {
+          setLayout((current) => {
+            let next = current;
+            const factoryLayoutRooms = next.rooms.filter((r) => r.kind === "factory");
+            maaFactoryRooms.forEach((maaRoom, index) => {
+              const layoutRoom = factoryLayoutRooms[index];
+              if (!layoutRoom || !maaRoom.product) return;
+              if (factoryRecipeFor(layoutRoom) !== "all") return;
+              const recipe = factoryRecipeFromMaaProduct(maaRoom.product);
+              if (recipe) {
+                next = updateFactoryRecipe(next, layoutRoom.id, recipe);
+              }
+            });
+            return next;
+          });
+        }
+      }
       if (!response.success) {
         setApiError(response.error ?? "infra-cli 没有成功生成排班。");
       }

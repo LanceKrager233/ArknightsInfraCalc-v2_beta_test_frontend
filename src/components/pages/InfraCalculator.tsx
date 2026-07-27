@@ -1,6 +1,7 @@
 "use client";
 
 import { FileJson, FlaskConical, Loader2, Settings2, ShieldCheck, Terminal } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -69,11 +70,19 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     onDownloadMaa, onDownloadBundle, onCopyCommand,
     onClearResultNotice, onDismissResultClearWarning,
   } = props;
+  const [scheduleViewMode, setScheduleViewMode] = useState<"list" | "compact">("list");
+  const showBetaSidebar = showBetaPanels && scheduleViewMode === "list";
+
+  useEffect(() => {
+    if (rows.length === 0) {
+      setScheduleViewMode("list");
+    }
+  }, [rows.length]);
 
   return (
     <>
-      <section className={showBetaPanels ? "grid grid-cols-[minmax(0,1fr)_clamp(320px,22vw,360px)] items-start max-[1100px]:block" : "block"}>
-        <section className={showBetaPanels ? "min-w-0 pr-5 max-[1100px]:pr-0" : "min-w-0"}>
+      <section className={showBetaSidebar ? "grid grid-cols-[minmax(0,1fr)_clamp(320px,22vw,360px)] items-start max-[1100px]:block" : "block"}>
+        <section className={showBetaSidebar ? "min-w-0 pr-5 max-[1100px]:pr-0" : "min-w-0"}>
           <Panel
             title="计划安排"
             icon={<ShieldCheck className="size-4" />}
@@ -85,17 +94,6 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               </Button>
             )}
           >
-            <div className="mb-3 flex items-start justify-between gap-3 max-sm:flex-col">
-              <div className="min-w-0">
-                <strong className="block truncate text-sm font-medium">
-                  {result?.maaJson?.title ?? "等待生成排班"}
-                </strong>
-                <span className="mt-1 block text-sm text-muted-foreground">
-                  {activePlan?.description ?? "配置 Box 与基建布局后，即可生成三班排班。"}
-                </span>
-              </div>
-              <ShiftTabs maaJson={result?.maaJson} active={activeShift} closest={closestComparison?.planIndex} onChange={onSetActiveShift} />
-            </div>
             {!operbox ? (
               <div className="mb-5 flex flex-wrap items-center justify-between gap-4 border-y border-dashed border-border/70 py-6">
                 <div>
@@ -118,14 +116,30 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               rows={rows}
               layout={layout}
               currentMoraleByOperator={currentMoraleByOperator}
+              activeShift={activeShift}
+              activePlan={activePlan}
+              shiftInfoSlot={(
+                <>
+                  <div className="min-w-0">
+                    <strong className="block truncate text-sm font-medium">
+                      {result?.maaJson?.title ?? "等待生成排班"}
+                    </strong>
+                    <span className="mt-1 block text-sm text-muted-foreground">
+                      {activePlan?.description ?? "配置 Box 与基建布局后，即可生成三班排班。"}
+                    </span>
+                  </div>
+                  <ShiftTabs maaJson={result?.maaJson} active={activeShift} closest={closestComparison?.planIndex} onChange={onSetActiveShift} />
+                </>
+              )}
               onIssue={onMarkIssue}
               onFactoryRecipeChange={onFactoryRecipeChange}
               onTradeOrderChange={onTradeOrderChange}
+              onViewModeChange={setScheduleViewMode}
             />
           </Panel>
         </section>
 
-        {showBetaPanels ? (
+        {showBetaSidebar ? (
           <aside className="min-w-0 divide-y divide-border/70 border-l border-border/70 pl-5 max-[1100px]:mt-5 max-[1100px]:grid max-[1100px]:grid-cols-[repeat(auto-fit,minmax(280px,1fr))] max-[1100px]:divide-x max-[1100px]:divide-y-0 max-[1100px]:border-l-0 max-[1100px]:border-t max-[1100px]:pl-0 max-[1100px]:[&>section]:px-5 max-[700px]:block max-[700px]:divide-x-0 max-[700px]:divide-y max-[700px]:[&>section]:px-0">
             <Panel title="问题上下文" icon={<FileJson className="size-4" />}>
               <IssuePanel issue={issueForPanel} report={issueReport} feedback={feedbackResult} feedbackError={feedbackError} />

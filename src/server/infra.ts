@@ -17,7 +17,6 @@ import type {
 import { isSklandConfigured, sklandDisabledReason } from "@/server/skland/session";
 import { normalizeServeRoomEfficiency } from "@/efficiency";
 import {
-  assertUniqueOperboxIdentities,
   inspectPlanComputeCapability,
   parsePlanComputePayload,
 } from "./plan-protocol";
@@ -837,6 +836,15 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
     const serveResponsePath = path.join(runDir, "serve-response.json");
     resultPath = path.join(runDir, "result.json");
 
+    // 去重：同名干员保留第一个，删除后续
+    const seenNames = new Set<string>();
+    body.operbox = body.operbox.filter((entry) => {
+      const name = entry.name.trim();
+      if (seenNames.has(name)) return false;
+      seenNames.add(name);
+      return true;
+    });
+
     await writeJson(layoutPath, body.layout);
     await writeJson(operboxPath, body.operbox);
 
@@ -852,7 +860,6 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
     let responseValidationError: string | undefined;
 
     if (planCompute.supported) {
-      assertUniqueOperboxIdentities(body.operbox);
       serveResult = await getServeClient().send("plan.compute", {
         schema_version: 1,
         layout: body.layout,
