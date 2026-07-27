@@ -51,9 +51,13 @@ import {
   DEFAULT_LIST_COLLAPSED_GROUPS,
   buildListScheduleGroups,
   isListFunctionalFacilityRoom,
+  listFunctionalFacilityGridClass,
+  listFunctionalOperatorPosition,
+  listFunctionalOperatorPlacementClass,
+  listMeetingRoomSpanClass,
   listRoomHeightClass,
+  listRoomTitleSizeClass,
   listRoomUsesAlignedOperatorOrigin,
-  listRoomUsesPowerColumnAlignment,
 } from "./schedule-list-layout";
 import {
   BaseBlueprint,
@@ -718,7 +722,7 @@ function RoomEfficiencyDetails({
     <div
       className={cn(
         "ml-6 grid min-w-[160px] max-w-[240px] gap-1 text-sm leading-tight text-white/62 max-sm:hidden",
-        compactFactory && "min-[1800px]:ml-0 min-[1800px]:flex min-[1800px]:min-w-0 min-[1800px]:max-w-none min-[1800px]:gap-3 min-[1800px]:text-xs"
+        compactFactory && "min-[1800px]:z-10 min-[1800px]:col-start-1 min-[1800px]:row-start-2 min-[1800px]:ml-0 min-[1800px]:flex min-[1800px]:min-w-0 min-[1800px]:max-w-none min-[1800px]:gap-3 min-[1800px]:text-xs"
       )}
       title={value.details.map((detail) => `${detail.label} ${detail.value}`).join(" · ")}
     >
@@ -796,44 +800,96 @@ export function RoomProductControls({
   return <div className="text-lg font-medium leading-none text-[var(--room-accent)]">{row.product}</div>;
 }
 
+function OperatorSlotShell({
+  ariaLabel,
+  centerFrameInList,
+  compactFactory,
+  frameClassName,
+  frameContent,
+  label,
+  labelClassName,
+  title,
+}: {
+  ariaLabel?: string;
+  centerFrameInList: boolean;
+  compactFactory: boolean;
+  frameClassName: string;
+  frameContent?: ReactNode;
+  label: string;
+  labelClassName: string;
+  title?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "min-w-0 shrink-0 [--operator-slot-size:clamp(70px,7.3vw,88px)] max-sm:[--operator-slot-size:clamp(56px,16vw,76px)]",
+        compactFactory && "min-[1800px]:[--operator-slot-size:70px]",
+        centerFrameInList && "sm:relative sm:h-full sm:w-[var(--operator-slot-size)]",
+      )}
+      title={title}
+    >
+      <div
+        className={cn(
+          "relative aspect-square h-[var(--operator-slot-size)] min-w-0 shrink-0 overflow-hidden border-2 max-sm:border",
+          frameClassName,
+          centerFrameInList && "sm:absolute sm:left-0 sm:top-1/2 sm:-translate-y-1/2",
+        )}
+        aria-label={ariaLabel}
+      >
+        {frameContent}
+      </div>
+      <span
+        className={cn(
+          "mt-0.5 block truncate text-center text-sm leading-tight max-sm:text-xs",
+          labelClassName,
+          centerFrameInList && "sm:absolute sm:left-0 sm:top-[calc(50%+var(--operator-slot-size)/2+2px)] sm:mt-0 sm:w-full",
+        )}
+      >
+        {label}
+      </span>
+    </div>
+  );
+}
+
 export function OperatorSlot({
   slot,
   currentMorale,
   compactFactory = false,
+  centerFrameInList = false,
 }: {
   slot: RoomRow["operatorSlots"][number] | undefined;
   currentMorale?: number;
   compactFactory?: boolean;
+  centerFrameInList?: boolean;
 }) {
   if (!slot) {
     return (
-      <div className="min-w-0 shrink-0">
-        <div
-          className={cn(
-            "relative aspect-square h-[clamp(70px,7.3vw,88px)] min-w-0 shrink-0 overflow-hidden border-2 border-[#4B4B4B] bg-[#3C3C3C] after:absolute after:left-1/2 after:top-1/2 after:h-0.5 after:w-[78%] after:origin-center after:-translate-x-1/2 after:-translate-y-1/2 after:rotate-[-45deg] after:bg-[#4B4B4B] after:content-[''] max-sm:h-[clamp(56px,16vw,76px)] max-sm:border",
-            compactFactory && "min-[1800px]:h-[70px]"
-          )}
-          aria-label="空置"
-        />
-        <span className="mt-0.5 block truncate text-center text-sm leading-tight text-transparent max-sm:text-xs select-none">占</span>
-      </div>
+      <OperatorSlotShell
+        ariaLabel="空置"
+        centerFrameInList={centerFrameInList}
+        compactFactory={compactFactory}
+        frameClassName="border-[#4B4B4B] bg-[#3C3C3C] after:absolute after:left-1/2 after:top-1/2 after:h-0.5 after:w-[78%] after:origin-center after:-translate-x-1/2 after:-translate-y-1/2 after:rotate-[-45deg] after:bg-[#4B4B4B] after:content-['']"
+        label="占"
+        labelClassName="text-transparent select-none"
+      />
     );
   }
 
   return (
-    <div className="min-w-0 shrink-0" title={slot.label}>
-      <div className={cn(
-        "relative aspect-square h-[clamp(70px,7.3vw,88px)] overflow-hidden border-2 border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)] max-sm:h-[clamp(56px,16vw,76px)] max-sm:border",
-        compactFactory && "min-[1800px]:h-[70px]"
-      )}>
-        {slot.portrait ? (
-          <img src={slot.portrait} alt={slot.name} className="absolute inset-0 h-full w-full object-cover outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10" />
-        ) : (
-          <div className="flex h-full items-center justify-center bg-[#4B4B4B] px-2 text-center text-xs font-semibold text-white">
-            {slot.name}
-          </div>
-        )}
-        {typeof currentMorale === "number" ? (
+    <OperatorSlotShell
+      centerFrameInList={centerFrameInList}
+      compactFactory={compactFactory}
+      frameClassName="border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)]"
+      frameContent={
+        <>
+          {slot.portrait ? (
+            <img src={slot.portrait} alt={slot.name} className="absolute inset-0 h-full w-full object-cover outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10" />
+          ) : (
+            <div className="flex h-full items-center justify-center bg-[#4B4B4B] px-2 text-center text-xs font-semibold text-white">
+              {slot.name}
+            </div>
+          )}
+          {typeof currentMorale === "number" ? (
           <span
             className="absolute bottom-0.5 left-0.5 flex items-center gap-0.5 whitespace-nowrap rounded-sm bg-black/72 px-1 py-0.5 text-xs font-normal leading-none text-white shadow-[0_1px_3px_rgba(0,0,0,0.5)] [&_svg]:size-2.5 max-sm:bottom-0.5 max-sm:left-0.5 max-sm:px-0.5 max-sm:text-[10px] max-sm:[&_svg]:size-2"
             aria-label={`当前心情 ${currentMorale}/24`}
@@ -843,12 +899,13 @@ export function OperatorSlot({
             <span className="max-sm:hidden">当前</span>
             <span>{currentMorale}</span>
           </span>
-        ) : null}
-      </div>
-      <span className="mt-0.5 block truncate text-center text-sm leading-tight text-white max-sm:text-xs">
-        {slot.name}
-      </span>
-    </div>
+          ) : null}
+        </>
+      }
+      label={slot.name}
+      labelClassName="text-white"
+      title={slot.label}
+    />
   );
 }
 
@@ -1022,7 +1079,7 @@ export function ScheduleBoard({
             <div
               className={cn(
                 "grid min-w-0 gap-3 pb-2",
-                group.label === "功能设施" && "xl:grid-cols-3",
+                group.label === "功能设施" && listFunctionalFacilityGridClass(),
                 group.rows[0]?.group === "manufacture" && "min-[1800px]:grid-cols-2",
                 collapsed && "hidden"
               )}
@@ -1034,7 +1091,8 @@ export function ScheduleBoard({
                 const compactInlineRoom = isListFunctionalFacilityRoom(row.group);
                 const narrowLeftPanel = listRoomUsesAlignedOperatorOrigin(row.group);
                 const compactFactoryRoom = row.group === "manufacture";
-                const powerColumnAlignedRoom = listRoomUsesPowerColumnAlignment(row.group);
+                const functionalOperatorPosition = listFunctionalOperatorPosition(row.group);
+                const functionalOperatorPlacementClass = listFunctionalOperatorPlacementClass(row.group);
                 const slotCount = compactInlineRoom ? (row.group === "meeting" ? 2 : 1) : roomSlotCountFor(row.group);
                 const slots = Array.from({ length: slotCount }, (_, index) => row.operatorSlots[index]);
                 const rowStyle = {
@@ -1048,7 +1106,8 @@ export function ScheduleBoard({
                     className={cn(
                       "relative flex w-full overflow-hidden bg-[#313131] text-white shadow-[0_10px_20px_rgba(0,0,0,0.24)] max-sm:h-auto max-sm:flex-col",
                       listRoomHeightClass(row.group),
-                      row.group === "meeting" && "xl:col-span-2 [container-type:inline-size]",
+                      compactInlineRoom && "[container-type:inline-size]",
+                      listMeetingRoomSpanClass(row.group),
                       row.suspicious && "ring-2 ring-destructive ring-offset-2"
                     )}
                     style={rowStyle}
@@ -1068,7 +1127,7 @@ export function ScheduleBoard({
                         <div className="max-sm:flex max-sm:items-center max-sm:gap-2">
                           <div>
                             <div className="flex items-center gap-2.5 max-sm:gap-1.5">
-                              <div className={cn("min-w-0 truncate text-[24px] font-medium tracking-normal text-white [text-shadow:0_2px_3px_rgba(0,0,0,0.75)] max-sm:text-[16px]", compactInlineRoom && "text-[18px]")}>
+                              <div className={cn("min-w-0 truncate font-medium tracking-normal text-white [text-shadow:0_2px_3px_rgba(0,0,0,0.75)]", listRoomTitleSizeClass(row.group))}>
                                 {row.title}
                               </div>
                               <LevelDiamonds level={row.level} maxLevel={layoutRoom ? maxRoomLevel(layoutRoom.kind) : row.level} />
@@ -1096,24 +1155,24 @@ export function ScheduleBoard({
 
                     <div
                       className={cn(
-                        "flex min-w-0 flex-1 items-center gap-5 py-2 pl-2 pr-3 max-sm:flex-col max-sm:items-stretch max-sm:gap-2 max-sm:px-3 max-sm:pb-3 max-sm:pt-0",
+                        "flex min-w-0 flex-1 items-center gap-5 py-2 pl-2 pr-3 sm:h-full max-sm:flex-col max-sm:items-stretch max-sm:gap-2 max-sm:px-3 max-sm:pb-3 max-sm:pt-0",
                         compactInlineRoom && "justify-center pl-4 pr-8",
-                        row.group === "meeting" && "xl:justify-start xl:pl-[max(0.5rem,calc(25cqw-10rem))]",
-                        compactFactoryRoom && "min-[1800px]:flex-col min-[1800px]:items-start min-[1800px]:justify-center min-[1800px]:gap-1 min-[1800px]:pr-3"
+                        compactFactoryRoom && "min-[1800px]:grid min-[1800px]:grid-cols-1 min-[1800px]:grid-rows-[1fr_auto] min-[1800px]:items-stretch min-[1800px]:gap-1 min-[1800px]:pr-3"
                       )}
                     >
                       <div
                         className={cn(
-                          "grid min-w-0 items-center justify-start max-sm:flex max-sm:overflow-x-auto max-sm:pb-1",
+                          "grid min-w-0 items-center justify-start sm:h-full max-sm:flex max-sm:overflow-x-auto max-sm:pb-1",
                           compactInlineRoom ? "flex-none" : "flex-1 grid-flow-col auto-cols-max",
-                          compactFactoryRoom && "min-[1800px]:flex-none",
+                          compactFactoryRoom && "min-[1800px]:col-start-1 min-[1800px]:row-span-2 min-[1800px]:row-start-1",
                           compactInlineRoom && (slotCount === 2 ? "grid-cols-2" : "grid-cols-1"),
-                          powerColumnAlignedRoom && "xl:absolute xl:top-1/2 xl:-translate-y-1/2"
+                          functionalOperatorPlacementClass
                         )}
                         style={{
-                          columnGap: "clamp(0.75rem, 1.25vw, 1.25rem)",
-                          ...(powerColumnAlignedRoom
-                            ? { left: "max(11.375rem, calc(25cqw + 3.125rem))" }
+                          columnGap: functionalOperatorPosition?.columnGap
+                            ?? "clamp(0.75rem, 1.25vw, 1.25rem)",
+                          ...(functionalOperatorPosition
+                            ? { left: functionalOperatorPosition.left }
                             : {}),
                         }}
                       >
@@ -1123,6 +1182,7 @@ export function ScheduleBoard({
                             slot={slot}
                             currentMorale={slot ? currentMoraleByOperator?.get(slot.name) : undefined}
                             compactFactory={compactFactoryRoom}
+                            centerFrameInList
                           />
                         ))}
                       </div>
