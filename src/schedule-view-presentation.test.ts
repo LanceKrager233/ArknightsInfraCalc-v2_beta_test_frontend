@@ -55,6 +55,17 @@ test("uses a horizontal power card with the operator aligned to the right", () =
   );
 });
 
+test("uses horizontal compact cards only for power and auxiliary rooms", () => {
+  assert.equal(typeof presentation.usesCompactHorizontalCard, "function");
+  assert.equal(presentation.usesCompactHorizontalCard("power"), true);
+  assert.equal(presentation.usesCompactHorizontalCard("meeting"), true);
+  assert.equal(presentation.usesCompactHorizontalCard("hire"), true);
+  assert.equal(presentation.usesCompactHorizontalCard("control"), false);
+  assert.equal(presentation.usesCompactHorizontalCard("trading"), false);
+  assert.equal(presentation.usesCompactHorizontalCard("manufacture"), false);
+  assert.equal(presentation.usesCompactHorizontalCard("dormitory"), false);
+});
+
 test("pins every compact room title to the shared top position", () => {
   assert.equal(
     COMPACT_CARD_CLASS,

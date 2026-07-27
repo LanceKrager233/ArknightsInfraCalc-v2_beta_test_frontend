@@ -57,3 +57,9 @@ export function compactFactoryAccent(recipe: string) {
 export function isCompactScheduleGroupVisible(group: string) {
   return group !== "processing";
 }
+
+const COMPACT_HORIZONTAL_GROUPS = new Set(["power", "meeting", "hire"]);
+
+export function usesCompactHorizontalCard(group: string) {
+  return COMPACT_HORIZONTAL_GROUPS.has(group);
+}
