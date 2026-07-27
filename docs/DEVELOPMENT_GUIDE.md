@@ -54,7 +54,7 @@ src/
 │   └── skland/                     # 森空岛认证后端（session, adapter, normalize）
 │
 ├── components/
-│   ├── ui/                         # shadcn/ui 组件（sidebar, dialog, tabs, ...）
+│   ├── ui/                         # shadcn/ui 组件（select, sidebar, dialog, tabs, ...）
 │   ├── pages/                      # 三个子页面
 │   │   ├── InfraCalculator.tsx     # 基建计算器（排班展示主界面）
 │   │   ├── TrainingAdvice.tsx      # 练卡建议（占位）
@@ -185,6 +185,8 @@ src/
 | `updateFactoryRecipe(layout, roomId, recipe)` | 修改制造站产品（all / gold / battle_record / originium） |
 | `updateTradeOrder(layout, roomId, order)` | 修改贸易站订单（gold / originium） |
 | `factoryRecipeFromMaaProduct(product)` | MAA 产品名 → recipe（"Pure Gold" → "gold"），求解后回写布局用 |
+
+**制造站配方**：新增 `"all"`（自动选择），求解器自行决定最优配方。求解完成后 `handleRun()` 回写布局，按钮自动切换为 CLI 实际选择的配方。列表式中用 `ProductToggleGroup` 按钮组（`grid-cols-2`），一图流中用 shadcn `<Select>` 下拉。
 | `computePowerBudget(layout)` | 发电量校验，返回 `{ ok, generated, consumed }` |
 | `roomKindLabel(kind)` | 房间类型中文名（"制造站"等） |
 | `maxRoomLevel(kind)` | 房间最大等级（中枢/宿舍 = 5，其他 = 3） |
@@ -228,9 +230,39 @@ src/
 | `LevelDiamonds` | ~659 行 | 等级菱形图形（1-5 个菱形 + Lv.N 文字） |
 | `RoomEfficiencyReadout` | ~678 行 | 效率大字展示（含跨设施标注） |
 | `RoomProductControls` | ~722 行 | 房间产品切换按钮组（ToggleGroup） |
-| `CompactScheduleView` | 独立文件 | 一图流排班视图（紧凑房间卡片，从上到下排列） |
+| `CompactScheduleView` | 独立文件 | 一图流排班视图。仅 PC 端（≥1024px）可用，按布局规则分组排列 |
 
 **注意**：`ProductToggleGroup`、`OperatorSlot`、`RoomEfficiencyReadout`、`RoomProductControls`、`roomVisualFor` 已 export，`CompactScheduleView` 可直接 import 复用。
+
+### CompactScheduleView（一图流布局）
+
+仅 PC 端可用（`< 1024px` 时按钮禁用且自动切回列表式）。按发电站数量（2 或 3）自动选择布局模板。
+
+**房间卡片结构**：
+
+```
+┌─────────────────────────────┐
+│ ▌ 制造站1 Lv.3  [自动选择▾]│  ← 名称+等级+Select 选择器
+│ 190% / 纯技能 80% / 跨设施 +3%│ ← 效率行（制造/贸易）
+│ [干员1] [干员2] [干员3]     │  ← 槽位 grid
+└─────────────────────────────┘
+```
+
+**槽位数量**：
+
+| 房间类型 | 槽位数 |
+|---------|-------|
+| 贸易/制造 | 3 |
+| 发电/办公室/加工站 | 1 |
+| 会客室 | 2 |
+| 控制中枢/宿舍 | 5 |
+
+**布局规则**：
+
+- 3 发电站：生产 2+2+2 分三行，发电 1+1+1 分行加入
+- 2 发电站：生产 3+3+1 分三行，发电集中于末行
+
+**选择器**：贸易/制造站用 shadcn Select 替代按钮组，选中后背景色和对应按钮样式一致（蓝/黄/红）。PC 端 `w-[100px]`。
 
 **房间卡片的结构**（在 `ScheduleBoard` 内部渲染，未抽成独立组件）：
 ```
@@ -300,6 +332,8 @@ src/
 | `buildRotationJson()` | 组装 rotationJson（shifts + daily） |
 
 **operbox 去重**：在 `runPlan()` 内发请求前执行。`filter` 遍历 operbox，同名干员保留第一个，删除后续。plan.compute 和 legacy 两条协议路径均覆盖。
+
+**operbox 校验规则**（`assertOperbox()`）：`own: false` 时 `elite`/`level` 可为 0 不报错。`own` 先于 `elite`/`level` 校验，未拥有干员不检查练度。
 
 ### 新增功能的修改指南
 
