@@ -29,8 +29,15 @@ test("keeps compact operators responsive, left aligned, and eight pixels apart",
   );
 });
 
-test("widens only the compact grid and removes processing from that view", () => {
-  assert.equal(presentation.COMPACT_GRID_CLASS, "-mx-[72px] grid gap-3");
+test("widens the compact two-column stack and removes processing from that view", () => {
+  assert.equal(
+    presentation.COMPACT_GRID_CLASS,
+    "-mx-[72px] flex items-start gap-3",
+  );
+  assert.equal(
+    presentation.COMPACT_COLUMN_CLASS,
+    "flex min-w-0 flex-col gap-3",
+  );
   assert.equal(typeof presentation.isCompactScheduleGroupVisible, "function");
   assert.equal(presentation.isCompactScheduleGroupVisible("processing"), false);
   assert.equal(presentation.isCompactScheduleGroupVisible("power"), true);

@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, type CSSProperties } from "react";
+import type { CSSProperties } from "react";
 
 import {
   factoryRecipeFor,
@@ -12,6 +12,7 @@ import { presentRoomEfficiency } from "@/efficiency";
 import {
   COMPACT_AUXILIARY_WIDTHS,
   COMPACT_CARD_CLASS,
+  COMPACT_COLUMN_CLASS,
   COMPACT_GRID_CLASS,
   COMPACT_HEADER_CLASS,
   COMPACT_OPERATOR_ROW_CLASS,
@@ -207,38 +208,25 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
   const office = getGroup("hire")[0];
 
   return (
-    <div
-      className={COMPACT_GRID_CLASS}
-      style={{ gridTemplateColumns: `${GRID_LEFT_PCT}% ${GRID_RIGHT_PCT}%` }}
-    >
-      {/* Row 1: 控制中枢 | 会客室 办公室 */}
-      {ctrl ? makeCard(ctrl) : <div />}
-      <div className="flex items-start justify-between gap-3">
-        {meeting && makeCard(meeting, COMPACT_AUXILIARY_WIDTHS.meeting)}
-        {office && makeCard(office, COMPACT_AUXILIARY_WIDTHS.hire)}
-      </div>
+    <div className={COMPACT_GRID_CLASS}>
+      <div
+        className={COMPACT_COLUMN_CLASS}
+        style={{ flexBasis: `${GRID_LEFT_PCT}%` }}
+      >
+        <div>{ctrl && makeCard(ctrl)}</div>
 
-      {/* Row 2-4: 工作站×2(各50%) | 宿舍 */}
-      {[0, 2, 4].map((start) => (
-        <Fragment key={start}>
-          <div className="flex justify-between gap-3">
+        {[0, 2, 4].map((start) => (
+          <div key={start} className="flex justify-between gap-3">
             {workstations[start] && makeCard(workstations[start], 50)}
             {workstations[start + 1] && makeCard(workstations[start + 1], 50)}
           </div>
-          {dorms[start / 2] ? makeCard(dorms[start / 2]) : <div />}
-        </Fragment>
-      ))}
+        ))}
 
-      {/* Row 5 */}
-      {powerCount === 3 ? (
-        <>
+        {powerCount === 3 ? (
           <div className="flex items-start justify-between gap-3">
             {power.slice(0, 3).map((p) => makeCard(p, 33))}
           </div>
-          {dorms[3] ? makeCard(dorms[3]) : <div />}
-        </>
-      ) : (
-        <>
+        ) : (
           <div className="flex justify-between gap-3">
             <div className="flex justify-between gap-3" style={{ flexBasis: "50%" }}>
               {power[0] && makeCard(power[0])}
@@ -246,9 +234,22 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
             </div>
             {workstations[6] && makeCard(workstations[6], 50)}
           </div>
-          {dorms[3] ? makeCard(dorms[3]) : <div />}
-        </>
-      )}
+        )}
+      </div>
+
+      <div
+        className={COMPACT_COLUMN_CLASS}
+        style={{ flexBasis: `${GRID_RIGHT_PCT}%` }}
+      >
+        <div className="flex items-start justify-between gap-3">
+          {meeting && makeCard(meeting, COMPACT_AUXILIARY_WIDTHS.meeting)}
+          {office && makeCard(office, COMPACT_AUXILIARY_WIDTHS.hire)}
+        </div>
+
+        {dorms.slice(0, 4).map((dorm) => (
+          <div key={dorm.key}>{makeCard(dorm)}</div>
+        ))}
+      </div>
     </div>
   );
 }
