@@ -29,8 +29,15 @@ test("keeps compact operators responsive, left aligned, and eight pixels apart",
   );
 });
 
-test("widens only the compact grid and removes processing from that view", () => {
-  assert.equal(presentation.COMPACT_GRID_CLASS, "-mx-[72px] grid gap-3");
+test("widens the compact two-column stack and removes processing from that view", () => {
+  assert.equal(
+    presentation.COMPACT_GRID_CLASS,
+    "-mx-[80px] flex items-start gap-3",
+  );
+  assert.equal(
+    presentation.COMPACT_COLUMN_CLASS,
+    "flex min-w-0 flex-col gap-3",
+  );
   assert.equal(typeof presentation.isCompactScheduleGroupVisible, "function");
   assert.equal(presentation.isCompactScheduleGroupVisible("processing"), false);
   assert.equal(presentation.isCompactScheduleGroupVisible("power"), true);
@@ -44,15 +51,30 @@ test("allocates the compact auxiliary row by operator capacity", () => {
   });
 });
 
-test("uses a horizontal power card with the operator aligned to the right", () => {
+test("right-aligns operators in horizontal power and auxiliary cards", () => {
   assert.equal(
     presentation.COMPACT_POWER_CARD_CLASS,
     "grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 bg-[#313131] px-3 py-2",
   );
   assert.equal(
     presentation.COMPACT_POWER_OPERATOR_ROW_CLASS,
-    "flex items-start justify-end",
+    "flex items-start justify-end gap-2",
   );
+  assert.equal(
+    presentation.COMPACT_AUXILIARY_OPERATOR_ROW_CLASS,
+    "flex items-start justify-end gap-2 max-[1400px]:translate-x-1",
+  );
+});
+
+test("uses horizontal compact cards only for power and auxiliary rooms", () => {
+  assert.equal(typeof presentation.usesCompactHorizontalCard, "function");
+  assert.equal(presentation.usesCompactHorizontalCard("power"), true);
+  assert.equal(presentation.usesCompactHorizontalCard("meeting"), true);
+  assert.equal(presentation.usesCompactHorizontalCard("hire"), true);
+  assert.equal(presentation.usesCompactHorizontalCard("control"), false);
+  assert.equal(presentation.usesCompactHorizontalCard("trading"), false);
+  assert.equal(presentation.usesCompactHorizontalCard("manufacture"), false);
+  assert.equal(presentation.usesCompactHorizontalCard("dormitory"), false);
 });
 
 test("pins every compact room title to the shared top position", () => {

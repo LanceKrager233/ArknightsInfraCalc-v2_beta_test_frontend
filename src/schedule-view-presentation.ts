@@ -6,7 +6,8 @@ export const COMPACT_OPERATOR_SIZE_CLASS =
 export const COMPACT_OPERATOR_ROW_CLASS =
   "flex items-start justify-start gap-2";
 
-export const COMPACT_GRID_CLASS = "-mx-[72px] grid gap-3";
+export const COMPACT_GRID_CLASS = "-mx-[80px] flex items-start gap-3";
+export const COMPACT_COLUMN_CLASS = "flex min-w-0 flex-col gap-3";
 
 export const COMPACT_AUXILIARY_WIDTHS = {
   meeting: 65,
@@ -20,7 +21,10 @@ export const COMPACT_POWER_CARD_CLASS =
   "grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 bg-[#313131] px-3 py-2";
 
 export const COMPACT_POWER_OPERATOR_ROW_CLASS =
-  "flex items-start justify-end";
+  "flex items-start justify-end gap-2";
+
+export const COMPACT_AUXILIARY_OPERATOR_ROW_CLASS =
+  `${COMPACT_POWER_OPERATOR_ROW_CLASS} max-[1400px]:translate-x-1`;
 
 export const COMPACT_HEADER_CLASS =
   "flex h-7 shrink-0 items-center gap-2";
@@ -56,4 +60,10 @@ export function compactFactoryAccent(recipe: string) {
 
 export function isCompactScheduleGroupVisible(group: string) {
   return group !== "processing";
+}
+
+const COMPACT_HORIZONTAL_GROUPS = new Set(["power", "meeting", "hire"]);
+
+export function usesCompactHorizontalCard(group: string) {
+  return COMPACT_HORIZONTAL_GROUPS.has(group);
 }
