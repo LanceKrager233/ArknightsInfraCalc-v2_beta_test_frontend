@@ -6,7 +6,7 @@ export const COMPACT_OPERATOR_SIZE_CLASS =
 export const COMPACT_OPERATOR_ROW_CLASS =
   "flex items-start justify-start gap-2";
 
-export const COMPACT_GRID_CLASS = "-mx-[72px] flex items-start gap-3";
+export const COMPACT_GRID_CLASS = "-mx-[80px] flex items-start gap-3";
 export const COMPACT_COLUMN_CLASS = "flex min-w-0 flex-col gap-3";
 
 export const COMPACT_AUXILIARY_WIDTHS = {

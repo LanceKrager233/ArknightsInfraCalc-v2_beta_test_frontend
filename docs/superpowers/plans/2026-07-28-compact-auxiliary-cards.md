@@ -133,7 +133,7 @@ Replace the compact-grid test with:
 test("widens the compact two-column stack and removes processing from that view", () => {
   assert.equal(
     presentation.COMPACT_GRID_CLASS,
-    "-mx-[72px] flex items-start gap-3",
+    "-mx-[80px] flex items-start gap-3",
   );
   assert.equal(
     presentation.COMPACT_COLUMN_CLASS,
@@ -161,7 +161,7 @@ Expected: FAIL because `COMPACT_GRID_CLASS` still uses `grid` and `COMPACT_COLUM
 Replace the old grid constant in `src/schedule-view-presentation.ts` with:
 
 ```ts
-export const COMPACT_GRID_CLASS = "-mx-[72px] flex items-start gap-3";
+export const COMPACT_GRID_CLASS = "-mx-[80px] flex items-start gap-3";
 
 export const COMPACT_COLUMN_CLASS = "flex min-w-0 flex-col gap-3";
 ```
