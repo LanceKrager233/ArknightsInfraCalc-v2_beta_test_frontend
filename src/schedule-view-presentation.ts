@@ -20,7 +20,7 @@ export const COMPACT_POWER_CARD_CLASS =
   "grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 bg-[#313131] px-3 py-2";
 
 export const COMPACT_POWER_OPERATOR_ROW_CLASS =
-  "flex items-start justify-end";
+  "flex items-start justify-end gap-2";
 
 export const COMPACT_HEADER_CLASS =
   "flex h-7 shrink-0 items-center gap-2";

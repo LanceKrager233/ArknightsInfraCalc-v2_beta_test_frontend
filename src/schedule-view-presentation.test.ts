@@ -51,7 +51,7 @@ test("uses a horizontal power card with the operator aligned to the right", () =
   );
   assert.equal(
     presentation.COMPACT_POWER_OPERATOR_ROW_CLASS,
-    "flex items-start justify-end",
+    "flex items-start justify-end gap-2",
   );
 });
 

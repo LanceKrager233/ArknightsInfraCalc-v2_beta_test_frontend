@@ -22,6 +22,7 @@ import {
   compactFactoryAccent,
   compactTradeAccent,
   isCompactScheduleGroupVisible,
+  usesCompactHorizontalCard,
 } from "@/schedule-view-presentation";
 import type { RoomRow } from "@/schedule";
 import type { BaseBlueprint, MaaPlan } from "@/types";
@@ -68,6 +69,7 @@ function CompactRoomCard({
   const isTrade = layoutRoom?.kind === "trade_post";
   const isFactory = layoutRoom?.kind === "factory";
   const isPower = row.group === "power";
+  const isHorizontal = usesCompactHorizontalCard(row.group);
   const rowStyle = { "--room-accent": visual.accent } as CSSProperties;
 
   const header = (
@@ -129,7 +131,7 @@ function CompactRoomCard({
     />
   ));
 
-  if (isPower) {
+  if (isHorizontal) {
     return (
       <div className={`${COMPACT_POWER_CARD_CLASS} ${className}`} style={{ ...rowStyle, ...style }}>
         <div className="min-w-0">
@@ -211,7 +213,7 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
     >
       {/* Row 1: 控制中枢 | 会客室 办公室 */}
       {ctrl ? makeCard(ctrl) : <div />}
-      <div className="flex justify-between gap-3">
+      <div className="flex items-start justify-between gap-3">
         {meeting && makeCard(meeting, COMPACT_AUXILIARY_WIDTHS.meeting)}
         {office && makeCard(office, COMPACT_AUXILIARY_WIDTHS.hire)}
       </div>
