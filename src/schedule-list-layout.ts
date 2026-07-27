@@ -30,8 +30,8 @@ export const LIST_MEETING_COLUMN_INSET_PX =
   LIST_OPERATOR_FRAME_SIZE_PX + LIST_FUNCTIONAL_GROUP_GAP_PX / 2;
 
 const LIST_OPERATOR_COLUMN_GAP = "clamp(0.75rem, 1.25vw, 1.25rem)";
-const LIST_FUNCTIONAL_GRID_CLASS = "min-[1800px]:grid-cols-3";
-const LIST_MEETING_ROOM_SPAN_CLASS = "min-[1800px]:col-span-2";
+const LIST_FUNCTIONAL_GRID_CLASS = "xl:grid-cols-3";
+const LIST_MEETING_ROOM_SPAN_CLASS = "xl:col-span-2";
 const LIST_FUNCTIONAL_OPERATOR_PLACEMENT_CLASS =
   "xl:absolute xl:inset-y-0";
 

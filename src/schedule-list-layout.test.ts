@@ -114,7 +114,7 @@ test("keeps meeting operators on the same origin and existing gap", () => {
   });
 });
 
-test("activates functional positioning and the three-column grid at their responsive policies", () => {
+test("restores the functional facility three-column layout at the desktop breakpoint", () => {
   assert.equal(LIST_OPERATOR_ORIGIN_PX, 248);
   assert.equal(LIST_OPERATOR_FRAME_SIZE_PX, 88);
   assert.equal(LIST_FUNCTIONAL_GROUP_GAP_PX, 12);
@@ -129,11 +129,11 @@ test("activates functional positioning and the three-column grid at their respon
   assert.equal(listFunctionalOperatorPlacementClass("manufacture"), undefined);
   assert.equal(
     listFunctionalFacilityGridClass(),
-    "min-[1800px]:grid-cols-3",
+    "xl:grid-cols-3",
   );
   assert.equal(
     listMeetingRoomSpanClass("meeting"),
-    "min-[1800px]:col-span-2",
+    "xl:col-span-2",
   );
   assert.equal(listMeetingRoomSpanClass("power"), undefined);
 });
