@@ -161,6 +161,14 @@ export interface HealthApiResponse {
     pid?: number | null;
     running: boolean;
     restartCount: number;
+    protocolMode?: "plan.compute" | "legacy";
+    planCompute?: {
+      supported: boolean;
+      protocolVersion: number | null;
+      schemaVersion: number | null;
+      contractSha256: string | null;
+      reason: string | null;
+    };
   };
   serveError?: string | null;
   candidates?: CliCandidate[];

@@ -16,6 +16,11 @@ import type {
 } from "@/types";
 import { isSklandConfigured, sklandDisabledReason } from "@/server/skland/session";
 import { normalizeServeRoomEfficiency } from "@/efficiency";
+import {
+  assertUniqueOperboxIdentities,
+  inspectPlanComputeCapability,
+  parsePlanComputePayload,
+} from "./plan-protocol";
 import { parseShiftFile } from "./shift-parser";
 
 type JsonRecord = Record<string, unknown>;
@@ -286,58 +291,8 @@ function buildRotationJson(profileJson: unknown, shifts: unknown[]) {
   };
 }
 
-/** plan.compute v1: result.rotation.shifts → 前端兼容格式 */
-function rotationShiftsFromServeNew(rotation: { shifts?: unknown[] } | undefined): unknown[] {
-  if (!rotation || !Array.isArray(rotation.shifts)) return [];
-  return rotation.shifts.map((shift) => {
-    if (!isObject(shift)) return shift;
-    const s = shift as Record<string, unknown>;
-    const efficiencies = isObject(s.efficiencies) ? (s.efficiencies as Record<string, unknown>) : null;
-    if (!efficiencies) {
-      // no efficiencies, clone as-is
-      return { ...s, scores: {} };
-    }
-    // map efficiencies → scores，并对 room_lines 做字段名归一化
-    const roomLines = Array.isArray(efficiencies.room_lines)
-      ? (efficiencies.room_lines as Record<string, unknown>[]).map(normalizeRoomLine)
-      : [];
-    const { efficiencies: _e, ...rest } = s;
-    return { ...rest, scores: { ...efficiencies, room_lines: roomLines } };
-  });
-}
-
-/** plan.compute 房间效率字段 → 前端 RoomEfficiency 命名（_pct / _score ×100） */
-function normalizeRoomLine(line: Record<string, unknown>): Record<string, unknown> {
-  const f = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
-  const trade = f(line.trade_efficiency);
-  const tradeSkill = f(line.trade_skill_efficiency);
-  const tradeDisplay = f(line.trade_display_efficiency);
-  const manu = f(line.manufacture_efficiency);
-  const manuSkill = f(line.manufacture_skill_efficiency);
-  const manuDisplay = f(line.manufacture_display_efficiency);
-  const power = f(line.power_efficiency);
-  const powerSkill = f(line.power_skill_efficiency);
-  const powerDisplay = f(line.power_display_efficiency);
-
-  return {
-    room_id: typeof line.room_id === "string" ? line.room_id : "",
-    ...(trade !== undefined ? { trade_score: trade } : {}),
-    ...(tradeSkill !== undefined ? { trade_skill_pct: tradeSkill * 100 } : {}),
-    ...(tradeDisplay !== undefined ? { trade_display_pct: tradeDisplay * 100 } : {}),
-    ...(manu !== undefined ? { manu_score: manu * 100 } : {}),
-    ...(manuSkill !== undefined ? { manu_prod_skill: manuSkill * 100 } : {}),
-    ...(manuDisplay !== undefined ? { manu_display_pct: manuDisplay * 100 } : {}),
-    ...(power !== undefined ? { power_score: power * 100 } : {}),
-    ...(powerSkill !== undefined ? { power_skill_pct: powerSkill * 100 } : {}),
-    ...(powerDisplay !== undefined ? { power_display_pct: powerDisplay * 100 } : {}),
-  };
-}
-
-function rotationShiftsFromServe(response: JsonRecord): unknown[] {
-  const result = response.result;
-  if (!isObject(result) || !Array.isArray(result.shifts)) return [];
-
-  return result.shifts.map((value, index) => {
+function normalizeRotationShifts(shifts: unknown[]): unknown[] {
+  return shifts.map((value, index) => {
     if (!isObject(value)) return value;
 
     const durationHours =
@@ -374,6 +329,15 @@ function rotationShiftsFromServe(response: JsonRecord): unknown[] {
   });
 }
 
+function rotationShiftsFromPlanCompute(rotation: JsonRecord): unknown[] {
+  return Array.isArray(rotation.shifts) ? normalizeRotationShifts(rotation.shifts) : [];
+}
+
+function rotationShiftsFromServe(response: JsonRecord): unknown[] {
+  const result = response.result;
+  return isObject(result) && Array.isArray(result.shifts) ? normalizeRotationShifts(result.shifts) : [];
+}
+
 function countRoomsByKind(layout: BaseBlueprint, kind: string) {
   return Array.isArray(layout.rooms) ? layout.rooms.filter((room) => room.kind === kind).length : 0;
 }
@@ -384,30 +348,12 @@ function serveErrorMessage(response: JsonRecord) {
   return "unknown error";
 }
 
-/** plan.compute v1 要求 operbox 内 name 唯一；阿米娅等重名干员加后缀去重 */
-function deduplicateOperboxNames(opbox: unknown[]): unknown[] {
-  const seen = new Map<string, number>();
-  return opbox.map((entry) => {
-    if (!entry || typeof entry !== "object" || !("name" in entry)) return entry;
-    const raw = entry as Record<string, unknown>;
-    const name = String(raw.name ?? "");
-    const count = seen.get(name) ?? 0;
-    seen.set(name, count + 1);
-    if (count > 0) return { ...raw, name: `${name}(${count + 1})` };
-    return entry;
-  });
-}
-
 function formatPlanFailure({
   layout,
-  maaJson,
-  profileJson,
   response,
   stderr,
 }: {
   layout: BaseBlueprint;
-  maaJson: unknown;
-  profileJson: unknown;
   response: JsonRecord;
   stderr: string;
 }) {
@@ -757,15 +703,20 @@ export async function getHealth(): Promise<HealthApiResponse> {
       }
     })();
     const dataPath = cliPath ? resolveRuntimeDataDir(cliPath) : null;
-    let serve = getServeClient().info();
+    let serve: NonNullable<HealthApiResponse["serve"]> = getServeClient().info();
     let serveError = runnableCandidate
       ? null
       : candidates.find((candidate) => candidate.exists && candidate.reason)?.reason ?? "未找到可运行的 infra-cli。";
 
     if (cliPath) {
       try {
-        await getServeClient().ping();
-        serve = getServeClient().info();
+        const pingResult = await getServeClient().ping();
+        const planCompute = inspectPlanComputeCapability(pingResult.response);
+        serve = {
+          ...getServeClient().info(),
+          protocolMode: planCompute.supported ? "plan.compute" : "legacy",
+          planCompute,
+        };
       } catch (error) {
         serveError = error instanceof Error ? error.message : String(error);
       }
@@ -889,30 +840,67 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
     await writeJson(layoutPath, body.layout);
     await writeJson(operboxPath, body.operbox);
 
-    // 写调试用文件（非协议所需）
-    await writeJson(layoutPath, body.layout);
-    await writeJson(operboxPath, body.operbox);
+    const pingResult = await getServeClient().ping();
+    const planCompute = inspectPlanComputeCapability(pingResult.response);
+    let serveResult: ServeResult;
+    let profileJson: unknown;
+    let maaJson: unknown;
+    let serveShifts: unknown[] = [];
+    let shiftFiles: string[] = [];
+    let shiftReadErrors: string[] = [];
+    let shiftsPath: string | undefined;
+    let responseValidationError: string | undefined;
 
-    // plan.compute v1: inline layout + operbox + labels + options
-    // 去重 operator name（如阿米娅三种形态同名），给重名加后缀 (2)(3)
-    const dedupedOperbox = deduplicateOperboxNames(body.operbox);
+    if (planCompute.supported) {
+      assertUniqueOperboxIdentities(body.operbox);
+      serveResult = await getServeClient().send("plan.compute", {
+        schema_version: 1,
+        layout: body.layout,
+        operbox: body.operbox,
+        labels: {
+          layout: body.layout.template ?? null,
+          operbox: body.sourceName ?? null,
+        },
+        options: {
+          rotation: "abc_12_6_6",
+          top: 20,
+          system_preferences: {},
+          maa_title: `${body.sourceName ?? "Arknights InfraCalc"} · ${String(body.layout.template ?? "layout")}`,
+        },
+      });
 
-    const planParams = {
-      schema_version: 1,
-      layout: body.layout,
-      operbox: dedupedOperbox,
-      labels: {
-        layout: (body.layout as { template?: unknown }).template ?? null,
-        operbox: body.sourceName ?? null,
-      },
-      options: {
-        rotation: "abc_12_6_6",
+      let payload: ReturnType<typeof parsePlanComputePayload> = null;
+      try {
+        payload = parsePlanComputePayload(serveResult.response);
+      } catch (error) {
+        responseValidationError = error instanceof Error ? error.message : String(error);
+      }
+      profileJson = payload?.profile;
+      maaJson = payload?.maa;
+      serveShifts = payload ? rotationShiftsFromPlanCompute(payload.rotation) : [];
+      if (profileJson) await writeJson(profilePath, profileJson);
+      if (maaJson) await writeJson(maaPath, maaJson);
+    } else {
+      serveResult = await getServeClient().send("plan", {
+        layout: layoutPath,
+        operbox: operboxPath,
+        profile_out: profilePath,
+        maa_out: maaPath,
+        output_dir: shiftsDir,
         top: 20,
-        maa_title: `${body.sourceName ?? "Arknights InfraCalc"} · ${String((body.layout as { template?: unknown }).template ?? "layout")}`,
-      },
-    };
+        maa_title: `${body.sourceName ?? "Arknights InfraCalc"} · ${String(body.layout.template ?? "layout")}`,
+      });
 
-    const serveResult = await getServeClient().send("plan.compute", planParams);
+      profileJson = await readJsonIfExists(profilePath);
+      maaJson = await readJsonIfExists(maaPath);
+      const shiftRead = await readShiftFiles(shiftsDir);
+      const responseShifts = rotationShiftsFromServe(serveResult.response);
+      serveShifts = responseShifts.length > 0 ? responseShifts : shiftRead.shifts;
+      shiftFiles = shiftRead.files.map((file) => path.relative(repoRoot, file));
+      shiftReadErrors = shiftRead.errors;
+      shiftsPath = path.relative(repoRoot, shiftsDir);
+    }
+
     const durationMs = Math.round(performance.now() - start);
     const command = `${cliPath} serve < ${path.relative(repoRoot, serveRequestLinePath)}`;
     await writeFile(commandPath, command, "utf-8");
@@ -920,17 +908,11 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
     await writeFile(serveRequestLinePath, `${JSON.stringify(serveResult.request)}\n`, "utf-8");
     await writeJson(serveResponsePath, serveResult.response);
 
-      // plan.compute 返回全部内联数据，不再读文件
-    const result = serveResult.response?.result as Record<string, unknown> | undefined;
-    const profileJson = result?.profile;
-    const maaJson = result?.maa;
-    const rotationResult = result?.rotation as { shifts?: unknown[] } | undefined;
-    const serveShifts = rotationShiftsFromServeNew(rotationResult);
     const rotationJson = buildRotationJson(profileJson, serveShifts);
     await writeFile(stdoutPath, serveResult.stdout, "utf-8");
     await writeFile(stderrPath, serveResult.stderr, "utf-8");
 
-    const success = serveResult.response?.ok === true;
+    const success = serveResult.response.ok === true && Boolean(profileJson) && Boolean(maaJson);
     const debugBundle: DebugBundle = {
       version: "beta-test-bundle-v2-next-serve",
       startedAt,
@@ -949,8 +931,8 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
       profileJson: profileJson as DebugBundle["profileJson"],
       maaJson: maaJson as DebugBundle["maaJson"],
       rotationJson: rotationJson as DebugBundle["rotationJson"],
-      shiftFiles: [],
-      shiftReadErrors: [],
+      shiftFiles,
+      shiftReadErrors,
       serveRequest: serveResult.request,
       serveResponse: serveResult.response,
       stdout: serveResult.stdout,
@@ -960,8 +942,8 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
         layout: path.relative(repoRoot, layoutPath),
         operbox: path.relative(repoRoot, operboxPath),
         profile: profileJson ? path.relative(repoRoot, profilePath) : undefined,
-        maa: path.relative(repoRoot, maaPath),
-        shifts: undefined,
+        maa: maaJson ? path.relative(repoRoot, maaPath) : undefined,
+        shifts: shiftsPath,
         debugBundle: path.relative(repoRoot, debugBundlePath),
         stdout: path.relative(repoRoot, stdoutPath),
         stderr: path.relative(repoRoot, stderrPath),
@@ -995,10 +977,9 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
       relativeResultPath: path.relative(repoRoot, resultPath),
       error: success
         ? undefined
-        : formatPlanFailure({
+        : responseValidationError ??
+          formatPlanFailure({
             layout: body.layout,
-            maaJson,
-            profileJson,
             response: serveResult.response,
             stderr: serveResult.stderr,
           }),
