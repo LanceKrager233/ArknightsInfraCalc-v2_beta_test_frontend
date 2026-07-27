@@ -1,22 +1,11 @@
 "use client";
 
 import { CSSProperties } from "react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 import {
-  FACTORY_RECIPE_OPTIONS,
   factoryRecipeFor,
-  type FactoryRecipe,
   maxRoomLevel,
-  TRADE_ORDER_OPTIONS,
   tradeOrderFor,
-  type TradeOrder,
 } from "@/blueprint";
 import { OperatorSlot, roomVisualFor } from "@/components";
 import { presentRoomEfficiency } from "@/efficiency";
@@ -30,8 +19,6 @@ export interface CompactScheduleViewProps {
   activeShift: number;
   activePlan?: MaaPlan;
   onIssue: (row: RoomRow) => void;
-  onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
-  onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
 }
 
 const TRADE_ACCENT: Record<string, string> = {
@@ -45,6 +32,10 @@ const FACTORY_ACCENT: Record<string, string> = {
   battle_record: "border-transparent bg-[#1F7DCE] text-white",
   originium: "border-transparent bg-[#8F1E26] text-white",
 };
+
+/** 布局宽度百分比，自己改数值 */
+const GRID_LEFT_PCT = 55;   // 左大列宽度%
+const GRID_RIGHT_PCT = 45;  // 右大列宽度%
 
 function roomSlotCountFor(group: string) {
   if (group === "trading" || group === "manufacture") return 3;
@@ -61,8 +52,8 @@ function CompactRoomCard({
   slotCount,
   slots,
   currentMoraleByOperator,
-  onTradeOrderChange,
-  onFactoryRecipeChange,
+  className = "",
+  style,
 }: {
   row: RoomRow;
   layoutRoom: BaseBlueprint["rooms"][number] | undefined;
@@ -71,15 +62,15 @@ function CompactRoomCard({
   slotCount: number;
   slots: (RoomRow["operatorSlots"][number] | undefined)[];
   currentMoraleByOperator?: ReadonlyMap<string, number>;
-  onTradeOrderChange: CompactScheduleViewProps["onTradeOrderChange"];
-  onFactoryRecipeChange: CompactScheduleViewProps["onFactoryRecipeChange"];
+  className?: string;
+  style?: CSSProperties;
 }) {
   const isTrade = layoutRoom?.kind === "trade_post";
   const isFactory = layoutRoom?.kind === "factory";
   const rowStyle = { "--room-accent": visual.accent } as CSSProperties;
 
   return (
-    <div className="flex flex-col gap-2 bg-[#313131] px-3 py-2" style={rowStyle}>
+    <div className={`flex flex-col justify-center gap-2 bg-[#313131] px-3 py-2 ${className}`} style={{ ...rowStyle, ...style }}>
       <div className="flex items-center gap-2">
         <span className="h-5 w-1 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
         <span className="text-sm font-medium text-white">{row.title}</span>
@@ -91,40 +82,20 @@ function CompactRoomCard({
         {isTrade ? (() => {
           const order = tradeOrderFor(layoutRoom!);
           const accent = TRADE_ACCENT[order] || "border-white/20 text-white bg-[#3C3C3C]/70";
+          const label = order === "gold" ? "龙门商法" : order === "originium" ? "开采协力" : order;
           return (
-          <Select
-            items={TRADE_ORDER_OPTIONS.map((o) => ({ value: o.order, label: o.label }))}
-            value={order}
-            onValueChange={(value) => onTradeOrderChange(row.roomId, value as TradeOrder)}
-          >
-            <SelectTrigger size="sm" className={`ml-auto w-[100px] ${accent}`}>
-              <SelectValue placeholder="选择" />
-            </SelectTrigger>
-            <SelectContent className="min-w-0">
-              {TRADE_ORDER_OPTIONS.map((o) => (
-                <SelectItem key={o.order} value={o.order}>{o.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <div className={`ml-auto flex h-7 w-[90px] items-center justify-center rounded border px-2 text-xs ${accent}`}>
+              {label}
+            </div>
           );
         })() : isFactory ? (() => {
           const recipe = factoryRecipeFor(layoutRoom!);
           const accent = FACTORY_ACCENT[recipe] || "border-white/20 text-white bg-[#3C3C3C]/70";
+          const label = recipe === "all" ? "自动选择" : recipe === "gold" ? "贵金属" : recipe === "battle_record" ? "作战记录" : recipe === "originium" ? "源石碎片" : recipe;
           return (
-          <Select
-            items={FACTORY_RECIPE_OPTIONS.map((o) => ({ value: o.recipe, label: o.label }))}
-            value={recipe}
-            onValueChange={(value) => onFactoryRecipeChange(row.roomId, value as FactoryRecipe)}
-          >
-            <SelectTrigger size="sm" className={`ml-auto w-[100px] ${accent}`}>
-              <SelectValue placeholder="选择" />
-            </SelectTrigger>
-            <SelectContent className="min-w-0">
-              {FACTORY_RECIPE_OPTIONS.map((o) => (
-                <SelectItem key={o.recipe} value={o.recipe}>{o.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <div className={`ml-auto flex h-7 w-[90px] items-center justify-center rounded border px-2 text-xs ${accent}`}>
+              {label}
+            </div>
           );
         })() : null}
       </div>
@@ -163,7 +134,7 @@ function CompactRoomCard({
 }
 
 export function CompactScheduleView(props: CompactScheduleViewProps) {
-  const { rows, layout, currentMoraleByOperator, onFactoryRecipeChange, onTradeOrderChange } = props;
+  const { rows, layout, currentMoraleByOperator } = props;
 
   if (rows.length === 0) {
     return (
@@ -181,30 +152,12 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
   }
   const getGroup = (group: string) => byGroup.get(group) ?? [];
 
-  const production = [...getGroup("trading"), ...getGroup("manufacture")];
+  const workstations = [...getGroup("trading"), ...getGroup("manufacture")];
   const power = getGroup("power");
   const dorms = getGroup("dormitory");
-  const hire = getGroup("hire");
-  const processing = getGroup("processing");
   const powerCount = power.length;
 
-  const rows1: RoomRow[][] = [
-    [...getGroup("control"), ...getGroup("meeting")],
-  ];
-  if (powerCount === 3) {
-    rows1.push([...production.slice(0, 2), ...power.slice(0, 1)]);
-    rows1.push([...production.slice(2, 4), ...power.slice(1, 2), ...hire]);
-    rows1.push([...production.slice(4, 6), ...power.slice(2, 3), ...processing]);
-  } else {
-    rows1.push(production.slice(0, 3));
-    rows1.push(production.slice(3, 6));
-    rows1.push([...production.slice(6, 7), ...power, ...hire, ...processing]);
-  }
-  for (let i = 0; i < dorms.length; i += 2) {
-    rows1.push(dorms.slice(i, i + 2));
-  }
-
-  function makeCard(row: RoomRow) {
+  function makeCard(row: RoomRow, widthPercent?: number) {
     const layoutRoom = layout.rooms.find((r) => r.id === row.roomId);
     const visual = roomVisualFor(row.group);
     const efficiency = presentRoomEfficiency(row.group, row.efficiency);
@@ -220,19 +173,61 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
         slotCount={slotCount}
         slots={slots}
         currentMoraleByOperator={currentMoraleByOperator}
-        onTradeOrderChange={onTradeOrderChange}
-        onFactoryRecipeChange={onFactoryRecipeChange}
+        className="min-w-0"
+        style={widthPercent !== undefined ? { flexBasis: `${widthPercent}%` } : { flex: 1 }}
       />
     );
   }
 
+  const ctrl = getGroup("control")[0];
+  const meeting = getGroup("meeting")[0];
+  const office = getGroup("hire")[0];
+  const workshop = getGroup("processing")[0];
+
   return (
-    <div className="flex flex-col gap-3">
-      {rows1.map((rowRooms, ri) => (
-        <div key={ri} className="flex items-center justify-center gap-3">
-          {rowRooms.map(makeCard)}
-        </div>
+    <div
+      className="-ml-10 -mr-10 grid gap-3"
+      style={{ gridTemplateColumns: `${GRID_LEFT_PCT}% ${GRID_RIGHT_PCT}%` }}
+    >
+      {/* Row 1: 控制中枢 | 会客室 办公室 加工站 */}
+      {ctrl ? makeCard(ctrl) : <div />}
+      <div className="flex justify-between gap-3">
+        {meeting && makeCard(meeting, 48)}
+        {office && makeCard(office, 26)}
+        {workshop && makeCard(workshop, 26)}
+      </div>
+
+      {/* Row 2-4: 工作站×2(各50%) | 宿舍 */}
+      {[0, 2, 4].map((start) => (
+        <>
+          <div className="flex justify-between gap-3">
+            {workstations[start] && makeCard(workstations[start], 50)}
+            {workstations[start + 1] && makeCard(workstations[start + 1], 50)}
+          </div>
+          {dorms[start / 2] ? makeCard(dorms[start / 2]) : <div />}
+        </>
       ))}
+
+      {/* Row 5 */}
+      {powerCount === 3 ? (
+        <>
+          <div className="flex justify-between gap-3">
+            {power.slice(0, 3).map((p) => makeCard(p, 33))}
+          </div>
+          {dorms[3] ? makeCard(dorms[3]) : <div />}
+        </>
+      ) : (
+        <>
+          <div className="flex justify-between gap-3">
+            <div className="flex justify-between gap-3" style={{ flexBasis: "50%" }}>
+              {power[0] && makeCard(power[0])}
+              {power[1] && makeCard(power[1])}
+            </div>
+            {workstations[6] && makeCard(workstations[6], 50)}
+          </div>
+          {dorms[3] ? makeCard(dorms[3]) : <div />}
+        </>
+      )}
     </div>
   );
 }

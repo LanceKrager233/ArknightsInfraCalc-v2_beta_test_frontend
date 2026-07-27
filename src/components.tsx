@@ -1147,8 +1147,6 @@ export function ScheduleBoard({
           activeShift={activeShift}
           activePlan={activePlan}
           onIssue={onIssue}
-          onFactoryRecipeChange={onFactoryRecipeChange}
-          onTradeOrderChange={onTradeOrderChange}
         />
       )}
     </div>
