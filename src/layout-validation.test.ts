@@ -23,6 +23,13 @@ test("accepts level-five facilities and the training room", () => {
   assert.deepEqual(validateLayoutJson(validLayout()), []);
 });
 
+test("accepts the plan.compute all factory recipe", () => {
+  const layout = validLayout();
+  layout.rooms[2].product = { factory: { recipe: "all" } };
+
+  assert.deepEqual(validateLayoutJson(layout), []);
+});
+
 test("rejects values that the core u32 and facility schema cannot consume", () => {
   const layout = validLayout();
   layout.drone_cap = 1.5;

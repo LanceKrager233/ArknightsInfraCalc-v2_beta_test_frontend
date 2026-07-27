@@ -17,6 +17,7 @@ export const PRESETS: PresetDef[] = [
 ];
 
 export const FACTORY_RECIPE_OPTIONS: { recipe: FactoryRecipe; label: string }[] = [
+  { recipe: "all", label: "由求解器选择" },
   { recipe: "gold", label: "贵金属" },
   { recipe: "battle_record", label: "作战记录" },
   { recipe: "originium", label: "源石碎片" },
