@@ -48,6 +48,10 @@ import { manufacturePoolReady, presentRoomEfficiency, profileEfficiency, RoomEff
 import { countElite2, countOwned, countSixStar } from "./operbox";
 import { RoomRow } from "./schedule";
 import {
+  COMPACT_OPERATOR_SIZE_CLASS,
+  OPERATOR_NAME_SIZE_CLASS,
+} from "./schedule-view-presentation";
+import {
   DEFAULT_LIST_COLLAPSED_GROUPS,
   buildListScheduleGroups,
   isListFunctionalFacilityRoom,
@@ -804,6 +808,7 @@ function OperatorSlotShell({
   ariaLabel,
   centerFrameInList,
   compactFactory,
+  compactView,
   frameClassName,
   frameContent,
   label,
@@ -813,6 +818,7 @@ function OperatorSlotShell({
   ariaLabel?: string;
   centerFrameInList: boolean;
   compactFactory: boolean;
+  compactView: boolean;
   frameClassName: string;
   frameContent?: ReactNode;
   label: string;
@@ -822,7 +828,10 @@ function OperatorSlotShell({
   return (
     <div
       className={cn(
-        "min-w-0 shrink-0 [--operator-slot-size:clamp(70px,7.3vw,88px)] max-sm:[--operator-slot-size:clamp(56px,16vw,76px)]",
+        "min-w-0 shrink-0",
+        compactView
+          ? COMPACT_OPERATOR_SIZE_CLASS
+          : "[--operator-slot-size:clamp(70px,7.3vw,88px)] max-sm:[--operator-slot-size:clamp(56px,16vw,76px)]",
         compactFactory && "min-[1800px]:[--operator-slot-size:70px]",
         centerFrameInList && "sm:relative sm:h-full sm:w-[var(--operator-slot-size)]",
       )}
@@ -840,7 +849,8 @@ function OperatorSlotShell({
       </div>
       <span
         className={cn(
-          "mt-0.5 block truncate text-center text-sm leading-tight max-sm:text-xs",
+          "mt-0.5 block truncate text-center leading-tight",
+          OPERATOR_NAME_SIZE_CLASS,
           labelClassName,
           centerFrameInList && "sm:absolute sm:left-0 sm:top-[calc(50%+var(--operator-slot-size)/2+2px)] sm:mt-0 sm:w-full",
         )}
@@ -855,11 +865,13 @@ export function OperatorSlot({
   slot,
   currentMorale,
   compactFactory = false,
+  compactView = false,
   centerFrameInList = false,
 }: {
   slot: RoomRow["operatorSlots"][number] | undefined;
   currentMorale?: number;
   compactFactory?: boolean;
+  compactView?: boolean;
   centerFrameInList?: boolean;
 }) {
   if (!slot) {
@@ -868,6 +880,7 @@ export function OperatorSlot({
         ariaLabel="空置"
         centerFrameInList={centerFrameInList}
         compactFactory={compactFactory}
+        compactView={compactView}
         frameClassName="border-[#4B4B4B] bg-[#3C3C3C] after:absolute after:left-1/2 after:top-1/2 after:h-0.5 after:w-[78%] after:origin-center after:-translate-x-1/2 after:-translate-y-1/2 after:rotate-[-45deg] after:bg-[#4B4B4B] after:content-['']"
         label="占"
         labelClassName="text-transparent select-none"
@@ -879,6 +892,7 @@ export function OperatorSlot({
     <OperatorSlotShell
       centerFrameInList={centerFrameInList}
       compactFactory={compactFactory}
+      compactView={compactView}
       frameClassName="border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)]"
       frameContent={
         <>
