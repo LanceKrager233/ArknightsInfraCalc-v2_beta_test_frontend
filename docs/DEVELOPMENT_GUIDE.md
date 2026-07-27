@@ -50,6 +50,7 @@ src/
 ├── layouts/                        # 5 个布局预设 JSON（153/243/252/333/342）
 ├── server/
 │   ├── infra.ts                    # CLI 进程管理、plan.compute 请求/响应处理
+│   ├── plan-protocol.ts            # plan.compute 协议能力检测、响应解析
 │   └── skland/                     # 森空岛认证后端（session, adapter, normalize）
 │
 ├── components/
@@ -58,8 +59,9 @@ src/
 │   │   ├── InfraCalculator.tsx     # 基建计算器（排班展示主界面）
 │   │   ├── TrainingAdvice.tsx      # 练卡建议（占位）
 │   │   └── SklandStatus.tsx        # 森空岛基建状态
-│   └── layout/
-│       └── AppSidebar.tsx          # 侧边栏导航（3 项 + 折叠按钮）
+│   ├── layout/
+│   │   └── AppSidebar.tsx          # 侧边栏导航（3 项 + 折叠按钮）
+│   └── CompactScheduleView.tsx     # 一图流排班视图组件
 │
 └── public/
     └── images/                     # 房间背景 webp、干员头像
@@ -87,7 +89,8 @@ src/
       │
       ├─ fetch POST /api/plan { layout, operbox, sourceName }
       │   └─ server/infra.ts: runPlan()
-      │       ├─ 去重 operbox name（阿米娅等同名处理）
+      │       ├─ 去重 operbox name（同名保留第一个，删除后续）
+      │       ├─ 求解完成后回写布局产品（"自动选择" → CLI 实际选定的配方）
       │       ├─ 组装 plan.compute v1 请求参数
       │       └─ 通过 stdin/stdout 发给 infra-cli serve 子进程
       │
@@ -142,7 +145,9 @@ src/
 **关键转换**（`server/infra.ts` 中 `rotationShiftsFromServeNew` + `normalizeRoomLine`）：
 - shift 层级：`efficiencies` → `scores`
 - room_line 字段：`trade_efficiency` → `trade_score`, `trade_skill_efficiency` → `trade_skill_pct ×100`
-- operbox 去重：`deduplicateOperboxNames` 给重名干员加 `(2)` `(3)` 后缀
+- operbox 去重：`runPlan()` 发请求前 filter 同名干员，保留第一个删除后续
+- plan.compute 协议链路：`inspectPlanComputeCapability()` 探测 CLI 能力 → `parsePlanComputePayload()` 解析响应
+- SHA-256 契约校验暂时关闭（CLI 更新后恢复）
 
 ## 核心模块详解
 
@@ -177,8 +182,9 @@ src/
 |------|------|
 | `buildBlueprint(preset)` | 深拷贝预设 JSON 得到初始 layout |
 | `updateRoomLevel(layout, roomId, level)` | 修改房间等级（1-3 或 1-5） |
-| `updateFactoryRecipe(layout, roomId, recipe)` | 修改制造站产品（gold / battle_record / originium） |
+| `updateFactoryRecipe(layout, roomId, recipe)` | 修改制造站产品（all / gold / battle_record / originium） |
 | `updateTradeOrder(layout, roomId, order)` | 修改贸易站订单（gold / originium） |
+| `factoryRecipeFromMaaProduct(product)` | MAA 产品名 → recipe（"Pure Gold" → "gold"），求解后回写布局用 |
 | `computePowerBudget(layout)` | 发电量校验，返回 `{ ok, generated, consumed }` |
 | `roomKindLabel(kind)` | 房间类型中文名（"制造站"等） |
 | `maxRoomLevel(kind)` | 房间最大等级（中枢/宿舍 = 5，其他 = 3） |
@@ -213,8 +219,8 @@ src/
 
 | 组件 | 位置 | 说明 |
 |------|------|------|
-| `ScheduleBoard` | ~831 行 | 排班展示面板。按房间类型分组，每组渲染"房间卡片" |
-| `OperatorSlot` | ~781 行 | 单个干员槽位（正方形卡片，70-88px，有头像+名字条） |
+| `ScheduleBoard` | ~831 行 | 排班展示面板。支持列表/一图流切换，按房间类型分组渲染 |
+| `OperatorSlot` | ~781 行 | 单个干员槽位（头像在上、名字在下，白字无背景） |
 | `LayoutEditor` | ~231 行 | 配置弹窗中的布局编辑器（等级、产品、预设选择） |
 | `Panel` | ~132 行 | 通用分区面板（标题 + 图标 + 内容 + 操作按钮） |
 | `StatusBar` | ~458 行 | Header 状态栏（运行耗时、错误信息） |
@@ -222,19 +228,50 @@ src/
 | `LevelDiamonds` | ~659 行 | 等级菱形图形（1-5 个菱形 + Lv.N 文字） |
 | `RoomEfficiencyReadout` | ~678 行 | 效率大字展示（含跨设施标注） |
 | `RoomProductControls` | ~722 行 | 房间产品切换按钮组（ToggleGroup） |
+| `CompactScheduleView` | 独立文件 | 一图流排班视图（紧凑房间卡片，从上到下排列） |
+
+**注意**：`ProductToggleGroup`、`OperatorSlot`、`RoomEfficiencyReadout`、`RoomProductControls`、`roomVisualFor` 已 export，`CompactScheduleView` 可直接 import 复用。
 
 **房间卡片的结构**（在 `ScheduleBoard` 内部渲染，未抽成独立组件）：
 ```
 ┌──────────────────────────────────────────────┐
-│ [背景图 + 半透明遮罩]  │ 房间名  ◆◆◆ Lv.3 │  ← 左侧 330px
+│ [背景图 + 半透明遮罩]  │ 房间名  ◆◆◆ Lv.3 │  ← 左侧 260px
 │                        │ 效率 105% 纯技能    │
-│                        │ [贵金属] [经验]     │  ← 产品切换
+│                        │ [自动选择][贵金属]  │  ← 产品切换(grid-cols-2)
 │                        ├────────────────────┤
 │                        │ [干员1][干员2][空]  │  ← 右侧干员槽位
 └──────────────────────────────────────────────┘
 ```
 
-功能设施（办公室、会客室、发电站、加工站）使用紧凑卡片样式（112px 高），加工站固定 1 个槽位。
+左面板宽度规则：
+- 默认（贸易站、制造站）：`260px`
+- 紧凑型（发电站、办公室、加工站）：`210px`
+- 窄面板（控制中枢、宿舍）：`240px`
+- 会客室：`360px`
+
+功能设施（办公室、会客室、发电站、加工站）使用紧凑卡片样式（112px 高）。干员槽位 PC 端 `clamp(70px, 7.3vw, 88px)`，移动端 `clamp(56px, 16vw, 76px)`。
+
+### operbox.ts（干员 Box 解析与校验）
+
+核心函数：
+
+| 函数 | 说明 |
+|------|------|
+| `assertOperbox(value)` | 校验 JSON 数组并返回 `OperBoxEntry[]` |
+| `readOperboxText(text)` | 解析 MAA JSON 字符串 |
+| `readOperboxFile(file)` | 解析 JSON / XLSX 文件 |
+
+**校验规则**（`assertOperbox()`）：
+
+| 字段 | 规则 |
+|------|------|
+| `id` | 非空字符串，全局唯一 |
+| `name` | 非空字符串 |
+| `elite` | `own: true` → 0-2 整数；`own: false` → 可为 0 不报错 |
+| `level` | `own: true` → 1-90 整数；`own: false` → 可为 0 不报错 |
+| `own` | 必须是布尔值（XLSX 通过 `boolValue()` 转换：`false`/`"false"`/`0` 以外均为 `true`） |
+| `potential` | 1-6 整数 |
+| `rarity` | 1-6 整数 |
 
 ### setup-dialog.tsx（配置弹窗）
 
@@ -255,13 +292,14 @@ src/
 
 | 函数 | 说明 |
 |------|------|
-| `runPlan(body)` | 入口：接收 `{ layout, operbox, sourceName }`，返回 `PlanApiResponse` |
+| `runPlan(body)` | 入口：接收 `{ layout, operbox, sourceName }`，去重后返回 `PlanApiResponse` |
 | `getServeClient().send(method, params)` | 发 NDJSON 请求给 CLI 子进程 |
 | `resolveCliPath()` | 查找 `infra-cli` 二进制路径 |
-| `deduplicateOperboxNames()` | operbox name 去重 |
 | `rotationShiftsFromServeNew()` | 新协议 shifts 格式转换 |
 | `normalizeRoomLine()` | 新协议 room_line 字段 → 前端 RoomEfficiency 格式 |
 | `buildRotationJson()` | 组装 rotationJson（shifts + daily） |
+
+**operbox 去重**：在 `runPlan()` 内发请求前执行。`filter` 遍历 operbox，同名干员保留第一个，删除后续。plan.compute 和 legacy 两条协议路径均覆盖。
 
 ### 新增功能的修改指南
 
@@ -275,6 +313,7 @@ src/
 | CLI 协议变更 | `server/infra.ts` → `runPlan()` + `rotationShiftsFromServeNew()` |
 | 侧边栏内容 | `AppSidebar.tsx` → 三个 `SidebarMenuButton` |
 | 练卡建议页 | `TrainingAdvice.tsx`（数据源：`scheduleResult.profileJson`） |
+| 一图流布局 | `CompactScheduleView.tsx`（与 `ScheduleBoard` 共享同一数据源） |
 | 森空岛状态页 | `SklandStatus.tsx` |
 | Header 响应式 | `App.tsx` ~750 行的 `<header>` |
 | 全局状态 | `App.tsx` → 待拆成 `useSklandAuth` / `useLayoutConfig` / `usePlanRunner` |

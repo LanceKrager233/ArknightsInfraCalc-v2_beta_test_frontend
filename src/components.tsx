@@ -12,7 +12,7 @@ import {
   Smile,
   Upload,
 } from "lucide-react";
-import { CSSProperties, ChangeEvent, ReactNode, useState } from "react";
+import { CSSProperties, ChangeEvent, ReactNode, useEffect, useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -789,10 +789,13 @@ export function OperatorSlot({
 }) {
   if (!slot) {
     return (
-      <div
-        className="relative aspect-square h-[clamp(70px,7.3vw,88px)] min-w-0 shrink-0 overflow-hidden border-2 border-[#4B4B4B] bg-[#3C3C3C] after:absolute after:left-1/2 after:top-1/2 after:h-0.5 after:w-[78%] after:origin-center after:-translate-x-1/2 after:-translate-y-1/2 after:rotate-[-45deg] after:bg-[#4B4B4B] after:content-[''] max-sm:h-[clamp(56px,16vw,76px)] max-sm:border"
-        aria-label="空置"
-      />
+      <div className="min-w-0 shrink-0">
+        <div
+          className="relative aspect-square h-[clamp(70px,7.3vw,88px)] min-w-0 shrink-0 overflow-hidden border-2 border-[#4B4B4B] bg-[#3C3C3C] after:absolute after:left-1/2 after:top-1/2 after:h-0.5 after:w-[78%] after:origin-center after:-translate-x-1/2 after:-translate-y-1/2 after:rotate-[-45deg] after:bg-[#4B4B4B] after:content-[''] max-sm:h-[clamp(56px,16vw,76px)] max-sm:border"
+          aria-label="空置"
+        />
+        <span className="mt-0.5 block truncate text-center text-sm leading-tight text-transparent max-sm:text-xs select-none">占</span>
+      </div>
     );
   }
 
@@ -849,6 +852,17 @@ export function ScheduleBoard({
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [hiddenGroups, setHiddenGroups] = useState<Record<string, boolean>>({});
   const [viewMode, setViewMode] = useState<"list" | "compact">("list");
+  const [isDesktop, setIsDesktop] = useState(true);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    setIsDesktop(mq.matches);
+    const handler = (e: MediaQueryListEvent) => {
+      setIsDesktop(e.matches);
+      if (!e.matches) setViewMode("list");
+    };
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
 
   if (rows.length === 0) {
     return (
@@ -920,7 +934,7 @@ export function ScheduleBoard({
       <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "compact")}>
         <TabsList>
           <TabsTrigger value="list">列表式布局</TabsTrigger>
-          <TabsTrigger value="compact">一图流布局</TabsTrigger>
+          <TabsTrigger value="compact" disabled={!isDesktop}>一图流布局</TabsTrigger>
         </TabsList>
       </Tabs>
       {viewMode === "list" ? (

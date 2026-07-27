@@ -75,7 +75,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
 
   return (
     <>
-      <section className="grid grid-cols-[minmax(0,1fr)_430px] items-start max-[1100px]:block">
+      <section className="grid grid-cols-[minmax(0,1fr)_360px] items-start max-[1100px]:block">
         <section className="min-w-0 pr-5 max-[1100px]:pr-0">
           <Panel
             title="计划安排"
