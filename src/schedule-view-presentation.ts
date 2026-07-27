@@ -23,6 +23,9 @@ export const COMPACT_POWER_CARD_CLASS =
 export const COMPACT_POWER_OPERATOR_ROW_CLASS =
   "flex items-start justify-end gap-2";
 
+export const COMPACT_AUXILIARY_OPERATOR_ROW_CLASS =
+  `${COMPACT_POWER_OPERATOR_ROW_CLASS} max-[1400px]:translate-x-1`;
+
 export const COMPACT_HEADER_CLASS =
   "flex h-7 shrink-0 items-center gap-2";
 

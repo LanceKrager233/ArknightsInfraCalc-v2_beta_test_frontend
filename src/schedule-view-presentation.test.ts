@@ -60,6 +60,10 @@ test("uses a horizontal power card with the operator aligned to the right", () =
     presentation.COMPACT_POWER_OPERATOR_ROW_CLASS,
     "flex items-start justify-end gap-2",
   );
+  assert.equal(
+    presentation.COMPACT_AUXILIARY_OPERATOR_ROW_CLASS,
+    "flex items-start justify-end gap-2 max-[1400px]:translate-x-1",
+  );
 });
 
 test("uses horizontal compact cards only for power and auxiliary rooms", () => {

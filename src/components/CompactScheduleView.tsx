@@ -10,6 +10,7 @@ import {
 import { OperatorSlot, roomVisualFor } from "@/components";
 import { presentRoomEfficiency } from "@/efficiency";
 import {
+  COMPACT_AUXILIARY_OPERATOR_ROW_CLASS,
   COMPACT_AUXILIARY_WIDTHS,
   COMPACT_CARD_CLASS,
   COMPACT_COLUMN_CLASS,
@@ -139,7 +140,13 @@ function CompactRoomCard({
           {header}
           <div className="mt-2">{efficiencyBlock}</div>
         </div>
-        <div className={COMPACT_POWER_OPERATOR_ROW_CLASS}>
+        <div
+          className={
+            isPower
+              ? COMPACT_POWER_OPERATOR_ROW_CLASS
+              : COMPACT_AUXILIARY_OPERATOR_ROW_CLASS
+          }
+        >
           {operators}
         </div>
       </div>
