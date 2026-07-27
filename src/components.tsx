@@ -934,7 +934,9 @@ export function ScheduleBoard({
       <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "compact")}>
         <TabsList>
           <TabsTrigger value="list">列表式布局</TabsTrigger>
-          <TabsTrigger value="compact" disabled={!isDesktop}>一图流布局</TabsTrigger>
+          <TabsTrigger value="compact" disabled={!isDesktop} className={!isDesktop ? "line-through" : ""}>
+            一图流布局
+          </TabsTrigger>
         </TabsList>
       </Tabs>
       {viewMode === "list" ? (
