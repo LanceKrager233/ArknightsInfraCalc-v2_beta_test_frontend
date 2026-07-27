@@ -34,7 +34,13 @@ $env:SKLAND_SESSION_SECRET = "请替换为随机生成的长期密钥"
 npm run dev
 ```
 
-森空岛凭证会使用 AES-256-GCM 加密后写入 HttpOnly Cookie，不写入浏览器存储、运行记录或反馈包。localhost 可使用 HTTP 开发；非 localhost 环境必须通过 HTTPS 访问，否则只禁用森空岛入口，MAA 导入和求解仍可使用。
+通过反向代理部署时，还应配置浏览器实际访问的完整 Origin（包括非默认端口），用于校验森空岛写请求的来源：
+
+```powershell
+$env:SKLAND_PUBLIC_ORIGIN = "https://beta.example.com"
+```
+
+森空岛凭证会使用 AES-256-GCM 加密后写入 HttpOnly Cookie，不写入浏览器存储、运行记录或反馈包。localhost 可使用 HTTP 开发；非 localhost 环境默认必须通过 HTTPS 访问，否则只禁用森空岛入口，MAA 导入和求解仍可使用。仅在临时、可信的 HTTP 测试环境中可以显式设置 `SKLAND_ALLOW_INSECURE_HTTP=1`；此时登录流量不会受到 HTTPS 保护。
 
 ## CLI 设置
 

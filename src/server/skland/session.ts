@@ -84,12 +84,47 @@ export function isSecureSklandRequest(request: Request, nodeEnv = process.env.NO
   return forwarded === "https" || url.protocol === "https:" || local;
 }
 
-export function assertSameOrigin(request: Request): void {
+function normalizedHttpOrigin(value: string): string | null {
+  try {
+    const url = new URL(value);
+    if (
+      (url.protocol !== "http:" && url.protocol !== "https:") ||
+      url.username ||
+      url.password ||
+      url.pathname !== "/" ||
+      url.search ||
+      url.hash
+    ) {
+      return null;
+    }
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+export function assertSameOrigin(request: Request, publicOrigin = process.env.SKLAND_PUBLIC_ORIGIN): void {
   const origin = request.headers.get("origin");
   if (!origin) return;
-  const originUrl = new URL(origin);
+
+  const actualOrigin = normalizedHttpOrigin(origin);
+  if (!actualOrigin) throw new Error("请求来源无效。");
+
+  const configuredOrigin = publicOrigin?.trim();
+  if (configuredOrigin) {
+    const expectedOrigin = normalizedHttpOrigin(configuredOrigin);
+    if (!expectedOrigin) {
+      throw new Error("SKLAND_PUBLIC_ORIGIN 配置无效，必须是仅包含协议、主机和可选端口的 HTTP(S) Origin。");
+    }
+    if (actualOrigin !== expectedOrigin) throw new Error("请求来源无效。");
+    return;
+  }
+
   const requestUrl = new URL(request.url);
   const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
   const expectedHost = forwardedHost || request.headers.get("host") || requestUrl.host;
-  if (originUrl.host !== expectedHost) throw new Error("请求来源无效。");
+  const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase();
+  const expectedProtocol = forwardedProto || requestUrl.protocol.slice(0, -1);
+  const expectedOrigin = normalizedHttpOrigin(`${expectedProtocol}://${expectedHost}`);
+  if (!expectedOrigin || actualOrigin !== expectedOrigin) throw new Error("请求来源无效。");
 }
