@@ -4,7 +4,9 @@ import test from "node:test";
 import {
   DEFAULT_LIST_COLLAPSED_GROUPS,
   buildListScheduleGroups,
+  listRoomHeightClass,
   listRoomUsesAlignedOperatorOrigin,
+  listRoomUsesPowerColumnAlignment,
 } from "./schedule-list-layout.ts";
 import type { RoomGroup, RoomRow } from "./schedule.ts";
 
@@ -55,4 +57,17 @@ test("aligns production operator origins with the control center", () => {
   assert.equal(listRoomUsesAlignedOperatorOrigin("manufacture"), true);
   assert.equal(listRoomUsesAlignedOperatorOrigin("processing"), true);
   assert.equal(listRoomUsesAlignedOperatorOrigin("power"), false);
+});
+
+test("adds breathing room only to manufacturing and functional facility cards", () => {
+  assert.equal(listRoomHeightClass("manufacture"), "h-[160px]");
+  assert.equal(listRoomHeightClass("power"), "h-[128px]");
+  assert.equal(listRoomHeightClass("meeting"), "h-[128px]");
+  assert.equal(listRoomHeightClass("trading"), "h-[144px]");
+});
+
+test("anchors the meeting-room operators to the second power-station column", () => {
+  assert.equal(listRoomUsesPowerColumnAlignment("meeting"), true);
+  assert.equal(listRoomUsesPowerColumnAlignment("power"), false);
+  assert.equal(listRoomUsesPowerColumnAlignment("manufacture"), false);
 });

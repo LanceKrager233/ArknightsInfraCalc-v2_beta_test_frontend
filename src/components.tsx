@@ -51,7 +51,9 @@ import {
   DEFAULT_LIST_COLLAPSED_GROUPS,
   buildListScheduleGroups,
   isListFunctionalFacilityRoom,
+  listRoomHeightClass,
   listRoomUsesAlignedOperatorOrigin,
+  listRoomUsesPowerColumnAlignment,
 } from "./schedule-list-layout";
 import {
   BaseBlueprint,
@@ -1032,6 +1034,7 @@ export function ScheduleBoard({
                 const compactInlineRoom = isListFunctionalFacilityRoom(row.group);
                 const narrowLeftPanel = listRoomUsesAlignedOperatorOrigin(row.group);
                 const compactFactoryRoom = row.group === "manufacture";
+                const powerColumnAlignedRoom = listRoomUsesPowerColumnAlignment(row.group);
                 const slotCount = compactInlineRoom ? (row.group === "meeting" ? 2 : 1) : roomSlotCountFor(row.group);
                 const slots = Array.from({ length: slotCount }, (_, index) => row.operatorSlots[index]);
                 const rowStyle = {
@@ -1043,8 +1046,8 @@ export function ScheduleBoard({
                   <div
                     key={row.key}
                     className={cn(
-                      "relative flex h-[144px] w-full overflow-hidden bg-[#313131] text-white shadow-[0_10px_20px_rgba(0,0,0,0.24)] max-sm:h-auto max-sm:flex-col",
-                      compactInlineRoom && "h-[112px]",
+                      "relative flex w-full overflow-hidden bg-[#313131] text-white shadow-[0_10px_20px_rgba(0,0,0,0.24)] max-sm:h-auto max-sm:flex-col",
+                      listRoomHeightClass(row.group),
                       row.group === "meeting" && "xl:col-span-2 [container-type:inline-size]",
                       row.suspicious && "ring-2 ring-destructive ring-offset-2"
                     )}
@@ -1104,10 +1107,14 @@ export function ScheduleBoard({
                           "grid min-w-0 items-center justify-start max-sm:flex max-sm:overflow-x-auto max-sm:pb-1",
                           compactInlineRoom ? "flex-none" : "flex-1 grid-flow-col auto-cols-max",
                           compactFactoryRoom && "min-[1800px]:flex-none",
-                          compactInlineRoom && (slotCount === 2 ? "grid-cols-2" : "grid-cols-1")
+                          compactInlineRoom && (slotCount === 2 ? "grid-cols-2" : "grid-cols-1"),
+                          powerColumnAlignedRoom && "xl:absolute xl:top-1/2 xl:-translate-y-1/2"
                         )}
                         style={{
                           columnGap: "clamp(0.75rem, 1.25vw, 1.25rem)",
+                          ...(powerColumnAlignedRoom
+                            ? { left: "max(11.375rem, calc(25cqw + 3.125rem))" }
+                            : {}),
                         }}
                       >
                         {slots.map((slot, index) => (
