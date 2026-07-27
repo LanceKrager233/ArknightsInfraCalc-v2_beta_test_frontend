@@ -58,8 +58,15 @@ export function inspectPlanComputeCapability(response: unknown): PlanComputeCapa
       reason: `plan_schema_version 需要 ${PLAN_SCHEMA_VERSION}，当前为 ${schemaVersion ?? "缺失"}`,
     };
   }
-  // SHA-256 校验暂时关闭，CLI 更新后再开启
-  // if (contractSha256 !== PLAN_CONTRACT_SHA256) { ... }
+  if (contractSha256 !== PLAN_CONTRACT_SHA256) {
+    return {
+      supported: false,
+      protocolVersion,
+      schemaVersion,
+      contractSha256,
+      reason: "plan.compute v1 契约 SHA-256 不匹配",
+    };
+  }
 
   return {
     supported: true,

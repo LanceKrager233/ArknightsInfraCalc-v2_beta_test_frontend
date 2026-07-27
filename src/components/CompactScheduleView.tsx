@@ -1,6 +1,6 @@
 "use client";
 
-import { CSSProperties } from "react";
+import { Fragment, type CSSProperties } from "react";
 
 import {
   factoryRecipeFor,
@@ -199,13 +199,13 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
 
       {/* Row 2-4: 工作站×2(各50%) | 宿舍 */}
       {[0, 2, 4].map((start) => (
-        <>
+        <Fragment key={start}>
           <div className="flex justify-between gap-3">
             {workstations[start] && makeCard(workstations[start], 50)}
             {workstations[start + 1] && makeCard(workstations[start + 1], 50)}
           </div>
           {dorms[start / 2] ? makeCard(dorms[start / 2]) : <div />}
-        </>
+        </Fragment>
       ))}
 
       {/* Row 5 */}

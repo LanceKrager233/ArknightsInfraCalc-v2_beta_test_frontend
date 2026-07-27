@@ -855,6 +855,7 @@ export function ScheduleBoard({
   onIssue,
   onFactoryRecipeChange,
   onTradeOrderChange,
+  onViewModeChange,
 }: {
   rows: RoomRow[];
   layout: BaseBlueprint;
@@ -865,6 +866,7 @@ export function ScheduleBoard({
   onIssue: (row: RoomRow) => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
+  onViewModeChange?: (viewMode: "list" | "compact") => void;
 }) {
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [hiddenGroups, setHiddenGroups] = useState<Record<string, boolean>>({});
@@ -875,11 +877,14 @@ export function ScheduleBoard({
     setIsDesktop(mq.matches);
     const handler = (e: MediaQueryListEvent) => {
       setIsDesktop(e.matches);
-      if (!e.matches) setViewMode("list");
+      if (!e.matches) {
+        setViewMode("list");
+        onViewModeChange?.("list");
+      }
     };
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
-  }, []);
+  }, [onViewModeChange]);
 
   if (rows.length === 0) {
     return (
@@ -948,7 +953,14 @@ export function ScheduleBoard({
       {shiftInfoSlot ? (
         <div className="flex items-start justify-between gap-3 max-sm:flex-col">{shiftInfoSlot}</div>
       ) : null}
-      <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "compact")}>
+      <Tabs
+        value={viewMode}
+        onValueChange={(value) => {
+          const nextViewMode = value as "list" | "compact";
+          setViewMode(nextViewMode);
+          onViewModeChange?.(nextViewMode);
+        }}
+      >
         <TabsList>
           <TabsTrigger value="list">列表式布局</TabsTrigger>
           <TabsTrigger value="compact" disabled={!isDesktop} className={!isDesktop ? "line-through" : ""}>

@@ -147,7 +147,7 @@ src/
 - room_line 字段：`trade_efficiency` → `trade_score`, `trade_skill_efficiency` → `trade_skill_pct ×100`
 - operbox 去重：`runPlan()` 发请求前 filter 同名干员，保留第一个删除后续
 - plan.compute 协议链路：`inspectPlanComputeCapability()` 探测 CLI 能力 → `parsePlanComputePayload()` 解析响应
-- SHA-256 契约校验暂时关闭（CLI 更新后恢复）
+- SHA-256 契约校验必须与前端内置的 plan.compute v1 契约一致
 
 ## 核心模块详解
 
