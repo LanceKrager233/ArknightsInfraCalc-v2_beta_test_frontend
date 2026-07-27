@@ -43,6 +43,7 @@ import {
   roomKindLabel,
   tradeOrderFor,
 } from "./blueprint";
+import { CompactScheduleView } from "@/components/CompactScheduleView";
 import { manufacturePoolReady, presentRoomEfficiency, profileEfficiency, RoomEfficiencyPresentation } from "./efficiency";
 import { countElite2, countOwned, countSixStar } from "./operbox";
 import { RoomRow } from "./schedule";
@@ -63,7 +64,7 @@ type Option<T extends string> = {
   label: string;
 };
 
-function ProductToggleGroup<T extends string>({
+export function ProductToggleGroup<T extends string>({
   value,
   options,
   onChange,
@@ -592,7 +593,7 @@ type RoomVisual = {
 
 const ROOM_SLOT_COUNT = 5;
 const AUXILIARY_ROOM_GROUPS = new Set(["dormitory", "hire", "meeting", "processing"]);
-const INLINE_MAIN_ROOM_GROUPS = new Set(["hire", "power", "meeting"]);
+const INLINE_MAIN_ROOM_GROUPS = new Set(["hire", "power", "meeting", "processing"]);
 
 function roomSlotCountFor(group: string) {
   if (group === "trading" || group === "manufacture") return 3;
@@ -652,7 +653,7 @@ const ROOM_VISUALS: Record<string, RoomVisual> = {
   },
 };
 
-function roomVisualFor(group: string): RoomVisual {
+export function roomVisualFor(group: string): RoomVisual {
   return ROOM_VISUALS[group] ?? ROOM_VISUALS.default;
 }
 
@@ -675,13 +676,13 @@ function LevelDiamonds({ level, maxLevel }: { level?: number; maxLevel?: number 
   );
 }
 
-function RoomEfficiencyReadout({ value, details = true }: { value: RoomEfficiencyPresentation; details?: boolean }) {
+export function RoomEfficiencyReadout({ value, details = true }: { value: RoomEfficiencyPresentation; details?: boolean }) {
   return (
-    <div className="mb-1.5 min-w-0" title={value.details.map((detail) => `${detail.label} ${detail.value}`).join(" · ")}>
-      <div className="flex min-w-0 items-baseline gap-1.5">
-        <strong className="shrink-0 text-base leading-none tabular-nums text-[var(--room-accent)] max-sm:text-xs">{value.primaryValue}</strong>
-        <span className="truncate text-[10px] font-medium text-white/68 max-sm:text-[8px]">{value.primaryLabel}</span>
-        {value.includesCrossStation ? <span className="shrink-0 bg-white/12 px-1 py-0.5 text-[8px] font-semibold text-white/82">含跨设施</span> : null}
+    <div className="min-w-0" title={value.details.map((detail) => `${detail.label} ${detail.value}`).join(" · ")}>
+      <div className="flex min-w-0 items-center gap-1.5">
+        <strong className="shrink-0 text-base tabular-nums text-[var(--room-accent)] max-sm:text-xs">{value.primaryValue}</strong>
+        <span className="truncate text-xs font-medium text-white/68 max-sm:text-[10px]">{value.primaryLabel}</span>
+        {value.includesCrossStation ? <span className="shrink-0 bg-white/12 px-1 text-[10px] font-normal text-white/82">含跨设施</span> : null}
       </div>
       {details && value.details.length ? (
         <div className="mt-1 flex max-h-8 flex-wrap gap-x-2 gap-y-0.5 overflow-hidden text-[9px] leading-3 text-white/56 max-sm:mt-0.5 max-sm:max-h-3 max-sm:text-[7px]">
@@ -701,7 +702,7 @@ function RoomEfficiencyDetails({ value }: { value: RoomEfficiencyPresentation | 
 
   return (
     <div
-      className="ml-6 grid min-w-[160px] max-w-[240px] gap-1 text-sm leading-tight text-white/62 max-sm:hidden"
+      className=" grid min-w-[120px] max-w-[240px] gap-1 text-sm leading-tight text-white/62 max-sm:hidden"
       title={value.details.map((detail) => `${detail.label} ${detail.value}`).join(" · ")}
     >
       {value.details.map((detail) => (
@@ -719,7 +720,7 @@ function RoomEfficiencyDetails({ value }: { value: RoomEfficiencyPresentation | 
   );
 }
 
-function RoomProductControls({
+export function RoomProductControls({
   row,
   layoutRoom,
   onFactoryRecipeChange,
@@ -778,7 +779,7 @@ function RoomProductControls({
   return <div className="text-lg font-medium leading-none text-[var(--room-accent)]">{row.product}</div>;
 }
 
-function OperatorSlot({
+export function OperatorSlot({
   slot,
   currentMorale,
 }: {
@@ -788,42 +789,37 @@ function OperatorSlot({
   if (!slot) {
     return (
       <div
-        className="relative aspect-square h-[clamp(70px,7.3vw,88px)] min-w-0 shrink overflow-hidden border-2 border-[#4B4B4B] bg-[#3C3C3C] after:absolute after:left-1/2 after:top-1/2 after:h-0.5 after:w-[78%] after:origin-center after:-translate-x-1/2 after:-translate-y-1/2 after:rotate-[-45deg] after:bg-[#4B4B4B] after:content-[''] max-sm:h-[clamp(32px,11vw,40px)] max-sm:border"
+        className="relative aspect-square h-[clamp(70px,7.3vw,88px)] min-w-0 shrink-0 overflow-hidden border-2 border-[#4B4B4B] bg-[#3C3C3C] after:absolute after:left-1/2 after:top-1/2 after:h-0.5 after:w-[78%] after:origin-center after:-translate-x-1/2 after:-translate-y-1/2 after:rotate-[-45deg] after:bg-[#4B4B4B] after:content-[''] max-sm:h-[clamp(56px,16vw,76px)] max-sm:border"
         aria-label="空置"
       />
     );
   }
 
   return (
-    <div
-      className="relative aspect-square h-[clamp(70px,7.3vw,88px)] min-w-0 shrink overflow-hidden border-2 border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)] max-sm:h-[clamp(32px,11vw,40px)] max-sm:border"
-      title={slot.label}
-    >
-      {slot.portrait ? (
-        <img src={slot.portrait} alt={slot.name} className="absolute inset-0 h-full w-full object-cover outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10" />
-      ) : (
-        <div className="flex h-full items-center justify-center bg-[#4B4B4B] px-2 text-center text-xs font-semibold text-white">
-          {slot.name}
-        </div>
-      )}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/60" />
-      <span
-        className="absolute inset-x-0 bottom-0 truncate bg-black/64 px-1.5 py-1 text-center text-[11px] font-semibold leading-none text-white shadow-[0_-4px_10px_rgba(0,0,0,0.28)] max-sm:px-0.5 max-sm:py-0.5 max-sm:text-[7px]"
-        title={slot.name}
-      >
+    <div className="min-w-0 shrink-0" title={slot.label}>
+      <div className="relative aspect-square h-[clamp(70px,7.3vw,88px)] overflow-hidden border-2 border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)] max-sm:h-[clamp(56px,16vw,76px)] max-sm:border">
+        {slot.portrait ? (
+          <img src={slot.portrait} alt={slot.name} className="absolute inset-0 h-full w-full object-cover outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10" />
+        ) : (
+          <div className="flex h-full items-center justify-center bg-[#4B4B4B] px-2 text-center text-xs font-semibold text-white">
+            {slot.name}
+          </div>
+        )}
+        {typeof currentMorale === "number" ? (
+          <span
+            className="absolute bottom-0.5 left-0.5 flex items-center gap-0.5 whitespace-nowrap rounded-sm bg-black/72 px-1 py-0.5 text-xs font-normal leading-none text-white shadow-[0_1px_3px_rgba(0,0,0,0.5)] [&_svg]:size-2.5 max-sm:bottom-0.5 max-sm:left-0.5 max-sm:px-0.5 max-sm:text-[10px] max-sm:[&_svg]:size-2"
+            aria-label={`当前心情 ${currentMorale}/24`}
+            title={`当前心情 ${currentMorale}/24`}
+          >
+            <Smile className="text-[#FFD501]" />
+            <span className="max-sm:hidden">当前</span>
+            <span>{currentMorale}</span>
+          </span>
+        ) : null}
+      </div>
+      <span className="mt-0.5 block truncate text-center text-sm leading-tight text-white max-sm:text-xs">
         {slot.name}
       </span>
-      {typeof currentMorale === "number" ? (
-        <span
-          className="absolute bottom-5 left-1 flex items-center gap-0.5 rounded-sm bg-black/72 px-1 py-0.5 text-[10px] font-semibold leading-none text-white shadow-[0_1px_3px_rgba(0,0,0,0.5)] [&_svg]:size-2.5 max-sm:bottom-4 max-sm:left-0.5 max-sm:px-0.5 max-sm:text-[8px] max-sm:[&_svg]:size-2"
-          aria-label={`当前心情 ${currentMorale}/24`}
-          title={`当前心情 ${currentMorale}/24`}
-        >
-          <Smile className="text-[#FFD501]" />
-          <span className="max-sm:hidden">当前</span>
-          <span>{currentMorale}</span>
-        </span>
-      ) : null}
     </div>
   );
 }
@@ -832,6 +828,9 @@ export function ScheduleBoard({
   rows,
   layout,
   currentMoraleByOperator,
+  shiftInfoSlot,
+  activeShift,
+  activePlan,
   onIssue,
   onFactoryRecipeChange,
   onTradeOrderChange,
@@ -839,12 +838,16 @@ export function ScheduleBoard({
   rows: RoomRow[];
   layout: BaseBlueprint;
   currentMoraleByOperator?: ReadonlyMap<string, number>;
+  shiftInfoSlot?: ReactNode;
+  activeShift: number;
+  activePlan?: MaaPlan;
   onIssue: (row: RoomRow) => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
 }) {
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [hiddenGroups, setHiddenGroups] = useState<Record<string, boolean>>({});
+  const [viewMode, setViewMode] = useState<"list" | "compact">("list");
 
   if (rows.length === 0) {
     return (
@@ -910,20 +913,31 @@ export function ScheduleBoard({
 
   return (
     <div className="flex flex-col gap-7">
-      {auxiliaryGroups.length ? (
-        <div className="flex flex-wrap justify-end gap-2">
-          {hiddenAuxiliaryCount ? (
-            <Button type="button" variant="ghost" size="sm" onClick={restoreHiddenAuxiliaryGroups}>
-              恢复已隐藏（{hiddenAuxiliaryCount}）
-            </Button>
-          ) : null}
-          <Button type="button" variant="outline" size="sm" onClick={toggleAuxiliaryGroups}>
-            <ChevronDown className={cn("transition-transform", allAuxiliaryCollapsed ? "-rotate-90" : "rotate-0")} />
-            {allAuxiliaryCollapsed ? "展开辅助设施" : "一键折叠辅助设施"}
-          </Button>
-        </div>
+      {shiftInfoSlot ? (
+        <div className="flex items-start justify-between gap-3 max-sm:flex-col">{shiftInfoSlot}</div>
       ) : null}
-      {rowGroups.map((group) => {
+      <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "compact")}>
+        <TabsList>
+          <TabsTrigger value="list">列表式布局</TabsTrigger>
+          <TabsTrigger value="compact">一图流布局</TabsTrigger>
+        </TabsList>
+      </Tabs>
+      {viewMode === "list" ? (
+        <>
+          {auxiliaryGroups.length ? (
+            <div className="flex flex-wrap justify-end gap-2">
+              {hiddenAuxiliaryCount ? (
+                <Button type="button" variant="ghost" size="sm" onClick={restoreHiddenAuxiliaryGroups}>
+                  恢复已隐藏（{hiddenAuxiliaryCount}）
+                </Button>
+              ) : null}
+              <Button type="button" variant="outline" size="sm" onClick={toggleAuxiliaryGroups}>
+                <ChevronDown className={cn("transition-transform", allAuxiliaryCollapsed ? "-rotate-90" : "rotate-0")} />
+                {allAuxiliaryCollapsed ? "展开辅助设施" : "一键折叠辅助设施"}
+              </Button>
+            </div>
+          ) : null}
+          {rowGroups.map((group) => {
         const visual = roomVisualFor(group.rows[0]?.group ?? "default");
         const groupStyle = {
           "--room-accent": visual.accent,
@@ -965,6 +979,7 @@ export function ScheduleBoard({
                 const rowVisual = roomVisualFor(row.group);
                 const efficiency = presentRoomEfficiency(row.group, row.efficiency);
                 const compactInlineRoom = INLINE_MAIN_ROOM_GROUPS.has(row.group);
+                const narrowLeftPanel = row.group === "control" || row.group === "dormitory";
                 const slotCount = compactInlineRoom ? (row.group === "meeting" ? 2 : 1) : roomSlotCountFor(row.group);
                 const slots = Array.from({ length: slotCount }, (_, index) => row.operatorSlots[index]);
                 const rowStyle = {
@@ -983,7 +998,7 @@ export function ScheduleBoard({
                     )}
                     style={rowStyle}
                   >
-                    <div className={cn("relative w-[330px] shrink-0 overflow-hidden bg-[#313131] max-sm:min-h-[128px] max-sm:w-full", compactInlineRoom && "w-[210px]")}>
+                    <div className={cn("relative w-[320px] shrink-0 overflow-hidden bg-[#313131] max-sm:w-full", compactInlineRoom && "w-[210px]", narrowLeftPanel && "w-[240px]")}>
                       <div
                         className="absolute inset-0 bg-left bg-no-repeat opacity-[0.52]"
                         style={{
@@ -994,17 +1009,27 @@ export function ScheduleBoard({
                         aria-hidden="true"
                       />
                       <div className="absolute inset-0 bg-gradient-to-r from-[#313131]/20 via-[#313131]/72 to-[#313131]" />
-                      <div className="relative z-10 flex h-full flex-col justify-center px-3 py-3 max-sm:px-3 max-sm:py-3">
-                        <div>
-                          <div className="flex items-start gap-2.5 max-sm:gap-1.5">
-                            <div className={cn("min-w-0 truncate text-[23px] font-medium leading-none tracking-normal text-white [text-shadow:0_2px_3px_rgba(0,0,0,0.75)] max-sm:text-[16px]", compactInlineRoom && "text-[18px]")}>
-                              {row.title}
+                      <div className="relative z-10 flex h-full flex-col justify-center gap-2 px-3 py-3 max-sm:justify-start max-sm:gap-1.5 max-sm:px-3 max-sm:py-2">
+                        <div className="max-sm:flex max-sm:items-center max-sm:gap-2">
+                          <div>
+                            <div className="flex items-center gap-2.5 max-sm:gap-1.5">
+                              <div className={cn("min-w-0 truncate text-[24px] font-medium tracking-normal text-white [text-shadow:0_2px_3px_rgba(0,0,0,0.75)] max-sm:text-[16px]", compactInlineRoom && "text-[18px]")}>
+                                {row.title}
+                              </div>
+                              <LevelDiamonds level={row.level} maxLevel={layoutRoom ? maxRoomLevel(layoutRoom.kind) : row.level} />
                             </div>
-                            <LevelDiamonds level={row.level} maxLevel={layoutRoom ? maxRoomLevel(layoutRoom.kind) : row.level} />
                           </div>
+                          {efficiency ? (
+                            <div className="hidden max-sm:block shrink-0">
+                              <RoomEfficiencyReadout value={efficiency} details={false} />
+                            </div>
+                          ) : null}
                         </div>
-                        <div className="h-2" />
-                        {efficiency ? <RoomEfficiencyReadout value={efficiency} details={false} /> : null}
+                        {efficiency ? (
+                          <div className="max-sm:hidden">
+                            <RoomEfficiencyReadout value={efficiency} details={false} />
+                          </div>
+                        ) : null}
                         <RoomProductControls
                           row={row}
                           layoutRoom={layoutRoom}
@@ -1014,7 +1039,7 @@ export function ScheduleBoard({
                       </div>
                     </div>
 
-                    <div className={cn("flex min-w-0 flex-1 items-center gap-5 py-2 pl-12 pr-10 max-sm:flex-col max-sm:items-stretch max-sm:gap-2 max-sm:px-3 max-sm:pb-3 max-sm:pt-0", compactInlineRoom && "justify-center pl-4 pr-8")}>
+                    <div className={cn("flex min-w-0 flex-1 items-center gap-5 py-2 pl-2 pr-3 max-sm:flex-col max-sm:items-stretch max-sm:gap-2 max-sm:px-3 max-sm:pb-3 max-sm:pt-0", compactInlineRoom && "justify-center pl-4 pr-8")}>
                       <div
                         className={cn(
                           "grid min-w-0 flex-1 items-center justify-items-center gap-2.5 max-sm:flex max-sm:overflow-x-auto max-sm:pb-1",
@@ -1040,7 +1065,7 @@ export function ScheduleBoard({
                             type="button"
                             variant="ghost"
                             size="icon-sm"
-                            className="absolute right-2 top-2 border border-white/10 bg-[#3C3C3C]/55 text-white/70 hover:bg-[#4B4B4B] hover:text-white"
+                            className="absolute right-2 top-2 z-10 border border-white/10 bg-[#3C3C3C]/55 text-white/70 hover:bg-[#4B4B4B] hover:text-white"
                             aria-label={`${row.title} 标记问题`}
                             onClick={() => onIssue(row)}
                           >
@@ -1057,6 +1082,19 @@ export function ScheduleBoard({
           </section>
         );
       })}
+        </>
+      ) : (
+        <CompactScheduleView
+          rows={rows}
+          layout={layout}
+          currentMoraleByOperator={currentMoraleByOperator}
+          activeShift={activeShift}
+          activePlan={activePlan}
+          onIssue={onIssue}
+          onFactoryRecipeChange={onFactoryRecipeChange}
+          onTradeOrderChange={onTradeOrderChange}
+        />
+      )}
     </div>
   );
 }

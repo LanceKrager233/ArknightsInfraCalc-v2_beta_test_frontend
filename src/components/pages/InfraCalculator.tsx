@@ -88,17 +88,6 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               </Button>
             )}
           >
-            <div className="mb-3 flex items-start justify-between gap-3 max-sm:flex-col">
-              <div className="min-w-0">
-                <strong className="block truncate text-sm font-medium">
-                  {result?.maaJson?.title ?? "等待生成排班"}
-                </strong>
-                <span className="mt-1 block text-sm text-muted-foreground">
-                  {activePlan?.description ?? "配置 Box 与基建布局后，即可生成三班排班。"}
-                </span>
-              </div>
-              <ShiftTabs maaJson={result?.maaJson} active={activeShift} closest={closestComparison?.planIndex} onChange={onSetActiveShift} />
-            </div>
             {!operbox ? (
               <div className="mb-5 flex flex-wrap items-center justify-between gap-4 border-y border-dashed border-border/70 py-6">
                 <div>
@@ -121,6 +110,21 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               rows={rows}
               layout={layout}
               currentMoraleByOperator={currentMoraleByOperator}
+              activeShift={activeShift}
+              activePlan={activePlan}
+              shiftInfoSlot={(
+                <>
+                  <div className="min-w-0">
+                    <strong className="block truncate text-sm font-medium">
+                      {result?.maaJson?.title ?? "等待生成排班"}
+                    </strong>
+                    <span className="mt-1 block text-sm text-muted-foreground">
+                      {activePlan?.description ?? "配置 Box 与基建布局后，即可生成三班排班。"}
+                    </span>
+                  </div>
+                  <ShiftTabs maaJson={result?.maaJson} active={activeShift} closest={closestComparison?.planIndex} onChange={onSetActiveShift} />
+                </>
+              )}
               onIssue={onMarkIssue}
               onFactoryRecipeChange={onFactoryRecipeChange}
               onTradeOrderChange={onTradeOrderChange}

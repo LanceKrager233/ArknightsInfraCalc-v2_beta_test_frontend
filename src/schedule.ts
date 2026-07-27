@@ -45,8 +45,8 @@ const GROUP_ORDER: RoomGroup[] = [
   "power",
   "dormitory",
   "hire",
-  "meeting",
   "processing",
+  "meeting",
 ];
 
 const ROOM_PREFIX: Partial<Record<RoomGroup, string>> = {
