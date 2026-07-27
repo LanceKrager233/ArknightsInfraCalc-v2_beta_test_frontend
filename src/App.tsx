@@ -62,10 +62,6 @@ import {
 const SESSION_KEY = "arknights-infra-calc-beta-session-v3";
 const LEGACY_SESSION_KEY = "arknights-infra-calc-beta-session-v2";
 const RESULT_CLEAR_WARNING_DISMISSED_KEY = "arknights-infra-calc-result-clear-warning-dismissed";
-const KNOWN_ISSUES = [
-  "Beta 测试阶段仍可能出现排班策略和预期不一致的情况；请用“标记问题”提交上下文。",
-  "如遇到 CLI 运行失败，请先下载调试包并保留本次运行记录。",
-];
 
 type ProductChange =
   | { type: "factory"; roomId: string; recipe: FactoryRecipe }
@@ -211,6 +207,7 @@ function WorkbenchApp() {
   const initialPreset = resolvePreset(initialSession?.preset);
   const initialLayout = restoreEditableProducts(buildBlueprint(initialPreset), initialSession?.layout);
   const [page, setPage] = useState<AppPage>("calculator");
+  const [showBetaPanels, setShowBetaPanels] = useState(false);
   const [preset, setPreset] = useState<PresetDef>(initialPreset);
   const [layout, setLayout] = useState<BaseBlueprint>(initialLayout);
   const powerBudget = useMemo(() => computePowerBudget(layout), [layout]);
@@ -285,6 +282,14 @@ function WorkbenchApp() {
     return JSON.stringify(compact(layout)) === JSON.stringify(compact(suggestion));
   }, [layout, sklandSnapshot?.infrastructure.layoutSuggestion]);
   const canRun = Boolean(operbox && operbox.length > 0 && cliReady);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const syncBetaPanels = () => setShowBetaPanels(new URLSearchParams(window.location.search).has("beta"));
+    syncBetaPanels();
+    window.addEventListener("popstate", syncBetaPanels);
+    return () => window.removeEventListener("popstate", syncBetaPanels);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -768,10 +773,10 @@ function WorkbenchApp() {
     <SidebarProvider>
       <AppSidebar page={page} onPageChange={setPage} />
       <SidebarInset>
-        <header className="sticky top-0 z-30 border-b bg-background/95 px-4 py-3 backdrop-blur-sm sm:px-5">
+        <header className="sticky top-0 z-30 border-b bg-background/95 px-[clamp(1.75rem,10vw,12rem)] py-3 backdrop-blur-sm">
           <h1 className="sr-only">明日方舟基建排班验收工作台</h1>
           <div className="flex items-center gap-2">
-            <SidebarTrigger className="h-10 w-10 shrink-0" />
+            <SidebarTrigger className="h-10 w-10 shrink-0 md:hidden" />
             <div className="grid w-full grid-cols-[minmax(160px,1fr)_auto_auto_auto] items-center gap-2 max-sm:grid-cols-3">
               <StatusBar loading={loading} result={result} error={inputError ?? apiError} cliPath={cliPath} />
           <Button
@@ -802,13 +807,12 @@ function WorkbenchApp() {
         </div>
       </header>
 
-      <div className="px-4 py-4 sm:px-5">
+      <div className="px-[clamp(1.75rem,10vw,12rem)] py-4">
       {page === "calculator" ? (
         <InfraCalculator
           operbox={operbox}
           layout={layout}
-          sklandSnapshot={sklandSnapshot}
-          sklandLayoutMatches={sklandLayoutMatches}
+          showBetaPanels={showBetaPanels}
           result={result}
           scheduleResult={scheduleResult}
           activeShift={activeShift}
@@ -828,7 +832,6 @@ function WorkbenchApp() {
           onMarkIssue={handleMarkIssue}
           onFactoryRecipeChange={handleFactoryRecipeChange}
           onTradeOrderChange={handleTradeOrderChange}
-          onApplySklandLayout={handleApplySklandLayout}
           onDownloadMaa={handleDownloadMaa}
           onDownloadBundle={handleDownloadBundle}
           onCopyCommand={handleCopyCommand}
@@ -892,20 +895,6 @@ function WorkbenchApp() {
         onSave={handleSaveIssue}
         onCancel={handleCancelIssue}
       />
-
-      <aside
-        className="fixed bottom-4 right-4 z-30 w-[min(360px,calc(100vw-2rem))] rounded-lg border border-amber-200 bg-background/95 p-3 text-sm shadow-lg backdrop-blur"
-        aria-label="目前已知问题"
-      >
-        <strong className="block text-sm font-medium">目前已知问题</strong>
-        <ul className="mt-2 grid gap-1 pl-4 text-xs leading-5 text-muted-foreground">
-          {KNOWN_ISSUES.map((issue) => (
-            <li key={issue} className="list-disc">
-              {issue}
-            </li>
-          ))}
-        </ul>
-      </aside>
       </SidebarInset>
     </SidebarProvider>
   );

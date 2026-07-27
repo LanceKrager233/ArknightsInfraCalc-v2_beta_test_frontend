@@ -6,9 +6,9 @@
   "scripts": {
     "dev": "next dev --webpack -H 0.0.0.0 -p 5174",
     "dev:full": "npm run dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start -H 0.0.0.0 -p 5174",
-    "test": "node --test --experimental-strip-types src/server/shift-parser.test.ts src/server/plan-protocol.test.ts src/layout-validation.test.ts",
+    "test": "node --test --experimental-strip-types src/server/shift-parser.test.ts src/server/plan-protocol.test.ts src/server/skland/session.test.ts src/layout-validation.test.ts",
     "lint": "eslint ."
   },
   "dependencies": {
