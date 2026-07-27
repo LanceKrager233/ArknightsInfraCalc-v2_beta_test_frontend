@@ -254,6 +254,10 @@ function WorkbenchApp() {
   const [resultClearNotice, setResultClearNotice] = useState<string | null>(null);
   const [resultClearWarningDismissed, setResultClearWarningDismissed] = useState(readResultClearWarningDismissed);
 
+  // ── plan.compute v1 返回的求解结果 ──
+  // result.profileJson  = BoxProfile v4（含 domains 差距分析、actions 练卡建议）→ 练卡建议页直接用
+  // result.maaJson      = MAA 三班排班（plans[].rooms.trading/manufacture/...）
+  // result.rotationJson = 轮换摘要（daily + shifts[].efficiencies.room_lines）
   const scheduleResult = result?.success ? result : null;
   const activePlan = scheduleResult?.maaJson?.plans?.[activeShift];
   const activeRotationShift = scheduleResult?.rotationJson?.shifts?.[activeShift];

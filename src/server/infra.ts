@@ -16,6 +16,11 @@ import type {
 } from "@/types";
 import { isSklandConfigured, sklandDisabledReason } from "@/server/skland/session";
 import { normalizeServeRoomEfficiency } from "@/efficiency";
+import {
+  assertUniqueOperboxIdentities,
+  inspectPlanComputeCapability,
+  parsePlanComputePayload,
+} from "./plan-protocol";
 import { parseShiftFile } from "./shift-parser";
 
 type JsonRecord = Record<string, unknown>;
@@ -286,11 +291,8 @@ function buildRotationJson(profileJson: unknown, shifts: unknown[]) {
   };
 }
 
-function rotationShiftsFromServe(response: JsonRecord): unknown[] {
-  const result = response.result;
-  if (!isObject(result) || !Array.isArray(result.shifts)) return [];
-
-  return result.shifts.map((value, index) => {
+function normalizeRotationShifts(shifts: unknown[]): unknown[] {
+  return shifts.map((value, index) => {
     if (!isObject(value)) return value;
 
     const durationHours =
@@ -327,6 +329,15 @@ function rotationShiftsFromServe(response: JsonRecord): unknown[] {
   });
 }
 
+function rotationShiftsFromPlanCompute(rotation: JsonRecord): unknown[] {
+  return Array.isArray(rotation.shifts) ? normalizeRotationShifts(rotation.shifts) : [];
+}
+
+function rotationShiftsFromServe(response: JsonRecord): unknown[] {
+  const result = response.result;
+  return isObject(result) && Array.isArray(result.shifts) ? normalizeRotationShifts(result.shifts) : [];
+}
+
 function countRoomsByKind(layout: BaseBlueprint, kind: string) {
   return Array.isArray(layout.rooms) ? layout.rooms.filter((room) => room.kind === kind).length : 0;
 }
@@ -339,14 +350,10 @@ function serveErrorMessage(response: JsonRecord) {
 
 function formatPlanFailure({
   layout,
-  maaJson,
-  profileJson,
   response,
   stderr,
 }: {
   layout: BaseBlueprint;
-  maaJson: unknown;
-  profileJson: unknown;
   response: JsonRecord;
   stderr: string;
 }) {
@@ -367,8 +374,6 @@ function formatPlanFailure({
         : undefined,
       layoutPowerRooms > got ? "处理方式：切换到 252/342 等 2 发电站布局，或补足可用于发电站的干员后重新导出 box。" : undefined,
       `原始错误：${message}`,
-      !profileJson && "profile.json 未生成",
-      !maaJson && "maa.json 未生成",
       stderr?.slice(0, 1200),
     ]
       .filter(Boolean)
@@ -377,8 +382,6 @@ function formatPlanFailure({
 
   return [
     !response.ok && `infra-cli serve error: ${message}`,
-    !profileJson && "profile.json 未生成",
-    !maaJson && "maa.json 未生成",
     stderr?.slice(0, 1200),
   ]
     .filter(Boolean)
@@ -700,15 +703,20 @@ export async function getHealth(): Promise<HealthApiResponse> {
       }
     })();
     const dataPath = cliPath ? resolveRuntimeDataDir(cliPath) : null;
-    let serve = getServeClient().info();
+    let serve: NonNullable<HealthApiResponse["serve"]> = getServeClient().info();
     let serveError = runnableCandidate
       ? null
       : candidates.find((candidate) => candidate.exists && candidate.reason)?.reason ?? "未找到可运行的 infra-cli。";
 
     if (cliPath) {
       try {
-        await getServeClient().ping();
-        serve = getServeClient().info();
+        const pingResult = await getServeClient().ping();
+        const planCompute = inspectPlanComputeCapability(pingResult.response);
+        serve = {
+          ...getServeClient().info(),
+          protocolMode: planCompute.supported ? "plan.compute" : "legacy",
+          planCompute,
+        };
       } catch (error) {
         serveError = error instanceof Error ? error.message : String(error);
       }
@@ -832,17 +840,67 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
     await writeJson(layoutPath, body.layout);
     await writeJson(operboxPath, body.operbox);
 
-    const planParams = {
-      layout: layoutPath,
-      operbox: operboxPath,
-      profile_out: profilePath,
-      maa_out: maaPath,
-      output_dir: shiftsDir,
-      top: 20,
-      maa_title: `${body.sourceName ?? "Arknights InfraCalc"} · ${String(body.layout.template ?? "layout")}`,
-    };
+    const pingResult = await getServeClient().ping();
+    const planCompute = inspectPlanComputeCapability(pingResult.response);
+    let serveResult: ServeResult;
+    let profileJson: unknown;
+    let maaJson: unknown;
+    let serveShifts: unknown[] = [];
+    let shiftFiles: string[] = [];
+    let shiftReadErrors: string[] = [];
+    let shiftsPath: string | undefined;
+    let responseValidationError: string | undefined;
 
-    const serveResult = await getServeClient().send("plan", planParams);
+    if (planCompute.supported) {
+      assertUniqueOperboxIdentities(body.operbox);
+      serveResult = await getServeClient().send("plan.compute", {
+        schema_version: 1,
+        layout: body.layout,
+        operbox: body.operbox,
+        labels: {
+          layout: body.layout.template ?? null,
+          operbox: body.sourceName ?? null,
+        },
+        options: {
+          rotation: "abc_12_6_6",
+          top: 20,
+          system_preferences: {},
+          maa_title: `${body.sourceName ?? "Arknights InfraCalc"} · ${String(body.layout.template ?? "layout")}`,
+        },
+      });
+
+      let payload: ReturnType<typeof parsePlanComputePayload> = null;
+      try {
+        payload = parsePlanComputePayload(serveResult.response);
+      } catch (error) {
+        responseValidationError = error instanceof Error ? error.message : String(error);
+      }
+      profileJson = payload?.profile;
+      maaJson = payload?.maa;
+      serveShifts = payload ? rotationShiftsFromPlanCompute(payload.rotation) : [];
+      if (profileJson) await writeJson(profilePath, profileJson);
+      if (maaJson) await writeJson(maaPath, maaJson);
+    } else {
+      serveResult = await getServeClient().send("plan", {
+        layout: layoutPath,
+        operbox: operboxPath,
+        profile_out: profilePath,
+        maa_out: maaPath,
+        output_dir: shiftsDir,
+        top: 20,
+        maa_title: `${body.sourceName ?? "Arknights InfraCalc"} · ${String(body.layout.template ?? "layout")}`,
+      });
+
+      profileJson = await readJsonIfExists(profilePath);
+      maaJson = await readJsonIfExists(maaPath);
+      const shiftRead = await readShiftFiles(shiftsDir);
+      const responseShifts = rotationShiftsFromServe(serveResult.response);
+      serveShifts = responseShifts.length > 0 ? responseShifts : shiftRead.shifts;
+      shiftFiles = shiftRead.files.map((file) => path.relative(repoRoot, file));
+      shiftReadErrors = shiftRead.errors;
+      shiftsPath = path.relative(repoRoot, shiftsDir);
+    }
+
     const durationMs = Math.round(performance.now() - start);
     const command = `${cliPath} serve < ${path.relative(repoRoot, serveRequestLinePath)}`;
     await writeFile(commandPath, command, "utf-8");
@@ -850,15 +908,11 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
     await writeFile(serveRequestLinePath, `${JSON.stringify(serveResult.request)}\n`, "utf-8");
     await writeJson(serveResponsePath, serveResult.response);
 
-    const profileJson = await readJsonIfExists(profilePath);
-    const maaJson = await readJsonIfExists(maaPath);
-    const shiftRead = await readShiftFiles(shiftsDir);
-    const serveShifts = rotationShiftsFromServe(serveResult.response);
-    const rotationJson = buildRotationJson(profileJson, serveShifts.length > 0 ? serveShifts : shiftRead.shifts);
+    const rotationJson = buildRotationJson(profileJson, serveShifts);
     await writeFile(stdoutPath, serveResult.stdout, "utf-8");
     await writeFile(stderrPath, serveResult.stderr, "utf-8");
 
-    const success = Boolean(serveResult.response?.ok) && Boolean(maaJson) && Boolean(profileJson);
+    const success = serveResult.response.ok === true && Boolean(profileJson) && Boolean(maaJson);
     const debugBundle: DebugBundle = {
       version: "beta-test-bundle-v2-next-serve",
       startedAt,
@@ -877,8 +931,8 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
       profileJson: profileJson as DebugBundle["profileJson"],
       maaJson: maaJson as DebugBundle["maaJson"],
       rotationJson: rotationJson as DebugBundle["rotationJson"],
-      shiftFiles: shiftRead.files.map((file) => path.relative(repoRoot, file)),
-      shiftReadErrors: shiftRead.errors,
+      shiftFiles,
+      shiftReadErrors,
       serveRequest: serveResult.request,
       serveResponse: serveResult.response,
       stdout: serveResult.stdout,
@@ -888,8 +942,8 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
         layout: path.relative(repoRoot, layoutPath),
         operbox: path.relative(repoRoot, operboxPath),
         profile: profileJson ? path.relative(repoRoot, profilePath) : undefined,
-        maa: path.relative(repoRoot, maaPath),
-        shifts: path.relative(repoRoot, shiftsDir),
+        maa: maaJson ? path.relative(repoRoot, maaPath) : undefined,
+        shifts: shiftsPath,
         debugBundle: path.relative(repoRoot, debugBundlePath),
         stdout: path.relative(repoRoot, stdoutPath),
         stderr: path.relative(repoRoot, stderrPath),
@@ -923,10 +977,9 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
       relativeResultPath: path.relative(repoRoot, resultPath),
       error: success
         ? undefined
-        : formatPlanFailure({
+        : responseValidationError ??
+          formatPlanFailure({
             layout: body.layout,
-            maaJson,
-            profileJson,
             response: serveResult.response,
             stderr: serveResult.stderr,
           }),
