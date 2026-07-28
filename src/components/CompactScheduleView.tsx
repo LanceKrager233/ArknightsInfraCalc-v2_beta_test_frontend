@@ -16,6 +16,7 @@ import {
   COMPACT_COLUMN_CLASS,
   COMPACT_CONTROL_HEADER_CLASS,
   COMPACT_DORM_OPERATOR_AREA_CLASS,
+  COMPACT_DORM_WRAPPER_CLASS,
   COMPACT_GRID_CLASS,
   COMPACT_HEADER_CLASS,
   COMPACT_OPERATOR_ROW_CLASS,
@@ -294,7 +295,9 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
         </div>
 
         {dorms.slice(0, 4).map((dorm) => (
-          <div key={dorm.key}>{makeCard(dorm)}</div>
+          <div key={dorm.key} className={COMPACT_DORM_WRAPPER_CLASS}>
+            {makeCard(dorm)}
+          </div>
         ))}
       </div>
     </div>
