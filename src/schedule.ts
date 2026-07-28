@@ -1,4 +1,5 @@
 import { operatorPortraitFor } from "./operatorPortraits";
+import { maaRoomAutofill } from "./schedule-autofill";
 import { BaseBlueprint, BlueprintRoom, MaaOperatorSlot, MaaPlan, MaaRoom, MaaRooms, RoomEfficiency, RoomKind, RotationShift } from "./types";
 
 export type RoomGroup = keyof MaaRooms;
@@ -14,6 +15,7 @@ export interface RoomRow {
   product?: string;
   operators: string[];
   operatorSlots: RoomOperatorSlot[];
+  autofill: boolean;
   efficiency?: RoomEfficiency;
   efficiencyLabel?: string;
   rule: string;
@@ -284,6 +286,7 @@ function layoutToRows(layout: BaseBlueprint | undefined): RoomRow[] {
       product: blueprintProductLabel(room),
       operators: [],
       operatorSlots: [],
+      autofill: false,
       rule: ruleFor(group, []),
       suspicious: false,
     });
@@ -317,6 +320,7 @@ export function planToRows(plan: MaaPlan | undefined, shift?: RotationShift, lay
         product: productLabel(room.product, group),
         operators,
         operatorSlots,
+        autofill: maaRoomAutofill(room.autofill),
         efficiency,
         efficiencyLabel: efficiencyLabel(group, efficiency),
         rule: ruleFor(group, plainRoomOperators(room)),

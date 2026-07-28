@@ -10,11 +10,9 @@ import {
 import { OperatorSlot, roomVisualFor } from "@/components";
 import { presentRoomEfficiency } from "@/efficiency";
 import {
-  COMPACT_AUXILIARY_OPERATOR_ROW_CLASS,
   COMPACT_AUXILIARY_WIDTHS,
   COMPACT_CARD_CLASS,
   COMPACT_COLUMN_CLASS,
-  COMPACT_CONTROL_HEADER_CLASS,
   COMPACT_DORM_OPERATOR_AREA_CLASS,
   COMPACT_DORM_WRAPPER_CLASS,
   COMPACT_GRID_CLASS,
@@ -62,6 +60,7 @@ function CompactRoomCard({
   efficiency,
   slots,
   currentMoraleByOperator,
+  horizontal,
   className = "",
   style,
 }: {
@@ -71,30 +70,16 @@ function CompactRoomCard({
   efficiency: ReturnType<typeof presentRoomEfficiency>;
   slots: (RoomRow["operatorSlots"][number] | undefined)[];
   currentMoraleByOperator?: ReadonlyMap<string, number>;
+  horizontal: boolean;
   className?: string;
   style?: CSSProperties;
 }) {
   const isTrade = layoutRoom?.kind === "trade_post";
   const isFactory = layoutRoom?.kind === "factory";
-  const isControl = row.group === "control";
   const isPower = row.group === "power";
-  const isHorizontal = usesCompactHorizontalCard(row.group);
   const rowStyle = { "--room-accent": visual.accent } as CSSProperties;
 
-  const header = isControl ? (
-    <div className={COMPACT_CONTROL_HEADER_CLASS}>
-      <span
-        className="row-span-2 h-5 w-1 self-start bg-[var(--room-accent)]"
-        aria-hidden="true"
-      />
-      <span className={COMPACT_ROOM_TITLE_CLASS}>{row.title}</span>
-      {row.level ? (
-        <span className={COMPACT_ROOM_LEVEL_CLASS}>
-          Lv.{row.level}/{layoutRoom ? maxRoomLevel(layoutRoom.kind) : row.level}
-        </span>
-      ) : null}
-    </div>
-  ) : (
+  const header = (
     <div className={COMPACT_HEADER_CLASS}>
       <span className="h-5 w-1 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
       <span className={COMPACT_ROOM_TITLE_CLASS}>{row.title}</span>
@@ -149,6 +134,7 @@ function CompactRoomCard({
       key={`${slot?.name ?? "empty"}-${index}`}
       slot={slot}
       currentMorale={slot ? currentMoraleByOperator?.get(slot.name) : undefined}
+      autofill={row.group === "dormitory" && row.autofill}
       compactView
     />
   ));
@@ -167,12 +153,7 @@ function CompactRoomCard({
     </>
   );
 
-  if (isHorizontal) {
-    const horizontalOperatorRowClass =
-      isPower || isControl
-        ? COMPACT_POWER_OPERATOR_ROW_CLASS
-        : COMPACT_AUXILIARY_OPERATOR_ROW_CLASS;
-
+  if (horizontal) {
     return (
       <div className={`${COMPACT_POWER_CARD_CLASS} ${className}`} style={{ ...rowStyle, ...style }}>
         {backgroundLayers}
@@ -180,7 +161,7 @@ function CompactRoomCard({
           {header}
           <div className="mt-2">{efficiencyBlock}</div>
         </div>
-        <div className={`relative z-10 ${horizontalOperatorRowClass}`}>
+        <div className={`relative z-10 ${COMPACT_POWER_OPERATOR_ROW_CLASS}`}>
           {operators}
         </div>
       </div>
@@ -245,6 +226,7 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
         efficiency={efficiency}
         slots={slots}
         currentMoraleByOperator={currentMoraleByOperator}
+        horizontal={usesCompactHorizontalCard(row.group, powerCount)}
         className="min-w-0"
         style={widthPercent !== undefined ? { flexBasis: `${widthPercent}%` } : { flex: 1 }}
       />
@@ -254,6 +236,7 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
   const ctrl = getGroup("control")[0];
   const meeting = getGroup("meeting")[0];
   const office = getGroup("hire")[0];
+  const processing = getGroup("processing")[0];
 
   return (
     <div className={COMPACT_GRID_CLASS}>
@@ -289,9 +272,10 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
         className={COMPACT_COLUMN_CLASS}
         style={{ flexBasis: `${GRID_RIGHT_PCT}%` }}
       >
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex items-stretch justify-between gap-3">
           {meeting && makeCard(meeting, COMPACT_AUXILIARY_WIDTHS.meeting)}
           {office && makeCard(office, COMPACT_AUXILIARY_WIDTHS.hire)}
+          {processing && makeCard(processing, COMPACT_AUXILIARY_WIDTHS.processing)}
         </div>
 
         {dorms.slice(0, 4).map((dorm) => (
