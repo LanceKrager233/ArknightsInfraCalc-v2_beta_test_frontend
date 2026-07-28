@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { pollSklandQr, startSklandQr } from "./api";
+import { pollSklandQr, startSklandQr, toDisplayError } from "./api";
 import type { ShiftComparison, SklandSnapshot } from "./types";
 
 const QRCodeSVG = dynamic(() => import("qrcode.react").then((module) => module.QRCodeSVG), { ssr: false });
@@ -57,13 +57,13 @@ export function SklandAccount({
     setScanUrl(null);
     try {
       const result = await startSklandQr();
-      if (!result.success || !result.scanId || !result.scanUrl) throw new Error(result.error ?? "二维码生成失败。");
       setScanId(result.scanId);
       setScanUrl(result.scanUrl);
       setScanState("waiting");
     } catch (caught) {
       setScanState("idle");
-      setError(caught instanceof Error ? caught.message : "二维码生成失败。");
+      const detail = toDisplayError(caught, "二维码生成失败，请稍后重试。");
+      setError(`${detail.message}（${detail.code}${detail.requestId ? ` · ${detail.requestId}` : ""}）`);
     }
   }
 
@@ -85,14 +85,15 @@ export function SklandAccount({
         }
         if (result.status === "expired") {
           setScanState("expired");
-          setError(result.error ?? "二维码已过期，请刷新。");
+          setError("二维码已过期，请刷新。");
           return;
         }
         setScanState(result.status === "scanned" ? "scanned" : "waiting");
         setError(null);
       } catch (caught) {
         if (cancelled) return;
-        setError(caught instanceof Error ? caught.message : "登录状态查询失败，将继续重试。");
+        const detail = toDisplayError(caught, "登录状态查询失败，将继续重试。");
+        setError(`${detail.message}（${detail.code}${detail.requestId ? ` · ${detail.requestId}` : ""}）`);
       }
       if (!cancelled) timer = window.setTimeout(() => void poll(), 1500);
     };
@@ -119,7 +120,7 @@ export function SklandAccount({
       <Button
         type="button"
         variant="outline"
-        className="h-10 min-w-0 justify-start px-3 max-sm:w-full"
+        className="h-10 min-w-0 justify-start px-3 max-sm:h-11 max-sm:w-full"
         aria-label={snapshot ? `森空岛账号：${snapshot.player.nickname}` : "登录森空岛"}
         onClick={() => handleOpenChange(true)}
         disabled={!configured && !snapshot}

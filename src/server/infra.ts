@@ -8,9 +8,9 @@ import type {
   BaseBlueprint,
   CliCandidate,
   DebugBundle,
-  FeedbackApiResponse,
+  FeedbackData,
+  FeedbackRequest,
   HealthApiResponse,
-  IssueReport,
   OperBoxEntry,
   PlanApiResponse,
 } from "@/types";
@@ -47,13 +47,6 @@ type PlanRequestBody = {
   layout: BaseBlueprint;
   operbox: OperBoxEntry[];
   sourceName?: string | null;
-};
-
-type FeedbackRequestBody = {
-  issue: IssueReport;
-  operbox: OperBoxEntry[];
-  sourceName?: string | null;
-  debugBundle?: DebugBundle;
 };
 
 const repoRoot = path.resolve(/* turbopackIgnore: true */ process.cwd());
@@ -199,15 +192,6 @@ function assertPlanBody(body: unknown): asserts body is PlanRequestBody {
   }
   if (!Array.isArray(body.operbox) || body.operbox.length === 0) {
     throw new Error("请求缺少非空 operbox 数组。");
-  }
-}
-
-function assertFeedbackBody(body: unknown): asserts body is FeedbackRequestBody {
-  if (!isObject(body) || !isObject(body.issue)) {
-    throw new Error("请求缺少 issue 对象。");
-  }
-  if (!Array.isArray(body.operbox) || body.operbox.length === 0) {
-    throw new Error("请求缺少对应的非空 operbox 数组。");
   }
 }
 
@@ -759,52 +743,39 @@ export async function getSampleOperbox() {
   const sample = JSON.parse(await readFile(samplePath, "utf-8")) as unknown;
   return {
     success: true,
-    sourceName: path.relative(repoRoot, samplePath),
+    sourceName: "243 全精二示例",
     operbox: sample,
   };
 }
 
-export async function saveFeedback(body: unknown): Promise<FeedbackApiResponse> {
+export async function saveFeedback(body: FeedbackRequest): Promise<FeedbackData> {
   const savedAt = new Date().toISOString();
-  assertFeedbackBody(body);
-
   const feedbackId = randomUUID();
-  const dirName = makeStampedDirName(savedAt, body.sourceName, feedbackId);
+  const dirName = makeStampedDirName(savedAt, body.room.group, feedbackId);
   const feedbackDir = path.join(feedbackRoot, dirName);
   const metaPath = path.join(feedbackDir, "meta.json");
   const issuePath = path.join(feedbackDir, "issue.json");
-  const operboxPersistPath = path.join(feedbackDir, "operbox.json");
-  const debugBundlePath = path.join(feedbackDir, "debug-bundle.json");
   await mkdir(feedbackDir, { recursive: true });
 
   const meta = {
     feedbackId,
     savedAt,
-    sourceName: body.sourceName ?? null,
-    operboxCount: body.operbox.length,
-    hasDebugBundle: isObject(body.debugBundle),
+    diagnosticId: body.diagnosticId,
+    consent: body.consent,
   };
 
   await writeJson(metaPath, meta);
-  await writeJson(issuePath, body.issue);
-  await writeJson(operboxPersistPath, body.operbox);
-
-  if (isObject(body.debugBundle)) {
-    await writeJson(debugBundlePath, body.debugBundle);
-  }
+  await writeJson(issuePath, {
+    type: "room_issue",
+    diagnosticId: body.diagnosticId,
+    room: body.room,
+    note: body.note,
+    consent: true,
+  });
 
   return {
-    success: true,
     feedbackId,
     savedAt,
-    path: feedbackDir,
-    relativePath: path.relative(repoRoot, feedbackDir),
-    issuePath,
-    operboxPath: operboxPersistPath,
-    debugBundlePath: isObject(body.debugBundle) ? debugBundlePath : undefined,
-    relativeIssuePath: path.relative(repoRoot, issuePath),
-    relativeOperboxPath: path.relative(repoRoot, operboxPersistPath),
-    relativeDebugBundlePath: isObject(body.debugBundle) ? path.relative(repoRoot, debugBundlePath) : undefined,
   };
 }
 

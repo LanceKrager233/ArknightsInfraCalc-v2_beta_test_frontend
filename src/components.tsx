@@ -4,10 +4,12 @@ import {
   CheckCircle2,
   ChevronDown,
   CircleHelp,
+  Copy,
   Download,
   FileWarning,
   Loader2,
   Play,
+  RotateCcw,
   Save,
   Smile,
   Upload,
@@ -64,12 +66,13 @@ import {
 } from "./schedule-list-layout";
 import {
   BaseBlueprint,
-  FeedbackApiResponse,
+  DisplayError,
+  FeedbackData,
   IssueReport,
   MaaJson,
   MaaPlan,
   OperBoxEntry,
-  PlanApiResponse,
+  PublicPlanData,
   PresetDef,
   RotationJson,
   UserProfile,
@@ -196,7 +199,7 @@ export function FileDrop({
       <Upload className="size-5 text-primary" />
       <span className="font-medium text-foreground">{fileName ?? "上传练度 JSON / XLSX"}</span>
       <span className="text-xs text-muted-foreground">
-        支持前端导出的 operbox.json，也支持一图流 xlsx
+        支持 MAA 导出的干员数据 JSON，也支持一图流 XLSX
       </span>
       <input className="sr-only" type="file" accept=".json,.xlsx,.xls" onChange={handleChange} />
     </Label>
@@ -378,51 +381,71 @@ export function StatusBar({
   loading,
   result,
   error,
-  cliPath,
+  ready,
+  onRetry,
+  onCopyDiagnostic,
 }: {
   loading: boolean;
-  result: PlanApiResponse | null;
-  error: string | null;
-  cliPath: string | null;
+  result: PublicPlanData | null;
+  error: DisplayError | null;
+  ready: boolean;
+  onRetry: () => void;
+  onCopyDiagnostic: () => void;
 }) {
   const content = (() => {
     if (loading) {
       return {
         icon: <Loader2 className="size-4 animate-spin" />,
-        text: "正在通过 infra-cli serve 排班",
+        text: "正在生成排班",
         className: "border-blue-200 bg-blue-50 text-blue-700",
       };
     }
     if (error) {
       return {
         icon: <AlertTriangle className="size-4" />,
-        text: error,
+        text: `${error.message}（${error.code}）`,
         className: "border-destructive/30 bg-destructive/10 text-destructive",
       };
     }
-    if (result?.success) {
+    if (result) {
       return {
         icon: <CheckCircle2 className="size-4" />,
-        text: `运行完成，${result.durationMs ?? "?"}ms`,
+        text: "排班已生成",
         className: "border-emerald-200 bg-emerald-50 text-emerald-700",
       };
     }
     return {
       icon: <CircleHelp className="size-4" />,
-      text: cliPath ? `CLI: ${cliPath}` : "等待连接本地 CLI 服务",
-      className: "border-border bg-background text-muted-foreground",
+      text: ready ? "排班服务已就绪" : "排班暂不可用",
+      className: ready
+        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+        : "border-border bg-background text-muted-foreground",
     };
   })();
 
   return (
     <div
       className={cn(
-        "surface-shadow col-span-1 flex h-10 min-w-0 items-center gap-2 overflow-hidden rounded-lg px-3 text-sm max-sm:col-span-3",
+        "surface-shadow col-span-1 flex min-h-10 min-w-0 items-center gap-2 overflow-hidden rounded-lg px-3 py-1 text-sm max-sm:col-span-3",
         content.className
       )}
+      role={error ? "alert" : "status"}
+      aria-live={error ? "assertive" : "polite"}
     >
       {content.icon}
-      <span className="truncate tabular-nums">{content.text}</span>
+      <span className="min-w-0 flex-1 truncate tabular-nums">{content.text}</span>
+      {error ? (
+        <span className="flex shrink-0 items-center gap-1">
+          {error.retryable ? (
+            <Button type="button" size="icon-sm" variant="ghost" className="max-sm:size-11" aria-label="重试" onClick={onRetry}>
+              <RotateCcw />
+            </Button>
+          ) : null}
+          <Button type="button" size="icon-sm" variant="ghost" className="max-sm:size-11" aria-label="复制诊断编号" onClick={onCopyDiagnostic}>
+            <Copy />
+          </Button>
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -437,10 +460,16 @@ export function RunButton({
   onRun: () => void;
 }) {
   return (
-    <Button className="h-10 min-w-0 px-3 max-sm:w-full" aria-label={loading ? "计算中" : "生成排班"} onClick={onRun} disabled={!canRun || loading}>
+    <Button
+      className="h-10 min-w-0 px-3 max-sm:h-11 max-sm:w-full"
+      aria-label={loading ? "计算中" : canRun ? "生成排班" : "请先导入干员数据"}
+      title={!canRun ? "请先导入干员数据，并等待排班服务就绪。" : undefined}
+      onClick={onRun}
+      disabled={!canRun || loading}
+    >
       {loading ? <Loader2 className="animate-spin" /> : <Play />}
-      <span className="hidden md:inline">{loading ? "计算中" : "生成排班"}</span>
-      <span className="md:hidden">{loading ? "计算" : "生成"}</span>
+      <span className="hidden md:inline">{loading ? "计算中" : canRun ? "生成排班" : "请先导入数据"}</span>
+      <span className="md:hidden">{loading ? "计算" : canRun ? "生成" : "先导入"}</span>
     </Button>
   );
 }
@@ -516,11 +545,11 @@ export function PlanTelemetry({
   const domains = profile?.domains ?? [];
 
   return (
-    <section className="mb-4 overflow-hidden border-y border-[#313131]/15 bg-[#F3F1EA]" aria-label="CLI 求解概览">
+    <section className="mb-4 overflow-hidden border-y border-[#313131]/15 bg-[#F3F1EA]" aria-label="效率概览">
       <div className="grid grid-cols-[auto_1fr] items-stretch max-md:grid-cols-1">
         <div className="flex min-w-36 flex-col justify-center bg-[#313131] px-4 py-3 text-white">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/55">CLI schema</span>
-          <strong className="mt-0.5 text-xl font-medium">v{profile?.schema_version ?? "—"}</strong>
+          <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/55">效率概览</span>
+          <strong className="mt-0.5 text-xl font-medium">当前方案</strong>
           <span className="mt-1 text-xs text-white/62">
             {layout.template} · {layout.rooms.length} 个设施
           </span>
@@ -558,7 +587,7 @@ export function PlanTelemetry({
       {domains.length > 0 || profile?.actions.length || profile?.flags.length || profile?.narration_hints.length ? (
         <details className="group border-t border-[#313131]/10">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 text-xs font-medium text-[#313131] marker:content-none">
-            <span>CLI 评估详情 · {domains.length} 个指标</span>
+            <span>效率详情 · {domains.length} 个指标</span>
             <span className="text-[#313131]/50 group-open:hidden">展开</span>
             <span className="hidden text-[#313131]/50 group-open:inline">收起</span>
           </summary>
@@ -1230,15 +1259,15 @@ export function ScheduleBoard({
                             type="button"
                             variant="ghost"
                             size="icon-sm"
-                            className="absolute right-2 top-2 z-10 border border-white/10 bg-[#3C3C3C]/55 text-white/70 hover:bg-[#4B4B4B] hover:text-white"
-                            aria-label={`${row.title} 标记问题`}
+                            className="absolute right-2 top-2 z-10 border border-white/10 bg-[#3C3C3C]/55 text-white/70 hover:bg-[#4B4B4B] hover:text-white max-sm:size-11"
+                            aria-label={`${row.title} 反馈排班问题`}
                             onClick={() => onIssue(row)}
                           >
                             <FileWarning />
                           </Button>
                         }
                       />
-                      <TooltipContent side="left">标记问题</TooltipContent>
+                      <TooltipContent side="left">反馈排班问题</TooltipContent>
                     </Tooltip>
                   </div>
                 );
@@ -1279,6 +1308,12 @@ export function IssueNoteModal({
   onSave: () => void;
   onCancel: () => void;
 }) {
+  const [consented, setConsented] = useState(false);
+
+  useEffect(() => {
+    if (open) setConsented(false);
+  }, [open, row?.key]);
+
   return (
     <Dialog
       open={open && Boolean(row)}
@@ -1288,24 +1323,36 @@ export function IssueNoteModal({
     >
       <DialogContent className="max-w-[min(620px,calc(100vw-2rem))] sm:max-w-xl">
         <DialogHeader>
-          <DialogDescription>输入 note</DialogDescription>
-          <DialogTitle>{row?.title ?? "标记问题"}</DialogTitle>
+          <DialogDescription>反馈排班问题</DialogDescription>
+          <DialogTitle>{row?.title ?? "反馈排班问题"}</DialogTitle>
         </DialogHeader>
-        <p className="text-sm text-muted-foreground">写下为什么要标记这个房间。</p>
+        <p className="text-sm text-muted-foreground">
+          将提交本次排班的诊断编号、房间名称、当前干员和你的说明；不会重复上传完整干员数据或调试包。
+        </p>
         <Textarea
           autoFocus
           value={note}
           onChange={(event) => onNoteChange(event.target.value)}
           placeholder="例如：这组应该换成可露希尔 / 当前站位有误。"
           className="min-h-36"
+          maxLength={1000}
         />
+        <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm">
+          <input
+            type="checkbox"
+            checked={consented}
+            onChange={(event) => setConsented(event.target.checked)}
+            className="size-4"
+          />
+          <span>我确认提交以上排班问题信息。</span>
+        </label>
         <DialogFooter>
-          <Button variant="outline" onClick={onCancel}>
+          <Button className="max-sm:min-h-11" variant="outline" onClick={onCancel}>
             取消
           </Button>
-          <Button onClick={onSave} disabled={!note.trim() || saving}>
+          <Button className="max-sm:min-h-11" onClick={onSave} disabled={!note.trim() || note.trim().length > 1000 || !consented || saving}>
             {saving ? <Loader2 className="animate-spin" /> : <Save />}
-            {saving ? "保存中" : "保存到服务器"}
+            {saving ? "提交中" : "提交反馈"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1321,7 +1368,7 @@ export function IssuePanel({
 }: {
   issue: { row: RoomRow; note: string } | null;
   report: IssueReport | null;
-  feedback: FeedbackApiResponse | null;
+  feedback: FeedbackData | null;
   feedbackError: string | null;
 }) {
   if (!issue || !report) {
@@ -1332,18 +1379,6 @@ export function IssuePanel({
     );
   }
 
-  const savedReport: IssueReport = feedback?.success
-    ? {
-        ...report,
-        savedFiles: {
-          feedbackDir: feedback.relativePath ?? feedback.path,
-          issue: feedback.relativeIssuePath ?? feedback.issuePath,
-          operbox: feedback.relativeOperboxPath ?? feedback.operboxPath,
-          debugBundle: feedback.relativeDebugBundlePath ?? feedback.debugBundlePath,
-        },
-      }
-    : report;
-
   return (
     <div className="space-y-3">
       <div>
@@ -1351,11 +1386,11 @@ export function IssuePanel({
         <div className="text-sm text-muted-foreground">{issue.row.operators.join(" / ") || "空置"}</div>
         <p className="mt-2 text-sm text-muted-foreground">{issue.note}</p>
       </div>
-      {feedback?.success ? (
+      {feedback ? (
         <Alert className="rounded-none border-x-0 border-emerald-200 bg-emerald-50 text-emerald-700">
           <CheckCircle2 />
           <AlertDescription className="text-emerald-700">
-            已保存 box：{feedback.relativeOperboxPath ?? feedback.operboxPath ?? feedback.relativePath ?? feedback.feedbackId}
+            反馈已提交，编号：{feedback.feedbackId}
           </AlertDescription>
         </Alert>
       ) : null}
@@ -1367,7 +1402,7 @@ export function IssuePanel({
       ) : null}
       <Textarea
         readOnly
-        value={JSON.stringify(savedReport, null, 2)}
+        value={JSON.stringify(report, null, 2)}
         className="min-h-56 resize-y font-mono text-xs"
       />
     </div>
@@ -1380,22 +1415,22 @@ export function DebugActions({
   onDownloadBundle,
   onCopyCommand,
 }: {
-  result: PlanApiResponse | null;
+  result: PublicPlanData | null;
   onDownloadMaa: () => void;
   onDownloadBundle: () => void;
   onCopyCommand: () => void;
 }) {
   return (
     <div className="grid gap-2">
-      <Button variant="outline" disabled={!result?.maaJson} onClick={onDownloadMaa}>
+      <Button variant="outline" disabled={!result?.maa} onClick={onDownloadMaa}>
         <Download />
         下载 MAA
       </Button>
-      <Button variant="outline" disabled={!result?.debugBundle} onClick={onDownloadBundle}>
+      <Button variant="outline" disabled={!result?.debug?.debugBundle} onClick={onDownloadBundle}>
         <Download />
         下载调试包
       </Button>
-      <Button variant="outline" disabled={!result?.command} onClick={onCopyCommand}>
+      <Button variant="outline" disabled={!result?.debug?.command} onClick={onCopyCommand}>
         复制 CLI 命令
       </Button>
     </div>

@@ -1,18 +1,25 @@
-import { NextResponse } from "next/server";
-
-import { requestIp, startScan } from "@/server/skland/adapter";
+import {
+  assertSameOrigin,
+  createRequestId,
+  enforceRateLimit,
+  requestClientIp,
+  successResponse,
+} from "@/server/api-contract";
+import { startScan } from "@/server/skland/adapter";
 import { assertSklandAvailable, sklandErrorResponse } from "@/server/skland/http";
-import { assertSameOrigin } from "@/server/skland/session";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  const requestId = createRequestId();
+  const startedAt = performance.now();
   try {
     assertSameOrigin(request);
     assertSklandAvailable(request);
-    const scan = await startScan(requestIp(request));
-    return NextResponse.json({ success: true, ...scan });
+    const ip = requestClientIp(request);
+    enforceRateLimit("skland-qr", ip, 10, 10 * 60_000);
+    return successResponse(await startScan(ip), requestId);
   } catch (error) {
-    return sklandErrorResponse(error);
+    return sklandErrorResponse(error, requestId, "/api/skland/auth/qr", startedAt);
   }
 }

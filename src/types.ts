@@ -476,3 +476,125 @@ export interface PlanApiResponse {
   relativeResultPath?: string;
   error?: string;
 }
+
+export type AppErrorCode =
+  | "AIC-REQ-1001"
+  | "AIC-REQ-1002"
+  | "AIC-BOX-1101"
+  | "AIC-LAYOUT-1201"
+  | "AIC-AUTH-2001"
+  | "AIC-AUTH-2002"
+  | "AIC-AUTH-2003"
+  | "AIC-PLAN-3001"
+  | "AIC-PLAN-3002"
+  | "AIC-PLAN-3003"
+  | "AIC-PLAN-3004"
+  | "AIC-FEEDBACK-4001"
+  | "AIC-FEEDBACK-4002"
+  | "AIC-SYS-5000"
+  | "AIC-RATE-6001"
+  | "AIC-LOCAL-7001";
+
+export interface ApiFieldError {
+  path: string;
+  code: string;
+  message: string;
+}
+
+export type ApiSuccess<T> = {
+  success: true;
+  data: T;
+  requestId: string;
+};
+
+export type ApiFailure = {
+  success: false;
+  error: {
+    code: AppErrorCode;
+    message: string;
+    requestId: string;
+    retryable: boolean;
+    fieldErrors?: ApiFieldError[];
+  };
+};
+
+export type ApiResponse<T> = ApiSuccess<T> | ApiFailure;
+
+export interface PublicFeatureFlags {
+  debugTools: boolean;
+  rateLimit: boolean;
+}
+
+export interface PublicHealthData {
+  status: "ready" | "unavailable";
+  plannerReady: boolean;
+  skland: {
+    available: boolean;
+    message: string | null;
+  };
+  features: PublicFeatureFlags;
+}
+
+export interface PublicPlanDebug {
+  command?: string;
+  stdout?: string;
+  stderr?: string;
+  debugBundle?: DebugBundle;
+}
+
+export interface PublicPlanData {
+  profile: UserProfile;
+  maa: MaaJson;
+  rotation: RotationJson;
+  durationMs: number;
+  diagnosticId: string;
+  debug?: PublicPlanDebug;
+}
+
+export interface SampleOperboxData {
+  sourceName: "243 全精二示例";
+  operbox: OperBoxEntry[];
+}
+
+export interface FeedbackRoom {
+  id: string;
+  title: string;
+  group: string;
+  operators: string[];
+}
+
+export interface FeedbackRequest {
+  diagnosticId: string;
+  room: FeedbackRoom;
+  note: string;
+  consent: true;
+}
+
+export interface FeedbackData {
+  feedbackId: string;
+  savedAt: string;
+}
+
+export interface SklandSessionData {
+  authenticated: boolean;
+  configured: boolean;
+  disabledReason?: string | null;
+  snapshot?: SklandSnapshot;
+}
+
+export interface SklandQrStartData {
+  scanId: string;
+  scanUrl: string;
+}
+
+export interface SklandQrStatusData {
+  status: "waiting" | "scanned" | "expired" | "authenticated";
+  snapshot?: SklandSnapshot;
+}
+
+export interface DisplayError {
+  code: AppErrorCode;
+  message: string;
+  requestId?: string;
+  retryable: boolean;
+}

@@ -2,10 +2,17 @@ node_modules
 dist
 .next
 .playwright-cli
+playwright-report/
+test-results/
 .tmp
 bin/data/
 server/feedback
 server/storage
+docs/
+!docs/
+docs/*
+!docs/FRONTEND_PRODUCTION_READINESS_REPORT.md
+!docs/UPDATE_SOLVER.md
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts

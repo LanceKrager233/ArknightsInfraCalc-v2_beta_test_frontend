@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Database, FileJson, LayoutGrid, RefreshCw, ScanLine, Upload } from "lucide-react";
+import { Check, Database, FileJson, LayoutGrid, RefreshCw, ScanLine, Trash2, Upload } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import { roomSummary } from "./blueprint";
 import { AccountStats, FileDrop, LayoutEditor, PresetSelector } from "./components";
 import { countOwned } from "./operbox";
 import type { SetupStep } from "./onboarding";
-import type { BaseBlueprint, BoxSource, OperBoxEntry, PresetDef, SklandSnapshot } from "./types";
+import type { BaseBlueprint, BoxSource, DisplayError, OperBoxEntry, PresetDef, SklandSnapshot } from "./types";
 
 type SetupDialogProps = {
   open: boolean;
@@ -46,6 +46,8 @@ type SetupDialogProps = {
   onLayoutFile: (file: File) => Promise<void>;
   onDownloadLayout: () => void;
   onRestoreResultClearWarning: () => void;
+  storageNotice: DisplayError | null;
+  onClearLocalData: () => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
   onRoomLevelChange: (roomId: string, level: number) => void;
@@ -57,7 +59,7 @@ type SetupDialogProps = {
 function sourceLabel(source: BoxSource): string {
   if (source === "skland") return "森空岛";
   if (source === "maa") return "MAA 导入";
-  return "243 全精二样例";
+  return "243 全精二示例";
 }
 
 function formatSyncTime(timestamp: number | undefined): string {
@@ -94,6 +96,8 @@ export function SetupDialog({
   onLayoutFile,
   onDownloadLayout,
   onRestoreResultClearWarning,
+  storageNotice,
+  onClearLocalData,
   onFactoryRecipeChange,
   onTradeOrderChange,
   onRoomLevelChange,
@@ -102,6 +106,7 @@ export function SetupDialog({
   onSkip,
 }: SetupDialogProps) {
   const [step, setStep] = useState<SetupStep>(initialStep);
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const hasBox = Boolean(operbox?.length);
 
   useEffect(() => {
@@ -125,8 +130,8 @@ export function SetupDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="h-[min(820px,calc(100dvh-1rem))] max-w-[calc(100vw-1rem)] grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-[min(1040px,calc(100vw-2rem))]">
         <DialogHeader className="px-5 py-5 pr-16 sm:px-7">
-          <DialogTitle className="text-lg">配置 Box 与布局</DialogTitle>
-          <DialogDescription className="text-pretty">导入干员 Box，再确认基建设施。修改会立即应用，但不会自动生成排班。</DialogDescription>
+          <DialogTitle className="text-lg">配置干员数据（Box）与布局</DialogTitle>
+          <DialogDescription className="text-pretty">导入干员数据，再确认基建设施。修改会立即应用，但不会自动生成排班。</DialogDescription>
         </DialogHeader>
 
         <Tabs
@@ -140,7 +145,7 @@ export function SetupDialog({
             <TabsTrigger value="box" className="h-12 justify-start gap-3 rounded-lg px-3 text-left">
               <span className="grid size-7 shrink-0 place-items-center rounded-md bg-background text-xs font-semibold shadow-xs">1</span>
               <span className="min-w-0">
-                <strong className="block text-sm">导入 Box</strong>
+                <strong className="block text-sm">导入干员数据</strong>
                 <span className="hidden truncate text-xs font-normal text-muted-foreground sm:block">森空岛、MAA 或测试样例</span>
               </span>
             </TabsTrigger>
@@ -176,7 +181,7 @@ export function SetupDialog({
                               <Button className="h-10" type="button" variant="outline" disabled={sklandBusy} onClick={() => void onRefreshSkland()}>
                                 <RefreshCw className={sklandBusy ? "animate-spin" : ""} />刷新
                               </Button>
-                              <Button className="h-10" type="button" onClick={useSklandBox}><Check />使用当前 Box</Button>
+                              <Button className="h-10" type="button" onClick={useSklandBox}><Check />使用当前干员数据</Button>
                             </div>
                           </div>
                           {sklandSnapshot.warnings.length ? (
@@ -188,9 +193,9 @@ export function SetupDialog({
                       ) : (
                         <div className="rounded-lg border border-dashed border-border/80 px-4 py-8 text-center">
                           <ScanLine className="mx-auto size-7 text-primary" />
-                          <strong className="mt-3 block">登录森空岛并同步 Box</strong>
+                          <strong className="mt-3 block">登录森空岛并同步干员数据</strong>
                           <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
-                            {sklandConfigured ? "扫码登录后会自动带回角色 Box 和基建快照。" : sklandDisabledReason ?? "森空岛登录当前不可用。"}
+                            {sklandConfigured ? "扫码登录后会自动带回角色干员数据和基建状态。" : sklandDisabledReason ?? "当前未开放森空岛登录，可使用 MAA 导入。"}
                           </p>
                           <Button type="button" className="mt-4 h-10" disabled={!sklandConfigured} onClick={onOpenSkland}>
                             <ScanLine />登录森空岛
@@ -217,7 +222,7 @@ export function SetupDialog({
                   <section className="surface-shadow grid gap-3 rounded-xl bg-card p-4 sm:p-5">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <span className="text-xs text-muted-foreground">当前 Box 来源</span>
+                        <span className="text-xs text-muted-foreground">当前干员数据来源</span>
                         <strong className="mt-0.5 block truncate">{sourceLabel(boxSource)}</strong>
                         {fileName ? <span className="block truncate text-xs text-muted-foreground">{fileName}</span> : null}
                       </div>
@@ -232,6 +237,22 @@ export function SetupDialog({
                   </section>
                 ) : null}
                 {inputError ? <p className="text-sm text-destructive" role="alert">{inputError}</p> : null}
+                {storageNotice ? (
+                  <Alert className="rounded-lg border-amber-200 bg-amber-50 text-amber-700" role="status">
+                    <AlertDescription className="text-amber-700">
+                      {storageNotice.message}（{storageNotice.code}）
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
+                <section className="surface-shadow rounded-xl bg-card p-4 sm:p-5">
+                  <h3 className="text-sm font-semibold">本地数据</h3>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    布局、干员数据和最近排班会在此浏览器保存 30 天。清除后会重置当前页面，但不会自动退出森空岛账号。
+                  </p>
+                  <Button type="button" variant="outline" className="mt-3 min-h-11" onClick={() => setClearConfirmOpen(true)}>
+                    <Trash2 />清除本地数据
+                  </Button>
+                </section>
               </div>
             </ScrollArea>
           </TabsContent>
@@ -248,22 +269,26 @@ export function SetupDialog({
                     </div>
                   </div>
                   <PresetSelector presets={presets} selected={preset} onSelect={onPresetSelect} />
-                  <label className="mt-4 flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed text-sm font-medium text-muted-foreground transition-[color,border-color,background-color,scale] duration-150 ease-out active:scale-[0.96] hover:border-primary hover:bg-muted/40 hover:text-primary motion-reduce:transform-none">
-                    <Upload className="size-4" />导入 layout JSON
-                    <input
-                      className="sr-only"
-                      type="file"
-                      accept="application/json,.json"
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        if (file) void onLayoutFile(file);
-                        event.currentTarget.value = "";
-                      }}
-                    />
-                  </label>
-                  <Button type="button" variant="outline" className="mt-2 h-10 w-full" onClick={onDownloadLayout}>
-                    <FileJson />导出当前 layout JSON
-                  </Button>
+                  <details className="mt-4 border-t border-border/70 pt-3">
+                    <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">高级设置</summary>
+                    <p className="mb-2 text-xs text-muted-foreground">导入或导出布局文件，适合跨设备复用配置。</p>
+                    <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed text-sm font-medium text-muted-foreground transition-[color,border-color,background-color,scale] duration-150 ease-out active:scale-[0.96] hover:border-primary hover:bg-muted/40 hover:text-primary motion-reduce:transform-none">
+                      <Upload className="size-4" />导入布局文件
+                      <input
+                        className="sr-only"
+                        type="file"
+                        accept="application/json,.json"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) void onLayoutFile(file);
+                          event.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+                    <Button type="button" variant="outline" className="mt-2 min-h-11 w-full" onClick={onDownloadLayout}>
+                      <FileJson />导出布局文件
+                    </Button>
+                  </details>
                   <div className="mt-4 rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">
                     <span className="block font-medium text-foreground">当前 {preset.label}</span>
                     <span className="mt-1 block">{roomSummary(layout)}</span>
@@ -299,7 +324,7 @@ export function SetupDialog({
               </>
             ) : (
               <>
-                <Button className="h-10" type="button" variant="ghost" onClick={() => setStep("box")}>上一步：修改 Box</Button>
+                <Button className="h-10" type="button" variant="ghost" onClick={() => setStep("box")}>上一步：修改干员数据</Button>
                 <span className="flex items-center gap-3">
                   <span className={`text-sm font-normal ${powerBudget.ok ? "text-muted-foreground" : "text-red-600"}`}>
                     发电 {powerBudget.generated} / 耗电 {powerBudget.consumed}
@@ -312,6 +337,30 @@ export function SetupDialog({
           </div>
         </footer>
       </DialogContent>
+      <Dialog open={clearConfirmOpen} onOpenChange={setClearConfirmOpen}>
+        <DialogContent className="max-w-[min(460px,calc(100vw-2rem))]">
+          <DialogHeader>
+            <DialogTitle>清除本地数据？</DialogTitle>
+            <DialogDescription>
+              将删除此浏览器中的布局、干员数据、最近排班和提示偏好。森空岛登录状态不会自动退出。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" className="min-h-11" onClick={() => setClearConfirmOpen(false)}>取消</Button>
+            <Button
+              type="button"
+              variant="destructive"
+              className="min-h-11"
+              onClick={() => {
+                onClearLocalData();
+                setClearConfirmOpen(false);
+              }}
+            >
+              清除本地数据
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

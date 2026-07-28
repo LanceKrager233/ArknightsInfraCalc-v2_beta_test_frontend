@@ -127,7 +127,7 @@ export function requestIp(request: Request): string {
 
 export async function startScan(ip: string): Promise<{ scanId: string; scanUrl: string }> {
   cleanupScans();
-  assertRate(`scan:${ip}`, 5, 10 * 60 * 1000);
+  assertRate(`scan:${ip}`, 10, 10 * 60 * 1000);
   assertRate("scan:global", 50, 10 * 60 * 1000);
   try {
     const client = createClient({ timeout: 30_000 });
@@ -214,7 +214,7 @@ export async function syncSessionSnapshot(payload: SklandSessionPayload): Promis
   snapshot: SklandSnapshot;
 }> {
   const key = createHash("sha256").update(payload.cred).digest("hex").slice(0, 24);
-  assertRate(`sync:${key}`, 1, 60_000);
+  assertRate(`sync:${key}`, 30, 60 * 60_000);
   return loadSessionSnapshot(payload, true);
 }
 

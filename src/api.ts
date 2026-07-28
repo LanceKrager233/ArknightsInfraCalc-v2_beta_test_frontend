@@ -1,109 +1,134 @@
-import {
+import type {
+  ApiFailure,
+  ApiResponse,
+  AppErrorCode,
   BaseBlueprint,
-  DebugBundle,
-  FeedbackApiResponse,
-  HealthApiResponse,
-  IssueReport,
+  DisplayError,
+  FeedbackData,
+  FeedbackRequest,
   OperBoxEntry,
-  PlanApiResponse,
-  SklandQrStartResponse,
-  SklandQrStatusResponse,
-  SklandSessionResponse,
+  PublicHealthData,
+  PublicPlanData,
+  SampleOperboxData,
+  SklandQrStartData,
+  SklandQrStatusData,
+  SklandSessionData,
 } from "./types";
 
-export async function runPlan(payload: {
+export class ApiClientError extends Error implements DisplayError {
+  readonly code: AppErrorCode;
+  readonly requestId?: string;
+  readonly retryable: boolean;
+
+  constructor(error: ApiFailure["error"]) {
+    super(error.message);
+    this.name = "ApiClientError";
+    this.code = error.code;
+    this.requestId = error.requestId;
+    this.retryable = error.retryable;
+  }
+}
+
+function networkError(): ApiClientError {
+  return new ApiClientError({
+    code: "AIC-SYS-5000",
+    message: "无法连接服务，请检查网络后重试。",
+    requestId: crypto.randomUUID(),
+    retryable: true,
+  });
+}
+
+async function requestData<T>(path: string, init?: RequestInit): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(path, init);
+  } catch {
+    throw networkError();
+  }
+
+  const body = (await response.json().catch(() => null)) as ApiResponse<T> | null;
+  if (body?.success === true) return body.data;
+  if (body?.success === false) throw new ApiClientError(body.error);
+  throw new ApiClientError({
+    code: "AIC-SYS-5000",
+    message: "服务返回了无法识别的响应，请稍后重试。",
+    requestId: response.headers.get("X-Request-Id") ?? crypto.randomUUID(),
+    retryable: true,
+  });
+}
+
+export function toDisplayError(error: unknown, fallback: string): DisplayError {
+  if (error instanceof ApiClientError) {
+    return {
+      code: error.code,
+      message: error.message,
+      requestId: error.requestId,
+      retryable: error.retryable,
+    };
+  }
+  return {
+    code: "AIC-SYS-5000",
+    message: fallback,
+    retryable: true,
+  };
+}
+
+export function runPlan(payload: {
   layout: BaseBlueprint;
   operbox: OperBoxEntry[];
   sourceName: string | null;
-}): Promise<PlanApiResponse> {
-  const response = await fetch("/api/plan", {
+}): Promise<PublicPlanData> {
+  return requestData("/api/plan", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  const body = (await response.json().catch(() => ({}))) as PlanApiResponse;
-
-  if (!response.ok && !body.error) {
-    return {
-      success: false,
-      error: `HTTP ${response.status}: ${response.statusText}`,
-    };
-  }
-  return body;
 }
 
-export async function getHealth(): Promise<HealthApiResponse> {
-  const response = await fetch("/api/health");
-  return response.json();
+export function getHealth(): Promise<PublicHealthData> {
+  return requestData("/api/health");
 }
 
-async function sklandJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, init);
-  const body = (await response.json().catch(() => ({}))) as T & { error?: string };
-  if (!response.ok) throw new Error(body.error ?? `HTTP ${response.status}: ${response.statusText}`);
-  return body;
+export function getSklandSession(): Promise<SklandSessionData> {
+  return requestData("/api/skland/session");
 }
 
-export function getSklandSession(): Promise<SklandSessionResponse> {
-  return sklandJson("/api/skland/session");
+export function startSklandQr(): Promise<SklandQrStartData> {
+  return requestData("/api/skland/auth/qr", { method: "POST" });
 }
 
-export function startSklandQr(): Promise<SklandQrStartResponse> {
-  return sklandJson("/api/skland/auth/qr", { method: "POST" });
-}
-
-export function pollSklandQr(scanId: string): Promise<SklandQrStatusResponse> {
-  return sklandJson("/api/skland/auth/qr/status", {
+export function pollSklandQr(scanId: string): Promise<SklandQrStatusData> {
+  return requestData("/api/skland/auth/qr/status", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ scanId }),
   });
 }
 
-export function syncSkland(): Promise<SklandSessionResponse> {
-  return sklandJson("/api/skland/sync", { method: "POST" });
+export function syncSkland(): Promise<SklandSessionData> {
+  return requestData("/api/skland/sync", { method: "POST" });
 }
 
-export function selectSklandRole(uid: string): Promise<SklandSessionResponse> {
-  return sklandJson("/api/skland/role", {
+export function selectSklandRole(uid: string): Promise<SklandSessionData> {
+  return requestData("/api/skland/role", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ uid }),
   });
 }
 
-export function logoutSkland(): Promise<{ success: boolean }> {
-  return sklandJson("/api/skland/session", { method: "DELETE" });
+export function logoutSkland(): Promise<{ authenticated: false }> {
+  return requestData("/api/skland/session", { method: "DELETE" });
 }
 
-export async function getSampleOperbox(): Promise<{
-  success: boolean;
-  sourceName?: string;
-  operbox?: OperBoxEntry[];
-  error?: string;
-}> {
-  const response = await fetch("/api/sample-operbox");
-  return response.json();
+export function getSampleOperbox(): Promise<SampleOperboxData> {
+  return requestData("/api/sample-operbox");
 }
 
-export async function saveFeedback(payload: {
-  issue: IssueReport;
-  operbox: OperBoxEntry[];
-  sourceName: string | null;
-  debugBundle?: DebugBundle;
-}): Promise<FeedbackApiResponse> {
-  const response = await fetch("/api/feedback", {
+export function saveFeedback(payload: FeedbackRequest): Promise<FeedbackData> {
+  return requestData("/api/feedback", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  const body = (await response.json().catch(() => ({}))) as FeedbackApiResponse;
-
-  if (!response.ok && !body.error) {
-    return {
-      success: false,
-      error: `HTTP ${response.status}: ${response.statusText}`,
-    };
-  }
-  return body;
 }

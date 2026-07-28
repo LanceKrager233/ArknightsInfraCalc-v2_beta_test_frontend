@@ -1,6 +1,6 @@
-# Arknights InfraCalc 排班验收台
+# 明日方舟基建排班助手
 
-独立的 beta 测试工作台，用来验收 `infra-cli serve` 生成的三班排班、房间效率、MAA JSON 和调试包。
+导入森空岛或 MAA 干员数据，配置基建设施，生成三班排班、效率概览与练卡建议，并可导出到 MAA。求解由服务端长驻的 `infra-cli serve` 完成，本仓库不实现排班算法和效率公式。
 
 ## 本地开发
 
@@ -9,19 +9,39 @@ npm install
 npm run dev
 ```
 
-兼容旧习惯：
-
-```powershell
-npm run dev:full
-```
-
 默认地址：
 
 ```text
 http://127.0.0.1:5174
 ```
 
-Next.js App Router 同时提供页面和 `/api/*` route handlers，不再需要单独启动 Express API 或 Vite 代理。
+页面和 `/api/*` route handlers 由同一个 Next.js 服务提供。`npm run dev:full` 是兼容别名。
+
+常用质量检查：
+
+```powershell
+npm run check
+npm run build
+npm run test:e2e
+```
+
+### 开发调试模式
+
+Windows PowerShell：
+
+```powershell
+$env:BETA_DEBUG_TOOLS_ENABLED='1'
+$env:BETA_RATE_LIMIT_ENABLED='0'
+npm run dev
+```
+
+然后访问：
+
+```text
+http://127.0.0.1:5174/?beta
+```
+
+调试 UI 只有在服务端 `BETA_DEBUG_TOOLS_ENABLED=1` 且 URL 同时带 `?beta` 时出现。单独添加 `?beta` 不会开启调试字段；生产环境应保持该开关关闭。hydration、接口泄露、错误码、限流和响应式排查流程见[开发指南](./docs/DEVELOPMENT_GUIDE.md#调试模式)和[上线产品化报告](./docs/FRONTEND_PRODUCTION_READINESS_REPORT.md#开发调试环境使用指南)。
 
 ## Box 导入与森空岛登录
 
@@ -34,13 +54,15 @@ $env:SKLAND_SESSION_SECRET = "请替换为随机生成的长期密钥"
 npm run dev
 ```
 
-通过反向代理部署时，还应配置浏览器实际访问的完整 Origin（包括非默认端口），用于校验森空岛写请求的来源：
+通过反向代理部署时，还应配置浏览器实际访问的完整 Origin（包括非默认端口），用于校验公开写请求的来源：
 
 ```powershell
-$env:SKLAND_PUBLIC_ORIGIN = "https://beta.example.com"
+$env:BETA_PUBLIC_ORIGIN = "https://infra.example.com"
+$env:SKLAND_PUBLIC_ORIGIN = "https://infra.example.com"
+$env:BETA_TRUST_PROXY_HEADERS = "1"
 ```
 
-森空岛凭证会使用 AES-256-GCM 加密后写入 HttpOnly Cookie，不写入浏览器存储、运行记录或反馈包。localhost 可使用 HTTP 开发；非 localhost 环境默认必须通过 HTTPS 访问，否则只禁用森空岛入口，MAA 导入和求解仍可使用。仅在临时、可信的 HTTP 测试环境中可以显式设置 `SKLAND_ALLOW_INSECURE_HTTP=1`；此时登录流量不会受到 HTTPS 保护。
+`BETA_PUBLIC_ORIGIN`保护全部公开写接口，`SKLAND_PUBLIC_ORIGIN`继续保护森空岛会话流。森空岛凭证会使用 AES-256-GCM 加密后写入 HttpOnly Cookie，不写入浏览器存储、运行记录或反馈包。localhost 可使用 HTTP 开发；非 localhost 环境默认必须通过 HTTPS 访问，否则只禁用森空岛入口，MAA 导入和求解仍可使用。仅在临时、可信的 HTTP 测试环境中可以显式设置 `SKLAND_ALLOW_INSECURE_HTTP=1`；此时登录流量不会受到 HTTPS 保护。
 
 ## CLI 设置
 
@@ -60,7 +82,7 @@ Linux 部署前请把 Linux 版本的 `infra-cli` 放到 `bin/infra-cli`，并�
 chmod +x bin/infra-cli
 ```
 
-`docs/FRONTEND_SERVE_GUIDE.md` 记录了前端接入 `infra-cli serve` 的协议：Next route handler 启动一次 `infra-cli serve`，之后通过 stdin/stdout 逐行发送 JSON 请求和响应。
+`infra-cli serve` 的内部响应不得直接作为公共 API 数据返回，必须经过 `src/server/public-plan.ts` 的白名单映射。协议与公共边界见[Frontend Serve Guide](./docs/FRONTEND_SERVE_GUIDE.md)。
 
 ## 生产运行
 
@@ -74,7 +96,7 @@ npm start
 
 ## 持久化数据
 
-beta 测试阶段 API 会保留每次 CLI 运行和反馈提交的 JSON，默认写入：
+服务端会保留 CLI 运行记录和反馈提交，默认写入：
 
 ```text
 server/storage/cli-runs
@@ -93,9 +115,17 @@ fixtures/operbox_full_e2.json
 
 如果仓库内不存在，会回退到本地核心仓库的 `data/fixtures/243/operbox_full_e2.json`。
 
-## 设计目标
+## 文档入口
 
-- beta 测试者可从森空岛同步或直接导入 MAA 练度表，再选择布局并运行。
-- 首屏直接展示排班验收工作台，不做介绍页。
-- 房间视角展示三班排班和对应效率。
-- 一键导出调试包，便于判断前端、CLI、策略表或用户 box 的问题。
+- [开发指南](./docs/DEVELOPMENT_GUIDE.md)：API 契约、环境变量、本地调试和质量门禁。
+- [上线产品化报告](./docs/FRONTEND_PRODUCTION_READINESS_REPORT.md)：改造基线、错误码、数据流、验证结果和 DevTools 排查方法。
+- [Frontend Serve Guide](./docs/FRONTEND_SERVE_GUIDE.md)：`infra-cli serve` 协议及公共 DTO 边界。
+- [更新线上求解器](./docs/UPDATE_SOLVER.md)：仅在契约或真实求解验证需要时更新服务器 CLI。
+
+## 产品约束
+
+- `Full E2 测试`保持在计划安排卡片右上角，并维持主按钮层级。
+- “基建计算器 / 练卡建议 / 森空岛状态”保持同级导航。
+- 手机端“一图流布局”继续显示为禁用态。
+- 加工站继续使用现有“暂不显示”按钮和交互。
+- 调试包、CLI 命令和内部响应只在服务端调试开关开启时显示。
