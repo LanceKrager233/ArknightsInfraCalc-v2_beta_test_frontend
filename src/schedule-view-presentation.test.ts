@@ -32,7 +32,7 @@ test("keeps compact operators responsive, left aligned, and eight pixels apart",
 test("widens the compact two-column stack and removes processing from that view", () => {
   assert.equal(
     presentation.COMPACT_GRID_CLASS,
-    "-mx-[80px] flex items-start gap-3",
+    "-mx-[80px] flex items-stretch gap-3",
   );
   assert.equal(
     presentation.COMPACT_COLUMN_CLASS,
@@ -42,6 +42,17 @@ test("widens the compact two-column stack and removes processing from that view"
   assert.equal(presentation.isCompactScheduleGroupVisible("processing"), false);
   assert.equal(presentation.isCompactScheduleGroupVisible("power"), true);
   assert.equal(presentation.isCompactScheduleGroupVisible("dormitory"), true);
+});
+
+test("stretches compact columns and lets dormitories share remaining height", () => {
+  assert.equal(
+    presentation.COMPACT_DORM_WRAPPER_CLASS,
+    "flex min-h-0 flex-1",
+  );
+  assert.equal(
+    presentation.COMPACT_DORM_OPERATOR_AREA_CLASS,
+    "flex min-h-0 flex-1 items-center",
+  );
 });
 
 test("allocates the compact auxiliary row by operator capacity", () => {
@@ -54,7 +65,7 @@ test("allocates the compact auxiliary row by operator capacity", () => {
 test("right-aligns operators in horizontal power and auxiliary cards", () => {
   assert.equal(
     presentation.COMPACT_POWER_CARD_CLASS,
-    "grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 bg-[#313131] px-3 py-2",
+    "relative grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 overflow-hidden bg-[#313131] px-3 py-2",
   );
   assert.equal(
     presentation.COMPACT_POWER_OPERATOR_ROW_CLASS,
@@ -66,21 +77,43 @@ test("right-aligns operators in horizontal power and auxiliary cards", () => {
   );
 });
 
-test("uses horizontal compact cards only for power and auxiliary rooms", () => {
+test("uses horizontal compact cards for control, power, and auxiliary rooms", () => {
   assert.equal(typeof presentation.usesCompactHorizontalCard, "function");
   assert.equal(presentation.usesCompactHorizontalCard("power"), true);
   assert.equal(presentation.usesCompactHorizontalCard("meeting"), true);
   assert.equal(presentation.usesCompactHorizontalCard("hire"), true);
-  assert.equal(presentation.usesCompactHorizontalCard("control"), false);
+  assert.equal(presentation.usesCompactHorizontalCard("control"), true);
   assert.equal(presentation.usesCompactHorizontalCard("trading"), false);
   assert.equal(presentation.usesCompactHorizontalCard("manufacture"), false);
   assert.equal(presentation.usesCompactHorizontalCard("dormitory"), false);
 });
 
+test("stacks the compact control level below its title", () => {
+  assert.equal(
+    presentation.COMPACT_CONTROL_HEADER_CLASS,
+    "grid min-w-0 grid-cols-[4px_minmax(0,1fr)] grid-rows-[20px_16px] gap-x-2",
+  );
+});
+
+test("reuses list room backgrounds in every compact card", () => {
+  assert.equal(
+    presentation.COMPACT_ROOM_BACKGROUND_CLASS,
+    "pointer-events-none absolute inset-0 bg-no-repeat opacity-[0.52]",
+  );
+  assert.equal(
+    presentation.COMPACT_ROOM_GRADIENT_CLASS,
+    "pointer-events-none absolute inset-0 bg-gradient-to-r from-[#313131]/20 via-[#313131]/72 to-[#313131]",
+  );
+  assert.deepEqual(presentation.COMPACT_ROOM_BACKGROUND_STYLE, {
+    backgroundPosition: "-18px center",
+    backgroundSize: "auto 176px",
+  });
+});
+
 test("pins every compact room title to the shared top position", () => {
   assert.equal(
     COMPACT_CARD_CLASS,
-    "flex flex-col justify-start gap-2 bg-[#313131] px-3 py-2",
+    "relative flex flex-col justify-start gap-2 overflow-hidden bg-[#313131] px-3 py-2",
   );
   assert.equal(
     COMPACT_HEADER_CLASS,
