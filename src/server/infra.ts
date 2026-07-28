@@ -836,11 +836,12 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
     const serveResponsePath = path.join(runDir, "serve-response.json");
     resultPath = path.join(runDir, "result.json");
 
-    // 去重：同名干员保留第一个，删除后续
+    // 去重：同名保留第一个；阿米娅变体直接删除
     const seenNames = new Set<string>();
+    const skipNames = new Set(["阿米娅（近卫）", "阿米娅（医疗）"]);
     body.operbox = body.operbox.filter((entry) => {
       const name = entry.name.trim();
-      if (seenNames.has(name)) return false;
+      if (skipNames.has(name) || seenNames.has(name)) return false;
       seenNames.add(name);
       return true;
     });

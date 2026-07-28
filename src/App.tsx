@@ -490,9 +490,19 @@ function WorkbenchApp() {
     clearIssueState();
 
     try {
+      // 去重：同名保留第一个；阿米娅变体直接删除
+      const seen = new Set<string>();
+      const skipNames = new Set(["阿米娅（近卫）", "阿米娅（医疗）"]);
+      const deduped = operbox.filter((e) => {
+        const n = e.name.trim();
+        if (skipNames.has(n) || seen.has(n)) return false;
+        seen.add(n);
+        return true;
+      });
+
       const response = await runPlan({
         layout,
-        operbox,
+        operbox: deduped,
         sourceName: fileName,
       });
       setResult(response);
