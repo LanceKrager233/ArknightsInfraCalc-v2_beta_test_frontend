@@ -117,3 +117,21 @@ All paths are selected by the frontend. After a successful response, the fronten
 3. Write one request line and match the response by `id`.
 4. Persist the request, response, stdout, stderr, profile, MAA, rotation, and debug bundle.
 5. If the process exits while a request is active, restart it and retry the active request once.
+
+## Public API boundary
+
+The CLI response is an internal transport object. It must never be returned directly from a Next.js route handler.
+
+`src/server/infra.ts` may retain CLI paths, commands, stdout, stderr, serve requests/responses and run-directory metadata for local diagnostics. `src/server/public-plan.ts` is the required boundary before `/api/plan`: it constructs a new allowlisted DTO containing only profile, MAA, rotation, duration and an opaque diagnostic ID.
+
+When `BETA_DEBUG_TOOLS_ENABLED=1`, the server may append diagnostic values under `data.debug`. That switch is server-owned; a query parameter cannot enable it. Public contract tests recursively reject internal field names in production responses, and the v4 browser persistence layer strips `data.debug` even in a debug session.
+
+Do not extend the public DTO by spreading an internal result:
+
+```ts
+// Incorrect: leaks new internal fields automatically.
+return NextResponse.json({ success: true, data: { ...internalResult } });
+
+// Correct: construct the allowlist through the boundary mapper.
+return successResponse(toPublicPlanData(internalResult, labels, requestId), requestId);
+```
