@@ -770,7 +770,7 @@ function WorkbenchApp() {
   );
 
   return (
-    <SidebarProvider>
+    <SidebarProvider defaultOpen={false}>
       <AppSidebar page={page} onPageChange={setPage} />
       <SidebarInset>
         <header className="sticky top-0 z-30 border-b bg-background/95 px-[clamp(1.75rem,10vw,12rem)] py-3 backdrop-blur-sm">
