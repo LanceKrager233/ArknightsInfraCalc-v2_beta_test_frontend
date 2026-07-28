@@ -14,11 +14,16 @@ import {
   COMPACT_AUXILIARY_WIDTHS,
   COMPACT_CARD_CLASS,
   COMPACT_COLUMN_CLASS,
+  COMPACT_CONTROL_HEADER_CLASS,
+  COMPACT_DORM_OPERATOR_AREA_CLASS,
   COMPACT_GRID_CLASS,
   COMPACT_HEADER_CLASS,
   COMPACT_OPERATOR_ROW_CLASS,
   COMPACT_POWER_CARD_CLASS,
   COMPACT_POWER_OPERATOR_ROW_CLASS,
+  COMPACT_ROOM_BACKGROUND_CLASS,
+  COMPACT_ROOM_BACKGROUND_STYLE,
+  COMPACT_ROOM_GRADIENT_CLASS,
   COMPACT_ROOM_LEVEL_CLASS,
   COMPACT_ROOM_TITLE_CLASS,
   compactFactoryAccent,
@@ -70,11 +75,25 @@ function CompactRoomCard({
 }) {
   const isTrade = layoutRoom?.kind === "trade_post";
   const isFactory = layoutRoom?.kind === "factory";
+  const isControl = row.group === "control";
   const isPower = row.group === "power";
   const isHorizontal = usesCompactHorizontalCard(row.group);
   const rowStyle = { "--room-accent": visual.accent } as CSSProperties;
 
-  const header = (
+  const header = isControl ? (
+    <div className={COMPACT_CONTROL_HEADER_CLASS}>
+      <span
+        className="row-span-2 h-5 w-1 self-start bg-[var(--room-accent)]"
+        aria-hidden="true"
+      />
+      <span className={COMPACT_ROOM_TITLE_CLASS}>{row.title}</span>
+      {row.level ? (
+        <span className={COMPACT_ROOM_LEVEL_CLASS}>
+          Lv.{row.level}/{layoutRoom ? maxRoomLevel(layoutRoom.kind) : row.level}
+        </span>
+      ) : null}
+    </div>
+  ) : (
     <div className={COMPACT_HEADER_CLASS}>
       <span className="h-5 w-1 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
       <span className={COMPACT_ROOM_TITLE_CLASS}>{row.title}</span>
@@ -133,20 +152,34 @@ function CompactRoomCard({
     />
   ));
 
+  const backgroundLayers = (
+    <>
+      <div
+        className={COMPACT_ROOM_BACKGROUND_CLASS}
+        style={{
+          ...COMPACT_ROOM_BACKGROUND_STYLE,
+          backgroundImage: `url(${visual.background})`,
+        }}
+        aria-hidden="true"
+      />
+      <div className={COMPACT_ROOM_GRADIENT_CLASS} aria-hidden="true" />
+    </>
+  );
+
   if (isHorizontal) {
+    const horizontalOperatorRowClass =
+      isPower || isControl
+        ? COMPACT_POWER_OPERATOR_ROW_CLASS
+        : COMPACT_AUXILIARY_OPERATOR_ROW_CLASS;
+
     return (
       <div className={`${COMPACT_POWER_CARD_CLASS} ${className}`} style={{ ...rowStyle, ...style }}>
-        <div className="min-w-0">
+        {backgroundLayers}
+        <div className="relative z-10 min-w-0">
           {header}
           <div className="mt-2">{efficiencyBlock}</div>
         </div>
-        <div
-          className={
-            isPower
-              ? COMPACT_POWER_OPERATOR_ROW_CLASS
-              : COMPACT_AUXILIARY_OPERATOR_ROW_CLASS
-          }
-        >
+        <div className={`relative z-10 ${horizontalOperatorRowClass}`}>
           {operators}
         </div>
       </div>
@@ -155,10 +188,17 @@ function CompactRoomCard({
 
   return (
     <div className={`${COMPACT_CARD_CLASS} ${className}`} style={{ ...rowStyle, ...style }}>
-      {header}
-      {efficiencyBlock}
-      <div className={COMPACT_OPERATOR_ROW_CLASS}>
-        {operators}
+      {backgroundLayers}
+      <div className="relative z-10">{header}</div>
+      {efficiencyBlock ? (
+        <div className="relative z-10">{efficiencyBlock}</div>
+      ) : null}
+      <div
+        className={`relative z-10 ${
+          row.group === "dormitory" ? COMPACT_DORM_OPERATOR_AREA_CLASS : ""
+        }`}
+      >
+        <div className={COMPACT_OPERATOR_ROW_CLASS}>{operators}</div>
       </div>
     </div>
   );
