@@ -1,4 +1,5 @@
 import { operatorPortraitFor } from "./operatorPortraits";
+import { maaRoomAutofill } from "./schedule-autofill";
 import { BaseBlueprint, BlueprintRoom, MaaOperatorSlot, MaaPlan, MaaRoom, MaaRooms, RoomEfficiency, RoomKind, RotationShift } from "./types";
 
 export type RoomGroup = keyof MaaRooms;
@@ -14,6 +15,7 @@ export interface RoomRow {
   product?: string;
   operators: string[];
   operatorSlots: RoomOperatorSlot[];
+  autofill: boolean;
   efficiency?: RoomEfficiency;
   efficiencyLabel?: string;
   rule: string;
@@ -249,6 +251,14 @@ function levelMapFor(layout: BaseBlueprint | undefined): Map<string, number> {
   return map;
 }
 
+function roomMapFor(layout: BaseBlueprint | undefined): Map<string, BlueprintRoom> {
+  const map = new Map<string, BlueprintRoom>();
+  for (const room of layout?.rooms ?? []) {
+    map.set(room.id, room);
+  }
+  return map;
+}
+
 function blueprintProductLabel(room: BlueprintRoom): string | undefined {
   if (!room.product) return undefined;
   if ("factory" in room.product) return productLabel(room.product.factory.recipe, "manufacture");
@@ -284,6 +294,7 @@ function layoutToRows(layout: BaseBlueprint | undefined): RoomRow[] {
       product: blueprintProductLabel(room),
       operators: [],
       operatorSlots: [],
+      autofill: false,
       rule: ruleFor(group, []),
       suspicious: false,
     });
@@ -298,6 +309,7 @@ export function planToRows(plan: MaaPlan | undefined, shift?: RotationShift, lay
   const rows: RoomRow[] = [];
   const efficiencyMap = efficiencyMapFor(shift);
   const levelMap = levelMapFor(layout);
+  const layoutRoomMap = roomMapFor(layout);
   const roomsByGroup = plan.rooms && typeof plan.rooms === "object" ? plan.rooms : {};
   for (const group of GROUP_ORDER) {
     const rooms = Array.isArray(roomsByGroup[group]) ? roomsByGroup[group] : [];
@@ -305,6 +317,7 @@ export function planToRows(plan: MaaPlan | undefined, shift?: RotationShift, lay
       const operators = roomOperators(room);
       const operatorSlots = roomOperatorSlots(room);
       const roomId = roomIdFor(group, index);
+      const layoutRoom = layoutRoomMap.get(roomId);
       const efficiency = efficiencyMap.get(roomId);
       rows.push({
         key: `${group}-${index}`,
@@ -317,6 +330,12 @@ export function planToRows(plan: MaaPlan | undefined, shift?: RotationShift, lay
         product: productLabel(room.product, group),
         operators,
         operatorSlots,
+        autofill: maaRoomAutofill(room.autofill, {
+          group,
+          skip: room.skip,
+          occupiedSlots: operatorSlots.length,
+          capacity: layoutRoom?.dorm_beds ?? 5,
+        }),
         efficiency,
         efficiencyLabel: efficiencyLabel(group, efficiency),
         rule: ruleFor(group, plainRoomOperators(room)),

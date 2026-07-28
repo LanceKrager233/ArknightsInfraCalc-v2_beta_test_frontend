@@ -52,13 +52,12 @@ import {
   OPERATOR_NAME_SIZE_CLASS,
 } from "./schedule-view-presentation";
 import {
-  DEFAULT_LIST_COLLAPSED_GROUPS,
   buildListScheduleGroups,
   isListFunctionalFacilityRoom,
   listFunctionalFacilityGridClass,
   listFunctionalOperatorPosition,
   listFunctionalOperatorPlacementClass,
-  listMeetingRoomSpanClass,
+  listFunctionalRoomSpanClass,
   listRoomHeightClass,
   listRoomTitleSizeClass,
   listRoomUsesAlignedOperatorOrigin,
@@ -864,17 +863,38 @@ function OperatorSlotShell({
 export function OperatorSlot({
   slot,
   currentMorale,
+  autofill = false,
   compactFactory = false,
   compactView = false,
   centerFrameInList = false,
 }: {
   slot: RoomRow["operatorSlots"][number] | undefined;
   currentMorale?: number;
+  autofill?: boolean;
   compactFactory?: boolean;
   compactView?: boolean;
   centerFrameInList?: boolean;
 }) {
   if (!slot) {
+    if (autofill) {
+      return (
+        <OperatorSlotShell
+          ariaLabel="自动补位"
+          centerFrameInList={centerFrameInList}
+          compactFactory={compactFactory}
+          compactView={compactView}
+          frameClassName="border-[#666] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.08)]"
+          frameContent={
+            <span className="flex h-full items-center justify-center text-xs font-semibold tracking-[0.14em] text-white/55">
+              AUTO
+            </span>
+          }
+          label="自动补位"
+          labelClassName="text-white/55"
+        />
+      );
+    }
+
     return (
       <OperatorSlotShell
         ariaLabel="空置"
@@ -946,9 +966,7 @@ export function ScheduleBoard({
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
   onViewModeChange?: (viewMode: "list" | "compact") => void;
 }) {
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({
-    ...DEFAULT_LIST_COLLAPSED_GROUPS,
-  });
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [hiddenGroups, setHiddenGroups] = useState<Record<string, boolean>>({});
   const [viewMode, setViewMode] = useState<"list" | "compact">("list");
   const [isDesktop, setIsDesktop] = useState(true);
@@ -1061,7 +1079,6 @@ export function ScheduleBoard({
         } as CSSProperties;
         const collapsed = collapsedGroups[group.label];
         const auxiliary = AUXILIARY_ROOM_GROUPS.has(group.rows[0]?.group ?? "");
-
         if (hiddenGroups[group.label]) return null;
 
         return (
@@ -1121,7 +1138,7 @@ export function ScheduleBoard({
                       "relative flex w-full overflow-hidden bg-[#313131] text-white shadow-[0_10px_20px_rgba(0,0,0,0.24)] max-sm:h-auto max-sm:flex-col",
                       listRoomHeightClass(row.group),
                       compactInlineRoom && "[container-type:inline-size]",
-                      listMeetingRoomSpanClass(row.group),
+                      listFunctionalRoomSpanClass(row.group),
                       row.suspicious && "ring-2 ring-destructive ring-offset-2"
                     )}
                     style={rowStyle}
@@ -1141,7 +1158,7 @@ export function ScheduleBoard({
                         <div className="max-sm:flex max-sm:items-center max-sm:gap-2">
                           <div>
                             <div className="flex items-center gap-2.5 max-sm:gap-1.5">
-                              <div className={cn("min-w-0 truncate font-medium tracking-normal text-white [text-shadow:0_2px_3px_rgba(0,0,0,0.75)]", listRoomTitleSizeClass(row.group))}>
+                              <div className={cn("min-w-0 truncate font-medium tracking-normal text-white [text-shadow:0_2px_3px_rgba(0,0,0,0.75)]", listRoomTitleSizeClass())}>
                                 {row.title}
                               </div>
                               <LevelDiamonds level={row.level} maxLevel={layoutRoom ? maxRoomLevel(layoutRoom.kind) : row.level} />
@@ -1195,6 +1212,7 @@ export function ScheduleBoard({
                             key={`${slot?.name ?? "empty"}-${index}`}
                             slot={slot}
                             currentMorale={slot ? currentMoraleByOperator?.get(slot.name) : undefined}
+                            autofill={row.group === "dormitory" && row.autofill}
                             compactFactory={compactFactoryRoom}
                             centerFrameInList
                           />

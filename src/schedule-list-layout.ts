@@ -5,14 +5,11 @@ export interface ListScheduleGroup {
   rows: RoomRow[];
 }
 
-export const DEFAULT_LIST_COLLAPSED_GROUPS: Readonly<Record<string, boolean>> = {
-  加工站: true,
-};
-
 const LIST_FUNCTIONAL_FACILITY_GROUPS = new Set<RoomGroup>([
   "hire",
   "power",
   "meeting",
+  "processing",
 ]);
 
 const LIST_ALIGNED_OPERATOR_ORIGIN_GROUPS = new Set<RoomGroup>([
@@ -20,18 +17,25 @@ const LIST_ALIGNED_OPERATOR_ORIGIN_GROUPS = new Set<RoomGroup>([
   "trading",
   "manufacture",
   "dormitory",
-  "processing",
 ]);
+
+const LIST_FUNCTIONAL_FACILITY_ORDER: Partial<Record<RoomGroup, number>> = {
+  power: 0,
+  meeting: 1,
+  hire: 2,
+  processing: 3,
+};
 
 export const LIST_OPERATOR_ORIGIN_PX = 248;
 export const LIST_OPERATOR_FRAME_SIZE_PX = 88;
+export const LIST_OPERATOR_GAP_MAX_PX = 20;
 export const LIST_FUNCTIONAL_GROUP_GAP_PX = 12;
-export const LIST_MEETING_COLUMN_INSET_PX =
-  LIST_OPERATOR_FRAME_SIZE_PX + LIST_FUNCTIONAL_GROUP_GAP_PX / 2;
+export const LIST_MEETING_OPERATOR_WIDTH_PX =
+  LIST_OPERATOR_FRAME_SIZE_PX * 2 + LIST_OPERATOR_GAP_MAX_PX;
 
 const LIST_OPERATOR_COLUMN_GAP = "clamp(0.75rem, 1.25vw, 1.25rem)";
-const LIST_FUNCTIONAL_GRID_CLASS = "xl:grid-cols-3";
-const LIST_MEETING_ROOM_SPAN_CLASS = "xl:col-span-2";
+const LIST_FUNCTIONAL_GRID_CLASS =
+  "xl:grid-cols-[repeat(24,minmax(0,1fr))]";
 const LIST_FUNCTIONAL_OPERATOR_PLACEMENT_CLASS =
   "xl:absolute xl:inset-y-0";
 
@@ -49,10 +53,8 @@ export function listRoomHeightClass(group: RoomGroup): string {
   return "h-[144px]";
 }
 
-export function listRoomTitleSizeClass(group: RoomGroup): string {
-  return group === "processing"
-    ? "text-[24px] max-sm:text-[16px]"
-    : "text-[18px] max-sm:text-[16px]";
+export function listRoomTitleSizeClass(): string {
+  return "text-[18px] max-sm:text-[16px]";
 }
 
 export function listFunctionalOperatorPosition(
@@ -63,7 +65,7 @@ export function listFunctionalOperatorPosition(
   return {
     columnGap: LIST_OPERATOR_COLUMN_GAP,
     left: group === "meeting"
-      ? `max(0px, min(${LIST_OPERATOR_ORIGIN_PX}px, calc(50cqw - ${LIST_MEETING_COLUMN_INSET_PX}px)))`
+      ? `max(0px, min(${LIST_OPERATOR_ORIGIN_PX}px, calc(100cqw - ${LIST_MEETING_OPERATOR_WIDTH_PX}px)))`
       : `max(0px, min(${LIST_OPERATOR_ORIGIN_PX}px, calc(100cqw - ${LIST_OPERATOR_FRAME_SIZE_PX}px)))`,
   };
 }
@@ -80,10 +82,14 @@ export function listFunctionalFacilityGridClass(): string {
   return LIST_FUNCTIONAL_GRID_CLASS;
 }
 
-export function listMeetingRoomSpanClass(
+export function listFunctionalRoomSpanClass(
   group: RoomGroup,
 ): string | undefined {
-  return group === "meeting" ? LIST_MEETING_ROOM_SPAN_CLASS : undefined;
+  if (group === "meeting") return "xl:col-span-12";
+  if (group === "power" || group === "hire" || group === "processing") {
+    return "xl:col-span-8";
+  }
+  return undefined;
 }
 
 export function buildListScheduleGroups(rows: RoomRow[]): ListScheduleGroup[] {
@@ -102,8 +108,22 @@ export function buildListScheduleGroups(rows: RoomRow[]): ListScheduleGroup[] {
     return currentGroups;
   }, []);
 
-  return [
-    ...groups.filter((group) => group.rows[0]?.group !== "processing"),
-    ...groups.filter((group) => group.rows[0]?.group === "processing"),
-  ];
+  const functionalGroup = groups.find((group) => group.label === "功能设施");
+  const functionalPowerCount = functionalGroup?.rows.filter(
+    (row) => row.group === "power",
+  ).length ?? 0;
+  const functionalFacilityOrder = functionalPowerCount === 2
+    ? {
+        ...LIST_FUNCTIONAL_FACILITY_ORDER,
+        hire: 1,
+        meeting: 2,
+      }
+    : LIST_FUNCTIONAL_FACILITY_ORDER;
+  functionalGroup?.rows.sort(
+    (left, right) =>
+      (functionalFacilityOrder[left.group] ?? Number.MAX_SAFE_INTEGER)
+      - (functionalFacilityOrder[right.group] ?? Number.MAX_SAFE_INTEGER),
+  );
+
+  return groups;
 }
