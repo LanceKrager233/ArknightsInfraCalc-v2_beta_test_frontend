@@ -2,9 +2,9 @@
 
 ## 执行摘要
 
-本次改造把前端从 beta 验收工作台收敛为正式产品“明日方舟基建排班助手”，重点完成用户文案、公开 API 白名单、统一错误码、请求保护、反馈最小化、v4 本地持久化、hydration 修复和自动化门禁。实施日期为 2026-07-28，工作分支为 `codex/frontend-production-readiness`，起始提交为 `387dd66`，前端改造提交为 `cde1cec`，发布前边界加固提交为 `04377b4`。
+本次改造把前端从 beta 验收工作台收敛为正式产品“明日方舟基建排班助手”，重点完成用户文案、公开 API 白名单、统一错误码、请求保护、反馈最小化、v4 本地持久化、hydration 修复和自动化门禁。实施日期为 2026-07-28，工作分支为 `codex/frontend-production-readiness`，起始提交为 `387dd66`，前端改造提交为 `cde1cec`，发布前边界加固提交为 `04377b4`，合并提交为 `01e5085`。
 
-改造分支已推送到 fork，并创建 PR [#46](https://github.com/KnightCodeSquareMatrix/ArknightsInfraCalc-v2_beta_test_frontend/pull/46)。截至本次更新，PR 尚未合并、服务器尚未部署；GitHub Actions 正在等待远端实际结果，后文会明确区分已经完成的本地验证与尚未发生的远端/线上验证。
+改造分支已推送到 fork，PR [#46](https://github.com/KnightCodeSquareMatrix/ArknightsInfraCalc-v2_beta_test_frontend/pull/46) 已合并。`main` push 的 [Frontend quality](https://github.com/KnightCodeSquareMatrix/ArknightsInfraCalc-v2_beta_test_frontend/actions/runs/30367945588) 工作流全部通过，合并提交已发布到 `/opt/arknights-infra/releases/20260728222529-01e5085`。
 
 本次明确保持不变：
 
@@ -13,7 +13,7 @@
 - 手机端“一图流布局”继续显示为禁用态，不隐藏；
 - 加工站继续使用现有“暂不显示”按钮与隐藏/恢复交互。
 
-求解算法、CLI 协议、核心仓库和服务端历史记录格式均未修改。
+求解算法、CLI 协议、核心仓库和 CLI 运行记录格式均未修改；反馈记录按本次公开契约改为最小化结构。
 
 ## 改造前问题基线
 
@@ -333,6 +333,7 @@ $env:BETA_RATE_LIMIT_ENABLED='0'
 | `npx playwright test -g "responsive navigation"` | 通过；1 条响应式与锁定区域回归 |
 | 真实 `/api/plan` Full E2 | 通过；11.151 秒生成 3 个班次，公开 data 仅有 5 个白名单字段 |
 | 真实 `/api/feedback` | 通过；响应 data 仅有 `feedbackId`、`savedAt` |
+| GitHub Actions `Frontend quality` | 通过；Node 22 下的安装、lint、单测、契约测试、生产构建和 7 条 Chromium E2E 全部成功 |
 
 已验证的浏览器范围：
 
@@ -351,18 +352,29 @@ $env:BETA_RATE_LIMIT_ENABLED='0'
 
 本地还验证了 Next 以 `-H 0.0.0.0`监听、浏览器从 `127.0.0.1`访问的场景：同源校验使用实际 `Host`，合法请求不再误报 `AIC-AUTH-2002`；无效布局继续进入 422 `AIC-LAYOUT-1201`。
 
-### 尚未发生
+### 线上发布结果
 
-- GitHub Actions 已由 PR 触发，但最终结果尚未写入本报告；
-- PR #46 尚未合并；
-- 未部署到服务器，因此没有线上 4174/4175 健康检查结果；
-- 没有修改 `infra-cli`算法、协议或核心仓库；
+- release：`/opt/arknights-infra/releases/20260728222529-01e5085`；
+- 当前软链与 `.release-sha`：`01e5085d47c55e32d04ab0389852f4b7962d8116`；
+- systemd：`arknights-infra`为 `active`；
+- 内部端口：Next 仅监听 `127.0.0.1:4175`；公网入口为 Nginx `4174`；
+- 内部和公网 `/api/health`均返回 200，`plannerReady: true`、`debugTools: false`、`rateLimit: true`；
+- 生产环境新增 `BETA_DEBUG_TOOLS_ENABLED=0`、`BETA_RATE_LIMIT_ENABLED=1`、`BETA_TRUST_PROXY_HEADERS=1`和公开 Origin；
+- `/var/lib/arknights-infra`及其 `cli-runs`、`feedback`目录保持原位置和所有权；
+- 真实 Chromium 从公网载入 Full E2，生成 3 个班次，刷新后恢复排班，Console 为 0 error / 0 warning；
+- 真实 plan 响应 data 仅有 `profile`、`maa`、`rotation`、`durationMs`、`diagnosticId`，递归检查未发现内部字段；
+- 真实反馈编号为 `611f5dc1-8557-420c-bfe8-5cc18134f9ea`，响应 data 仅有 `feedbackId`、`savedAt`，服务端只落盘 `meta.json`与`issue.json`。
+
+### 未纳入本阶段
+
+- 没有修改 `infra-cli`算法、协议或核心仓库。线上旧求解器哈希仍为 `70771355df6661a08f8162acc972523dcdf9fc23ad03f1da93e0a5416b052d09`，真实 Full E2 已证明兼容；
+- 核心仓库最新 `main`在本次审计时有 7 个自身测试失败，因此没有绕过核心门禁强制更新求解器；
 - 没有实现服务端历史数据自动清理任务。
 
 ### 已知风险
 
 - 限流是单实例进程内状态，重启会清空，不适合未来多实例水平扩展；若扩容需迁移到共享存储。
 - 反馈只保存诊断编号与房间摘要，依赖服务端 CLI 运行记录仍在保留期内。
-- 本次 E2E 使用固定 fixture 与接口拦截，真实 CLI 的发布前冒烟仍需按部署清单执行。
+- 自动化 E2E 使用固定 fixture 与接口拦截；本次已额外完成真实公网 CLI 冒烟，但今后每次更新求解器仍需重复执行。
 - 本次安装依赖时 npm 报告 2 个 moderate、7 个 high 漏洞；本阶段未执行可能引入破坏性升级的 `npm audit fix --force`，发布负责人应单独评估依赖升级。
 - 当前工作区存在任务开始前的用户改动；提交时必须只选择本次目标文件，不能把无关文件带入 PR。
