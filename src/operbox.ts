@@ -49,9 +49,9 @@ export function assertOperbox(value: unknown): OperBoxEntry[] {
         throw new Error(`${name} 的 elite 必须是 0–2 的整数。`);
       if (!Number.isInteger(level) || level < 1 || level > 90)
         throw new Error(`${name} 的 level 必须是 1–90 的整数。`);
+      if (!Number.isInteger(potential) || potential < 1 || potential > 6)
+        throw new Error(`${name} 的 potential 必须是 1–6 的整数。`);
     }
-    if (!Number.isInteger(potential) || potential < 1 || potential > 6)
-      throw new Error(`${name} 的 potential 必须是 1–6 的整数。`);
     if (!Number.isInteger(rarity) || rarity < 1 || rarity > 6)
       throw new Error(`${name} 的 rarity 必须是 1–6 的整数。`);
     seen.add(id);
