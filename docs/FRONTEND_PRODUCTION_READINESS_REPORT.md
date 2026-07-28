@@ -2,9 +2,9 @@
 
 ## 执行摘要
 
-本次改造把前端从 beta 验收工作台收敛为正式产品“明日方舟基建排班助手”，重点完成用户文案、公开 API 白名单、统一错误码、请求保护、反馈最小化、v4 本地持久化、hydration 修复和自动化门禁。实施日期为 2026-07-28，工作分支为 `codex/frontend-production-readiness`，起始提交为 `387dd66`，前端改造提交为 `cde1cec`。
+本次改造把前端从 beta 验收工作台收敛为正式产品“明日方舟基建排班助手”，重点完成用户文案、公开 API 白名单、统一错误码、请求保护、反馈最小化、v4 本地持久化、hydration 修复和自动化门禁。实施日期为 2026-07-28，工作分支为 `codex/frontend-production-readiness`，起始提交为 `387dd66`，前端改造提交为 `cde1cec`，发布前边界加固提交为 `04377b4`。
 
-截至本次发布前更新，前端改造与文档已经创建本地提交，发布前安全审查补丁仍待提交；尚未 push、创建 PR 或部署服务器。GitHub Actions 尚未在远端实际运行，后文会明确区分已经完成的本地验证与尚未发生的远端/线上验证。
+改造分支已推送到 fork，并创建 PR [#46](https://github.com/KnightCodeSquareMatrix/ArknightsInfraCalc-v2_beta_test_frontend/pull/46)。截至本次更新，PR 尚未合并、服务器尚未部署；GitHub Actions 正在等待远端实际结果，后文会明确区分已经完成的本地验证与尚未发生的远端/线上验证。
 
 本次明确保持不变：
 
@@ -353,8 +353,8 @@ $env:BETA_RATE_LIMIT_ENABLED='0'
 
 ### 尚未发生
 
-- GitHub Actions 尚未由远端 PR/push 触发，不能标记为已通过；
-- 未创建 commit、未 push、未创建 PR；
+- GitHub Actions 已由 PR 触发，但最终结果尚未写入本报告；
+- PR #46 尚未合并；
 - 未部署到服务器，因此没有线上 4174/4175 健康检查结果；
 - 没有修改 `infra-cli`算法、协议或核心仓库；
 - 没有实现服务端历史数据自动清理任务。
