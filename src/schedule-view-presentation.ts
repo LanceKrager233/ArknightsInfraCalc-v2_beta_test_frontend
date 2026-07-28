@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react";
+
 export const OPERATOR_NAME_SIZE_CLASS = "text-xs max-sm:text-[10px]";
 
 export const COMPACT_OPERATOR_SIZE_CLASS =
@@ -6,8 +8,11 @@ export const COMPACT_OPERATOR_SIZE_CLASS =
 export const COMPACT_OPERATOR_ROW_CLASS =
   "flex items-start justify-start gap-2";
 
-export const COMPACT_GRID_CLASS = "-mx-[80px] flex items-start gap-3";
+export const COMPACT_GRID_CLASS = "-mx-[80px] flex items-stretch gap-3";
 export const COMPACT_COLUMN_CLASS = "flex min-w-0 flex-col gap-3";
+export const COMPACT_DORM_WRAPPER_CLASS = "flex min-h-0 flex-1";
+export const COMPACT_DORM_OPERATOR_AREA_CLASS =
+  "flex min-h-0 flex-1 items-center";
 
 export const COMPACT_AUXILIARY_WIDTHS = {
   meeting: 65,
@@ -15,16 +20,19 @@ export const COMPACT_AUXILIARY_WIDTHS = {
 } as const;
 
 export const COMPACT_CARD_CLASS =
-  "flex flex-col justify-start gap-2 bg-[#313131] px-3 py-2";
+  "relative flex flex-col justify-start gap-2 overflow-hidden bg-[#313131] px-3 py-2";
 
 export const COMPACT_POWER_CARD_CLASS =
-  "grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 bg-[#313131] px-3 py-2";
+  "relative grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 overflow-hidden bg-[#313131] px-3 py-2";
 
 export const COMPACT_POWER_OPERATOR_ROW_CLASS =
   "flex items-start justify-end gap-2";
 
 export const COMPACT_AUXILIARY_OPERATOR_ROW_CLASS =
   `${COMPACT_POWER_OPERATOR_ROW_CLASS} max-[1400px]:translate-x-1`;
+
+export const COMPACT_CONTROL_HEADER_CLASS =
+  "grid min-w-0 grid-cols-[4px_minmax(0,1fr)] grid-rows-[20px_16px] gap-x-2";
 
 export const COMPACT_HEADER_CLASS =
   "flex h-7 shrink-0 items-center gap-2";
@@ -34,6 +42,17 @@ export const COMPACT_ROOM_TITLE_CLASS =
 
 export const COMPACT_ROOM_LEVEL_CLASS =
   "min-w-0 truncate text-xs text-white/50";
+
+export const COMPACT_ROOM_BACKGROUND_CLASS =
+  "pointer-events-none absolute inset-0 bg-no-repeat opacity-[0.52]";
+
+export const COMPACT_ROOM_GRADIENT_CLASS =
+  "pointer-events-none absolute inset-0 bg-gradient-to-r from-[#313131]/20 via-[#313131]/72 to-[#313131]";
+
+export const COMPACT_ROOM_BACKGROUND_STYLE = {
+  backgroundPosition: "-18px center",
+  backgroundSize: "auto 176px",
+} satisfies CSSProperties;
 
 const PRODUCT_FALLBACK =
   "border-white/20 text-white bg-[#3C3C3C]/70";
@@ -62,7 +81,12 @@ export function isCompactScheduleGroupVisible(group: string) {
   return group !== "processing";
 }
 
-const COMPACT_HORIZONTAL_GROUPS = new Set(["power", "meeting", "hire"]);
+const COMPACT_HORIZONTAL_GROUPS = new Set([
+  "control",
+  "power",
+  "meeting",
+  "hire",
+]);
 
 export function usesCompactHorizontalCard(group: string) {
   return COMPACT_HORIZONTAL_GROUPS.has(group);
