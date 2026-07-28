@@ -81,7 +81,7 @@ export function operboxFromPlayerInfo(info: PlayerInfo): { operbox: OperBoxEntry
     const elite = Number(character.evolvePhase);
     const level = Number(character.level);
     const potential = Number(character.potentialRank) + 1;
-    const rarity = Number(character.rarity) + 1;
+    const rarity = Number(info.charInfoMap[character.charId]?.rarity ?? character.rarity) + 1;
     if (!name || !Number.isInteger(elite) || elite < 0 || elite > 2 || !Number.isInteger(level) || level < 1 || level > 90 || !Number.isInteger(potential) || potential < 1 || potential > 6 || !Number.isInteger(rarity) || rarity < 1 || rarity > 6) {
       warnings.push(`干员 ${name || character.charId} 的森空岛练度字段不完整，已跳过。`);
       return [];
