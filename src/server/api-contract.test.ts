@@ -76,6 +76,13 @@ test("readJsonBody rejects malformed and oversized requests", async () => {
     }), 128),
     (error: unknown) => error instanceof PublicApiError && error.code === "AIC-REQ-1002"
   );
+  await assert.rejects(
+    readJsonBody(new Request("http://localhost/api", {
+      method: "POST",
+      body: "x".repeat(129),
+    }), 128),
+    (error: unknown) => error instanceof PublicApiError && error.code === "AIC-REQ-1002"
+  );
 });
 
 test("same-origin protection rejects a mismatched Origin", () => {

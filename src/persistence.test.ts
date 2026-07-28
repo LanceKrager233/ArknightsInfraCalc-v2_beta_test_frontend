@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import type { PublicPlanData } from "./types.ts";
 import {
   clearLocalProductData,
   loadPersistedSession,
@@ -135,6 +136,27 @@ test("quota failures surface without corrupting the previous session", () => {
     result: null,
     activeShift: 0,
   }));
+});
+
+test("internal fields nested in persisted result data are stripped", () => {
+  const storage = new MemoryStorage();
+  const unsafeResult = structuredClone(result) as PublicPlanData & {
+    profile: PublicPlanData["profile"] & { cliPath?: string };
+  };
+  unsafeResult.profile.cliPath = "C:\\secret\\infra-cli.exe";
+
+  const saved = persistSession(storage, {
+    presetLabel: "243",
+    layout,
+    operbox,
+    sourceName: "示例",
+    boxSource: "sample",
+    layoutDirty: false,
+    result: unsafeResult,
+    activeShift: 0,
+  });
+
+  assert.equal("cliPath" in saved.result!.profile, false);
 });
 
 test("clear removes all session generations and product preferences", () => {

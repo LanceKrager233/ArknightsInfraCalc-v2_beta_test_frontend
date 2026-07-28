@@ -5,9 +5,15 @@ import type {
   RotationJson,
   UserProfile,
 } from "../types";
+import { stripInternalFields } from "../internal-field-safety.ts";
 import { isDebugToolsEnabled, PublicApiError } from "./api-contract.ts";
 
 const PATH_SEPARATOR = /[/\\]+/g;
+
+function safeDuration(value: unknown): number {
+  const duration = Number(value);
+  return Number.isFinite(duration) ? Math.max(0, duration) : 0;
+}
 
 export function safeDisplayName(value: unknown, fallback: string, maxLength = 80): string {
   const normalized = String(value ?? "")
@@ -26,7 +32,7 @@ export function safeDisplayName(value: unknown, fallback: string, maxLength = 80
 
 function sanitizeProfile(profile: UserProfile, layoutLabel: string, sourceName: string): UserProfile {
   return {
-    ...structuredClone(profile),
+    ...stripInternalFields(structuredClone(profile)),
     layout_label: safeDisplayName(layoutLabel, "当前布局"),
     operbox_label: safeDisplayName(sourceName, "已导入的干员数据"),
     baseline_label: "产品推荐基准",
@@ -39,7 +45,7 @@ function sanitizeProfile(profile: UserProfile, layoutLabel: string, sourceName: 
 
 function sanitizeMaa(maa: MaaJson, layoutLabel: string): MaaJson {
   return {
-    ...structuredClone(maa),
+    ...stripInternalFields(structuredClone(maa)),
     title: `明日方舟基建排班助手 · ${safeDisplayName(layoutLabel, "当前布局")}`,
   };
 }
@@ -63,8 +69,8 @@ export function toPublicPlanData(
   const data: PublicPlanData = {
     profile: sanitizeProfile(result.profileJson, input.layoutLabel, input.sourceName),
     maa: sanitizeMaa(result.maaJson, input.layoutLabel),
-    rotation: structuredClone(result.rotationJson as RotationJson),
-    durationMs: Math.max(0, Number(result.durationMs ?? 0)),
+    rotation: stripInternalFields(structuredClone(result.rotationJson as RotationJson)),
+    durationMs: safeDuration(result.durationMs),
     diagnosticId: result.runId ?? requestId,
   };
 

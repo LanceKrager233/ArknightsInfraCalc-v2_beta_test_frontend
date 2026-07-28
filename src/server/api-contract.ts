@@ -132,9 +132,27 @@ export async function readJsonBody(request: Request, maxBytes: number): Promise<
     throw new PublicApiError("AIC-REQ-1002");
   }
 
-  const bytes = new Uint8Array(await request.arrayBuffer());
-  if (bytes.byteLength > maxBytes) throw new PublicApiError("AIC-REQ-1002");
-  if (bytes.byteLength === 0) throw new PublicApiError("AIC-REQ-1001");
+  if (!request.body) throw new PublicApiError("AIC-REQ-1001");
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let byteLength = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    byteLength += value.byteLength;
+    if (byteLength > maxBytes) {
+      await reader.cancel();
+      throw new PublicApiError("AIC-REQ-1002");
+    }
+    chunks.push(value);
+  }
+  if (byteLength === 0) throw new PublicApiError("AIC-REQ-1001");
+  const bytes = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
 
   try {
     return JSON.parse(new TextDecoder().decode(bytes)) as unknown;

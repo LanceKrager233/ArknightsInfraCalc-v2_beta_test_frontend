@@ -4,7 +4,7 @@
 
 本次改造把前端从 beta 验收工作台收敛为正式产品“明日方舟基建排班助手”，重点完成用户文案、公开 API 白名单、统一错误码、请求保护、反馈最小化、v4 本地持久化、hydration 修复和自动化门禁。实施日期为 2026-07-28，工作分支为 `codex/frontend-production-readiness`，起始提交为 `387dd66`，前端改造提交为 `cde1cec`。
 
-截至本次发布前更新，前端改造已经创建本地提交，文档更新仍待提交；尚未 push、创建 PR 或部署服务器。GitHub Actions 尚未在远端实际运行，后文会明确区分已经完成的本地验证与尚未发生的远端/线上验证。
+截至本次发布前更新，前端改造与文档已经创建本地提交，发布前安全审查补丁仍待提交；尚未 push、创建 PR 或部署服务器。GitHub Actions 尚未在远端实际运行，后文会明确区分已经完成的本地验证与尚未发生的远端/线上验证。
 
 本次明确保持不变：
 
@@ -327,7 +327,7 @@ $env:BETA_RATE_LIMIT_ENABLED='0'
 
 | 命令 | 结果 |
 | --- | --- |
-| `npm run check` | 通过；48 个单元/持久化测试 + 13 个 API 契约测试 |
+| `npm run check` | 通过；49 个单元/持久化测试 + 13 个 API 契约测试 |
 | `npm run build` | 通过；Next 生产编译、TypeScript 和 8 个页面/路由生成完成 |
 | `npm run test:e2e` | 通过；7 条 Chromium E2E |
 | `npx playwright test -g "responsive navigation"` | 通过；1 条响应式与锁定区域回归 |

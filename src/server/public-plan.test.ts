@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { PlanApiResponse } from "../types.ts";
+import type { PlanApiResponse, UserProfile } from "../types.ts";
 import { safeDisplayName, toPublicPlanData } from "./public-plan.ts";
 
 function internalResult(): PlanApiResponse {
@@ -25,7 +25,11 @@ function internalResult(): PlanApiResponse {
       actions: [],
       flags: [],
       narration_hints: [],
-    },
+      nestedInternal: {
+        cliPath: "C:\\secret\\future-cli.exe",
+        debugBundle: { future: true },
+      },
+    } as UserProfile & { nestedInternal: { cliPath: string; debugBundle: { future: boolean } } },
     maaJson: { title: "C:\\private\\title", plans: [] },
     rotationJson: { shifts: [], daily: { trade: null, manu: null, power: null } },
     debugBundle: {
@@ -83,6 +87,7 @@ test("production public plan data recursively excludes internal fields", () => {
     assert.equal(publicData.profile.baseline_label, "产品推荐基准");
     assert.equal(publicData.profile.layout_label.includes("\\"), false);
     assert.equal(publicData.maa.title.includes("\\"), false);
+    assert.equal(keys.has("nestedInternal"), true);
   } finally {
     if (previous === undefined) delete process.env.BETA_DEBUG_TOOLS_ENABLED;
     else process.env.BETA_DEBUG_TOOLS_ENABLED = previous;

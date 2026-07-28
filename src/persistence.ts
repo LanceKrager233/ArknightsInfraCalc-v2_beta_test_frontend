@@ -7,6 +7,7 @@ import type {
   RotationJson,
   UserProfile,
 } from "./types";
+import { stripInternalFields } from "./internal-field-safety.ts";
 
 export const SESSION_KEY_V4 = "arknights-infra-calc-session-v4";
 export const SESSION_KEY_V3 = "arknights-infra-calc-beta-session-v3";
@@ -43,6 +44,11 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+function safeDuration(value: unknown): number {
+  const duration = Number(value);
+  return Number.isFinite(duration) ? Math.max(0, duration) : 0;
+}
+
 function validLayout(value: unknown): value is BaseBlueprint {
   if (!isObject(value) || typeof value.template !== "string" || !Array.isArray(value.rooms) || !isObject(value.scenario)) {
     return false;
@@ -76,10 +82,10 @@ function safeResult(value: unknown): PublicPlanData | null {
   if (!Array.isArray(maa.plans) || !Array.isArray(rotation.shifts)) return null;
 
   return {
-    profile: structuredClone(profile),
-    maa: structuredClone(maa),
-    rotation: structuredClone(rotation),
-    durationMs: Math.max(0, Number(value.durationMs ?? 0)),
+    profile: stripInternalFields(structuredClone(profile)),
+    maa: stripInternalFields(structuredClone(maa)),
+    rotation: stripInternalFields(structuredClone(rotation)),
+    durationMs: safeDuration(value.durationMs),
     diagnosticId:
       typeof value.diagnosticId === "string"
         ? value.diagnosticId.slice(0, 80)
