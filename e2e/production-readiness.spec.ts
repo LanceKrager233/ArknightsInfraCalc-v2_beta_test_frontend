@@ -303,20 +303,25 @@ test("responsive navigation and the two locked areas keep their current behavior
   await expect(page.getByRole("button", { name: "森空岛状态" })).toBeVisible();
 });
 
-test("Skland login supports desktop QR and the official mobile app handoff", async ({ page }) => {
+test("Skland login shows QR on every viewport and offers a separate mobile app shortcut", async ({ page }) => {
   await mockApis(page, { sklandConfigured: true });
-  await page.route("**/api/skland/auth/qr", (route) => route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    body: JSON.stringify({
-      success: true,
-      data: {
-        scanId: "scan-login-1",
-        scanUrl: "hypergryph://scan_login?scanId=scan-login-1&from=web",
-      },
-      requestId,
-    }),
-  }));
+  let qrStartRequests = 0;
+  await page.route("**/api/skland/auth/qr", (route) => {
+    qrStartRequests += 1;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          scanId: "scan-login-1",
+          scanUrl: "hypergryph://scan_login?scanId=scan-login-1&from=web",
+          expiresInSeconds: 600,
+        },
+        requestId,
+      }),
+    });
+  });
   await page.route("**/api/skland/auth/qr/status", (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
@@ -336,11 +341,12 @@ test("Skland login supports desktop QR and the official mobile app handoff", asy
   await expect(dialog.getByRole("heading", { name: "登录森空岛" })).toBeVisible();
   await expect(dialog.getByRole("tab")).toHaveCount(0);
   await expect(dialog.getByText(/手机号|验证码|密码/)).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "尝试在手机上打开森空岛授权" })).toHaveAttribute(
+  await expect(dialog.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "打开森空岛 App" })).toHaveAttribute(
     "href",
-    "https://bbs.hycdn.cn/u-link/download.html?schema=hypergryph%3A%2F%2Fscan_login%3FscanId%3Dscan-login-1%26from%3Dweb"
+    "https://bbs.hycdn.cn/u-link/download.html?schema=skland%3A%2F%2FgameCenter"
   );
-  await expect(page.getByText("这是实验性入口。", { exact: false })).toBeVisible();
+  await expect(page.getByText("此按钮只负责打开 App，不会自动完成登录。", { exact: false })).toBeVisible();
 
   await page.keyboard.press("Escape");
   await expect(page.getByRole("heading", { name: "登录森空岛" })).toHaveCount(0);
@@ -349,7 +355,61 @@ test("Skland login supports desktop QR and the official mobile app handoff", asy
   await page.setViewportSize({ width: 1024, height: 800 });
   await accountButton.click();
   await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "尝试在手机上打开森空岛授权" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "打开森空岛 App" })).toBeHidden();
+  expect(qrStartRequests).toBe(1);
+  await page.keyboard.press("Escape");
+});
+
+test("Skland login explains slow preparation and reuses the in-flight request", async ({ page }) => {
+  await mockApis(page, { sklandConfigured: true });
+  let qrStartRequests = 0;
+  let releaseQr: (() => void) | undefined;
+  const qrGate = new Promise<void>((resolve) => {
+    releaseQr = resolve;
+  });
+  await page.route("**/api/skland/auth/qr", async (route) => {
+    qrStartRequests += 1;
+    await qrGate;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          scanId: "scan-login-slow",
+          scanUrl: "hypergryph://scan_login?scanId=scan-login-slow",
+          expiresInSeconds: 600,
+        },
+        requestId,
+      }),
+    });
+  });
+  await page.route("**/api/skland/auth/qr/status", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      success: true,
+      data: { status: "waiting" },
+      requestId,
+    }),
+  }));
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto("/");
+
+  const accountButton = page.getByRole("button", { name: "登录森空岛" });
+  await accountButton.focus();
+  await expect.poll(() => qrStartRequests).toBe(1);
+  await accountButton.click();
+  await expect(page.getByText("正在生成二维码…")).toBeVisible();
+  await expect(page.getByText("正在连接鹰角登录服务，首次准备可能需要更久…")).toBeVisible({ timeout: 3_000 });
+  await page.keyboard.press("Escape");
+  await accountButton.click();
+  expect(qrStartRequests).toBe(1);
+
+  releaseQr?.();
+  await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
+  expect(qrStartRequests).toBe(1);
   await page.keyboard.press("Escape");
 });
 

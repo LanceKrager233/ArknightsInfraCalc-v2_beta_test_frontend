@@ -1,7 +1,6 @@
 "use client";
 
-import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Building2,
   Check,
@@ -12,6 +11,7 @@ import {
   ScanLine,
   UserRound,
 } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -26,10 +26,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { pollSklandQr, startSklandQr, toDisplayError } from "./api";
-import { buildSklandMobileAuthUrl } from "./skland-auth-url";
+import { buildSklandAppOpenUrl } from "./skland-auth-url";
 import type { ShiftComparison, SklandSnapshot } from "./types";
 
-const QRCodeSVG = dynamic(() => import("qrcode.react").then((module) => module.QRCodeSVG), { ssr: false });
+const SKLAND_APP_OPEN_URL = buildSklandAppOpenUrl();
 
 type AccountProps = {
   open: boolean;
@@ -62,24 +62,71 @@ export function SklandAccount({
   const [scanUrl, setScanUrl] = useState<string | null>(null);
   const [scanState, setScanState] = useState<ScanState>("idle");
   const [scanError, setScanError] = useState<string | null>(null);
-  const mobileAuthUrl = scanUrl ? buildSklandMobileAuthUrl(scanUrl) : null;
+  const [scanExpiresAt, setScanExpiresAt] = useState<number | null>(null);
+  const [preparingSlow, setPreparingSlow] = useState(false);
+  const createQrPromiseRef = useRef<Promise<void> | null>(null);
+  const mountedRef = useRef(true);
 
-  async function createQr() {
-    setScanError(null);
-    setScanState("loading");
-    setScanId(null);
-    setScanUrl(null);
-    try {
-      const result = await startSklandQr();
-      setScanId(result.scanId);
-      setScanUrl(result.scanUrl);
-      setScanState("waiting");
-    } catch (caught) {
-      setScanState("idle");
-      const detail = toDisplayError(caught, "二维码生成失败，请稍后重试。");
-      setScanError(`${detail.message}（${detail.code}${detail.requestId ? ` · ${detail.requestId}` : ""}）`);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const createQr = useCallback(() => {
+    if (createQrPromiseRef.current) return createQrPromiseRef.current;
+
+    const task = (async () => {
+      setScanError(null);
+      setScanState("loading");
+      setScanId(null);
+      setScanUrl(null);
+      setScanExpiresAt(null);
+      try {
+        const result = await startSklandQr();
+        if (!mountedRef.current) return;
+        setScanId(result.scanId);
+        setScanUrl(result.scanUrl);
+        setScanExpiresAt(Date.now() + result.expiresInSeconds * 1000);
+        setScanState("waiting");
+      } catch (caught) {
+        if (!mountedRef.current) return;
+        setScanState("idle");
+        const detail = toDisplayError(caught, "二维码生成失败，请稍后重试。");
+        setScanError(`${detail.message}（${detail.code}${detail.requestId ? ` · ${detail.requestId}` : ""}）`);
+      }
+    })();
+    createQrPromiseRef.current = task;
+    void task.finally(() => {
+      if (createQrPromiseRef.current === task) createQrPromiseRef.current = null;
+    });
+    return task;
+  }, []);
+
+  useEffect(() => {
+    if (scanState !== "loading") {
+      setPreparingSlow(false);
+      return;
     }
-  }
+    const timer = window.setTimeout(() => setPreparingSlow(true), 2_000);
+    return () => window.clearTimeout(timer);
+  }, [scanState]);
+
+  useEffect(() => {
+    if (!open || !scanId || !scanExpiresAt) return;
+    const remaining = scanExpiresAt - Date.now();
+    if (remaining <= 0) {
+      setScanId(null);
+      setScanState("expired");
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setScanId(null);
+      setScanState("expired");
+    }, remaining);
+    return () => window.clearTimeout(timer);
+  }, [open, scanExpiresAt, scanId]);
 
   useEffect(() => {
     if (!open || !scanId) return;
@@ -94,13 +141,15 @@ export function SklandAccount({
           onOpenChange(false);
           setScanId(null);
           setScanUrl(null);
+          setScanExpiresAt(null);
           setScanState("idle");
           setScanError(null);
           return;
         }
         if (result.status === "expired") {
+          setScanId(null);
           setScanState("expired");
-          setScanError("二维码已过期，请刷新。");
+          setScanError(null);
           return;
         }
         setScanState(result.status === "scanned" ? "scanned" : "waiting");
@@ -119,17 +168,15 @@ export function SklandAccount({
     };
   }, [onAuthenticated, onOpenChange, open, scanId]);
 
-  function resetLoginState() {
-    setScanId(null);
-    setScanUrl(null);
-    setScanState("idle");
-    setScanError(null);
+  function prepareQrOnIntent() {
+    if (snapshot || !configured || scanState === "loading") return;
+    const hasActiveChallenge = Boolean(scanId && scanUrl && scanExpiresAt && scanExpiresAt > Date.now());
+    if (!hasActiveChallenge) void createQr();
   }
 
   function handleOpenChange(next: boolean) {
     onOpenChange(next);
-    if (next && !snapshot && configured && scanState === "idle") void createQr();
-    if (!next && !snapshot) resetLoginState();
+    if (next) prepareQrOnIntent();
   }
 
   return (
@@ -139,6 +186,8 @@ export function SklandAccount({
         variant="outline"
         className="h-10 min-w-0 justify-start px-3 max-sm:h-11 max-sm:w-full"
         aria-label={snapshot ? `森空岛账号：${snapshot.player.nickname}` : "登录森空岛"}
+        onFocus={prepareQrOnIntent}
+        onPointerDown={prepareQrOnIntent}
         onClick={() => handleOpenChange(true)}
         disabled={!configured && !snapshot}
       >
@@ -199,7 +248,7 @@ export function SklandAccount({
               <DialogHeader>
                 <DialogTitle>登录森空岛</DialogTitle>
                 <DialogDescription>
-                  桌面端使用森空岛 App 扫码；手机端可尝试通过官方通用链接打开 App。
+                  使用森空岛 App 扫描二维码完成登录。手机端也会显示二维码，并提供打开 App 的快捷按钮。
                 </DialogDescription>
               </DialogHeader>
               {!configured ? (
@@ -208,11 +257,12 @@ export function SklandAccount({
                 </Alert>
               ) : (
                 <div className="grid place-items-center gap-3 py-1">
-                  <div className="hidden size-56 place-items-center rounded-xl bg-white p-3 shadow-[inset_0_0_0_1px_rgb(0_0_0/0.08)] sm:grid">
+                  <div className="grid size-52 place-items-center rounded-xl bg-white p-3 shadow-[inset_0_0_0_1px_rgb(0_0_0/0.08)] sm:size-56">
                     {scanUrl ? (
                       <QRCodeSVG
                         value={scanUrl}
                         size={196}
+                        className="size-full"
                         title="森空岛登录二维码"
                         role="img"
                         aria-label="森空岛登录二维码"
@@ -222,39 +272,46 @@ export function SklandAccount({
                     )}
                   </div>
 
-                  <div className="grid w-full gap-2 sm:hidden">
-                    {mobileAuthUrl ? (
+                  {scanUrl ? (
+                    <div className="grid w-full gap-2 sm:hidden">
                       <Button
+                        nativeButton={false}
                         render={
                           <a
-                            href={mobileAuthUrl}
+                            href={SKLAND_APP_OPEN_URL}
                             target="_blank"
                             rel="noreferrer"
-                            aria-label="尝试在手机上打开森空岛授权"
+                            aria-label="打开森空岛 App"
                           />
                         }
                         className="h-11 w-full"
                       >
-                        <ExternalLink />在森空岛中打开授权
+                        <ExternalLink />打开森空岛
                       </Button>
-                    ) : (
-                      <Button type="button" className="h-11 w-full" disabled>
-                        <LoaderCircle className="animate-spin" />正在准备授权
-                      </Button>
-                    )}
-                    <p className="text-pretty text-center text-xs leading-5 text-muted-foreground">
-                      这是实验性入口。若只打开森空岛首页，说明当前 App 未转交登录请求，请改用桌面二维码。
-                      授权后返回此页面，登录状态会自动更新。
-                    </p>
-                  </div>
+                      <p className="text-pretty text-center text-xs leading-5 text-muted-foreground">
+                        此按钮只负责打开 App，不会自动完成登录。请使用森空岛的扫码功能扫描上方二维码，可在另一台设备展示二维码。
+                      </p>
+                    </div>
+                  ) : null}
 
-                  <p className="text-sm text-muted-foreground" aria-live="polite">
-                    {scanState === "scanned"
-                      ? "已扫码，请在森空岛中确认登录。"
-                      : scanState === "expired"
-                        ? "二维码已过期。"
-                        : "等待森空岛授权…"}
+                  <p className="text-sm text-muted-foreground" role="status" aria-live="polite">
+                    {scanState === "loading"
+                      ? preparingSlow
+                        ? "正在连接鹰角登录服务，首次准备可能需要更久…"
+                        : "正在生成二维码…"
+                      : scanState === "scanned"
+                        ? "已扫码，请在森空岛中确认登录。"
+                        : scanState === "expired"
+                          ? "二维码已过期，请刷新。"
+                          : scanUrl
+                            ? "等待森空岛扫码授权…"
+                            : "二维码尚未生成。"}
                   </p>
+                  {scanState === "loading" && preparingSlow ? (
+                    <p className="text-pretty text-center text-xs leading-5 text-muted-foreground">
+                      可以先关闭弹窗继续操作；生成完成后再次打开会复用同一个二维码。
+                    </p>
+                  ) : null}
                   {scanError ? (
                     <Alert variant="destructive">
                       <AlertDescription>{scanError}</AlertDescription>

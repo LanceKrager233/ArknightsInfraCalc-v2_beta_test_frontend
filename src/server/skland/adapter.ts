@@ -10,10 +10,12 @@ import {
 } from "skland-kit";
 
 import type { SklandQrStatusResponse, SklandSnapshot } from "@/types";
+import { DeviceIdCache } from "./device-id-cache";
 import { rolesFromBinding, snapshotFromPlayerInfo } from "./normalize";
 import { SKLAND_SESSION_TTL_SECONDS, type SklandSessionPayload } from "./session";
 
 const SCAN_TTL_MS = 10 * 60 * 1000;
+const SCAN_TTL_SECONDS = SCAN_TTL_MS / 1000;
 const TOKEN_REFRESH_MS = 20 * 60 * 1000;
 
 type PendingScan = {
@@ -27,12 +29,15 @@ type RateEntry = { timestamps: number[] };
 declare global {
   var __infraCalcSklandScans: Map<string, PendingScan> | undefined;
   var __infraCalcSklandRate: Map<string, RateEntry> | undefined;
+  var __infraCalcSklandDeviceIdCache: DeviceIdCache | undefined;
 }
 
 const pendingScans = globalThis.__infraCalcSklandScans ?? new Map<string, PendingScan>();
 const rateEntries = globalThis.__infraCalcSklandRate ?? new Map<string, RateEntry>();
+const deviceIdCache = globalThis.__infraCalcSklandDeviceIdCache ?? new DeviceIdCache();
 globalThis.__infraCalcSklandScans = pendingScans;
 globalThis.__infraCalcSklandRate = rateEntries;
+globalThis.__infraCalcSklandDeviceIdCache = deviceIdCache;
 
 export class SklandServiceError extends Error {
   constructor(
@@ -162,15 +167,19 @@ export function requestIp(request: Request): string {
   return request.headers.get("cf-connecting-ip") || request.headers.get("x-real-ip") || request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
 }
 
-export async function startScan(ip: string): Promise<{ scanId: string; scanUrl: string }> {
+export async function startScan(ip: string): Promise<{ scanId: string; scanUrl: string; expiresInSeconds: number }> {
   cleanupScans();
   assertRate(`scan:${ip}`, 10, 10 * 60 * 1000);
   assertRate("scan:global", 50, 10 * 60 * 1000);
   try {
     const client = createClient({ timeout: 30_000 });
-    const result = await client.collections.hypergryph.generateScanLoginUrl();
+    const result = await deviceIdCache.run(
+      client.storage,
+      STORAGE_DID_KEY,
+      () => client.collections.hypergryph.generateScanLoginUrl()
+    );
     pendingScans.set(result.scanId, { client, createdAt: Date.now(), lastPollAt: 0 });
-    return result;
+    return { ...result, expiresInSeconds: SCAN_TTL_SECONDS };
   } catch (error) {
     throw publicError(error);
   }

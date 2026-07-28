@@ -591,6 +591,7 @@ export interface SklandSessionData {
 export interface SklandQrStartData {
   scanId: string;
   scanUrl: string;
+  expiresInSeconds: number;
 }
 
 export interface SklandQrStatusData {
