@@ -1079,8 +1079,6 @@ export function ScheduleBoard({
         } as CSSProperties;
         const collapsed = collapsedGroups[group.label];
         const auxiliary = AUXILIARY_ROOM_GROUPS.has(group.rows[0]?.group ?? "");
-        const functionalPowerCount = group.rows.filter((row) => row.group === "power").length;
-
         if (hiddenGroups[group.label]) return null;
 
         return (
@@ -1140,7 +1138,7 @@ export function ScheduleBoard({
                       "relative flex w-full overflow-hidden bg-[#313131] text-white shadow-[0_10px_20px_rgba(0,0,0,0.24)] max-sm:h-auto max-sm:flex-col",
                       listRoomHeightClass(row.group),
                       compactInlineRoom && "[container-type:inline-size]",
-                      listFunctionalRoomSpanClass(row.group, functionalPowerCount),
+                      listFunctionalRoomSpanClass(row.group),
                       row.suspicious && "ring-2 ring-destructive ring-offset-2"
                     )}
                     style={rowStyle}

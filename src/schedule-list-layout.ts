@@ -84,15 +84,10 @@ export function listFunctionalFacilityGridClass(): string {
 
 export function listFunctionalRoomSpanClass(
   group: RoomGroup,
-  powerCount: number,
 ): string | undefined {
-  if (group === "power") {
-    if (powerCount <= 1) return "xl:col-span-24";
-    return powerCount === 2 ? "xl:col-span-12" : "xl:col-span-8";
-  }
-  if (group === "meeting") return "xl:col-span-10 2xl:col-span-8";
-  if (group === "hire" || group === "processing") {
-    return "xl:col-span-7 2xl:col-span-8";
+  if (group === "meeting") return "xl:col-span-12";
+  if (group === "power" || group === "hire" || group === "processing") {
+    return "xl:col-span-8";
   }
   return undefined;
 }
@@ -114,10 +109,20 @@ export function buildListScheduleGroups(rows: RoomRow[]): ListScheduleGroup[] {
   }, []);
 
   const functionalGroup = groups.find((group) => group.label === "功能设施");
+  const functionalPowerCount = functionalGroup?.rows.filter(
+    (row) => row.group === "power",
+  ).length ?? 0;
+  const functionalFacilityOrder = functionalPowerCount === 2
+    ? {
+        ...LIST_FUNCTIONAL_FACILITY_ORDER,
+        hire: 1,
+        meeting: 2,
+      }
+    : LIST_FUNCTIONAL_FACILITY_ORDER;
   functionalGroup?.rows.sort(
     (left, right) =>
-      (LIST_FUNCTIONAL_FACILITY_ORDER[left.group] ?? Number.MAX_SAFE_INTEGER)
-      - (LIST_FUNCTIONAL_FACILITY_ORDER[right.group] ?? Number.MAX_SAFE_INTEGER),
+      (functionalFacilityOrder[left.group] ?? Number.MAX_SAFE_INTEGER)
+      - (functionalFacilityOrder[right.group] ?? Number.MAX_SAFE_INTEGER),
   );
 
   return groups;

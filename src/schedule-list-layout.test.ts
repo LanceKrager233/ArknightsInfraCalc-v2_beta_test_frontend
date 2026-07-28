@@ -55,6 +55,21 @@ test("places processing in the ordered functional facility group", () => {
   );
 });
 
+test("fills the first three-column row with the office in two-power layouts", () => {
+  const groups = buildListScheduleGroups([
+    roomRow("meeting", "会客室"),
+    roomRow("power", "发电站", 0),
+    roomRow("processing", "加工站"),
+    roomRow("power", "发电站", 1),
+    roomRow("hire", "办公室"),
+  ]);
+
+  assert.deepEqual(
+    groups.find((group) => group.label === "功能设施")?.rows.map((row) => row.group),
+    ["power", "power", "hire", "meeting", "processing"],
+  );
+});
+
 test("aligns production operator origins with the control center", () => {
   assert.equal(listRoomUsesAlignedOperatorOrigin("control"), true);
   assert.equal(listRoomUsesAlignedOperatorOrigin("trading"), true);
@@ -97,7 +112,7 @@ test("keeps meeting operators on the same origin and existing gap", () => {
   });
 });
 
-test("uses proportional functional facility spans at the desktop breakpoint", () => {
+test("uses a fixed three-column functional facility grid on desktop", () => {
   assert.equal(LIST_OPERATOR_ORIGIN_PX, 248);
   assert.equal(LIST_OPERATOR_FRAME_SIZE_PX, 88);
   assert.equal(LIST_OPERATOR_GAP_MAX_PX, 20);
@@ -115,19 +130,9 @@ test("uses proportional functional facility spans at the desktop breakpoint", ()
     listFunctionalFacilityGridClass(),
     "xl:grid-cols-[repeat(24,minmax(0,1fr))]",
   );
-  assert.equal(listFunctionalRoomSpanClass("power", 2), "xl:col-span-12");
-  assert.equal(listFunctionalRoomSpanClass("power", 3), "xl:col-span-8");
-  assert.equal(
-    listFunctionalRoomSpanClass("meeting", 3),
-    "xl:col-span-10 2xl:col-span-8",
-  );
-  assert.equal(
-    listFunctionalRoomSpanClass("hire", 3),
-    "xl:col-span-7 2xl:col-span-8",
-  );
-  assert.equal(
-    listFunctionalRoomSpanClass("processing", 3),
-    "xl:col-span-7 2xl:col-span-8",
-  );
-  assert.equal(listFunctionalRoomSpanClass("manufacture", 3), undefined);
+  assert.equal(listFunctionalRoomSpanClass("power"), "xl:col-span-8");
+  assert.equal(listFunctionalRoomSpanClass("meeting"), "xl:col-span-12");
+  assert.equal(listFunctionalRoomSpanClass("hire"), "xl:col-span-8");
+  assert.equal(listFunctionalRoomSpanClass("processing"), "xl:col-span-8");
+  assert.equal(listFunctionalRoomSpanClass("manufacture"), undefined);
 });
