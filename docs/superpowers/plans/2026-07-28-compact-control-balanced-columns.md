@@ -16,7 +16,7 @@
 - Modify: `src/schedule-view-presentation.test.ts`
 - Modify: `src/schedule-view-presentation.ts`
 
-- [ ] **Step 1: Write the failing presentation tests**
+- [x] **Step 1: Write the failing presentation tests**
 
 Add these assertions to `src/schedule-view-presentation.test.ts`:
 
@@ -72,7 +72,7 @@ test("stacks the compact control level below its title", () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -82,7 +82,7 @@ node --test --experimental-strip-types src/schedule-view-presentation.test.ts
 
 Expected: FAIL because the dorm/background/control constants are undefined, the grid still uses `items-start`, and `control` is not a horizontal group.
 
-- [ ] **Step 3: Add the minimal presentation policy**
+- [x] **Step 3: Add the minimal presentation policy**
 
 Update `src/schedule-view-presentation.ts`:
 
@@ -126,13 +126,13 @@ export const COMPACT_POWER_CARD_CLASS =
   "relative grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 overflow-hidden bg-[#313131] px-3 py-2";
 ```
 
-- [ ] **Step 4: Run the focused test and verify GREEN**
+- [x] **Step 4: Run the focused test and verify GREEN**
 
 Run the command from Step 2.
 
 Expected: all presentation tests pass.
 
-- [ ] **Step 5: Commit the presentation policy**
+- [x] **Step 5: Commit the presentation policy**
 
 ```powershell
 git add -- src/schedule-view-presentation.ts src/schedule-view-presentation.test.ts
@@ -144,7 +144,7 @@ git commit -m "test: define balanced compact room presentation"
 **Files:**
 - Modify: `src/components/CompactScheduleView.tsx`
 
-- [ ] **Step 1: Import the new presentation constants**
+- [x] **Step 1: Import the new presentation constants**
 
 Add:
 
@@ -159,7 +159,7 @@ import {
 } from "@/schedule-view-presentation";
 ```
 
-- [ ] **Step 2: Add the shared facility background layers**
+- [x] **Step 2: Add the shared facility background layers**
 
 Inside `CompactRoomCard`, create:
 
@@ -181,7 +181,7 @@ const backgroundLayers = (
 
 Render `backgroundLayers` as the first children of both card variants. Give the horizontal left-content block and operator row `relative z-10`; give the vertical header, efficiency block, and operator area the same foreground stacking.
 
-- [ ] **Step 3: Add the control-specific stacked header**
+- [x] **Step 3: Add the control-specific stacked header**
 
 Set:
 
@@ -219,7 +219,7 @@ For control only, replace the shared one-line header with:
 
 Keep all other room headers on `COMPACT_HEADER_CLASS`.
 
-- [ ] **Step 4: Center expanded dorm content below the fixed header**
+- [x] **Step 4: Center expanded dorm content below the fixed header**
 
 For the vertical card variant, wrap the operator row:
 
@@ -237,7 +237,7 @@ For the vertical card variant, wrap the operator row:
 
 The title remains in its fixed header at the top; only the operator region shares the added vertical room.
 
-- [ ] **Step 5: Run focused tests and TypeScript lint**
+- [x] **Step 5: Run focused tests and TypeScript lint**
 
 Run:
 
@@ -248,7 +248,7 @@ npm run lint
 
 Expected: tests pass and ESLint exits with code 0.
 
-- [ ] **Step 6: Commit the compact card rendering**
+- [x] **Step 6: Commit the compact card rendering**
 
 ```powershell
 git add -- src/components/CompactScheduleView.tsx
@@ -260,7 +260,7 @@ git commit -m "feat: compact the control center and add room backgrounds"
 **Files:**
 - Modify: `src/components/CompactScheduleView.tsx`
 
-- [ ] **Step 1: Apply equal flex growth to dormitory wrappers**
+- [x] **Step 1: Apply equal flex growth to dormitory wrappers**
 
 Replace:
 
@@ -282,7 +282,7 @@ with:
 
 Because `makeCard(dorm)` already sets `flex: 1`, each card fills its equal wrapper.
 
-- [ ] **Step 2: Run all automated checks**
+- [x] **Step 2: Run all automated checks**
 
 ```powershell
 npm test
@@ -293,7 +293,7 @@ git diff --check
 
 Expected: all repository tests pass; lint, build, and diff check exit with code 0.
 
-- [ ] **Step 3: Commit the balanced columns**
+- [x] **Step 3: Commit the balanced columns**
 
 ```powershell
 git add -- src/components/CompactScheduleView.tsx
@@ -307,7 +307,7 @@ git commit -m "fix: balance compact schedule columns"
 - Verify: `src/schedule-view-presentation.ts`
 - Verify: `src/schedule-view-presentation.test.ts`
 
-- [ ] **Step 1: Start the local app and load Full E2**
+- [x] **Step 1: Start the local app and load Full E2**
 
 Run:
 
@@ -317,7 +317,7 @@ npm run dev
 
 Load the 243 Full E2 fixture, generate a schedule, and switch to compact layout.
 
-- [ ] **Step 2: Measure compact geometry at 1280px**
+- [x] **Step 2: Measure compact geometry at 1280px**
 
 With the sidebar expanded and collapsed, verify:
 
@@ -328,11 +328,11 @@ With the sidebar expanded and collapsed, verify:
 - left and right visible card bottoms differ by no more than `1px`;
 - document `scrollWidth` equals `clientWidth`.
 
-- [ ] **Step 3: Measure compact geometry at 1920px**
+- [x] **Step 3: Measure compact geometry at 1920px**
 
 Repeat Step 2 and additionally verify compact operator frames are `76px`.
 
-- [ ] **Step 4: Verify facility backgrounds**
+- [x] **Step 4: Verify facility backgrounds**
 
 For control, trading, manufacture, power, meeting, hire, and dormitory cards, inspect the computed background layer:
 
@@ -342,7 +342,7 @@ For control, trading, manufacture, power, meeting, hire, and dormitory cards, in
 - size `auto 176px`;
 - foreground title, efficiency, product, and operators remain readable.
 
-- [ ] **Step 5: Verify list-view regression**
+- [x] **Step 5: Verify list-view regression**
 
 At 1280px, switch to list view and verify:
 
@@ -352,7 +352,7 @@ At 1280px, switch to list view and verify:
 - list room backgrounds and card heights are unchanged;
 - no console or page errors were introduced.
 
-- [ ] **Step 6: Stop the dev server and inspect scope**
+- [x] **Step 6: Stop the dev server and inspect scope**
 
 ```powershell
 git status --short
@@ -367,7 +367,7 @@ Expected: only the design/plan docs, compact presentation policy/tests, and comp
 **Files:**
 - Review: all files in `git diff origin/main...HEAD`
 
-- [ ] **Step 1: Review behavior and scope**
+- [x] **Step 1: Review behavior and scope**
 
 Confirm:
 
@@ -375,7 +375,7 @@ Confirm:
 - no list-layout, API, efficiency, scheduling, storage, MAA, feedback, or `own:false` changes;
 - no generated or local-only files staged.
 
-- [ ] **Step 2: Re-run final verification**
+- [x] **Step 2: Re-run final verification**
 
 ```powershell
 npm test
