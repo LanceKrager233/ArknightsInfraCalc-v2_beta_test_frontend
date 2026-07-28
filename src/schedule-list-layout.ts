@@ -28,9 +28,10 @@ const LIST_FUNCTIONAL_FACILITY_ORDER: Partial<Record<RoomGroup, number>> = {
 
 export const LIST_OPERATOR_ORIGIN_PX = 248;
 export const LIST_OPERATOR_FRAME_SIZE_PX = 88;
+export const LIST_OPERATOR_GAP_MAX_PX = 20;
 export const LIST_FUNCTIONAL_GROUP_GAP_PX = 12;
-export const LIST_MEETING_COLUMN_INSET_PX =
-  LIST_OPERATOR_FRAME_SIZE_PX + LIST_FUNCTIONAL_GROUP_GAP_PX / 2;
+export const LIST_MEETING_OPERATOR_WIDTH_PX =
+  LIST_OPERATOR_FRAME_SIZE_PX * 2 + LIST_OPERATOR_GAP_MAX_PX;
 
 const LIST_OPERATOR_COLUMN_GAP = "clamp(0.75rem, 1.25vw, 1.25rem)";
 const LIST_FUNCTIONAL_GRID_CLASS =
@@ -64,7 +65,7 @@ export function listFunctionalOperatorPosition(
   return {
     columnGap: LIST_OPERATOR_COLUMN_GAP,
     left: group === "meeting"
-      ? `max(0px, min(${LIST_OPERATOR_ORIGIN_PX}px, calc(50cqw - ${LIST_MEETING_COLUMN_INSET_PX}px)))`
+      ? `max(0px, min(${LIST_OPERATOR_ORIGIN_PX}px, calc(100cqw - ${LIST_MEETING_OPERATOR_WIDTH_PX}px)))`
       : `max(0px, min(${LIST_OPERATOR_ORIGIN_PX}px, calc(100cqw - ${LIST_OPERATOR_FRAME_SIZE_PX}px)))`,
   };
 }
@@ -89,8 +90,10 @@ export function listFunctionalRoomSpanClass(
     if (powerCount <= 1) return "xl:col-span-24";
     return powerCount === 2 ? "xl:col-span-12" : "xl:col-span-8";
   }
-  if (group === "meeting") return "xl:col-span-10";
-  if (group === "hire" || group === "processing") return "xl:col-span-7";
+  if (group === "meeting") return "xl:col-span-10 2xl:col-span-8";
+  if (group === "hire" || group === "processing") {
+    return "xl:col-span-7 2xl:col-span-8";
+  }
   return undefined;
 }
 
