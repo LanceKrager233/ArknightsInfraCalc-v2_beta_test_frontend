@@ -33,7 +33,8 @@ export const LIST_MEETING_COLUMN_INSET_PX =
   LIST_OPERATOR_FRAME_SIZE_PX + LIST_FUNCTIONAL_GROUP_GAP_PX / 2;
 
 const LIST_OPERATOR_COLUMN_GAP = "clamp(0.75rem, 1.25vw, 1.25rem)";
-const LIST_FUNCTIONAL_GRID_CLASS = "xl:grid-cols-12";
+const LIST_FUNCTIONAL_GRID_CLASS =
+  "xl:grid-cols-[repeat(24,minmax(0,1fr))]";
 const LIST_FUNCTIONAL_OPERATOR_PLACEMENT_CLASS =
   "xl:absolute xl:inset-y-0";
 
@@ -85,11 +86,11 @@ export function listFunctionalRoomSpanClass(
   powerCount: number,
 ): string | undefined {
   if (group === "power") {
-    if (powerCount <= 1) return "xl:col-span-12";
-    return powerCount === 2 ? "xl:col-span-6" : "xl:col-span-4";
+    if (powerCount <= 1) return "xl:col-span-24";
+    return powerCount === 2 ? "xl:col-span-12" : "xl:col-span-8";
   }
-  if (group === "meeting") return "xl:col-span-6";
-  if (group === "hire" || group === "processing") return "xl:col-span-3";
+  if (group === "meeting") return "xl:col-span-10";
+  if (group === "hire" || group === "processing") return "xl:col-span-7";
   return undefined;
 }
 

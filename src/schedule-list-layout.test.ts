@@ -111,12 +111,12 @@ test("uses proportional functional facility spans at the desktop breakpoint", ()
   assert.equal(listFunctionalOperatorPlacementClass("manufacture"), undefined);
   assert.equal(
     listFunctionalFacilityGridClass(),
-    "xl:grid-cols-12",
+    "xl:grid-cols-[repeat(24,minmax(0,1fr))]",
   );
-  assert.equal(listFunctionalRoomSpanClass("power", 2), "xl:col-span-6");
-  assert.equal(listFunctionalRoomSpanClass("power", 3), "xl:col-span-4");
-  assert.equal(listFunctionalRoomSpanClass("meeting", 3), "xl:col-span-6");
-  assert.equal(listFunctionalRoomSpanClass("hire", 3), "xl:col-span-3");
-  assert.equal(listFunctionalRoomSpanClass("processing", 3), "xl:col-span-3");
+  assert.equal(listFunctionalRoomSpanClass("power", 2), "xl:col-span-12");
+  assert.equal(listFunctionalRoomSpanClass("power", 3), "xl:col-span-8");
+  assert.equal(listFunctionalRoomSpanClass("meeting", 3), "xl:col-span-10");
+  assert.equal(listFunctionalRoomSpanClass("hire", 3), "xl:col-span-7");
+  assert.equal(listFunctionalRoomSpanClass("processing", 3), "xl:col-span-7");
   assert.equal(listFunctionalRoomSpanClass("manufacture", 3), undefined);
 });
