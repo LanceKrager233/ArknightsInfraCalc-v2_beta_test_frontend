@@ -1,0 +1,145 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  clearLocalProductData,
+  loadPersistedSession,
+  persistSession,
+  SESSION_KEY_V2,
+  SESSION_KEY_V3,
+  SESSION_KEY_V4,
+  SESSION_TTL_MS,
+} from "./persistence.ts";
+
+class MemoryStorage {
+  values = new Map<string, string>();
+  failWrites = false;
+
+  getItem(key: string): string | null {
+    return this.values.get(key) ?? null;
+  }
+
+  setItem(key: string, value: string): void {
+    if (this.failWrites) throw new DOMException("Quota exceeded", "QuotaExceededError");
+    this.values.set(key, value);
+  }
+
+  removeItem(key: string): void {
+    this.values.delete(key);
+  }
+}
+
+const layout = {
+  template: "243",
+  drone_cap: 235,
+  scenario: {},
+  rooms: [{ id: "control", kind: "control_center" as const, level: 5 }],
+};
+const operbox = [{ id: "char_1", name: "测试干员", elite: 2, level: 90, own: true, potential: 1, rarity: 6 }];
+const result = {
+  profile: {
+    schema_version: 4,
+    layout_label: "243",
+    operbox_label: "示例",
+    baseline_label: "产品推荐基准",
+    summary: { owned: 1, tier_up_owned: 1, trade_pool_ready: 1 },
+    domains: [],
+    rotation: {},
+    baseline_rotation: {},
+    actions: [],
+    flags: [],
+    narration_hints: [],
+  },
+  maa: { title: "排班", plans: [] },
+  rotation: { shifts: [], daily: { trade: null, manu: null, power: null } },
+  durationMs: 10,
+  diagnosticId: "diag",
+  debug: { command: "must be removed", stdout: "secret" },
+};
+
+test("v4 persistence stores expiry metadata and strips debug fields", () => {
+  const storage = new MemoryStorage();
+  const now = Date.parse("2026-07-28T00:00:00.000Z");
+  const saved = persistSession(storage, {
+    presetLabel: "243",
+    layout,
+    operbox,
+    sourceName: "示例",
+    boxSource: "sample",
+    layoutDirty: false,
+    result,
+    activeShift: 1,
+  }, now);
+  assert.equal(Date.parse(saved.expiresAt) - now, SESSION_TTL_MS);
+  assert.equal(saved.result?.debug, undefined);
+  assert.equal((JSON.parse(storage.getItem(SESSION_KEY_V4) ?? "{}").result as Record<string, unknown>).debug, undefined);
+});
+
+test("v2 and v3 migrate once to the v4 allowlist", () => {
+  for (const legacyKey of [SESSION_KEY_V2, SESSION_KEY_V3]) {
+    const storage = new MemoryStorage();
+    storage.setItem(legacyKey, JSON.stringify({
+      preset: { label: "243" },
+      layout,
+      operbox,
+      fileName: "C:\\private\\box.json",
+      boxSource: "maa",
+      result: {
+        success: true,
+        profileJson: result.profile,
+        maaJson: result.maa,
+        rotationJson: result.rotation,
+        runId: "legacy-diag",
+        command: "secret",
+      },
+      activeShift: 2,
+    }));
+    const migrated = loadPersistedSession(storage, Date.parse("2026-07-28T00:00:00.000Z"));
+    assert.equal(migrated?.version, 4);
+    assert.equal(migrated?.result?.diagnosticId, "legacy-diag");
+    assert.equal(migrated?.result?.debug, undefined);
+    assert.equal(storage.getItem(legacyKey), null);
+    assert.ok(storage.getItem(SESSION_KEY_V4));
+  }
+});
+
+test("expired and corrupted sessions are removed", () => {
+  const storage = new MemoryStorage();
+  storage.setItem(SESSION_KEY_V4, "{bad");
+  assert.equal(loadPersistedSession(storage), null);
+  assert.equal(storage.getItem(SESSION_KEY_V4), null);
+
+  storage.setItem(SESSION_KEY_V4, JSON.stringify({
+    version: 4,
+    savedAt: "2026-01-01T00:00:00.000Z",
+    expiresAt: "2026-01-02T00:00:00.000Z",
+    presetLabel: "243",
+    layout,
+    operbox,
+    boxSource: "sample",
+  }));
+  assert.equal(loadPersistedSession(storage, Date.parse("2026-07-28T00:00:00.000Z")), null);
+  assert.equal(storage.getItem(SESSION_KEY_V4), null);
+});
+
+test("quota failures surface without corrupting the previous session", () => {
+  const storage = new MemoryStorage();
+  storage.failWrites = true;
+  assert.throws(() => persistSession(storage, {
+    presetLabel: "243",
+    layout,
+    operbox,
+    sourceName: "示例",
+    boxSource: "sample",
+    layoutDirty: false,
+    result: null,
+    activeShift: 0,
+  }));
+});
+
+test("clear removes all session generations and product preferences", () => {
+  const storage = new MemoryStorage();
+  [SESSION_KEY_V2, SESSION_KEY_V3, SESSION_KEY_V4, "onboarding"].forEach((key) => storage.setItem(key, "1"));
+  clearLocalProductData(storage, ["onboarding"]);
+  assert.equal(storage.values.size, 0);
+});

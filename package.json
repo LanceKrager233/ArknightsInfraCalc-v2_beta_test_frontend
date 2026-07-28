@@ -8,8 +8,11 @@
     "dev:full": "npm run dev",
     "build": "next build --webpack",
     "start": "next start -H 0.0.0.0 -p 5174",
-    "test": "node --test --experimental-strip-types src/server/shift-parser.test.ts src/server/plan-protocol.test.ts src/server/skland/session.test.ts src/layout-validation.test.ts src/schedule-autofill.test.ts src/schedule-list-layout.test.ts src/schedule-view-presentation.test.ts",
-    "lint": "eslint ."
+    "test": "node --test --experimental-strip-types src/server/shift-parser.test.ts src/server/plan-protocol.test.ts src/server/skland/session.test.ts src/layout-validation.test.ts src/schedule-autofill.test.ts src/schedule-list-layout.test.ts src/schedule-view-presentation.test.ts src/persistence.test.ts",
+    "test:api-contract": "node --test --experimental-strip-types src/server/api-contract.test.ts src/server/public-plan.test.ts",
+    "test:e2e": "playwright test",
+    "lint": "eslint .",
+    "check": "npm run lint && npm test && npm run test:api-contract"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
@@ -29,6 +32,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
+    "@playwright/test": "^1.62.0",
     "@tailwindcss/postcss": "4.3.1",
     "@types/node": "^22.10.5",
     "@types/react": "^19.0.4",

@@ -20,6 +20,7 @@ import {
   saveFeedback,
   selectSklandRole,
   syncSkland,
+  toDisplayError,
 } from "./api";
 import {
   buildBlueprint,
@@ -43,6 +44,12 @@ import {
 import { copyText, downloadJson } from "./download";
 import { ONBOARDING_STORAGE_KEY, initialSetupStep, shouldAutoOpenSetup, type SetupStep } from "./onboarding";
 import { readOperboxFile, readOperboxText } from "./operbox";
+import {
+  clearLocalProductData,
+  loadPersistedSession,
+  persistSession,
+  RESULT_CLEAR_WARNING_DISMISSED_KEY,
+} from "./persistence";
 import { planToRows, RoomRow } from "./schedule";
 import { SetupDialog } from "./setup-dialog";
 import { closestShift, compareShifts } from "./skland";
@@ -51,43 +58,21 @@ import {
   BaseBlueprint,
   BoxSource,
   BlueprintRoom,
-  FeedbackApiResponse,
+  DisplayError,
+  FeedbackData,
   IssueReport,
   OperBoxEntry,
-  PlanApiResponse,
+  PublicPlanData,
   PresetDef,
   SklandSnapshot,
 } from "./types";
-
-const SESSION_KEY = "arknights-infra-calc-beta-session-v3";
-const LEGACY_SESSION_KEY = "arknights-infra-calc-beta-session-v2";
-const RESULT_CLEAR_WARNING_DISMISSED_KEY = "arknights-infra-calc-result-clear-warning-dismissed";
 
 type ProductChange =
   | { type: "factory"; roomId: string; recipe: FactoryRecipe }
   | { type: "trade"; roomId: string; order: TradeOrder };
 
-function safeParseJson(value: string | null): unknown {
-  if (!value) return null;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
-  }
-}
-
-function readSessionState() {
-  if (typeof window === "undefined") return null;
-  return safeParseJson(window.localStorage.getItem(SESSION_KEY)) ?? safeParseJson(window.localStorage.getItem(LEGACY_SESSION_KEY));
-}
-
-function readResultClearWarningDismissed() {
-  if (typeof window === "undefined") return false;
-  try {
-    return window.localStorage.getItem(RESULT_CLEAR_WARNING_DISMISSED_KEY) === "1";
-  } catch {
-    return false;
-  }
+function displayError(code: DisplayError["code"], message: string, retryable = false): DisplayError {
+  return { code, message, retryable };
 }
 
 function resolvePreset(value: PresetDef | undefined): PresetDef {
@@ -186,35 +171,19 @@ function buildIssueReport(
 }
 
 function WorkbenchApp() {
-  const initialSession = readSessionState() as
-    | {
-        preset?: PresetDef;
-        layout?: BaseBlueprint;
-        operbox?: OperBoxEntry[] | null;
-        fileName?: string | null;
-        boxSource?: BoxSource;
-        layoutDirty?: boolean;
-        result?: PlanApiResponse | null;
-        activeShift?: number;
-        issueOpen?: boolean;
-        issueDraftRow?: RoomRow | null;
-        issueDraftNote?: string;
-        issue?: { row: RoomRow; note: string } | null;
-        feedback?: FeedbackApiResponse | null;
-      }
-    | null;
-
-  const initialPreset = resolvePreset(initialSession?.preset);
-  const initialLayout = restoreEditableProducts(buildBlueprint(initialPreset), initialSession?.layout);
+  const defaultPreset = PRESETS[0];
+  const defaultLayout = buildBlueprint(defaultPreset);
   const [page, setPage] = useState<AppPage>("calculator");
-  const [showBetaPanels, setShowBetaPanels] = useState(false);
-  const [preset, setPreset] = useState<PresetDef>(initialPreset);
-  const [layout, setLayout] = useState<BaseBlueprint>(initialLayout);
+  const [betaRequested, setBetaRequested] = useState(false);
+  const [debugToolsEnabled, setDebugToolsEnabled] = useState(false);
+  const [hasRestoredSession, setHasRestoredSession] = useState(false);
+  const [preset, setPreset] = useState<PresetDef>(defaultPreset);
+  const [layout, setLayout] = useState<BaseBlueprint>(defaultLayout);
   const powerBudget = useMemo(() => computePowerBudget(layout), [layout]);
-  const [operbox, setOperbox] = useState<OperBoxEntry[] | null>(initialSession?.operbox ?? null);
-  const [fileName, setFileName] = useState<string | null>(initialSession?.fileName ?? null);
-  const [boxSource, setBoxSource] = useState<BoxSource>(initialSession?.boxSource ?? (initialSession?.operbox ? "maa" : "sample"));
-  const [layoutDirty, setLayoutDirty] = useState(initialSession?.layoutDirty ?? Boolean(initialSession?.layout));
+  const [operbox, setOperbox] = useState<OperBoxEntry[] | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [boxSource, setBoxSource] = useState<BoxSource>("sample");
+  const [layoutDirty, setLayoutDirty] = useState(false);
   const [inputMode, setInputMode] = useState<"skland" | "maa">("skland");
   const [maaPaste, setMaaPaste] = useState("");
   const [sklandSnapshot, setSklandSnapshot] = useState<SklandSnapshot | null>(null);
@@ -225,41 +194,34 @@ function WorkbenchApp() {
   const [setupInitialStep, setSetupInitialStep] = useState<SetupStep>("box");
   const [sklandAccountOpen, setSklandAccountOpen] = useState(false);
   const resumeSetupAfterSkland = useRef(false);
-  const initialLayoutForRestore = useRef(initialLayout);
+  const initialLayoutForRestore = useRef(defaultLayout);
   const initialBoxSource = useRef(boxSource);
   const initialOperbox = useRef(operbox);
   const initialLayoutDirty = useRef(layoutDirty);
+  const skipNextPersistence = useRef(false);
   const [inputError, setInputError] = useState<string | null>(null);
+  const [inputErrorCode, setInputErrorCode] = useState<DisplayError["code"]>("AIC-BOX-1101");
   const [sampleLoading, setSampleLoading] = useState(false);
-  const [result, setResult] = useState<PlanApiResponse | null>(initialSession?.result ?? null);
+  const [result, setResult] = useState<PublicPlanData | null>(null);
   const [loading, setLoading] = useState(false);
-  const [cliPath, setCliPath] = useState<string | null>(null);
   const [cliReady, setCliReady] = useState(false);
-  const [apiError, setApiError] = useState<string | null>(null);
-  const [activeShift, setActiveShift] = useState(initialSession?.activeShift ?? 0);
-  const [issueDraftRow, setIssueDraftRow] = useState<RoomRow | null>(
-    initialSession?.issueDraftRow ?? initialSession?.issue?.row ?? null
-  );
-  const [issueDraftNote, setIssueDraftNote] = useState(
-    initialSession?.issueDraftNote ?? initialSession?.issue?.note ?? ""
-  );
-  const [savedIssue, setSavedIssue] = useState<{ row: RoomRow; note: string } | null>(
-    initialSession?.issue ?? null
-  );
-  const [issueOpen, setIssueOpen] = useState(initialSession?.issueOpen ?? false);
+  const [apiError, setApiError] = useState<DisplayError | null>(null);
+  const [storageNotice, setStorageNotice] = useState<DisplayError | null>(null);
+  const [activeShift, setActiveShift] = useState(0);
+  const [issueDraftRow, setIssueDraftRow] = useState<RoomRow | null>(null);
+  const [issueDraftNote, setIssueDraftNote] = useState("");
+  const [savedIssue, setSavedIssue] = useState<{ row: RoomRow; note: string } | null>(null);
+  const [issueOpen, setIssueOpen] = useState(false);
   const [feedbackSaving, setFeedbackSaving] = useState(false);
-  const [feedbackResult, setFeedbackResult] = useState<FeedbackApiResponse | null>(initialSession?.feedback ?? null);
+  const [feedbackResult, setFeedbackResult] = useState<FeedbackData | null>(null);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [resultClearNotice, setResultClearNotice] = useState<string | null>(null);
-  const [resultClearWarningDismissed, setResultClearWarningDismissed] = useState(readResultClearWarningDismissed);
+  const [resultClearWarningDismissed, setResultClearWarningDismissed] = useState(false);
 
-  // ── plan.compute v1 返回的求解结果 ──
-  // result.profileJson  = BoxProfile v4（含 domains 差距分析、actions 练卡建议）→ 练卡建议页直接用
-  // result.maaJson      = MAA 三班排班（plans[].rooms.trading/manufacture/...）
-  // result.rotationJson = 轮换摘要（daily + shifts[].efficiencies.room_lines）
-  const scheduleResult = result?.success ? result : null;
-  const activePlan = scheduleResult?.maaJson?.plans?.[activeShift];
-  const activeRotationShift = scheduleResult?.rotationJson?.shifts?.[activeShift];
+  // 公开排班结果只包含产品页面需要的效率、MAA 与轮换数据。
+  const scheduleResult = result;
+  const activePlan = scheduleResult?.maa.plans?.[activeShift];
+  const activeRotationShift = scheduleResult?.rotation.shifts?.[activeShift];
   const rows = useMemo(() => planToRows(activePlan, activeRotationShift, layout), [activePlan, activeRotationShift, layout]);
   const currentMoraleByOperator = useMemo(() => {
     if (boxSource !== "skland" || !sklandSnapshot) return undefined;
@@ -271,8 +233,8 @@ function WorkbenchApp() {
     );
   }, [boxSource, sklandSnapshot]);
   const shiftComparisons = useMemo(
-    () => compareShifts(scheduleResult?.maaJson, sklandSnapshot?.infrastructure),
-    [scheduleResult?.maaJson, sklandSnapshot?.infrastructure]
+    () => compareShifts(scheduleResult?.maa, sklandSnapshot?.infrastructure),
+    [scheduleResult?.maa, sklandSnapshot?.infrastructure]
   );
   const closestComparison = useMemo(() => closestShift(shiftComparisons), [shiftComparisons]);
   const sklandLayoutMatches = useMemo(() => {
@@ -282,10 +244,11 @@ function WorkbenchApp() {
     return JSON.stringify(compact(layout)) === JSON.stringify(compact(suggestion));
   }, [layout, sklandSnapshot?.infrastructure.layoutSuggestion]);
   const canRun = Boolean(operbox && operbox.length > 0 && cliReady);
+  const showBetaPanels = betaRequested && debugToolsEnabled;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const syncBetaPanels = () => setShowBetaPanels(new URLSearchParams(window.location.search).has("beta"));
+    const syncBetaPanels = () => setBetaRequested(new URLSearchParams(window.location.search).has("beta"));
     syncBetaPanels();
     window.addEventListener("popstate", syncBetaPanels);
     return () => window.removeEventListener("popstate", syncBetaPanels);
@@ -293,56 +256,84 @@ function WorkbenchApp() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const session = {
-      preset,
-      layout,
-      operbox,
-      fileName,
-      boxSource,
-      layoutDirty,
-      result: result?.success ? result : null,
-      activeShift,
-      issueOpen,
-      issueDraftRow,
-      issueDraftNote,
-      issue: savedIssue,
-      feedback: feedbackResult,
-    };
     try {
-      window.localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-    } catch (error) {
-      console.warn("Failed to persist workbench session", error);
-    }
-  }, [preset, layout, operbox, fileName, boxSource, layoutDirty, result, activeShift, issueOpen, issueDraftRow, issueDraftNote, savedIssue, feedbackResult]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (shouldAutoOpenSetup(window.localStorage.getItem(ONBOARDING_STORAGE_KEY), Boolean(initialOperbox.current?.length))) {
-      setSetupInitialStep("box");
-      setSetupOpen(true);
+      const restored = loadPersistedSession(window.localStorage);
+      const warningDismissed = window.localStorage.getItem(RESULT_CLEAR_WARNING_DISMISSED_KEY) === "1";
+      setResultClearWarningDismissed(warningDismissed);
+      if (restored) {
+        const restoredPreset = resolvePreset(PRESETS.find((item) => item.label === restored.presetLabel));
+        const restoredLayout = restoreEditableProducts(buildBlueprint(restoredPreset), restored.layout);
+        setPreset(restoredPreset);
+        setLayout(restoredLayout);
+        setOperbox(restored.operbox);
+        setFileName(restored.sourceName);
+        setBoxSource(restored.boxSource);
+        setLayoutDirty(restored.layoutDirty);
+        setResult(restored.result);
+        setActiveShift(restored.activeShift);
+        initialLayoutForRestore.current = restoredLayout;
+        initialBoxSource.current = restored.boxSource;
+        initialOperbox.current = restored.operbox;
+        initialLayoutDirty.current = restored.layoutDirty;
+      }
+    } catch {
+      setStorageNotice(displayError("AIC-LOCAL-7001", "浏览器无法读取本地数据，但仍可继续生成排班。"));
+    } finally {
+      setHasRestoredSession(true);
     }
   }, []);
 
   useEffect(() => {
+    if (!hasRestoredSession || typeof window === "undefined") return;
+    if (skipNextPersistence.current) {
+      skipNextPersistence.current = false;
+      return;
+    }
+    try {
+      persistSession(window.localStorage, {
+        presetLabel: preset.label,
+        layout,
+        operbox,
+        sourceName: fileName,
+        boxSource,
+        layoutDirty,
+        result,
+        activeShift,
+      });
+      setStorageNotice(null);
+    } catch {
+      setStorageNotice(displayError("AIC-LOCAL-7001", "浏览器无法保存本地数据，但仍可继续生成排班。"));
+    }
+  }, [hasRestoredSession, preset, layout, operbox, fileName, boxSource, layoutDirty, result, activeShift]);
+
+  useEffect(() => {
+    if (!hasRestoredSession || typeof window === "undefined") return;
+    if (shouldAutoOpenSetup(window.localStorage.getItem(ONBOARDING_STORAGE_KEY), Boolean(initialOperbox.current?.length))) {
+      setSetupInitialStep("box");
+      setSetupOpen(true);
+    }
+  }, [hasRestoredSession]);
+
+  useEffect(() => {
     let cancelled = false;
+    if (!hasRestoredSession) return;
     void Promise.allSettled([getHealth(), getSklandSession()]).then(([healthResult, sessionResult]) => {
       if (cancelled) return;
       if (healthResult.status === "fulfilled") {
         const health = healthResult.value;
-        setSklandConfigured(Boolean(health.sklandConfigured));
-        setSklandDisabledReason(health.sklandDisabledReason ?? null);
-        if (health.ok && health.cliReady) {
-          setCliPath(health.cliPath ?? null);
+        setSklandConfigured(health.skland.available);
+        setSklandDisabledReason(health.skland.message);
+        setDebugToolsEnabled(health.features.debugTools);
+        if (health.plannerReady) {
           setCliReady(true);
           setApiError(null);
         } else {
           setCliReady(false);
-          setCliPath(health.cliPath ?? null);
-          setApiError(health.serveError ?? health.error ?? "API 正常，但未找到可执行的 infra-cli。");
+          setApiError(displayError("AIC-PLAN-3001", "排班服务暂不可用，请稍后重试。", true));
         }
       } else {
         setCliReady(false);
-        setApiError(healthResult.reason instanceof Error ? healthResult.reason.message : "本地 API 服务不可用。");
+        setApiError(toDisplayError(healthResult.reason, "排班服务暂不可用，请稍后重试。"));
       }
 
       if (sessionResult.status === "fulfilled") {
@@ -367,7 +358,7 @@ function WorkbenchApp() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [hasRestoredSession]);
 
   async function handleFile(file: File): Promise<boolean> {
     setInputError(null);
@@ -381,6 +372,7 @@ function WorkbenchApp() {
       return true;
     } catch (error) {
       setInputError(error instanceof Error ? error.message : "练度文件解析失败。");
+      setInputErrorCode("AIC-BOX-1101");
       return false;
     }
   }
@@ -410,6 +402,7 @@ function WorkbenchApp() {
       return true;
     } catch (error) {
       setInputError(error instanceof Error ? error.message : "MAA JSON 解析失败。");
+      setInputErrorCode("AIC-BOX-1101");
       return false;
     }
   }
@@ -419,10 +412,13 @@ function WorkbenchApp() {
     setInputError(null);
     try {
       const session = await syncSkland();
-      if (!session.authenticated || !session.snapshot) throw new Error(session.error ?? "森空岛同步失败。");
+      if (!session.authenticated || !session.snapshot) throw new Error("森空岛同步失败。");
       applySklandSnapshot(session.snapshot, false);
     } catch (error) {
-      setInputError(error instanceof Error ? error.message : "森空岛同步失败。");
+      const normalized = toDisplayError(error, "森空岛同步失败，请稍后重试。");
+      setInputError(normalized.message);
+      setInputErrorCode(normalized.code);
+      setApiError(normalized);
     } finally {
       setSklandBusy(false);
     }
@@ -433,10 +429,13 @@ function WorkbenchApp() {
     setInputError(null);
     try {
       const session = await selectSklandRole(uid);
-      if (!session.authenticated || !session.snapshot) throw new Error(session.error ?? "角色切换失败。");
+      if (!session.authenticated || !session.snapshot) throw new Error("角色切换失败。");
       applySklandSnapshot(session.snapshot, false);
     } catch (error) {
-      setInputError(error instanceof Error ? error.message : "角色切换失败。");
+      const normalized = toDisplayError(error, "角色切换失败，请稍后重试。");
+      setInputError(normalized.message);
+      setInputErrorCode(normalized.code);
+      setApiError(normalized);
     } finally {
       setSklandBusy(false);
     }
@@ -455,7 +454,10 @@ function WorkbenchApp() {
         clearPlanResult();
       }
     } catch (error) {
-      setInputError(error instanceof Error ? error.message : "退出森空岛失败。");
+      const normalized = toDisplayError(error, "退出森空岛失败，请稍后重试。");
+      setInputError(normalized.message);
+      setInputErrorCode(normalized.code);
+      setApiError(normalized);
     } finally {
       setSklandBusy(false);
     }
@@ -474,11 +476,11 @@ function WorkbenchApp() {
     if (!operbox) return;
     const layoutError = layoutValidationError(layout);
     if (layoutError) {
-      setApiError(layoutError);
+      setApiError(displayError("AIC-LAYOUT-1201", layoutError));
       return;
     }
     if (!cliReady) {
-      setApiError("当前没有可运行的 infra-cli；Windows 本地请设置 INFRA_CLI_PATH 指向 infra-cli.exe。");
+      setApiError(displayError("AIC-PLAN-3001", "排班服务暂不可用，请稍后重试。", true));
       return;
     }
     setLoading(true);
@@ -496,8 +498,8 @@ function WorkbenchApp() {
         sourceName: fileName,
       });
       setResult(response);
-      if (response.success && response.maaJson?.plans[0]) {
-        const plan = response.maaJson.plans[0];
+      if (response.maa.plans[0]) {
+        const plan = response.maa.plans[0];
         const maaFactoryRooms = plan.rooms?.manufacture;
         if (maaFactoryRooms) {
           setLayout((current) => {
@@ -516,11 +518,8 @@ function WorkbenchApp() {
           });
         }
       }
-      if (!response.success) {
-        setApiError(response.error ?? "infra-cli 没有成功生成排班。");
-      }
     } catch (error) {
-      setApiError(error instanceof Error ? error.message : "排班请求失败。");
+      setApiError(toDisplayError(error, "排班请求失败，请稍后重试。"));
     } finally {
       setLoading(false);
     }
@@ -533,15 +532,15 @@ function WorkbenchApp() {
     clearIssueState();
     try {
       const sample = await getSampleOperbox();
-      if (!sample.success || !sample.operbox) {
-        throw new Error(sample.error ?? "样例数据读取失败。");
-      }
       setOperbox(sample.operbox);
-      setFileName(sample.sourceName ?? "243 全精二样例");
+      setFileName(sample.sourceName);
       setBoxSource("sample");
       return true;
     } catch (error) {
       setInputError(error instanceof Error ? error.message : "样例数据读取失败。");
+      const normalized = toDisplayError(error, "示例数据读取失败，请稍后重试。");
+      setInputErrorCode(normalized.code);
+      setApiError(normalized);
       return false;
     } finally {
       setSampleLoading(false);
@@ -549,15 +548,15 @@ function WorkbenchApp() {
   }
 
   function handleDownloadMaa() {
-    if (result?.maaJson) downloadJson("infra-calc-beta-maa.json", result.maaJson);
+    if (result?.maa) downloadJson("arknights-infra-schedule-maa.json", result.maa);
   }
 
   function handleDownloadBundle() {
-    if (result?.debugBundle) downloadJson("infra-calc-beta-debug-bundle.json", result.debugBundle);
+    if (result?.debug?.debugBundle) downloadJson("arknights-infra-debug-bundle.json", result.debug.debugBundle);
   }
 
   function handleCopyCommand() {
-    if (result?.command) void copyText(result.command);
+    if (result?.debug?.command) void copyText(result.debug.command);
   }
 
   function clearIssueState() {
@@ -580,37 +579,37 @@ function WorkbenchApp() {
 
   async function handleSaveIssue() {
     if (!issueDraftRow || !issueDraftNote.trim()) return;
-    if (!operbox || operbox.length === 0) {
-      setFeedbackError("请先上传或载入 operbox。");
+    if (!result?.diagnosticId) {
+      setFeedbackError("请先生成排班，再提交问题。");
       return;
     }
 
     const issue = { row: issueDraftRow, note: issueDraftNote.trim() };
-    const report = buildIssueReport(issue, fileName, result?.debugBundle?.command);
-    if (!report) return;
 
     setFeedbackSaving(true);
     setFeedbackError(null);
     setApiError(null);
     try {
       const response = await saveFeedback({
-        issue: report,
-        operbox,
-        sourceName: fileName,
-        debugBundle: result?.debugBundle,
+        diagnosticId: result.diagnosticId,
+        room: {
+          id: issue.row.roomId,
+          title: issue.row.title,
+          group: issue.row.group,
+          operators: issue.row.operators,
+        },
+        note: issue.note,
+        consent: true,
       });
-      if (!response.success) {
-        throw new Error(response.error ?? "反馈保存失败。");
-      }
       setSavedIssue(issue);
       setFeedbackResult(response);
       setIssueOpen(false);
       setIssueDraftRow(null);
       setIssueDraftNote("");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "反馈保存失败。";
-      setFeedbackError(message);
-      setApiError(message);
+      const normalized = toDisplayError(error, "反馈保存失败，请稍后重试。");
+      setFeedbackError(normalized.message);
+      setApiError(normalized);
     } finally {
       setFeedbackSaving(false);
     }
@@ -646,7 +645,7 @@ function WorkbenchApp() {
   }
 
   function showResultClearNotice(label: string | undefined) {
-    if (resultClearWarningDismissed || !result?.success) return;
+    if (resultClearWarningDismissed || !result) return;
     setResultClearNotice(label ? `已切换到：${label}` : "配置已切换");
   }
 
@@ -699,13 +698,14 @@ function WorkbenchApp() {
   async function handleLayoutFile(file: File) {
     try {
       const parsed = parseLayoutJson(JSON.parse(await file.text()));
-      if (!parsed) throw new Error("layout JSON 格式无效：需要 rooms[].id、kind 和合法的设施等级。");
+      if (!parsed) throw new Error("布局文件格式无效，请检查房间名称、类型和设施等级。");
       setLayout(parsed);
       setLayoutDirty(true);
       clearPlanResult();
       setInputError(null);
     } catch (error) {
       setInputError(error instanceof Error ? error.message : "布局 JSON 读取失败。");
+      setInputErrorCode("AIC-LAYOUT-1201");
     }
   }
 
@@ -760,34 +760,97 @@ function WorkbenchApp() {
     if (sklandSnapshot) applySklandSnapshot(sklandSnapshot, false);
   }
 
+  function handleClearLocalData() {
+    try {
+      clearLocalProductData(window.localStorage, [ONBOARDING_STORAGE_KEY]);
+      skipNextPersistence.current = true;
+      setPreset(defaultPreset);
+      setLayout(buildBlueprint(defaultPreset));
+      setOperbox(null);
+      setFileName(null);
+      setBoxSource("sample");
+      setLayoutDirty(false);
+      setResult(null);
+      setActiveShift(0);
+      setResultClearWarningDismissed(false);
+      setStorageNotice(null);
+      clearIssueState();
+    } catch {
+      setStorageNotice(displayError("AIC-LOCAL-7001", "浏览器无法清除本地数据，请检查站点存储权限。"));
+    }
+  }
+
+  async function handleRetry() {
+    if (apiError?.code !== "AIC-PLAN-3001" && canRun) {
+      await handleRun();
+      return;
+    }
+    try {
+      const health = await getHealth();
+      setCliReady(health.plannerReady);
+      setDebugToolsEnabled(health.features.debugTools);
+      setApiError(
+        health.plannerReady
+          ? null
+          : displayError("AIC-PLAN-3001", "排班服务暂不可用，请稍后重试。", true)
+      );
+    } catch (error) {
+      setApiError(toDisplayError(error, "排班服务暂不可用，请稍后重试。"));
+    }
+  }
+
   const issueForPanel = useMemo(
     () => savedIssue ?? (issueDraftRow && issueOpen ? { row: issueDraftRow, note: issueDraftNote } : null),
     [issueDraftNote, issueDraftRow, issueOpen, savedIssue]
   );
   const issueReport = useMemo(
-    () => buildIssueReport(issueForPanel, fileName, result?.debugBundle?.command),
-    [issueForPanel, fileName, result?.debugBundle?.command]
+    () => buildIssueReport(issueForPanel, fileName, result?.debug?.command),
+    [issueForPanel, fileName, result?.debug?.command]
   );
+  const statusError = inputError
+    ? displayError(inputErrorCode, inputError)
+    : apiError ?? storageNotice;
+
+  if (!hasRestoredSession) {
+    return (
+      <main className="grid min-h-dvh place-items-center bg-background px-6" role="status" aria-live="polite">
+        <div className="w-full max-w-md space-y-3" aria-label="正在恢复本地数据">
+          <div className="h-10 animate-pulse rounded-lg bg-muted" />
+          <div className="h-56 animate-pulse rounded-lg bg-muted/70" />
+          <span className="sr-only">正在恢复本地数据</span>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <SidebarProvider>
       <AppSidebar page={page} onPageChange={setPage} />
       <SidebarInset>
         <header className="sticky top-0 z-30 border-b bg-background/95 px-[clamp(1.75rem,10vw,12rem)] py-3 backdrop-blur-sm">
-          <h1 className="sr-only">明日方舟基建排班验收工作台</h1>
+          <h1 className="sr-only">明日方舟基建排班助手</h1>
           <div className="flex items-center gap-2">
-            <SidebarTrigger className="h-10 w-10 shrink-0 md:hidden" />
+            <SidebarTrigger className="h-11 w-11 shrink-0 md:hidden" />
             <div className="grid w-full grid-cols-[minmax(160px,1fr)_auto_auto_auto] items-center gap-2 max-sm:grid-cols-3">
-              <StatusBar loading={loading} result={result} error={inputError ?? apiError} cliPath={cliPath} />
+              <StatusBar
+                loading={loading}
+                result={result}
+                error={statusError}
+                ready={cliReady}
+                onRetry={() => void handleRetry()}
+                onCopyDiagnostic={() => {
+                  if (statusError) void copyText(`${statusError.code}${statusError.requestId ? ` · ${statusError.requestId}` : ""}`);
+                }}
+              />
           <Button
             type="button"
             variant="outline"
-            className="h-10 min-w-0 px-3 max-sm:w-full"
-            aria-label="配置 Box 与布局"
+            className="h-10 min-w-0 px-3 max-sm:h-11 max-sm:w-full"
+            aria-label="配置干员数据与布局"
             onClick={openSetup}
           >
             <Settings2 />
-            <span className="hidden md:inline">配置 Box 与布局</span>
+            <span className="hidden md:inline">配置干员数据与布局</span>
             <span className="md:hidden">配置</span>
           </Button>
           <SklandAccount
@@ -842,10 +905,13 @@ function WorkbenchApp() {
         <SklandStatus
           snapshot={sklandSnapshot}
           layoutMatches={sklandLayoutMatches ?? false}
+          configured={sklandConfigured}
+          disabledReason={sklandDisabledReason}
+          onOpenAccount={() => setSklandAccountOpen(true)}
           onApplyLayout={handleApplySklandLayout}
         />
       ) : (
-        <TrainingAdvice operbox={operbox} layout={layout} profile={result?.profileJson} />
+        <TrainingAdvice operbox={operbox} layout={layout} profile={result?.profile} onOpenCalculator={() => setPage("calculator")} />
       )}
       </div>
 
@@ -878,6 +944,8 @@ function WorkbenchApp() {
         onLayoutFile={handleLayoutFile}
         onDownloadLayout={() => downloadJson(`layout-${layout.template}.json`, layout)}
         onRestoreResultClearWarning={restoreResultClearWarning}
+        storageNotice={storageNotice}
+        onClearLocalData={handleClearLocalData}
         onFactoryRecipeChange={handleFactoryRecipeChange}
         onTradeOrderChange={handleTradeOrderChange}
         onRoomLevelChange={handleRoomLevelChange}

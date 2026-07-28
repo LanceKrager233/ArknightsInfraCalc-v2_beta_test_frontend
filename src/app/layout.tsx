@@ -7,8 +7,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Arknights InfraCalc 排班验收台",
-  description: "明日方舟基建排班 beta 测试验收工作台",
+  title: "明日方舟基建排班助手",
+  description: "导入干员数据，生成三班排班并导出到 MAA。",
 };
 
 export default function RootLayout({
@@ -17,7 +17,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN" className="antialiased">
+    <html lang="zh-CN" className="antialiased" suppressHydrationWarning>
       <body>
         <PageScrollbar />
         <TooltipProvider>{children}</TooltipProvider>

@@ -1,6 +1,6 @@
 "use client";
 
-import { FileJson, FlaskConical, Loader2, Settings2, ShieldCheck, Terminal } from "lucide-react";
+import { Download, FileJson, FlaskConical, Loader2, Settings2, ShieldCheck, Terminal } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -19,11 +19,11 @@ import { ShiftComparisonCard } from "@/skland-components";
 import type { RoomRow } from "@/schedule";
 import type {
   BaseBlueprint,
-  FeedbackApiResponse,
+  FeedbackData,
   IssueReport,
   MaaPlan,
   OperBoxEntry,
-  PlanApiResponse,
+  PublicPlanData,
   ShiftComparison,
 } from "@/types";
 
@@ -31,8 +31,8 @@ interface InfraCalculatorProps {
   operbox: OperBoxEntry[] | null;
   layout: BaseBlueprint;
   showBetaPanels: boolean;
-  result: PlanApiResponse | null;
-  scheduleResult: PlanApiResponse | null;
+  result: PublicPlanData | null;
+  scheduleResult: PublicPlanData | null;
   activeShift: number;
   rows: RoomRow[];
   currentMoraleByOperator: Map<string, number> | undefined;
@@ -41,7 +41,7 @@ interface InfraCalculatorProps {
   resultClearNotice: string | null;
   issueForPanel: { row: RoomRow; note: string } | null;
   issueReport: IssueReport | null;
-  feedbackResult: FeedbackApiResponse | null;
+  feedbackResult: FeedbackData | null;
   feedbackError: string | null;
   sampleLoading: boolean;
   onLoadSample: () => Promise<boolean>;
@@ -88,7 +88,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
             icon={<ShieldCheck className="size-4" />}
             className="min-h-[calc(100vh-112px)]"
             action={(
-              <Button type="button" size="sm" disabled={sampleLoading} aria-label="载入 243 全精二测试 Box" onClick={() => void onLoadSample()}>
+              <Button type="button" size="sm" className="max-sm:min-h-11" disabled={sampleLoading} aria-label="载入 243 全精二测试干员数据" onClick={() => void onLoadSample()}>
                 {sampleLoading ? <Loader2 className="animate-spin" /> : <FlaskConical />}
                 {sampleLoading ? "正在载入" : "Full E2 测试"}
               </Button>
@@ -97,17 +97,17 @@ export function InfraCalculator(props: InfraCalculatorProps) {
             {!operbox ? (
               <div className="mb-5 flex flex-wrap items-center justify-between gap-4 border-y border-dashed border-border/70 py-6">
                 <div>
-                  <strong className="block text-sm">先选择用于验收的 Box</strong>
-                  <p className="mt-1 text-sm text-muted-foreground">使用上方 Full E2 测试入口，或配置自己的 Box 与基建布局。</p>
+                  <strong className="block text-sm">先导入干员数据</strong>
+                  <p className="mt-1 text-sm text-muted-foreground">使用上方 Full E2 测试入口，或配置自己的干员数据与基建布局。</p>
                 </div>
                 <Button type="button" variant="outline" onClick={onOpenSetup}>
-                  <Settings2 />配置 Box 与布局
+                  <Settings2 />配置干员数据与布局
                 </Button>
               </div>
             ) : null}
             <PlanTelemetry
-              profile={scheduleResult?.profileJson}
-              rotation={scheduleResult?.rotationJson}
+              profile={scheduleResult?.profile}
+              rotation={scheduleResult?.rotation}
               layout={layout}
               activeShift={activeShift}
             />
@@ -122,13 +122,18 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                 <>
                   <div className="min-w-0">
                     <strong className="block truncate text-sm font-medium">
-                      {result?.maaJson?.title ?? "等待生成排班"}
+                      {result?.maa.title ?? "等待生成排班"}
                     </strong>
                     <span className="mt-1 block text-sm text-muted-foreground">
-                      {activePlan?.description ?? "配置 Box 与基建布局后，即可生成三班排班。"}
+                      {activePlan?.description ?? "配置干员数据与基建布局后，即可生成三班排班。"}
                     </span>
                   </div>
-                  <ShiftTabs maaJson={result?.maaJson} active={activeShift} closest={closestComparison?.planIndex} onChange={onSetActiveShift} />
+                  <div className="flex flex-wrap items-center justify-end gap-2 max-sm:w-full max-sm:justify-between">
+                    <ShiftTabs maaJson={result?.maa} active={activeShift} closest={closestComparison?.planIndex} onChange={onSetActiveShift} />
+                    <Button type="button" size="sm" variant="outline" disabled={!result?.maa} onClick={onDownloadMaa}>
+                      <Download />导出到 MAA
+                    </Button>
+                  </div>
                 </>
               )}
               onIssue={onMarkIssue}
@@ -137,6 +142,11 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               onViewModeChange={setScheduleViewMode}
             />
           </Panel>
+          {feedbackResult ? (
+            <div className="mt-3 border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700" role="status">
+              反馈已提交，编号：{feedbackResult.feedbackId}
+            </div>
+          ) : null}
         </section>
 
         {showBetaSidebar ? (
@@ -148,7 +158,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               <DebugActions result={result} onDownloadMaa={onDownloadMaa} onDownloadBundle={onDownloadBundle} onCopyCommand={onCopyCommand} />
               <details className="mt-3 text-sm text-muted-foreground">
                 <summary className="cursor-pointer">stdout / stderr</summary>
-                <Textarea readOnly value={result?.stdout || result?.stderr || "暂无输出。"} className="mt-2 max-h-64 min-h-32 resize-y font-mono text-xs" />
+                <Textarea readOnly value={result?.debug?.stdout || result?.debug?.stderr || "暂无输出。"} className="mt-2 max-h-64 min-h-32 resize-y font-mono text-xs" />
               </details>
             </Panel>
           </aside>

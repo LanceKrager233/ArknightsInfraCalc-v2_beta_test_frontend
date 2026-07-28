@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
+import { failureResponse, PublicApiError } from "../api-contract";
 import { SklandServiceError } from "./adapter";
 import {
   isSecureSklandRequest,
@@ -8,7 +9,6 @@ import {
   sealSklandSession,
   SKLAND_SESSION_COOKIE,
   SKLAND_SESSION_TTL_SECONDS,
-  sklandDisabledReason,
   type SklandSessionPayload,
   unsealSklandSession,
 } from "./session";
@@ -20,8 +20,8 @@ export async function readSklandSession(): Promise<SklandSessionPayload | null> 
 }
 
 export function assertSklandAvailable(request: Request): void {
-  if (!isSklandConfigured()) throw new SklandServiceError("NOT_CONFIGURED", sklandDisabledReason() ?? "森空岛登录未配置。", 503);
-  if (!isSecureSklandRequest(request)) throw new SklandServiceError("INSECURE", "森空岛登录要求 HTTPS；MAA 导入仍可正常使用。", 403);
+  if (!isSklandConfigured()) throw new PublicApiError("AIC-AUTH-2003");
+  if (!isSecureSklandRequest(request)) throw new PublicApiError("AIC-AUTH-2002");
 }
 
 export function setSklandSessionCookie(response: NextResponse, request: Request, session: SklandSessionPayload): void {
@@ -40,11 +40,28 @@ export function clearSklandSessionCookie(response: NextResponse): void {
   response.cookies.set(SKLAND_SESSION_COOKIE, "", { httpOnly: true, sameSite: "lax", maxAge: 0, path: "/" });
 }
 
-export function sklandErrorResponse(error: unknown): NextResponse {
-  const known = error instanceof SklandServiceError
-    ? error
-    : error instanceof Error && error.message === "请求来源无效。"
-      ? new SklandServiceError("BAD_DATA", error.message, 403)
-      : new SklandServiceError("UNAVAILABLE", "森空岛暂时不可用，请稍后重试。", 502);
-  return NextResponse.json({ success: false, authenticated: false, error: known.message, code: known.code }, { status: known.status });
+export function sklandErrorResponse(
+  error: unknown,
+  requestId: string,
+  route: string,
+  startedAt: number
+): NextResponse {
+  if (error instanceof PublicApiError) {
+    return failureResponse(error, requestId, route, startedAt);
+  }
+  if (error instanceof Error && error.message === "请求来源无效。") {
+    return failureResponse(new PublicApiError("AIC-AUTH-2002"), requestId, route, startedAt);
+  }
+  if (error instanceof SklandServiceError) {
+    const code =
+      error.code === "AUTH_EXPIRED"
+        ? "AIC-AUTH-2001"
+        : error.code === "INSECURE"
+          ? "AIC-AUTH-2002"
+          : error.code === "NOT_CONFIGURED" || error.code === "UNAVAILABLE"
+            ? "AIC-AUTH-2003"
+            : "AIC-REQ-1001";
+    return failureResponse(new PublicApiError(code), requestId, route, startedAt);
+  }
+  return failureResponse(new PublicApiError("AIC-AUTH-2003"), requestId, route, startedAt);
 }
