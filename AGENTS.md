@@ -1,154 +1,261 @@
-# Agent 入口文档
+# AGENTS.md
 
-> 新会话先读本文。这里是 `ArknightsInfraCli-v2` 明日方舟基建排班求解器的 beta 测试前端，不是核心求解器仓库。
+> 本文件是仓库级持久指令。新任务先读本文，再以当前代码、`README.md`、`package.json` 和更靠近工作目录的 `AGENTS.md` / `AGENTS.override.md` 为准。
 
 ## 项目定位
 
-本仓库提供一个面向 beta 测试者的排班验收工作台，用来调用本地或指定路径下的 `infra-cli`，验收 `infra-cli serve` 生成的结果。
+本仓库是“明日方舟基建排班助手”的 Next.js 前端与轻量服务端，不是核心求解器仓库。产品主流程包括：
 
-主要目标：
+- 通过森空岛二维码登录同步干员与基建状态，或导入 MAA JSON / 兼容的一图流 xlsx。
+- 配置 243、153、333、252、342 布局、设施等级、制造配方和贸易订单。
+- 调用长驻的 `infra-cli serve` 生成三班排班、效率概览和练卡建议。
+- 展示森空岛当前基建状态，比较当前进驻与排班计划，并导出 MAA JSON。
+- 保存 CLI 运行记录和经用户同意的最小反馈；只有显式调试模式才展示额外问题上下文与 CLI 输出。
 
-- 上传或载入干员练度表。
-- 选择基建布局并运行三班排班求解。
-- 展示房间排班、效率、调试信息和可导出的 MAA JSON。
-- 收集 CLI 运行记录与反馈 JSON，方便定位前端、CLI、策略表或用户 box 的问题。
+明确边界：
 
-非目标：
+- 排班搜索、干员技能、策略和核心效率公式属于相邻核心仓库 `../ArknightsInfraCalc-v2`；不要在前端复制一套求解逻辑。
+- 本仓库可以维护输入校验、展示换算、房间功耗校验、协议适配和公开 DTO 映射。
+- `src/server/` 负责 API 边界、森空岛适配、调用 CLI 和持久化记录，不应演变为第二个求解器。
+- 首屏是可直接使用的排班助手，不是营销页或内部运维面板。
 
-- 不在前端重写排班、技能、效率或策略求解逻辑。
-- 不在 `src/server/` 中实现机制公式；服务端只负责接收请求、调用 CLI、保存记录和提供 Next 页面。
-- 不把 beta 测试页面做成介绍页或营销页；首屏应直接是验收工作台。
+## 技术栈与运行方式
 
-## 技术栈
+- Next.js 16 App Router、React 19、TypeScript strict mode。
+- Tailwind CSS v4、shadcn/ui、Base UI primitives。
+- Node runtime 的 Next route handlers；禁止改成静态导出。
+- `infra-cli serve` 是外部长驻子进程；森空岛访问通过 `skland-kit`。
+- CI 使用 Node.js 22 和 npm；不要切换包管理器。
+- 页面和 `/api/*` 由同一个 Next 服务提供，没有独立 Express 服务或 Vite 代理。
 
-- 前端：Next.js App Router + React + TypeScript。
-- UI：shadcn/ui，Base UI primitive，Tailwind CSS v4。
-- 本地 API：Next route handlers，入口在 `src/app/api/*/route.ts`。
-- 服务端逻辑：`src/server/infra.ts`。
-- 求解器：外部可执行文件 `infra-cli`。
-- 样例数据：`fixtures/operbox_full_e2.json`。
+## 开始任务与改动纪律
+
+1. 先运行 `git status --short --branch`，确认分支、远端差异和用户已有改动。
+2. 不丢弃、覆盖、回滚或顺手提交与当前任务无关的改动。
+3. 修改前从代码确认事实，不把旧报告、历史提交或 README 示例当成高于当前实现的真相。
+4. 保持改动小而聚焦，优先延续现有模块边界；跨层重构应说明必要性。
+5. 默认使用 npm。新增或升级依赖时同步提交 `package.json` 与 `package-lock.json`，并说明必要性和风险。
+6. 不提交密码、token、Cookie、私钥、森空岛临时凭据、真实用户 Box、服务器登录信息或包含这些内容的日志。
+7. 不提交运行产物和本地状态，包括 `.next/`、`test-results/`、`playwright-report/`、`.tmp/`、`bin/data/`、`server/storage/`、`*.local` 和临时部署包。
+8. `AGENTS.md` 是已跟踪的团队指令；当仓库约定确实变化时可以更新并提交。
+
+## 关键结构
+
+| 路径 | 职责 |
+| --- | --- |
+| `src/app/layout.tsx`、`src/app/page.tsx` | App Router 根布局与应用入口 |
+| `src/App.tsx` | 顶层状态、页面编排、持久化与求解主流程 |
+| `src/components/pages/*` | 基建计算器、练卡建议、森空岛状态三个一级页面 |
+| `src/components/layout/AppSidebar.tsx` | 三个一级导航及移动端侧栏行为 |
+| `src/setup-dialog.tsx` | Box 导入、森空岛入口和布局配置流程 |
+| `src/components.tsx` | 业务 UI 组件 |
+| `src/components/ui/*` | shadcn/Base UI primitives |
+| `src/layouts/*.json`、`src/blueprint.ts` | 布局预设、产品和前端功耗校验 |
+| `src/operbox.ts` | MAA JSON / xlsx 解析与 Box 校验 |
+| `src/skland*.ts(x)` | 森空岛前端映射、登录 UI 与授权 URL |
+| `src/schedule*.ts`、`src/efficiency.ts` | 排班展示、班次整理与服务端效率字段归一化 |
+| `src/persistence.ts` | 浏览器 v4 会话、旧版本迁移、30 天过期与安全清理 |
+| `src/api.ts`、`src/types.ts` | 前端请求封装与共享类型 |
+| `src/app/api/*/route.ts` | 公共 API route handlers |
+| `src/server/api-contract.ts` | 统一响应、错误码、同源校验、大小限制与限流 |
+| `src/server/public-plan.ts` | 内部求解结果到公共排班 DTO 的白名单映射 |
+| `src/server/infra.ts` | CLI 查找、长驻 serve 客户端、运行记录、反馈和 CLI release 存储 |
+| `src/server/skland/*` | 森空岛会话加密、Cookie、扫码、同步、角色切换与数据归一化 |
+| `src/internal-field-safety.ts` | 递归剔除内部字段 |
+| `fixtures/operbox_full_e2.json` | 首页 Full E2 的 243 全精二样例 |
+| `bin/infra-cli*`、`bin/data/` | 当前平台 CLI 与可选运行数据 |
+| `e2e/production-readiness.spec.ts` | 产品边界、响应式、持久化、调试开关与森空岛 UI 回归 |
+| `.github/workflows/frontend-quality.yml` | main / PR 的完整质量门禁 |
+| `docs/FRONTEND_PRODUCTION_READINESS_REPORT.md` | 公开边界、错误码和产品化基线 |
+| `docs/UPDATE_SOLVER.md` | 只更新线上求解器时的操作与回滚说明 |
+
+UI 控件优先组合 `src/components/ui/*` 中的现有 primitive。不要另造按钮、Tabs、Dialog、Sheet、Select 或 Textarea；若现有 primitive 不足，先扩展 primitive，再由业务组件组合。
+
+## 公共 API
+
+当前 route handlers：
+
+- `GET /api/health`
+- `GET /api/sample-operbox`
+- `POST /api/plan`
+- `POST /api/feedback`
+- `GET`、`DELETE /api/skland/session`
+- `POST /api/skland/auth/qr`
+- `POST /api/skland/auth/qr/status`
+- `POST /api/skland/sync`
+- `POST /api/skland/role`
+
+所有公共响应使用 `ApiSuccess<T> | ApiFailure` 信封并返回 `X-Request-Id`。健康检查的公开就绪字段是 `data.plannerReady`，不是内部 `HealthApiResponse` 的 `ok` / `cliReady`。
+
+### 必须保持的安全与契约边界
+
+- 不得直接从 route handler 返回 `src/server/infra.ts` 的内部对象。排班结果必须经过 `toPublicPlanData`，错误必须经过统一的 `failureResponse`。
+- 生产 `plan` 数据只允许公开 `profile`、`maa`、`rotation`、`durationMs`、`diagnosticId`；健康检查不得公开 CLI 路径、PID、候选文件、仓库路径、存储路径或原始 serve 错误。
+- `command`、stdout、stderr 和 debug bundle 只有在服务端 `BETA_DEBUG_TOOLS_ENABLED=1` 时才能进入 `data.debug`；页面还必须同时带 `?beta` 才显示调试面板。任一条件缺失都不能暴露调试数据。
+- 新增或修改公共 DTO 时，同时更新 `src/types.ts`、白名单 mapper、客户端调用和 `src/server/public-plan.test.ts` / `src/server/api-contract.test.ts`。
+- 新增或修改错误码时，同时更新 `AppErrorCode`、`ERROR_DEFINITIONS`、HTTP 映射和契约测试。日志只记录 requestId、code、route、status、durationMs 等最小诊断信息，不打印请求正文或凭据。
+- 所有公开写请求必须保留同源校验、请求体大小限制和适当限流。只有在明确的本地测试中关闭限流；不要用重复请求压测线上实例。
+- 反馈必须要求用户同意，并保持最小化：公开响应只有 `feedbackId` 和 `savedAt`，不要把文件路径、Box、debug bundle 或内部诊断内容回传给浏览器。
+- 森空岛只提供二维码授权流程，不添加账号密码、短信验证码代填或绕过官方授权的登录方式。
+- `SKLAND_SESSION_SECRET` 必须至少 32 字节且长期稳定。森空岛会话使用 AES-256-GCM 封装在 HttpOnly Cookie 中；凭据不得进入 localStorage、CLI 运行记录、反馈包、console 或公开响应。
+- 非 localhost 的森空岛请求默认要求 HTTPS。`SKLAND_ALLOW_INSECURE_HTTP=1` 仅允许临时、可信的本地或内网测试，绝不能作为生产默认值。
+- 浏览器 v4 持久化可以保存布局、Box 和经过清理的最近排班，但必须继续剔除 debug、路径、stdout、stderr、请求/响应内部字段和森空岛凭据。
+
+## 环境变量
+
+### CLI 与存储
+
+| 变量 | 用途 |
+| --- | --- |
+| `INFRA_CLI_PATH` | 显式指定当前平台可执行的 `infra-cli` |
+| `INFRA_CORE_ROOT` | 指定相邻核心仓库，默认 `../ArknightsInfraCalc-v2` |
+| `ARKNIGHTS_INFRA_DATA_DIR` | 指定 CLI 运行数据目录 |
+| `BETA_CLI_TIMEOUT_MS` | CLI 请求超时，默认 `120000` |
+| `BETA_STORAGE_DIR` | 整体服务端持久化根目录 |
+| `BETA_CLI_RUN_DIR` | CLI 运行记录目录 |
+| `BETA_FEEDBACK_DIR` | 反馈目录 |
+| `BETA_CLI_RELEASE_DIR` | CLI release 存储目录 |
+
+默认持久化位置是：
+
+```text
+server/storage/cli-runs
+server/storage/feedback
+server/storage/cli-releases
+server/storage/active-cli.json
+```
+
+CLI 查找以当前平台文件名为优先，覆盖仓库 `bin/`、仓库根目录和核心仓库 `target/{release,debug}`；不要假定 Windows 能运行 Linux ELF，或 Linux 能运行 PE 文件。`bin/data/` 是可选且被忽略的运行数据目录。
+
+### 安全、功能与测试
+
+| 变量 | 用途 |
+| --- | --- |
+| `SKLAND_SESSION_SECRET` | 森空岛会话密钥，至少 32 字节 |
+| `BETA_PUBLIC_ORIGIN` | 所有公开写接口的可信 Origin |
+| `SKLAND_PUBLIC_ORIGIN` | 森空岛会话流的可信 Origin |
+| `BETA_TRUST_PROXY_HEADERS` | 为 `1` 时信任反向代理的来源/IP 头 |
+| `SKLAND_ALLOW_INSECURE_HTTP` | 仅可信临时测试允许非 HTTPS 森空岛请求 |
+| `BETA_DEBUG_TOOLS_ENABLED` | 为 `1` 时允许服务端生成公开调试字段 |
+| `BETA_RATE_LIMIT_ENABLED` | `0` 关闭、`1` 开启；生产默认开启 |
+| `PLAYWRIGHT_BASE_URL` | E2E 地址，默认 `http://127.0.0.1:5184` |
+
+反向代理生产环境应明确设置两个公开 Origin，并启用可信代理头；生产保持调试关闭、限流开启。
 
 ## 常用命令
+
+建议使用 Node.js 22。
 
 ```bash
 npm install
 npm run dev
 ```
 
-默认地址：
-
-```text
-http://127.0.0.1:5174
-```
-
-其他常用命令：
+本地开发默认监听 `http://127.0.0.1:5174`；`npm run dev:full` 是兼容别名。
 
 ```bash
-npm run build
 npm run lint
+npm test
+npm run test:api-contract
+npm run check
+npm run build
+npm run test:e2e
 npm start
 ```
 
-`npm run dev:full` 保留为 `npm run dev` 的别名，兼容旧习惯。页面和 `/api/*` 由同一个 Next dev server 提供，不再启动单独的 Express 服务。
+- `npm run check` 依次运行 lint、单元测试和 API 契约测试。
+- `npm run build` 进行 Next 生产构建并覆盖 TypeScript 集成检查。
+- `npm run test:e2e` 默认在 5184 端口自动启动 Next，并用 Playwright 拦截外部 API；通常不需要真实 CLI 或森空岛凭据。
+- `npm start` 默认监听 `0.0.0.0:5174`。
+- CI 依次执行 `npm ci`、lint、单元测试、契约测试、build 和 Chromium E2E。
 
-## CLI 关系
+开发调试模式仅在本地这样开启：
 
-服务端优先查找：
-
-```text
-bin/infra-cli
-bin/infra-cli.exe
-```
-
-也可以通过环境变量指定：
-
-```bash
-INFRA_CLI_PATH=/path/to/infra-cli npm run dev
-```
-
-如果仓库内没有 CLI，服务端会尝试回退到相邻核心仓库：
-
-```text
-../ArknightsInfraCalc-v2/target/release/infra-cli*
-../ArknightsInfraCalc-v2/target/debug/infra-cli*
-```
-
-Linux 环境下确认可执行权限：
-
-```bash
-chmod +x bin/infra-cli
-```
-
-## 关键文件
-
-| 路径 | 说明 |
-|------|------|
-| `src/app/layout.tsx` | Next App Router 根布局 |
-| `src/app/page.tsx` | 首屏工作台入口 |
-| `src/app/api/*/route.ts` | health、sample-operbox、plan、feedback API |
-| `src/server/infra.ts` | CLI 查找、`infra-cli serve` 客户端、运行记录和反馈保存 |
-| `src/App.tsx` | 主工作台状态与页面编排 |
-| `src/components.tsx` | shadcn/base 业务 UI 组件 |
-| `src/components/ui/*` | shadcn 生成的 UI primitives |
-| `src/api.ts` | 前端 API 调用 |
-| `src/types.ts` | 前后端共享的 TypeScript 数据形状 |
-| `src/operbox.ts` | 练度表解析与样例载入 |
-| `src/schedule.ts` | 排班结果整理 |
-| `src/blueprint.ts` | 布局 / 蓝图相关处理 |
-| `src/download.ts` | 调试包、MAA JSON 等导出 |
-| `fixtures/operbox_full_e2.json` | 243 全精二样例 box |
-| `bin/infra-cli` | Linux CLI 可执行文件 |
-| `bin/infra-cli.exe` | Windows CLI 可执行文件 |
-
-## 存储与环境变量
-
-beta 测试阶段会保留 CLI 运行记录和反馈提交，默认写入：
-
-```text
-server/storage/cli-runs
-server/storage/feedback
-```
-
-可用环境变量：
-
-| 变量 | 用途 |
-|------|------|
-| `INFRA_CLI_PATH` | 指定 CLI 可执行文件 |
-| `INFRA_CORE_ROOT` | 指定相邻核心仓库路径 |
-| `ARKNIGHTS_INFRA_DATA_DIR` | 指定 CLI 运行数据目录 |
-| `BETA_STORAGE_DIR` | 整体存储根目录 |
-| `BETA_CLI_RUN_DIR` | CLI 运行记录目录 |
-| `BETA_FEEDBACK_DIR` | 反馈记录目录 |
-| `BETA_CLI_TIMEOUT_MS` | CLI 请求超时时间，默认 120000ms |
-
-## 实现原则
-
-1. 前端只展示和校验，不发明求解口径。
-2. CLI 输出 JSON 是排班、效率、导出数据的事实源。
-3. 修改数据结构时，同时检查 `src/types.ts`、`src/api.ts`、`src/server/infra.ts` 和 UI 展示。
-4. 任何与排班算法、干员技能、效率公式相关的问题，优先去核心仓库 `../ArknightsInfraCalc-v2` 修改。
-5. beta 用户路径要短：上传 box、选择布局、运行、查看结果、导出调试包。
-6. 保持首屏为实际工具界面，不新增落地页。
-7. UI 控件优先使用 `src/components/ui/*` 中的 shadcn/base primitives，不回退到手写按钮、弹窗或 tabs。
-
-## 验证建议
-
-文档或小 UI 改动后至少运行：
-
-```bash
-npm run lint
-```
-
-涉及类型、构建或 API 契约时运行：
-
-```bash
-npm run build
-```
-
-涉及 CLI 调用链时，用可用的 `infra-cli` 跑：
-
-```bash
+```powershell
+$env:BETA_DEBUG_TOOLS_ENABLED='1'
+$env:BETA_RATE_LIMIT_ENABLED='0'
 npm run dev
 ```
 
-然后在页面中载入 243 全精二样例并执行一次排班。
+然后访问 `http://127.0.0.1:5174/?beta`。调试结束后恢复默认环境并重启服务。
+
+## 验证矩阵
+
+- 纯文档改动：核对所有路径、脚本、环境变量和链接确实存在；若直接推 main，至少运行 `npm run check`。
+- TypeScript、状态管理、解析或通用 UI 改动：运行 `npm run check`。
+- 依赖、类型、Next 配置、route handler、服务端或公共契约改动：运行 `npm run check` 和 `npm run build`。
+- 用户流程、响应式、持久化、调试开关或森空岛 UI 改动：再运行 `npm run test:e2e`。
+- CLI 协议或真实求解链改动：启动 `npm run dev`，确认 `/api/health` 的成功信封中 `data.plannerReady: true`，再用 Full E2 生成三班排班。
+- 森空岛服务端改动：除自动化外，在安全测试环境验证二维码、轮询、Cookie 刷新、角色切换、同步和退出；不得把真实凭据写入测试夹具。
+
+涉及 UI 时至少检查 390px、768px、1440px，并覆盖：
+
+- 基建计算器、练卡建议、森空岛状态三个一级导航。
+- Full E2、配置流程、生成排班、三班切换和 MAA 下载。
+- 键盘焦点、Dialog 关闭后焦点恢复、`role="status"` / `role="alert"` 和移动端约 44px 触控目标。
+- “一图流布局”仍可见且保持当前禁用状态；加工站“暂不显示”和恢复交互不丢失。
+- v4 会话刷新后无 hydration 错误，持久化数据不含内部字段。
+
+真实 CLI 冒烟还要确认：
+
+- `server/storage/cli-runs` 生成运行记录。
+- 反馈经用户同意后写入 `server/storage/feedback`。
+- 公开 plan、health、feedback 响应没有内部路径、进程信息或调试字段泄露。
+
+不要把“测试文件存在”写成“测试已通过”；只报告本次实际执行的命令和结果。
+
+## Git、PR 与评审
+
+- 默认不要直推 `origin/main`；除非用户明确要求，否则使用功能分支和 PR。
+- 开始提交前先 `git fetch origin main`，确认基线没有落后；若 main 已前进，先安全同步再继续。
+- 只暂存本任务文件，提交前检查 `git diff --check`、`git diff --cached` 和 `git status --short`。
+- commit message 使用简短的中文或英文 `<type>: <summary>`。
+- PR 说明至少写明改了什么、为什么、验证命令，以及是否影响 CLI、公共 API、森空岛会话、存储、反馈 JSON 或 MAA JSON。
+- 合并前确保完整质量门禁通过。不要为消除审计告警擅自运行可能破坏兼容性的 `npm audit fix --force`。
+
+代码评审优先检查高风险行为，不把格式问题重复成评审规则：
+
+- 内部字段或凭据是否可能进入公共 API、localStorage、日志或反馈。
+- 写接口是否绕过同源、大小限制、限流或 consent。
+- 公共 DTO、错误码和协议变化是否有对应契约测试。
+- 失败、超时、CLI 重启、损坏持久化和移动端流程是否仍可恢复。
+- 算法变更是否误放在前端仓库。
+
+## 生产与发布
+
+除非用户明确要求，不执行服务器部署、服务重启、线上求解器替换或数据清理。
+
+当前生产约定：
+
+```text
+host: 114.66.55.78
+app root: /opt/arknights-infra
+current: /opt/arknights-infra/current
+releases: /opt/arknights-infra/releases/<timestamp>-<sha>
+systemd: arknights-infra
+internal Next: 127.0.0.1:4175
+public nginx: 4174
+persistent storage: /var/lib/arknights-infra
+```
+
+发布前必须基于已合并且已验证的 `origin/main`。发布包只包含 Git 跟踪内容；新 release 继承现有 `.env.local` 和 `bin/data`，以 `arkinfra` 用户执行 `npm ci` / `npm run build`，再原子切换 `current` 并重启 systemd。不得把服务器密码写入文件或命令；使用 SSH key 或交互式认证。
+
+发布后至少验证：
+
+- `current` 指向预期 SHA，`arknights-infra` 为 active。
+- 4175 正常监听，内部与公网 `/api/health` 返回成功信封，`data.plannerReady: true`。
+- 生产 `debugTools: false`、`rateLimit: true`，公开响应不泄露内部字段。
+- 浏览器可载入 Full E2、生成三班、刷新恢复、下载 MAA 并提交一次最小反馈。
+- `/var/lib/arknights-infra/cli-runs` 和 `/var/lib/arknights-infra/feedback` 保持持久化且有正确所有权。
+
+前端发布失败时，把 `current` 原子切回已确认的上一 release 后重启并复查健康检查。只更新线上 CLI 时遵循 `docs/UPDATE_SOLVER.md`，不要借机发布未合并的前端工作区。
+
+## 完成标准
+
+最终回复明确说明：
+
+- 修改了哪些文件和主要行为。
+- 实际运行了哪些验证命令及结果。
+- 是否创建 commit、push、PR；如有，给出分支、commit 或 PR。
+- 是否执行生产部署；如执行，说明 release、端口、健康检查和持久化状态。
+- 仍未验证或尚未解决的风险。
