@@ -2,6 +2,36 @@ import type { CSSProperties } from "react";
 
 export const OPERATOR_NAME_SIZE_CLASS = "text-xs max-sm:text-[10px]";
 
+export const LEVEL_DIAMOND_METRICS = {
+  list: { height: 20, width: 10, gap: 2 },
+  listMobile: { height: 16, width: 8, gap: 1.5 },
+  compact: { height: 14, width: 7.5, gap: 1.5 },
+} as const;
+
+export type LevelDiamondVariant = "list" | "compact";
+
+export function levelDiamondCount(level?: number): number {
+  if (!level || !Number.isFinite(level)) return 0;
+  return Math.max(1, Math.min(Math.trunc(level), 5));
+}
+
+export const ROOM_GRID_TONES = {
+  control: {
+    color: "#D58A32",
+    opacity: 0.15,
+    fadeStart: "8%",
+  },
+  default: {
+    color: "#52B8E8",
+    opacity: 0.09,
+    fadeStart: "30%",
+  },
+} as const;
+
+export function roomGridTone(group: string) {
+  return group === "control" ? ROOM_GRID_TONES.control : ROOM_GRID_TONES.default;
+}
+
 export const COMPACT_OPERATOR_SIZE_CLASS =
   "[--operator-slot-size:clamp(64px,5.9vw,76px)]";
 
@@ -21,28 +51,22 @@ export const COMPACT_AUXILIARY_WIDTHS = {
 } as const;
 
 export const COMPACT_CARD_CLASS =
-  "relative flex flex-col justify-start gap-2 overflow-hidden bg-[#313131] px-3 py-2";
+  "infra-room-surface relative flex flex-col justify-start gap-2 overflow-hidden px-3 py-2";
 
 export const COMPACT_POWER_CARD_CLASS =
-  "relative grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 overflow-hidden bg-[#313131] px-3 py-2";
+  "infra-room-surface relative grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 overflow-hidden px-3 py-2";
 
 export const COMPACT_POWER_OPERATOR_ROW_CLASS =
   "flex items-start justify-end gap-2";
 
 export const COMPACT_HEADER_CLASS =
-  "flex h-7 shrink-0 items-center gap-2";
+  "flex h-7 shrink-0 items-center gap-1.5";
 
 export const COMPACT_ROOM_TITLE_CLASS =
-  "shrink-0 whitespace-nowrap text-sm font-medium text-white";
-
-export const COMPACT_ROOM_LEVEL_CLASS =
-  "min-w-0 truncate text-xs text-white/50";
+  "shrink-0 whitespace-nowrap text-sm font-medium tracking-[-0.02em] text-white";
 
 export const COMPACT_ROOM_BACKGROUND_CLASS =
-  "pointer-events-none absolute inset-0 bg-no-repeat opacity-[0.52]";
-
-export const COMPACT_ROOM_GRADIENT_CLASS =
-  "pointer-events-none absolute inset-0 bg-gradient-to-r from-[#313131]/20 via-[#313131]/72 to-[#313131]";
+  "infra-room-emblem pointer-events-none absolute inset-0 bg-no-repeat";
 
 export const COMPACT_ROOM_BACKGROUND_STYLE = {
   backgroundPosition: "-18px center",
@@ -53,14 +77,14 @@ const PRODUCT_FALLBACK =
   "border-white/20 text-white bg-[#3C3C3C]/70";
 
 const TRADE_ACCENT: Record<string, string> = {
-  gold: "border-transparent bg-transparent text-[#22BBFF]",
+  gold: "infra-room-value border-transparent bg-transparent text-[#22BBFF]",
   originium: "border-transparent bg-[#8F1E26] text-white",
 };
 
 const FACTORY_ACCENT: Record<string, string> = {
   all: "border-transparent bg-[#FFD800] text-[#313131]",
-  gold: "border-transparent bg-transparent text-[#FFD800]",
-  battle_record: "border-transparent bg-transparent text-[#1F7DCE]",
+  gold: "infra-room-value border-transparent bg-transparent text-[#FFD800]",
+  battle_record: "infra-room-value border-transparent bg-transparent text-[#4DB9FF]",
   originium: "border-transparent bg-[#8F1E26] text-white",
 };
 

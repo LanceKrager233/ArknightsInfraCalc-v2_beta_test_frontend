@@ -7,15 +7,37 @@ import {
   COMPACT_HEADER_CLASS,
   COMPACT_OPERATOR_ROW_CLASS,
   COMPACT_OPERATOR_SIZE_CLASS,
-  COMPACT_ROOM_LEVEL_CLASS,
   COMPACT_ROOM_TITLE_CLASS,
+  LEVEL_DIAMOND_METRICS,
   OPERATOR_NAME_SIZE_CLASS,
+  ROOM_GRID_TONES,
   compactFactoryAccent,
   compactTradeAccent,
+  levelDiamondCount,
+  roomGridTone,
 } from "./schedule-view-presentation.ts";
 
 test("uses the smaller operator name size in both schedule views", () => {
   assert.equal(OPERATOR_NAME_SIZE_CLASS, "text-xs max-sm:text-[10px]");
+});
+
+test("defines narrow level diamonds for list, mobile, and compact views", () => {
+  assert.deepEqual(LEVEL_DIAMOND_METRICS, {
+    list: { height: 20, width: 10, gap: 2 },
+    listMobile: { height: 16, width: 8, gap: 1.5 },
+    compact: { height: 14, width: 7.5, gap: 1.5 },
+  });
+  assert.equal(levelDiamondCount(undefined), 0);
+  assert.equal(levelDiamondCount(1), 1);
+  assert.equal(levelDiamondCount(3), 3);
+  assert.equal(levelDiamondCount(7), 5);
+});
+
+test("uses an orange control grid and a pale blue grid everywhere else", () => {
+  assert.deepEqual(roomGridTone("control"), ROOM_GRID_TONES.control);
+  assert.deepEqual(roomGridTone("trading"), ROOM_GRID_TONES.default);
+  assert.deepEqual(roomGridTone("manufacture"), ROOM_GRID_TONES.default);
+  assert.deepEqual(roomGridTone("dormitory"), ROOM_GRID_TONES.default);
 });
 
 test("keeps compact operators responsive, left aligned, and eight pixels apart", () => {
@@ -66,7 +88,7 @@ test("allocates the compact auxiliary row by operator capacity", () => {
 test("right-aligns operators in horizontal three-power cards", () => {
   assert.equal(
     presentation.COMPACT_POWER_CARD_CLASS,
-    "relative grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 overflow-hidden bg-[#313131] px-3 py-2",
+    "infra-room-surface relative grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 overflow-hidden px-3 py-2",
   );
   assert.equal(
     presentation.COMPACT_POWER_OPERATOR_ROW_CLASS,
@@ -91,11 +113,7 @@ test("keeps power cards horizontal except in two-power layouts", () => {
 test("reuses list room backgrounds in every compact card", () => {
   assert.equal(
     presentation.COMPACT_ROOM_BACKGROUND_CLASS,
-    "pointer-events-none absolute inset-0 bg-no-repeat opacity-[0.52]",
-  );
-  assert.equal(
-    presentation.COMPACT_ROOM_GRADIENT_CLASS,
-    "pointer-events-none absolute inset-0 bg-gradient-to-r from-[#313131]/20 via-[#313131]/72 to-[#313131]",
+    "infra-room-emblem pointer-events-none absolute inset-0 bg-no-repeat",
   );
   assert.deepEqual(presentation.COMPACT_ROOM_BACKGROUND_STYLE, {
     backgroundPosition: "-18px center",
@@ -106,34 +124,30 @@ test("reuses list room backgrounds in every compact card", () => {
 test("pins every compact room title to the shared top position", () => {
   assert.equal(
     COMPACT_CARD_CLASS,
-    "relative flex flex-col justify-start gap-2 overflow-hidden bg-[#313131] px-3 py-2",
+    "infra-room-surface relative flex flex-col justify-start gap-2 overflow-hidden px-3 py-2",
   );
   assert.equal(
     COMPACT_HEADER_CLASS,
-    "flex h-7 shrink-0 items-center gap-2",
+    "flex h-7 shrink-0 items-center gap-1.5",
   );
   assert.equal(
     COMPACT_ROOM_TITLE_CLASS,
-    "shrink-0 whitespace-nowrap text-sm font-medium text-white",
-  );
-  assert.equal(
-    COMPACT_ROOM_LEVEL_CLASS,
-    "min-w-0 truncate text-xs text-white/50",
+    "shrink-0 whitespace-nowrap text-sm font-medium tracking-[-0.02em] text-white",
   );
 });
 
 test("renders the three highlighted products as text-only accents", () => {
   assert.equal(
     compactTradeAccent("gold"),
-    "border-transparent bg-transparent text-[#22BBFF]",
+    "infra-room-value border-transparent bg-transparent text-[#22BBFF]",
   );
   assert.equal(
     compactFactoryAccent("gold"),
-    "border-transparent bg-transparent text-[#FFD800]",
+    "infra-room-value border-transparent bg-transparent text-[#FFD800]",
   );
   assert.equal(
     compactFactoryAccent("battle_record"),
-    "border-transparent bg-transparent text-[#1F7DCE]",
+    "infra-room-value border-transparent bg-transparent text-[#4DB9FF]",
   );
 });
 

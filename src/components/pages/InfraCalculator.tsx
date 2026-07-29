@@ -81,7 +81,10 @@ export function InfraCalculator(props: InfraCalculatorProps) {
 
   return (
     <>
-      <section className={showBetaSidebar ? "grid grid-cols-[minmax(0,1fr)_clamp(320px,22vw,360px)] items-start max-[1100px]:block" : "block"}>
+      <section
+        className={showBetaSidebar ? "infra-technical-canvas grid grid-cols-[minmax(0,1fr)_clamp(320px,22vw,360px)] items-start max-[1100px]:block" : "infra-technical-canvas block"}
+        data-infra-canvas
+      >
         <section className={showBetaSidebar ? "min-w-0 pr-5 max-[1100px]:pr-0" : "min-w-0"}>
           <Panel
             title="计划安排"

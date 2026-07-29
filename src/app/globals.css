@@ -5,8 +5,9 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-    --font-heading: "Segoe UI", system-ui, sans-serif;
-    --font-sans: "Segoe UI", system-ui, sans-serif;
+    --font-heading: var(--font-ui-source);
+    --font-sans: var(--font-ui-source);
+    --font-technical: var(--font-technical-source);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -88,6 +89,15 @@
     --sidebar-accent-foreground: oklch(0.205 0 0);
     --sidebar-border: oklch(0.922 0 0);
     --sidebar-ring: oklch(0.708 0 0);
+    --infra-room-surface: #272a2b;
+    --infra-room-surface-solid: #272a2b;
+    --infra-room-edge: oklch(0.94 0.012 220 / 0.14);
+    --infra-room-edge-hover: oklch(0.94 0.012 220 / 0.22);
+    --infra-room-shadow: oklch(0.12 0.012 220 / 0.24);
+    --infra-room-shadow-soft: oklch(0.12 0.012 220 / 0.12);
+    --infra-room-text: oklch(0.97 0.006 220);
+    --infra-room-text-muted: oklch(0.82 0.01 220);
+    --infra-ease-out: cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 .dark {
@@ -132,6 +142,7 @@
     }
   body {
     @apply min-h-screen min-w-80 bg-background text-foreground;
+    font-kerning: normal;
     }
   button:not(:disabled), [role="button"]:not(:disabled) {
     cursor: pointer;
@@ -158,9 +169,157 @@
   transition-timing-function: ease-out;
 }
 
+.infra-technical-canvas {
+  position: relative;
+  isolation: isolate;
+}
+
+.infra-room-surface {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid var(--infra-room-edge);
+  background-color: var(--infra-room-surface-solid);
+  color: var(--infra-room-text);
+  box-shadow:
+    inset 0 1px 0 oklch(0.98 0.006 220 / 0.08),
+    0 10px 22px var(--infra-room-shadow),
+    0 3px 8px var(--infra-room-shadow-soft);
+  transition:
+    border-color 160ms var(--infra-ease-out),
+    box-shadow 160ms var(--infra-ease-out);
+}
+
+.infra-room-surface::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--room-grid-color, #52b8e8) 48%, transparent) var(--room-grid-fade-start, 30%),
+    var(--room-grid-color, #52b8e8) 100%
+  );
+  opacity: var(--room-grid-opacity, 0.09);
+  -webkit-mask-image: url("/images/ui/facility-grid.svg");
+  mask-image: url("/images/ui/facility-grid.svg");
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+  -webkit-mask-size: 96px 96px;
+  mask-size: 96px 96px;
+}
+
+.infra-room-emblem {
+  opacity: 0.3;
+  mix-blend-mode: screen;
+  filter: grayscale(1) contrast(2.6) brightness(1.55);
+}
+
+.infra-room-accent {
+  box-shadow:
+    0 0 7px color-mix(in srgb, var(--room-accent) 46%, transparent),
+    0 0 2px color-mix(in srgb, var(--room-accent) 74%, transparent);
+}
+
+.infra-room-value {
+  text-shadow: 0 0 7px color-mix(in srgb, var(--room-accent) 42%, transparent);
+}
+
+.infra-room-control {
+  transition:
+    border-color 160ms var(--infra-ease-out),
+    background-color 160ms var(--infra-ease-out),
+    box-shadow 160ms var(--infra-ease-out);
+}
+
+.infra-room-control[aria-pressed="true"],
+.infra-room-control[data-state="on"] {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--room-accent) 24%, transparent),
+    0 0 7px color-mix(in srgb, var(--room-accent) 32%, transparent);
+}
+
+.level-diamonds {
+  --level-diamond-height: 20px;
+  --level-diamond-width: 10px;
+  --level-diamond-gap: 2px;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--level-diamond-gap);
+}
+
+.level-diamonds[data-variant="compact"] {
+  --level-diamond-height: 14px;
+  --level-diamond-width: 7.5px;
+  --level-diamond-gap: 1.5px;
+}
+
+.level-diamond {
+  display: block;
+  width: var(--level-diamond-width);
+  height: var(--level-diamond-height);
+  flex-shrink: 0;
+  background: var(--room-level, var(--room-accent));
+  clip-path: polygon(50% 0, 100% 22%, 100% 78%, 50% 100%, 0 78%, 0 22%);
+  box-shadow:
+    0 0 7px color-mix(in srgb, var(--room-level, var(--room-accent)) 48%, transparent),
+    0 0 2px color-mix(in srgb, var(--room-level, var(--room-accent)) 76%, transparent);
+}
+
 @media (hover: hover) and (pointer: fine) {
   .interactive-surface-shadow:hover {
     box-shadow: var(--shadow-border-hover);
+  }
+
+  .infra-room-surface:hover {
+    border-color: var(--infra-room-edge-hover);
+    box-shadow:
+      inset 0 1px 0 oklch(0.98 0.006 220 / 0.12),
+      0 12px 26px var(--infra-room-shadow),
+      0 4px 10px var(--infra-room-shadow-soft);
+  }
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .infra-room-surface {
+    background-color: var(--infra-room-surface);
+    -webkit-backdrop-filter: blur(12px) saturate(1.12);
+    backdrop-filter: blur(12px) saturate(1.12);
+  }
+}
+
+@media (max-width: 639px) {
+  .infra-room-surface::before {
+    opacity: calc(var(--room-grid-opacity, 0.09) * 0.55);
+    -webkit-mask-size: 84px 84px;
+    mask-size: 84px 84px;
+  }
+
+  .level-diamonds[data-variant="list"] {
+    --level-diamond-height: 16px;
+    --level-diamond-width: 8px;
+    --level-diamond-gap: 1.5px;
+  }
+
+  @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+    .infra-room-surface {
+      -webkit-backdrop-filter: blur(8px) saturate(1.08);
+      backdrop-filter: blur(8px) saturate(1.08);
+    }
+  }
+}
+
+@media (min-width: 640px) and (max-width: 900px) {
+  .infra-operator-slot {
+    --operator-slot-size: 56px;
+  }
+
+  .infra-list-operator-grid {
+    column-gap: 6px;
   }
 }
 

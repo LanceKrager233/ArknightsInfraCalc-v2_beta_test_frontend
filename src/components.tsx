@@ -51,7 +51,10 @@ import { countElite2, countOwned, countSixStar } from "./operbox";
 import { RoomRow } from "./schedule";
 import {
   COMPACT_OPERATOR_SIZE_CLASS,
+  LevelDiamondVariant,
   OPERATOR_NAME_SIZE_CLASS,
+  levelDiamondCount,
+  roomGridTone,
 } from "./schedule-view-presentation";
 import {
   buildListScheduleGroups,
@@ -128,6 +131,7 @@ export function ProductToggleGroup<T extends string>({
             variant="outline"
             className={cn(
               "min-w-0 px-2 text-xs",
+              surface === "room" && "infra-room-control",
               surface === "default" && "min-h-10",
               surface === "room" && "max-w-[90px] max-sm:max-w-[50px] border-white/20 bg-[#3C3C3C]/70 px-1.5 text-[10px] text-white hover:bg-[#4B4B4B] hover:text-white sm:px-2 sm:text-xs",
               tone === "trade" &&
@@ -498,7 +502,7 @@ export function ShiftTabs({
 
   return (
     <Tabs value={String(active)} onValueChange={(value) => onChange(Number(value))}>
-      <TabsList>
+      <TabsList className="font-technical tracking-[0.01em]">
         {plans.map((plan, index) => (
           <TabsTrigger key={`${plan.name}-${index}`} value={String(index)}>
             {labels[index] ?? plan.name ?? `班次 ${index + 1}`}
@@ -558,7 +562,7 @@ export function PlanTelemetry({
           {dailyMetrics.map((metric) => (
             <div key={metric.label} className="px-4 py-3">
               <span className="block text-[11px] text-[#313131]/58">{metric.label}</span>
-              <strong className="mt-0.5 block text-lg font-semibold tabular-nums text-[#313131]">
+              <strong className="font-technical mt-0.5 block text-lg font-semibold tabular-nums tracking-[0.01em] text-[#313131]">
                 {compactNumber(metric.value, 2)}{metric.suffix}
               </strong>
             </div>
@@ -566,7 +570,7 @@ export function PlanTelemetry({
           {active ? (
             <div className="px-4 py-3">
               <span className="block text-[11px] text-[#313131]/58">当前班次</span>
-              <strong className="mt-0.5 block text-lg font-semibold tabular-nums text-[#313131]">
+              <strong className="font-technical mt-0.5 block text-lg font-semibold tabular-nums tracking-[0.01em] text-[#313131]">
                 {compactNumber(active.duration_hours)}h
               </strong>
             </div>
@@ -576,11 +580,11 @@ export function PlanTelemetry({
 
       {summary ? (
         <div className="flex flex-wrap gap-x-5 gap-y-1 border-t border-[#313131]/10 px-4 py-2 text-xs text-[#313131]/68">
-          <span>已拥有 <strong className="text-[#313131]">{summary.owned}</strong></span>
-          <span>进阶可用 <strong className="text-[#313131]">{summary.tier_up_owned}</strong></span>
-          <span>贸易候选 <strong className="text-[#313131]">{summary.trade_pool_ready}</strong></span>
-          {manufactureReady !== undefined ? <span>制造候选 <strong className="text-[#313131]">{manufactureReady}</strong></span> : null}
-          <span>中枢等级 <strong className="text-[#313131]">Lv.{layout.rooms.find((room) => room.kind === "control_center")?.level ?? "—"}</strong></span>
+          <span>已拥有 <strong className="font-technical text-[#313131]">{summary.owned}</strong></span>
+          <span>进阶可用 <strong className="font-technical text-[#313131]">{summary.tier_up_owned}</strong></span>
+          <span>贸易候选 <strong className="font-technical text-[#313131]">{summary.trade_pool_ready}</strong></span>
+          {manufactureReady !== undefined ? <span>制造候选 <strong className="font-technical text-[#313131]">{manufactureReady}</strong></span> : null}
+          <span>中枢等级 <strong className="font-technical text-[#313131]">Lv.{layout.rooms.find((room) => room.kind === "control_center")?.level ?? "—"}</strong></span>
         </div>
       ) : null}
 
@@ -701,21 +705,34 @@ export function roomVisualFor(group: string): RoomVisual {
   return ROOM_VISUALS[group] ?? ROOM_VISUALS.default;
 }
 
-function LevelDiamonds({ level, maxLevel }: { level?: number; maxLevel?: number }) {
-  if (!level) return null;
-  const count = Math.max(1, Math.min(level, 5));
+export function LevelDiamonds({
+  level,
+  maxLevel,
+  variant = "list",
+}: {
+  level?: number;
+  maxLevel?: number;
+  variant?: LevelDiamondVariant;
+}) {
+  const count = levelDiamondCount(level);
+  if (!count || !level) return null;
 
   return (
-    <span className="flex shrink-0 items-center gap-1.5" aria-label={`${level} 级，最高 ${maxLevel ?? level} 级`}>
-      <span className="flex translate-y-[-0.5px] gap-0.5" aria-hidden="true">
+    <span
+      className="flex shrink-0 items-center gap-1.5"
+      aria-label={`${level} 级，最高 ${maxLevel ?? level} 级`}
+      title={variant === "compact" ? `Lv.${level}/${maxLevel ?? level}` : undefined}
+    >
+      <span className="level-diamonds" data-variant={variant} aria-hidden="true">
         {Array.from({ length: count }).map((_, index) => (
-          <span
-            key={index}
-            className="block h-6 w-3 bg-[var(--room-level)] shadow-[0_0_8px_rgba(255,255,255,0.25)] [clip-path:polygon(50%_0,100%_24%,100%_76%,50%_100%,0_76%,0_24%)] max-sm:h-4 max-sm:w-2"
-          />
+          <span key={index} className="level-diamond" />
         ))}
       </span>
-      <span className="shrink-0 text-[10px] font-semibold text-white/64 max-sm:text-[8px]">Lv.{level}/{maxLevel ?? level}</span>
+      {variant === "list" ? (
+        <span className="font-technical shrink-0 text-[10px] font-semibold tracking-[0.02em] text-white/68 max-sm:text-[9px]">
+          Lv.{level}/{maxLevel ?? level}
+        </span>
+      ) : null}
     </span>
   );
 }
@@ -724,12 +741,12 @@ export function RoomEfficiencyReadout({ value, details = true }: { value: RoomEf
   return (
     <div className="min-w-0" title={value.details.map((detail) => `${detail.label} ${detail.value}`).join(" · ")}>
       <div className="flex min-w-0 items-center gap-1.5">
-        <strong className="shrink-0 text-base tabular-nums text-[var(--room-accent)] max-sm:text-xs">{value.primaryValue}</strong>
+        <strong className="infra-room-value font-technical shrink-0 text-base font-semibold tabular-nums tracking-[0.01em] text-[var(--room-accent)] max-sm:text-xs">{value.primaryValue}</strong>
         <span className="truncate text-xs font-medium text-white/68 max-sm:text-[10px]">{value.primaryLabel}</span>
         {value.includesCrossStation ? <span className="shrink-0 bg-white/12 px-1 text-[10px] font-normal text-white/82">含跨设施</span> : null}
       </div>
       {details && value.details.length ? (
-        <div className="mt-1 flex max-h-8 flex-wrap gap-x-2 gap-y-0.5 overflow-hidden text-[9px] leading-3 text-white/56 max-sm:mt-0.5 max-sm:max-h-3 max-sm:text-[7px]">
+        <div className="font-technical mt-1 flex max-h-8 flex-wrap gap-x-2 gap-y-0.5 overflow-hidden text-[9px] leading-3 tracking-[0.01em] text-white/60 max-sm:mt-0.5 max-sm:max-h-3 max-sm:text-[7px]">
           {value.details.map((detail) => (
             <span key={`${detail.label}-${detail.value}`} className={detail.kind === "cross-station" ? "font-semibold text-[#C8F75A]" : undefined}>
               {detail.label} {detail.value}
@@ -753,7 +770,7 @@ function RoomEfficiencyDetails({
   return (
     <div
       className={cn(
-        "ml-6 grid min-w-[160px] max-w-[240px] gap-1 text-sm leading-tight text-white/62 max-sm:hidden",
+        "font-technical ml-6 grid min-w-[160px] max-w-[240px] gap-1 text-sm leading-tight tracking-[0.01em] text-white/68 max-sm:hidden",
         compactFactory && "min-[1800px]:z-10 min-[1800px]:col-start-1 min-[1800px]:row-start-2 min-[1800px]:ml-0 min-[1800px]:flex min-[1800px]:min-w-0 min-[1800px]:max-w-none min-[1800px]:gap-3 min-[1800px]:text-xs"
       )}
       title={value.details.map((detail) => `${detail.label} ${detail.value}`).join(" · ")}
@@ -829,7 +846,7 @@ export function RoomProductControls({
 
   if (!row.product) return null;
 
-  return <div className="text-lg font-medium leading-none text-[var(--room-accent)]">{row.product}</div>;
+  return <div className="infra-room-value text-lg font-medium leading-none text-[var(--room-accent)]">{row.product}</div>;
 }
 
 function OperatorSlotShell({
@@ -856,7 +873,7 @@ function OperatorSlotShell({
   return (
     <div
       className={cn(
-        "min-w-0 shrink-0",
+        "infra-operator-slot min-w-0 shrink-0",
         compactView
           ? COMPACT_OPERATOR_SIZE_CLASS
           : "[--operator-slot-size:clamp(70px,7.3vw,88px)] max-sm:[--operator-slot-size:clamp(56px,16vw,76px)]",
@@ -1119,9 +1136,9 @@ export function ScheduleBoard({
                 aria-expanded={!collapsed}
                 onClick={() => setCollapsedGroups((current) => ({ ...current, [group.label]: !current[group.label] }))}
               >
-                <span className="h-7 w-1.5 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
+                <span className="infra-room-accent h-7 w-1.5 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
                 <h3 className="truncate text-[21px] font-medium leading-none text-[#313131]">{group.label}</h3>
-                <span className="text-xs text-[#313131]/52">{group.rows.length}</span>
+                <span className="font-technical text-xs text-[#313131]/56">{group.rows.length}</span>
                 <ChevronDown className={cn("size-4 shrink-0 text-[#313131]/45 transition-transform", collapsed && "-rotate-90")} />
               </button>
               {auxiliary && collapsed ? (
@@ -1155,16 +1172,20 @@ export function ScheduleBoard({
                 const functionalOperatorPlacementClass = listFunctionalOperatorPlacementClass(row.group);
                 const slotCount = compactInlineRoom ? (row.group === "meeting" ? 2 : 1) : roomSlotCountFor(row.group);
                 const slots = Array.from({ length: slotCount }, (_, index) => row.operatorSlots[index]);
+                const gridTone = roomGridTone(row.group);
                 const rowStyle = {
                   "--room-accent": rowVisual.accent,
                   "--room-level": rowVisual.level,
+                  "--room-grid-color": gridTone.color,
+                  "--room-grid-opacity": gridTone.opacity,
+                  "--room-grid-fade-start": gridTone.fadeStart,
                 } as CSSProperties;
 
                 return (
                   <div
                     key={row.key}
                     className={cn(
-                      "relative flex w-full overflow-hidden bg-[#313131] text-white shadow-[0_10px_20px_rgba(0,0,0,0.24)] max-sm:h-auto max-sm:flex-col",
+                      "infra-room-surface relative flex w-full overflow-hidden text-white max-sm:h-auto max-sm:flex-col",
                       listRoomHeightClass(row.group),
                       compactInlineRoom && "[container-type:inline-size]",
                       listFunctionalRoomSpanClass(row.group),
@@ -1172,9 +1193,9 @@ export function ScheduleBoard({
                     )}
                     style={rowStyle}
                   >
-                    <div className={cn("relative w-[220px] shrink-0 overflow-hidden bg-[#313131] max-sm:w-full", compactInlineRoom && "w-[210px]", narrowLeftPanel && "w-[240px]", row.group === "meeting" && "w-[360px]")}>
+                    <div className={cn("relative w-[220px] shrink-0 overflow-hidden max-sm:w-full", compactInlineRoom && "w-[210px]", narrowLeftPanel && "w-[240px]", row.group === "meeting" && "w-[360px]")}>
                       <div
-                        className="absolute inset-0 bg-left bg-no-repeat opacity-[0.52]"
+                        className="infra-room-emblem absolute inset-0 bg-left bg-no-repeat"
                         style={{
                           backgroundImage: `url(${rowVisual.background})`,
                           backgroundPosition: "-18px center",
@@ -1182,12 +1203,11 @@ export function ScheduleBoard({
                         }}
                         aria-hidden="true"
                       />
-                      <div className="absolute inset-0 bg-gradient-to-r from-[#313131]/20 via-[#313131]/72 to-[#313131]" />
                       <div className="relative z-10 flex h-full flex-col justify-center gap-2 px-3 py-3 max-sm:justify-start max-sm:gap-2 max-sm:px-3 max-sm:py-3">
                         <div className="max-sm:flex max-sm:items-center max-sm:gap-2">
                           <div>
                             <div className="flex items-center gap-2.5 max-sm:gap-1.5">
-                              <div className={cn("min-w-0 truncate font-medium tracking-normal text-white [text-shadow:0_2px_3px_rgba(0,0,0,0.75)]", listRoomTitleSizeClass())}>
+                              <div className={cn("min-w-0 truncate font-medium tracking-[-0.02em] text-white [text-shadow:0_2px_3px_rgba(0,0,0,0.75)]", listRoomTitleSizeClass())}>
                                 {row.title}
                               </div>
                               <LevelDiamonds level={row.level} maxLevel={layoutRoom ? maxRoomLevel(layoutRoom.kind) : row.level} />
@@ -1222,7 +1242,7 @@ export function ScheduleBoard({
                     >
                       <div
                         className={cn(
-                          "grid min-w-0 items-center justify-start [column-gap:var(--operator-column-gap-desktop)] sm:h-full",
+                          "infra-list-operator-grid grid min-w-0 items-center justify-start [column-gap:var(--operator-column-gap-desktop)] sm:h-full",
                           listMobileOperatorGridClass(),
                           compactInlineRoom ? "flex-none" : "flex-1 grid-flow-col auto-cols-max",
                           compactFactoryRoom && "min-[1800px]:col-start-1 min-[1800px]:row-span-2 min-[1800px]:row-start-1",

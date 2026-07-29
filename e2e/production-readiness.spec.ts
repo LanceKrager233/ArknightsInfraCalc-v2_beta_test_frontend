@@ -303,6 +303,72 @@ test("responsive navigation and the two locked areas keep their current behavior
   await expect(page.getByRole("button", { name: "森空岛状态" })).toBeVisible();
 });
 
+test("schedule visuals use the technical canvas, acrylic mesh, and responsive level markers", async ({ page }) => {
+  await mockApis(page);
+  await seedV4Session(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  const canvas = page.locator("[data-infra-canvas]");
+  const roomSurface = page.locator(".infra-room-surface").first();
+  const listDiamonds = page.locator('.level-diamonds[data-variant="list"]').first();
+
+  await expect(canvas).toBeVisible();
+  await expect(roomSurface).toBeVisible();
+  await expect(listDiamonds).toBeVisible();
+
+  const visualStyles = await page.evaluate(() => {
+    const room = document.querySelector<HTMLElement>(".infra-room-surface");
+    if (!room) throw new Error("Missing room surface");
+    const surface = getComputedStyle(room);
+    const mesh = getComputedStyle(room, "::before");
+    return {
+      bodyFont: getComputedStyle(document.body).fontFamily,
+      backdropFilter: surface.backdropFilter || surface.webkitBackdropFilter,
+      surfaceBackground: surface.backgroundColor,
+      meshMask: mesh.maskImage || mesh.webkitMaskImage,
+    };
+  });
+  expect(visualStyles.bodyFont).toContain("Noto Sans SC");
+  expect(visualStyles.bodyFont).not.toContain("Segoe UI");
+  expect(visualStyles.backdropFilter).toContain("blur(12px)");
+  expect(visualStyles.surfaceBackground).toBe("rgb(39, 42, 43)");
+  expect(visualStyles.meshMask).toContain("facility-grid.svg");
+
+  const listBox = await listDiamonds.boundingBox();
+  expect(listBox?.height).toBeCloseTo(20, 0);
+  const listDiamondBox = await listDiamonds.locator(".level-diamond").first().boundingBox();
+  expect(listDiamondBox?.width).toBeCloseTo(10, 0);
+
+  await page.getByRole("tab", { name: "一图流布局" }).click();
+  const compactDiamonds = page.locator('.level-diamonds[data-variant="compact"]').first();
+  await expect(compactDiamonds).toBeVisible();
+  const compactBox = await compactDiamonds.boundingBox();
+  expect(compactBox?.height).toBeCloseTo(14, 0);
+  const compactDiamondBox = await compactDiamonds.locator(".level-diamond").first().boundingBox();
+  expect(compactDiamondBox?.width).toBeCloseTo(7.5, 0);
+
+  await page.getByRole("tab", { name: "列表式布局" }).click();
+  await page.setViewportSize({ width: 768, height: 900 });
+  await expect(page.getByRole("tab", { name: "一图流布局" })).toBeDisabled();
+  const tabletOperatorGrid = page.locator(".infra-list-operator-grid").first();
+  await expect(tabletOperatorGrid).toBeVisible();
+  const tabletGridSize = await tabletOperatorGrid.evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  expect(tabletGridSize.scrollWidth).toBeLessThanOrEqual(tabletGridSize.clientWidth);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole("tab", { name: "一图流布局" })).toBeDisabled();
+  const mobileDiamonds = page.locator('.level-diamonds[data-variant="list"]').first();
+  await expect(mobileDiamonds).toBeVisible();
+  const mobileBox = await mobileDiamonds.boundingBox();
+  expect(mobileBox?.height).toBeCloseTo(16, 0);
+  const mobileDiamondBox = await mobileDiamonds.locator(".level-diamond").first().boundingBox();
+  expect(mobileDiamondBox?.width).toBeCloseTo(8, 0);
+});
+
 test("Skland login shows QR on every viewport and offers a separate mobile app shortcut", async ({ page }) => {
   await mockApis(page, { sklandConfigured: true });
   let qrStartRequests = 0;

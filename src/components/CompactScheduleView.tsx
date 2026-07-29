@@ -7,7 +7,7 @@ import {
   maxRoomLevel,
   tradeOrderFor,
 } from "@/blueprint";
-import { OperatorSlot, roomVisualFor } from "@/components";
+import { LevelDiamonds, OperatorSlot, roomVisualFor } from "@/components";
 import { presentRoomEfficiency } from "@/efficiency";
 import {
   COMPACT_AUXILIARY_WIDTHS,
@@ -22,12 +22,11 @@ import {
   COMPACT_POWER_OPERATOR_ROW_CLASS,
   COMPACT_ROOM_BACKGROUND_CLASS,
   COMPACT_ROOM_BACKGROUND_STYLE,
-  COMPACT_ROOM_GRADIENT_CLASS,
-  COMPACT_ROOM_LEVEL_CLASS,
   COMPACT_ROOM_TITLE_CLASS,
   compactFactoryAccent,
   compactTradeAccent,
   isCompactScheduleGroupVisible,
+  roomGridTone,
   usesCompactHorizontalCard,
 } from "@/schedule-view-presentation";
 import type { RoomRow } from "@/schedule";
@@ -77,17 +76,24 @@ function CompactRoomCard({
   const isTrade = layoutRoom?.kind === "trade_post";
   const isFactory = layoutRoom?.kind === "factory";
   const isPower = row.group === "power";
-  const rowStyle = { "--room-accent": visual.accent } as CSSProperties;
+  const gridTone = roomGridTone(row.group);
+  const rowStyle = {
+    "--room-accent": visual.accent,
+    "--room-level": visual.level,
+    "--room-grid-color": gridTone.color,
+    "--room-grid-opacity": gridTone.opacity,
+    "--room-grid-fade-start": gridTone.fadeStart,
+  } as CSSProperties;
 
   const header = (
     <div className={COMPACT_HEADER_CLASS}>
-      <span className="h-5 w-1 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
+      <span className="infra-room-accent h-5 w-1 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
       <span className={COMPACT_ROOM_TITLE_CLASS}>{row.title}</span>
-      {row.level ? (
-          <span className={COMPACT_ROOM_LEVEL_CLASS}>
-            Lv.{row.level}/{layoutRoom ? maxRoomLevel(layoutRoom.kind) : row.level}
-          </span>
-        ) : null}
+      <LevelDiamonds
+        level={row.level}
+        maxLevel={layoutRoom ? maxRoomLevel(layoutRoom.kind) : row.level}
+        variant="compact"
+      />
         {isTrade ? (() => {
           const order = tradeOrderFor(layoutRoom!);
           const accent = compactTradeAccent(order);
@@ -113,10 +119,10 @@ function CompactRoomCard({
   const efficiencyBlock = efficiency ? (
     <div>
       {isPower ? (
-        <span className="text-sm font-semibold tabular-nums text-[var(--room-accent)]">{efficiency.primaryValue}</span>
+        <span className="infra-room-value font-technical text-sm font-semibold tabular-nums text-[var(--room-accent)]">{efficiency.primaryValue}</span>
       ) : row.group === "trading" || row.group === "manufacture" ? (
-        <div className="flex flex-wrap items-center gap-x-1.5 text-xs text-white/72">
-          <span className="font-semibold tabular-nums text-[var(--room-accent)]">{efficiency.primaryValue}</span>
+        <div className="font-technical flex flex-wrap items-center gap-x-1.5 text-xs tracking-[0.01em] text-white/76">
+          <span className="infra-room-value font-semibold tabular-nums text-[var(--room-accent)]">{efficiency.primaryValue}</span>
           {efficiency.details.map((detail) => (
             <span key={detail.label} className={detail.kind === "cross-station" ? "text-[#C8F75A]" : undefined}>
               / {detail.label} {detail.value}
@@ -124,7 +130,7 @@ function CompactRoomCard({
           ))}
         </div>
       ) : (
-        <span className="text-sm tabular-nums text-white/60">{efficiency.primaryValue}</span>
+        <span className="font-technical text-sm tabular-nums text-white/66">{efficiency.primaryValue}</span>
       )}
     </div>
   ) : null;
@@ -149,7 +155,6 @@ function CompactRoomCard({
         }}
         aria-hidden="true"
       />
-      <div className={COMPACT_ROOM_GRADIENT_CLASS} aria-hidden="true" />
     </>
   );
 
