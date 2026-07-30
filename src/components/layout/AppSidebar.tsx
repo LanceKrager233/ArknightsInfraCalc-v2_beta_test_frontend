@@ -88,7 +88,7 @@ export function AppSidebar({ page, snapshot, onPageChange }: AppSidebarProps) {
               {snapshot ? (
                 <>
                   <span
-                    className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-primary text-sm font-semibold text-primary-foreground ring-1 ring-foreground/12"
+                    className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-lg bg-primary text-sm font-semibold text-primary-foreground ring-1 ring-foreground/12"
                     role="img"
                     aria-label={`${snapshot.player.nickname}的森空岛头像`}
                     data-skland-sidebar-avatar
@@ -97,8 +97,8 @@ export function AppSidebar({ page, snapshot, onPageChange }: AppSidebarProps) {
                       <img
                         src={snapshot.player.avatarUrl}
                         alt=""
-                        width={40}
-                        height={40}
+                        width={36}
+                        height={36}
                         referrerPolicy="no-referrer"
                         className="size-full object-cover"
                       />

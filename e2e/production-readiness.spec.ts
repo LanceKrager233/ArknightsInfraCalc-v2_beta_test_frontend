@@ -568,8 +568,11 @@ test("calculator owns scheduling controls and training advice uses a single tech
   await expect(calculatorControls).toHaveCount(0);
   await expect(page.locator('[data-slot="training-summary"]')).toHaveClass(/infra-room-surface/);
   await expect(page.locator('[data-slot="training-data-check"]')).toHaveClass(/infra-room-surface/);
+  await expect(page.locator('[data-slot="training-summary"] svg')).toHaveCount(0);
+  await expect(page.locator('[data-slot="training-data-check"] svg')).toHaveCount(0);
   const adviceCards = page.locator('[data-slot="training-advice-card"]');
   await expect(adviceCards).toHaveCount(2);
+  await expect(adviceCards.locator("svg")).toHaveCount(0);
   const cardBoxes = await adviceCards.evaluateAll((elements) => elements.map((element) => {
     const box = element.getBoundingClientRect();
     return { left: box.left, top: box.top, width: box.width };
@@ -806,6 +809,8 @@ test("Skland status center keeps profile and recruitment in overview and support
   await seedPreferences(page);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
+  const scheduleViewTabHeight = await page.getByRole("tab", { name: "列表式布局" })
+    .evaluate((element) => element.getBoundingClientRect().height);
   await page.getByRole("button", { name: "森空岛状态", exact: true }).click();
   await expect(page.locator("[data-calculator-controls]")).toHaveCount(0);
 
@@ -817,6 +822,10 @@ test("Skland status center keeps profile and recruitment in overview and support
   await expect(page.getByRole("tab", { name: "概览", exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: "基建", exact: true })).toBeVisible();
   await expect(page.locator("[data-skland-view-tabs]")).toHaveAttribute("data-variant", "default");
+  await expect(page.locator("[data-skland-view-tabs] svg")).toHaveCount(0);
+  const sklandViewTabHeight = await page.getByRole("tab", { name: "概览", exact: true })
+    .evaluate((element) => element.getBoundingClientRect().height);
+  expect(sklandViewTabHeight).toBe(scheduleViewTabHeight);
   await expect(page.getByRole("tab", { name: "干员", exact: true })).toHaveCount(0);
   await expect(page.getByRole("tab", { name: "进度", exact: true })).toHaveCount(0);
   await expect(page.getByText("当前理智")).toBeVisible();
@@ -830,6 +839,9 @@ test("Skland status center keeps profile and recruitment in overview and support
   await expect(page.locator('[data-slot="skland-layout-sync"]')).toHaveClass(/infra-room-surface/);
   await expect(page.locator('[data-slot="skland-training-room"]')).toHaveClass(/infra-room-surface/);
   await expect(page.locator('[data-slot="skland-infra-assets"]')).toHaveClass(/infra-room-surface/);
+  await expect(page.locator('[data-slot="skland-layout-sync"] svg')).toHaveCount(0);
+  await expect(page.locator('[data-slot="skland-training-room"] svg')).toHaveCount(0);
+  await expect(page.locator('[data-slot="skland-infra-assets"] svg')).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "当前基建", exact: true })).toBeVisible();
   await expect(page.getByText("按计算器布局排列，快速核对进驻、心情与生产状态。", { exact: true })).toHaveCount(0);
   await expect(page.locator("[data-skland-compact-layout]")).toBeVisible();
@@ -1020,7 +1032,7 @@ test("Skland supports adding, switching, and individually logging out multiple a
   await expect(sidebarAccount).toBeVisible();
   await expect(sidebarAvatar).toBeVisible();
   const avatarBox = await sidebarAvatar.boundingBox();
-  expect(avatarBox?.width).toBeCloseTo(40, 0);
+  expect(avatarBox?.width).toBeCloseTo(36, 0);
   await expect.poll(() => sidebarAvatar.evaluate((element) => getComputedStyle(element).borderRadius)).not.toBe("9999px");
   const controlHeights = await Promise.all([
     accountSelect.evaluate((element) => element.getBoundingClientRect().height),

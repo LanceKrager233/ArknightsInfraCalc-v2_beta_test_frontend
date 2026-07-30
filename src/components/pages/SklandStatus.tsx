@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   Boxes,
   Building2,
-  Check,
   Clipboard,
   Database,
   DoorOpen,
@@ -668,13 +667,7 @@ function InfrastructureTab({
           dataSlot="skland-layout-sync"
         >
           <div className="flex h-full flex-col">
-            <OverviewTechnicalHeading
-              icon={layoutMatches
-                ? <Check className="size-4" aria-hidden="true" />
-                : <AlertTriangle className="size-4" aria-hidden="true" />}
-            >
-              布局同步
-            </OverviewTechnicalHeading>
+            <OverviewTechnicalHeading>布局同步</OverviewTechnicalHeading>
             <p className="mt-5 text-2xl font-semibold tracking-[-0.02em] text-[var(--room-accent)]">
               {layoutMatches ? "当前布局一致" : "布局需要确认"}
             </p>
@@ -688,7 +681,7 @@ function InfrastructureTab({
                 variant="outline"
                 onClick={requestApplyLayout}
               >
-                <Building2 />应用森空岛布局
+                应用森空岛布局
               </Button>
             ) : null}
           </div>
@@ -696,9 +689,7 @@ function InfrastructureTab({
 
         <OverviewTechnicalCard group="training" className="min-h-40" dataSlot="skland-training-room">
           <div className="flex h-full flex-col">
-            <OverviewTechnicalHeading icon={<Activity className="size-4" aria-hidden="true" />}>
-              训练室
-            </OverviewTechnicalHeading>
+            <OverviewTechnicalHeading>训练室</OverviewTechnicalHeading>
             <p className="mt-5 text-2xl font-semibold tracking-[-0.02em] text-[var(--room-accent)]">
               {infrastructure.training?.trainee ?? "当前空闲"}
             </p>
@@ -715,9 +706,7 @@ function InfrastructureTab({
 
         <OverviewTechnicalCard group="power" className="min-h-40" dataSlot="skland-infra-assets">
           <div className="flex h-full flex-col">
-            <OverviewTechnicalHeading icon={<Boxes className="size-4" aria-hidden="true" />}>
-              基建资产
-            </OverviewTechnicalHeading>
+            <OverviewTechnicalHeading>基建资产</OverviewTechnicalHeading>
             <p className="mt-5 text-3xl font-semibold tabular-nums text-[var(--room-accent)]">
               {infrastructure.furnitureTotal}
               <span className="ml-1 text-sm font-normal text-white/58">件家具</span>
@@ -1353,8 +1342,8 @@ export function SklandStatus({
       <Tabs defaultValue="overview">
         <div className="-mx-3 overflow-x-auto px-3 pb-1">
           <TabsList className="min-w-max" data-skland-view-tabs>
-            <TabsTrigger value="overview" className="h-9 px-4 max-sm:h-11"><Database />概览</TabsTrigger>
-            <TabsTrigger value="infrastructure" className="h-9 px-4 max-sm:h-11"><Building2 />基建</TabsTrigger>
+            <TabsTrigger value="overview">概览</TabsTrigger>
+            <TabsTrigger value="infrastructure">基建</TabsTrigger>
           </TabsList>
         </div>
         <TabsContent value="overview" className="pt-5">
