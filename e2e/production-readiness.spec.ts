@@ -568,8 +568,9 @@ test("calculator owns scheduling controls and training advice uses a single tech
   await expect(calculatorControls).toHaveCount(0);
   await expect(page.locator('[data-slot="training-summary"]')).toHaveClass(/infra-room-surface/);
   await expect(page.locator('[data-slot="training-data-check"]')).toHaveClass(/infra-room-surface/);
-  await expect(page.locator('[data-slot="training-summary"] svg')).toHaveCount(0);
-  await expect(page.locator('[data-slot="training-data-check"] svg')).toHaveCount(0);
+  await expect(page.locator('[data-slot="training-summary"] svg')).toHaveCount(1);
+  await expect(page.locator('[data-slot="training-data-check"] svg')).toHaveCount(1);
+  await expect(page.locator('[data-slot^="training-"] .infra-room-emblem')).toHaveCount(0);
   const adviceCards = page.locator('[data-slot="training-advice-card"]');
   await expect(adviceCards).toHaveCount(2);
   await expect(adviceCards.locator("svg")).toHaveCount(0);
@@ -839,9 +840,10 @@ test("Skland status center keeps profile and recruitment in overview and support
   await expect(page.locator('[data-slot="skland-layout-sync"]')).toHaveClass(/infra-room-surface/);
   await expect(page.locator('[data-slot="skland-training-room"]')).toHaveClass(/infra-room-surface/);
   await expect(page.locator('[data-slot="skland-infra-assets"]')).toHaveClass(/infra-room-surface/);
-  await expect(page.locator('[data-slot="skland-layout-sync"] svg')).toHaveCount(0);
-  await expect(page.locator('[data-slot="skland-training-room"] svg')).toHaveCount(0);
-  await expect(page.locator('[data-slot="skland-infra-assets"] svg')).toHaveCount(0);
+  await expect(page.locator('[data-slot^="skland-"] .infra-room-emblem')).toHaveCount(0);
+  await expect(page.locator('[data-slot="skland-layout-sync"] svg').first()).toBeVisible();
+  await expect(page.locator('[data-slot="skland-training-room"] svg').first()).toBeVisible();
+  await expect(page.locator('[data-slot="skland-infra-assets"] svg').first()).toBeVisible();
   await expect(page.getByRole("heading", { name: "当前基建", exact: true })).toBeVisible();
   await expect(page.getByText("按计算器布局排列，快速核对进驻、心情与生产状态。", { exact: true })).toHaveCount(0);
   await expect(page.locator("[data-skland-compact-layout]")).toBeVisible();
@@ -1032,7 +1034,10 @@ test("Skland supports adding, switching, and individually logging out multiple a
   await expect(sidebarAccount).toBeVisible();
   await expect(sidebarAvatar).toBeVisible();
   const avatarBox = await sidebarAvatar.boundingBox();
+  const sidebarAccountBox = await sidebarAccount.boundingBox();
   expect(avatarBox?.width).toBeCloseTo(36, 0);
+  expect((avatarBox?.x ?? 0) + (avatarBox?.width ?? 0) / 2)
+    .toBeCloseTo((sidebarAccountBox?.x ?? 0) + (sidebarAccountBox?.width ?? 0) / 2, 0);
   await expect.poll(() => sidebarAvatar.evaluate((element) => getComputedStyle(element).borderRadius)).not.toBe("9999px");
   const controlHeights = await Promise.all([
     accountSelect.evaluate((element) => element.getBoundingClientRect().height),

@@ -79,7 +79,7 @@ export function AppSidebar({ page, snapshot, onPageChange }: AppSidebarProps) {
             <SidebarMenuButton
               size="lg"
               isActive={page === "skland"}
-              className="h-14 gap-2 p-2 group-data-[collapsible=icon]:size-10! group-data-[collapsible=icon]:p-0!"
+              className="h-14 gap-2 p-2 group-data-[collapsible=icon]:size-10! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0!"
               onClick={() => handlePageChange("skland")}
               tooltip={snapshot ? `${snapshot.player.nickname} · 森空岛` : "登录森空岛"}
               aria-label={snapshot ? `${snapshot.player.nickname}，进入森空岛状态` : "登录森空岛"}

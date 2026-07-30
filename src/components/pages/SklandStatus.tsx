@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   Boxes,
   Building2,
+  Check,
   Clipboard,
   Database,
   DoorOpen,
@@ -665,9 +666,16 @@ function InfrastructureTab({
           group="control"
           className="min-h-40 md:col-span-2 xl:col-span-1"
           dataSlot="skland-layout-sync"
+          showEmblem={false}
         >
           <div className="flex h-full flex-col">
-            <OverviewTechnicalHeading>布局同步</OverviewTechnicalHeading>
+            <OverviewTechnicalHeading
+              icon={layoutMatches
+                ? <Check className="size-4" aria-hidden="true" />
+                : <AlertTriangle className="size-4" aria-hidden="true" />}
+            >
+              布局同步
+            </OverviewTechnicalHeading>
             <p className="mt-5 text-2xl font-semibold tracking-[-0.02em] text-[var(--room-accent)]">
               {layoutMatches ? "当前布局一致" : "布局需要确认"}
             </p>
@@ -681,15 +689,22 @@ function InfrastructureTab({
                 variant="outline"
                 onClick={requestApplyLayout}
               >
-                应用森空岛布局
+                <Building2 />应用森空岛布局
               </Button>
             ) : null}
           </div>
         </OverviewTechnicalCard>
 
-        <OverviewTechnicalCard group="training" className="min-h-40" dataSlot="skland-training-room">
+        <OverviewTechnicalCard
+          group="training"
+          className="min-h-40"
+          dataSlot="skland-training-room"
+          showEmblem={false}
+        >
           <div className="flex h-full flex-col">
-            <OverviewTechnicalHeading>训练室</OverviewTechnicalHeading>
+            <OverviewTechnicalHeading icon={<Activity className="size-4" aria-hidden="true" />}>
+              训练室
+            </OverviewTechnicalHeading>
             <p className="mt-5 text-2xl font-semibold tracking-[-0.02em] text-[var(--room-accent)]">
               {infrastructure.training?.trainee ?? "当前空闲"}
             </p>
@@ -704,9 +719,16 @@ function InfrastructureTab({
           </div>
         </OverviewTechnicalCard>
 
-        <OverviewTechnicalCard group="power" className="min-h-40" dataSlot="skland-infra-assets">
+        <OverviewTechnicalCard
+          group="power"
+          className="min-h-40"
+          dataSlot="skland-infra-assets"
+          showEmblem={false}
+        >
           <div className="flex h-full flex-col">
-            <OverviewTechnicalHeading>基建资产</OverviewTechnicalHeading>
+            <OverviewTechnicalHeading icon={<Boxes className="size-4" aria-hidden="true" />}>
+              基建资产
+            </OverviewTechnicalHeading>
             <p className="mt-5 text-3xl font-semibold tabular-nums text-[var(--room-accent)]">
               {infrastructure.furnitureTotal}
               <span className="ml-1 text-sm font-normal text-white/58">件家具</span>

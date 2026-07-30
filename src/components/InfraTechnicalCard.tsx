@@ -9,11 +9,13 @@ export function InfraTechnicalCard({
   className,
   children,
   dataSlot,
+  showEmblem = true,
 }: {
   group: string;
   className?: string;
   children: ReactNode;
   dataSlot?: string;
+  showEmblem?: boolean;
 }) {
   const visual = roomVisualFor(group);
   const gridTone = roomGridTone(group);
@@ -35,15 +37,17 @@ export function InfraTechnicalCard({
       data-slot={dataSlot}
       style={style}
     >
-      <div
-        className="infra-room-emblem pointer-events-none absolute inset-0 bg-left bg-no-repeat"
-        style={{
-          backgroundImage: `url(${visual.background})`,
-          backgroundPosition: "-18px center",
-          backgroundSize: "auto 176px",
-        }}
-        aria-hidden="true"
-      />
+      {showEmblem ? (
+        <div
+          className="infra-room-emblem pointer-events-none absolute inset-0 bg-left bg-no-repeat"
+          style={{
+            backgroundImage: `url(${visual.background})`,
+            backgroundPosition: "-18px center",
+            backgroundSize: "auto 176px",
+          }}
+          aria-hidden="true"
+        />
+      ) : null}
       <div className="relative z-10 h-full">{children}</div>
     </article>
   );
@@ -54,14 +58,14 @@ export function InfraTechnicalHeading({
   children,
   titleId,
 }: {
-  icon?: ReactNode;
+  icon: ReactNode;
   children: ReactNode;
   titleId?: string;
 }) {
   return (
     <div className="flex min-h-6 items-center gap-2">
       <span className="h-5 w-1 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
-      {icon ? <span className="text-[var(--room-accent)]">{icon}</span> : null}
+      <span className="text-[var(--room-accent)]">{icon}</span>
       <h3 id={titleId} className="text-xs font-medium tracking-wide text-white/66">
         {children}
       </h3>

@@ -1,3 +1,5 @@
+import { ArrowUpRight, CircleAlert, ClipboardCheck, GraduationCap } from "lucide-react";
+
 import { InfraTechnicalCard, InfraTechnicalHeading } from "@/components/InfraTechnicalCard";
 import { Button } from "@/components/ui/button";
 import { operatorPortraitFor } from "@/operatorPortraits";
@@ -112,6 +114,7 @@ function ActionCard({
       group={actionDomainGroup(action.domain_id)}
       className="min-w-0"
       dataSlot="training-advice-card"
+      showEmblem={false}
     >
       <div className="grid min-w-0 gap-4 sm:grid-cols-[88px_minmax(0,1fr)_auto] sm:items-center">
         <div className="relative size-[88px] overflow-hidden bg-[#3C3C3C] outline outline-1 -outline-offset-1 outline-white/12">
@@ -167,10 +170,12 @@ export function TrainingAdvice({ operbox, layout, profile, onOpenCalculator }: T
           <h1 className="truncate text-[21px] font-medium leading-none text-[#313131]">训练建议</h1>
           <span className="text-xs text-[#313131]/52">{actions.length}</span>
         </div>
-        <InfraTechnicalCard group="manufacture" dataSlot="training-summary">
+        <InfraTechnicalCard group="manufacture" dataSlot="training-summary" showEmblem={false}>
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(28rem,0.8fr)] lg:items-end">
             <div>
-              <InfraTechnicalHeading>最近一次排班</InfraTechnicalHeading>
+              <InfraTechnicalHeading icon={<GraduationCap className="size-4" aria-hidden="true" />}>
+                最近一次排班
+              </InfraTechnicalHeading>
               <h2 className="mt-4 text-[23px] font-medium leading-tight tracking-[-0.02em]">
                 根据最近排班整理的培养方向
               </h2>
@@ -205,19 +210,29 @@ export function TrainingAdvice({ operbox, layout, profile, onOpenCalculator }: T
       </section>
 
       {issues.length ? (
-        <InfraTechnicalCard group="manufacture" dataSlot="training-data-check">
-          <div className="text-sm" aria-label="数据检查问题">
-            <strong className="text-[var(--room-accent)]">还需要补充以下信息</strong>
-            <ul className="mt-2 grid gap-1 text-white/72">
-              {issues.map((issue) => <li key={issue}>• {issue}</li>)}
-            </ul>
+        <InfraTechnicalCard group="manufacture" dataSlot="training-data-check" showEmblem={false}>
+          <div className="flex gap-3 text-sm" aria-label="数据检查问题">
+            <CircleAlert
+              className="mt-0.5 size-5 shrink-0 text-[var(--room-accent)]"
+              aria-hidden="true"
+            />
+            <div>
+              <strong className="text-[var(--room-accent)]">还需要补充以下信息</strong>
+              <ul className="mt-2 grid gap-1 text-white/72">
+                {issues.map((issue) => <li key={issue}>• {issue}</li>)}
+              </ul>
+            </div>
           </div>
         </InfraTechnicalCard>
       ) : (
-        <InfraTechnicalCard group="power" dataSlot="training-data-check">
-          <p className="text-sm text-white/76" aria-label="数据检查">
-            当前基建设施与干员数据已通过基础检查，可以生成排班。
-          </p>
+        <InfraTechnicalCard group="power" dataSlot="training-data-check" showEmblem={false}>
+          <div className="flex gap-3 text-sm" aria-label="数据检查">
+            <ClipboardCheck
+              className="mt-0.5 size-5 shrink-0 text-[var(--room-accent)]"
+              aria-hidden="true"
+            />
+            <p className="text-white/76">当前基建设施与干员数据已通过基础检查，可以生成排班。</p>
+          </div>
         </InfraTechnicalCard>
       )}
 
@@ -234,10 +249,19 @@ export function TrainingAdvice({ operbox, layout, profile, onOpenCalculator }: T
             ))}
           </div>
         ) : (
-          <InfraTechnicalCard group="training" className="min-h-[220px]" dataSlot="training-empty">
+          <InfraTechnicalCard
+            group="training"
+            className="min-h-[220px]"
+            dataSlot="training-empty"
+            showEmblem={false}
+          >
             <div className="grid min-h-[188px] place-items-center text-center">
               <div className="max-w-xl">
-                <h3 className="text-lg font-semibold">尚无培养建议</h3>
+                <ArrowUpRight
+                  className="mx-auto size-8 text-[var(--room-accent)]"
+                  aria-hidden="true"
+                />
+                <h3 className="mt-3 text-lg font-semibold">尚无培养建议</h3>
                 <p className="mt-2 text-sm leading-6 text-white/62">先导入干员数据、确认基建布局并生成一次排班。</p>
                 <Button type="button" className="mt-4 h-9 bg-white text-[#272a2b] hover:bg-white/90 max-sm:h-11" onClick={onOpenCalculator}>
                   前往生成排班
