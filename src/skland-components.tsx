@@ -1,63 +1,35 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Building2,
-  Check,
-  ExternalLink,
-  LoaderCircle,
-  LogOut,
-  RefreshCw,
-  ScanLine,
-  UserRound,
-} from "lucide-react";
+import { ExternalLink, LoaderCircle, RefreshCw, ScanLine, ShieldCheck } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 
+import { pollSklandQr, startSklandQr, toDisplayError } from "@/api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { pollSklandQr, startSklandQr, toDisplayError } from "./api";
-import { buildSklandAppOpenUrl } from "./skland-auth-url";
-import type { ShiftComparison, SklandSnapshot } from "./types";
+import { buildSklandAppOpenUrl } from "@/skland-auth-url";
+import type { ShiftComparison, SklandSessionData } from "@/types";
 
 const SKLAND_APP_OPEN_URL = buildSklandAppOpenUrl();
-
-type AccountProps = {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  configured: boolean;
-  disabledReason?: string | null;
-  snapshot: SklandSnapshot | null;
-  busy: boolean;
-  onAuthenticated: (snapshot: SklandSnapshot) => void;
-  onRefresh: () => Promise<void>;
-  onRoleChange: (uid: string) => Promise<void>;
-  onLogout: () => Promise<void>;
-};
+const SKLAND_QR_POLL_INTERVAL_MS = 6_000;
 
 type ScanState = "idle" | "loading" | "waiting" | "scanned" | "expired";
 
-export function SklandAccount({
-  open,
-  onOpenChange,
+interface SklandLoginPanelProps {
+  configured: boolean;
+  disabledReason?: string | null;
+  onAuthenticated: (session: SklandSessionData) => void;
+  className?: string;
+}
+
+export function SklandLoginPanel({
   configured,
   disabledReason,
-  snapshot,
-  busy,
   onAuthenticated,
-  onRefresh,
-  onRoleChange,
-  onLogout,
-}: AccountProps) {
+  className,
+}: SklandLoginPanelProps) {
   const [scanId, setScanId] = useState<string | null>(null);
   const [scanUrl, setScanUrl] = useState<string | null>(null);
   const [scanState, setScanState] = useState<ScanState>("idle");
@@ -76,7 +48,6 @@ export function SklandAccount({
 
   const createQr = useCallback(() => {
     if (createQrPromiseRef.current) return createQrPromiseRef.current;
-
     const task = (async () => {
       setScanError(null);
       setScanState("loading");
@@ -90,10 +61,10 @@ export function SklandAccount({
         setScanUrl(result.scanUrl);
         setScanExpiresAt(Date.now() + result.expiresInSeconds * 1000);
         setScanState("waiting");
-      } catch (caught) {
+      } catch (error) {
         if (!mountedRef.current) return;
+        const detail = toDisplayError(error, "二维码生成失败，请稍后重试。");
         setScanState("idle");
-        const detail = toDisplayError(caught, "二维码生成失败，请稍后重试。");
         setScanError(`${detail.message}（${detail.code}${detail.requestId ? ` · ${detail.requestId}` : ""}）`);
       }
     })();
@@ -114,7 +85,7 @@ export function SklandAccount({
   }, [scanState]);
 
   useEffect(() => {
-    if (!open || !scanId || !scanExpiresAt) return;
+    if (!scanId || !scanExpiresAt) return;
     const remaining = scanExpiresAt - Date.now();
     if (remaining <= 0) {
       setScanId(null);
@@ -126,19 +97,29 @@ export function SklandAccount({
       setScanState("expired");
     }, remaining);
     return () => window.clearTimeout(timer);
-  }, [open, scanExpiresAt, scanId]);
+  }, [scanExpiresAt, scanId]);
 
   useEffect(() => {
-    if (!open || !scanId) return;
+    if (!scanId) return;
     let cancelled = false;
     let timer: number | null = null;
     const poll = async () => {
       try {
         const result = await pollSklandQr(scanId);
         if (cancelled) return;
-        if (result.status === "authenticated" && result.snapshot) {
-          onAuthenticated(result.snapshot);
-          onOpenChange(false);
+        if (
+          result.status === "authenticated" &&
+          result.snapshot &&
+          result.accounts &&
+          result.activeAccountId
+        ) {
+          onAuthenticated({
+            authenticated: true,
+            configured: true,
+            accounts: result.accounts,
+            activeAccountId: result.activeAccountId,
+            snapshot: result.snapshot,
+          });
           setScanId(null);
           setScanUrl(null);
           setScanExpiresAt(null);
@@ -154,252 +135,124 @@ export function SklandAccount({
         }
         setScanState(result.status === "scanned" ? "scanned" : "waiting");
         setScanError(null);
-      } catch (caught) {
+      } catch (error) {
         if (cancelled) return;
-        const detail = toDisplayError(caught, "登录状态查询失败，将继续重试。");
+        const detail = toDisplayError(error, "登录状态查询失败，将继续重试。");
         setScanError(`${detail.message}（${detail.code}${detail.requestId ? ` · ${detail.requestId}` : ""}）`);
       }
-      if (!cancelled) timer = window.setTimeout(() => void poll(), 1500);
+      if (!cancelled) timer = window.setTimeout(() => void poll(), SKLAND_QR_POLL_INTERVAL_MS);
     };
-    timer = window.setTimeout(() => void poll(), 1500);
+    timer = window.setTimeout(() => void poll(), SKLAND_QR_POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
       if (timer !== null) window.clearTimeout(timer);
     };
-  }, [onAuthenticated, onOpenChange, open, scanId]);
+  }, [onAuthenticated, scanId]);
 
-  function prepareQrOnIntent() {
-    if (snapshot || !configured || scanState === "loading") return;
-    const hasActiveChallenge = Boolean(scanId && scanUrl && scanExpiresAt && scanExpiresAt > Date.now());
-    if (!hasActiveChallenge) void createQr();
-  }
-
-  function handleOpenChange(next: boolean) {
-    onOpenChange(next);
-    if (next) prepareQrOnIntent();
-  }
+  const statusText = scanState === "loading"
+    ? preparingSlow
+      ? "正在连接鹰角登录服务，首次准备可能需要更久。"
+      : "正在生成二维码…"
+    : scanState === "scanned"
+      ? "已扫码，请在森空岛中确认登录。"
+      : scanState === "expired"
+        ? "二维码已过期，请重新生成。"
+        : scanUrl
+          ? "等待森空岛扫码授权…"
+          : "二维码不会自动生成，准备好后再开始登录。";
 
   return (
-    <>
-      <Button
-        type="button"
-        variant="outline"
-        className="h-10 min-w-0 justify-start px-3 max-sm:size-11 max-sm:justify-center max-sm:px-0"
-        aria-label={snapshot ? `森空岛账号：${snapshot.player.nickname}` : "登录森空岛"}
-        onFocus={prepareQrOnIntent}
-        onPointerDown={prepareQrOnIntent}
-        onClick={() => handleOpenChange(true)}
-        disabled={!configured && !snapshot}
-      >
-        {snapshot ? (
-          <>
-            <UserRound className="shrink-0" aria-hidden="true" />
-            <span className="hidden max-w-32 truncate md:inline">{snapshot.player.nickname}</span>
-          </>
-        ) : (
-          <>
-            <ScanLine />
-            <span className="hidden md:inline">登录森空岛</span>
-          </>
-        )}
-      </Button>
+    <Card className={cn("surface-shadow mx-auto w-full max-w-4xl overflow-hidden ring-0", className)}>
+      <div className="grid md:grid-cols-[minmax(0,1fr)_22rem]">
+        <CardHeader className="border-b bg-muted/35 px-6 py-7 md:border-r md:border-b-0 md:px-8 md:py-9">
+          <div className="mb-5 flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <ScanLine className="size-5" aria-hidden="true" />
+          </div>
+          <CardTitle className="text-xl">登录森空岛账号</CardTitle>
+          <CardDescription className="max-w-md text-pretty leading-6">
+            打开森空岛 App，扫描页面中的二维码完成登录。登录成功后会自动同步当前角色的干员、基建和游戏进度。
+          </CardDescription>
+          <div className="mt-6 grid gap-3 text-sm text-muted-foreground">
+            <p className="flex items-start gap-2">
+              <ShieldCheck className="mt-0.5 size-4 shrink-0 text-emerald-600" aria-hidden="true" />
+              账号登录信息会加密保存在当前浏览器中，我们不会把它保存到服务器数据库。
+            </p>
+            <p>这里只读取排班需要的游戏数据，不会自动签到，也不会读取社区内容。</p>
+          </div>
+        </CardHeader>
 
-      <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain sm:max-w-md">
-          {snapshot ? (
-            <>
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <UserRound className="size-4" />
-                  {snapshot.player.nickname}
-                </DialogTitle>
-                <DialogDescription>
-                  {snapshot.player.channelName} · Lv.{snapshot.player.level} · UID {snapshot.player.uid}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-2">
-                <span className="text-xs font-medium text-muted-foreground">绑定角色</span>
-                {snapshot.roles.map((role) => (
-                  <Button
-                    type="button"
-                    key={role.uid}
-                    variant={role.uid === snapshot.player.uid ? "secondary" : "outline"}
-                    className="justify-between"
-                    disabled={busy || role.uid === snapshot.player.uid}
-                    onClick={() => void onRoleChange(role.uid)}
-                  >
-                    <span className="truncate">{role.nickname} · {role.channelName}</span>
-                    {role.uid === snapshot.player.uid ? <Check /> : null}
-                  </Button>
-                ))}
-              </div>
-              <DialogFooter>
-                <Button type="button" className="h-10" variant="outline" disabled={busy} onClick={() => void onLogout()}>
-                  <LogOut />退出
-                </Button>
-                <Button type="button" className="h-10" disabled={busy} onClick={() => void onRefresh()}>
-                  <RefreshCw className={busy ? "animate-spin" : ""} />刷新数据
-                </Button>
-              </DialogFooter>
-            </>
+        <CardContent className="grid min-h-80 place-items-center px-6 py-7 md:px-8">
+          {!configured ? (
+            <Alert>
+              <AlertDescription>
+                {disabledReason ?? "当前未开放森空岛登录，可继续使用 MAA 导入。"}
+              </AlertDescription>
+            </Alert>
           ) : (
-            <>
-              <DialogHeader>
-                <DialogTitle>登录森空岛</DialogTitle>
-                <DialogDescription>
-                  使用森空岛 App 扫描二维码完成登录。手机端也会显示二维码，并提供打开 App 的快捷按钮。
-                </DialogDescription>
-              </DialogHeader>
-              {!configured ? (
-                <Alert>
-                  <AlertDescription>{disabledReason}</AlertDescription>
-                </Alert>
-              ) : (
-                <div className="grid place-items-center gap-3 py-1">
-                  <div className="grid size-52 place-items-center rounded-xl bg-white p-3 shadow-[inset_0_0_0_1px_rgb(0_0_0/0.08)] sm:size-56">
-                    {scanUrl ? (
-                      <QRCodeSVG
-                        value={scanUrl}
-                        size={196}
-                        className="size-full"
-                        title="森空岛登录二维码"
-                        role="img"
-                        aria-label="森空岛登录二维码"
-                      />
-                    ) : (
-                      <LoaderCircle className="size-8 animate-spin text-muted-foreground" />
-                    )}
-                  </div>
-
+            <div className="grid w-full place-items-center gap-4">
+              {scanUrl || scanState === "loading" ? (
+                <div className="grid size-52 place-items-center rounded-xl bg-white p-3 ring-1 ring-black/10 sm:size-56">
                   {scanUrl ? (
-                    <div className="grid w-full gap-2 sm:hidden">
-                      <Button
-                        nativeButton={false}
-                        render={
-                          <a
-                            href={SKLAND_APP_OPEN_URL}
-                            target="_blank"
-                            rel="noreferrer"
-                            aria-label="打开森空岛 App"
-                          />
-                        }
-                        className="h-11 w-full"
-                      >
-                        <ExternalLink />打开森空岛
-                      </Button>
-                      <p className="text-pretty text-center text-xs leading-5 text-muted-foreground">
-                        此按钮只负责打开 App，不会自动完成登录。请使用森空岛的扫码功能扫描上方二维码，可在另一台设备展示二维码。
-                      </p>
-                    </div>
-                  ) : null}
-
-                  <p className="text-sm text-muted-foreground" role="status" aria-live="polite">
-                    {scanState === "loading"
-                      ? preparingSlow
-                        ? "正在连接鹰角登录服务，首次准备可能需要更久…"
-                        : "正在生成二维码…"
-                      : scanState === "scanned"
-                        ? "已扫码，请在森空岛中确认登录。"
-                        : scanState === "expired"
-                          ? "二维码已过期，请刷新。"
-                          : scanUrl
-                            ? "等待森空岛扫码授权…"
-                            : "二维码尚未生成。"}
-                  </p>
-                  {scanState === "loading" && preparingSlow ? (
-                    <p className="text-pretty text-center text-xs leading-5 text-muted-foreground">
-                      可以先关闭弹窗继续操作；生成完成后再次打开会复用同一个二维码。
-                    </p>
-                  ) : null}
-                  {scanError ? (
-                    <Alert variant="destructive">
-                      <AlertDescription>{scanError}</AlertDescription>
-                    </Alert>
-                  ) : null}
-                  {scanState === "expired" || scanError ? (
-                    <Button type="button" className="h-10" variant="outline" onClick={() => void createQr()}>
-                      <RefreshCw />刷新二维码
-                    </Button>
-                  ) : null}
+                    <QRCodeSVG
+                      value={scanUrl}
+                      size={196}
+                      className="size-full"
+                      title="森空岛登录二维码"
+                      role="img"
+                      aria-label="森空岛登录二维码"
+                    />
+                  ) : (
+                    <LoaderCircle className="size-8 animate-spin text-muted-foreground" aria-hidden="true" />
+                  )}
+                </div>
+              ) : (
+                <div className="grid size-36 place-items-center rounded-full bg-muted text-muted-foreground">
+                  <ScanLine className="size-12" aria-hidden="true" />
                 </div>
               )}
-            </>
+
+              <p className="text-center text-sm leading-6 text-muted-foreground" role="status" aria-live="polite">
+                {statusText}
+              </p>
+
+              {scanError ? (
+                <Alert variant="destructive">
+                  <AlertDescription>{scanError}</AlertDescription>
+                </Alert>
+              ) : null}
+
+              {scanUrl ? (
+                <div className="grid w-full gap-2 sm:hidden">
+                  <Button
+                    nativeButton={false}
+                    render={<a href={SKLAND_APP_OPEN_URL} target="_blank" rel="noreferrer" />}
+                    className="h-11 w-full"
+                  >
+                    <ExternalLink />打开森空岛 App
+                  </Button>
+                  <p className="text-pretty text-center text-xs leading-5 text-muted-foreground">
+                    按钮只负责打开 App。请使用森空岛扫码功能扫描上方二维码，必要时在另一台设备展示二维码。
+                  </p>
+                </div>
+              ) : null}
+
+              {!scanUrl || scanState === "expired" || scanError ? (
+                <Button
+                  type="button"
+                  className="h-11 min-w-36"
+                  variant={scanState === "idle" && !scanError ? "default" : "outline"}
+                  disabled={scanState === "loading"}
+                  onClick={() => void createQr()}
+                >
+                  {scanState === "loading" ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
+                  {scanState === "idle" && !scanError ? "生成登录二维码" : "重新生成二维码"}
+                </Button>
+              ) : null}
+            </div>
           )}
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
-
-function formatTime(timestamp: number): string {
-  if (!timestamp) return "未知";
-  return new Intl.DateTimeFormat("zh-CN", { dateStyle: "short", timeStyle: "medium" }).format(new Date(timestamp * 1000));
-}
-
-function roomLabel(group: string, index: number): string {
-  const labels: Record<string, string> = { control: "控制中枢", trading: "贸易站", manufacture: "制造站", power: "发电站", dormitory: "宿舍", meeting: "会客室", hire: "办公室" };
-  return `${labels[group] ?? group}${["control", "meeting", "hire"].includes(group) ? "" : ` ${index + 1}`}`;
-}
-
-export function InfrastructureSnapshot({
-  snapshot,
-  layoutMatches,
-  onApplyLayout,
-}: {
-  snapshot: SklandSnapshot;
-  layoutMatches: boolean;
-  onApplyLayout: () => void;
-}) {
-  const roomOrder: Record<string, number> = {
-    control: 0,
-    trading: 10,
-    manufacture: 20,
-    power: 30,
-    dormitory: 40,
-    hire: 50,
-    meeting: 60,
-  };
-  const occupied = snapshot.infrastructure.rooms
-    .filter((room) => room.operators.length > 0)
-    .sort((left, right) => (roomOrder[left.group] ?? 99) - (roomOrder[right.group] ?? 99) || left.index - right.index);
-  return (
-    <div className="grid gap-3 text-sm">
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge variant={layoutMatches ? "secondary" : "destructive"}>{layoutMatches ? "布局一致" : "布局不一致"}</Badge>
-        <span className="text-xs text-muted-foreground">存档于 {formatTime(snapshot.infrastructure.storeTs)}</span>
+        </CardContent>
       </div>
-      {!layoutMatches && snapshot.infrastructure.layoutSuggestion ? (
-        <Button type="button" size="sm" variant="outline" onClick={onApplyLayout}><Building2 />应用森空岛 {snapshot.infrastructure.layoutLabel} 布局</Button>
-      ) : null}
-      {snapshot.infrastructure.layoutWarning ? <p className="text-xs text-amber-700">{snapshot.infrastructure.layoutWarning}</p> : null}
-      <div className="divide-y divide-border/70 border-y border-border/70">
-        {occupied.map((room) => (
-          <div key={room.key} className="py-3">
-            <div className="flex items-center justify-between gap-2">
-              <strong className="text-xs">{roomLabel(room.group, room.index)} · Lv.{room.level}</strong>
-              {room.product ? <span className="text-[11px] text-muted-foreground">{room.product}</span> : null}
-            </div>
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              {room.operators.map((operator) => (
-                <Badge key={`${room.key}-${operator.id}`} variant={operator.morale <= 4 ? "destructive" : "outline"}>{operator.name} {operator.morale}</Badge>
-              ))}
-            </div>
-            {room.production ? (
-              <div className="mt-1.5 text-[11px] text-muted-foreground">
-                库存 {room.production.stock ?? "—"}/{room.production.capacity ?? "—"}
-                {room.production.completed !== null ? ` · 已完成 ${room.production.completed}` : ""}
-                {room.production.remaining !== null ? ` · 剩余 ${room.production.remaining}` : ""}
-              </div>
-            ) : null}
-          </div>
-        ))}
-      </div>
-      <div className="grid gap-1 text-xs text-muted-foreground">
-        <span>无人机：{snapshot.infrastructure.labor.value}/{snapshot.infrastructure.labor.maxValue}</span>
-        <span>疲劳干员：{snapshot.infrastructure.tiredOperators.join("、") || "无"}</span>
-        <span>训练室：{snapshot.infrastructure.training ? `${snapshot.infrastructure.training.trainee ?? "空"} / ${snapshot.infrastructure.training.trainer ?? "无协助"}` : "空闲"}</span>
-      </div>
-    </div>
+    </Card>
   );
 }
 
@@ -416,14 +269,15 @@ export function ShiftComparisonCard({ comparison }: { comparison: ShiftCompariso
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
         <div>
           <span className="text-xs font-medium text-muted-foreground">当前状态匹配</span>
-          <h3 id="closest-shift-title" className="mt-0.5 text-base font-semibold">当前最接近第 {comparison.planIndex + 1} 班</h3>
+          <h3 id="closest-shift-title" className="mt-0.5 text-base font-semibold">
+            当前最接近第 {comparison.planIndex + 1} 班
+          </h3>
         </div>
         <div className="text-right">
           <span className="text-xs text-muted-foreground">房间匹配</span>
           <strong className="ml-2 text-lg tabular-nums">{comparison.score}%</strong>
         </div>
       </div>
-
       <div
         className="mt-3 h-1.5 overflow-hidden bg-border/70"
         role="progressbar"
@@ -432,18 +286,21 @@ export function ShiftComparisonCard({ comparison }: { comparison: ShiftCompariso
         aria-valuemax={100}
         aria-valuenow={comparison.score}
       >
-        <div className="h-full bg-primary transition-[width]" style={{ width: `${Math.max(0, Math.min(100, comparison.score))}%` }} />
+        <div
+          className="h-full bg-primary transition-[width]"
+          style={{ width: `${Math.max(0, Math.min(100, comparison.score))}%` }}
+        />
       </div>
-
       <dl className="mt-4 grid grid-cols-2 divide-x divide-y divide-border/70 border-y border-border/70 sm:grid-cols-4 sm:divide-y-0">
         {groups.map((group) => (
           <div key={group.label} className="px-3 py-2 first:pl-0 sm:first:pl-0">
             <dt className="text-xs text-muted-foreground">{group.label}</dt>
-            <dd className={cn("mt-0.5 text-base font-semibold tabular-nums", group.tone)}>{group.names.length}</dd>
+            <dd className={cn("mt-0.5 text-base font-semibold tabular-nums", group.tone)}>
+              {group.names.length}
+            </dd>
           </div>
         ))}
       </dl>
-
       <details className="mt-3 border-t border-border/70 pt-3">
         <summary className="cursor-pointer select-none text-sm font-medium text-primary hover:underline hover:underline-offset-4">
           查看具体干员
@@ -455,7 +312,9 @@ export function ShiftComparisonCard({ comparison }: { comparison: ShiftCompariso
                 <strong className={cn("text-xs", group.tone)}>{group.label}</strong>
                 <span className="text-xs tabular-nums text-muted-foreground">{group.names.length}</span>
               </div>
-              <p className="mt-1.5 break-words text-sm leading-6 text-muted-foreground">{group.names.join("、") || "无"}</p>
+              <p className="mt-1.5 break-words text-sm leading-6 text-muted-foreground">
+                {group.names.join("、") || "无"}
+              </p>
             </div>
           ))}
         </div>

@@ -19,7 +19,6 @@ import {
   runPlan,
   saveFeedback,
   selectSklandRole,
-  syncSkland,
   toDisplayError,
 } from "./api";
 import {
@@ -53,7 +52,6 @@ import {
 import { planToRows, RoomRow } from "./schedule";
 import { SetupDialog } from "./setup-dialog";
 import { closestShift, compareShifts } from "./skland";
-import { SklandAccount } from "./skland-components";
 import {
   BaseBlueprint,
   BoxSource,
@@ -64,6 +62,8 @@ import {
   OperBoxEntry,
   PublicPlanData,
   PresetDef,
+  SklandAccountSummary,
+  SklandSessionData,
   SklandSnapshot,
 } from "./types";
 
@@ -77,6 +77,28 @@ function displayError(code: DisplayError["code"], message: string, retryable = f
 
 function resolvePreset(value: PresetDef | undefined): PresetDef {
   return PRESETS.find((preset) => preset.label === value?.label) ?? PRESETS[0];
+}
+
+function SklandTopAvatar({ snapshot }: { snapshot: SklandSnapshot }) {
+  const label = `${snapshot.player.nickname}的森空岛头像`;
+  return (
+    <div
+      className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-primary text-sm font-semibold text-primary-foreground ring-1 ring-foreground/12"
+      role="img"
+      aria-label={label}
+      title={`森空岛 · ${snapshot.player.nickname}`}
+      data-skland-top-avatar
+    >
+      {snapshot.player.avatarUrl ? (
+        <img
+          src={snapshot.player.avatarUrl}
+          alt=""
+          referrerPolicy="no-referrer"
+          className="size-full object-cover"
+        />
+      ) : snapshot.player.nickname.slice(0, 1)}
+    </div>
+  );
 }
 
 function parseLayoutJson(value: unknown): BaseBlueprint | null {
@@ -187,13 +209,15 @@ function WorkbenchApp() {
   const [inputMode, setInputMode] = useState<"skland" | "maa">("skland");
   const [maaPaste, setMaaPaste] = useState("");
   const [sklandSnapshot, setSklandSnapshot] = useState<SklandSnapshot | null>(null);
+  const [sklandAccounts, setSklandAccounts] = useState<SklandAccountSummary[]>([]);
+  const [sklandActiveAccountId, setSklandActiveAccountId] = useState<string | null>(null);
   const [sklandConfigured, setSklandConfigured] = useState(false);
   const [sklandDisabledReason, setSklandDisabledReason] = useState<string | null>(null);
+  const [sklandSessionLoading, setSklandSessionLoading] = useState(true);
+  const [sklandError, setSklandError] = useState<DisplayError | null>(null);
   const [sklandBusy, setSklandBusy] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
   const [setupInitialStep, setSetupInitialStep] = useState<SetupStep>("box");
-  const [sklandAccountOpen, setSklandAccountOpen] = useState(false);
-  const resumeSetupAfterSkland = useRef(false);
   const initialLayoutForRestore = useRef(defaultLayout);
   const initialBoxSource = useRef(boxSource);
   const initialOperbox = useRef(operbox);
@@ -317,6 +341,7 @@ function WorkbenchApp() {
   useEffect(() => {
     let cancelled = false;
     if (!hasRestoredSession) return;
+    setSklandSessionLoading(true);
     void Promise.allSettled([getHealth(), getSklandSession()]).then(([healthResult, sessionResult]) => {
       if (cancelled) return;
       if (healthResult.status === "fulfilled") {
@@ -338,8 +363,11 @@ function WorkbenchApp() {
 
       if (sessionResult.status === "fulfilled") {
         const session = sessionResult.value;
+        setSklandError(null);
         setSklandConfigured(session.configured);
         setSklandDisabledReason(session.disabledReason ?? null);
+        setSklandAccounts(session.accounts);
+        setSklandActiveAccountId(session.activeAccountId);
         if (session.authenticated && session.snapshot) {
           setSklandSnapshot(session.snapshot);
           if (initialBoxSource.current === "skland" || !initialOperbox.current) {
@@ -353,7 +381,10 @@ function WorkbenchApp() {
             setPreset(resolvePreset(PRESETS.find((item) => item.label === session.snapshot?.infrastructure.layoutLabel)));
           }
         }
+      } else {
+        setSklandError(toDisplayError(sessionResult.reason, "森空岛会话恢复失败，请稍后刷新。"));
       }
+      setSklandSessionLoading(false);
     });
     return () => {
       cancelled = true;
@@ -391,6 +422,22 @@ function WorkbenchApp() {
     }
   }
 
+  function applySklandSession(session: SklandSessionData, applyLayoutWhenClean = true) {
+    setSklandAccounts(session.accounts);
+    setSklandActiveAccountId(session.activeAccountId);
+    if (session.authenticated && session.snapshot) {
+      applySklandSnapshot(session.snapshot, applyLayoutWhenClean);
+      return;
+    }
+    setSklandSnapshot(null);
+    if (boxSource === "skland") {
+      setOperbox(null);
+      setFileName(null);
+      setBoxSource("sample");
+      clearPlanResult();
+    }
+  }
+
   function handleMaaPaste(): boolean {
     setInputError(null);
     try {
@@ -407,57 +454,39 @@ function WorkbenchApp() {
     }
   }
 
-  async function handleSklandRefresh() {
+  async function handleSklandRole(accountId: string, uid: string) {
     setSklandBusy(true);
-    setInputError(null);
+    setSklandError(null);
     try {
-      const session = await syncSkland();
-      if (!session.authenticated || !session.snapshot) throw new Error("森空岛同步失败。");
-      applySklandSnapshot(session.snapshot, false);
-    } catch (error) {
-      const normalized = toDisplayError(error, "森空岛同步失败，请稍后重试。");
-      setInputError(normalized.message);
-      setInputErrorCode(normalized.code);
-      setApiError(normalized);
-    } finally {
-      setSklandBusy(false);
-    }
-  }
-
-  async function handleSklandRole(uid: string) {
-    setSklandBusy(true);
-    setInputError(null);
-    try {
-      const session = await selectSklandRole(uid);
+      const session = await selectSklandRole(accountId, uid);
       if (!session.authenticated || !session.snapshot) throw new Error("角色切换失败。");
-      applySklandSnapshot(session.snapshot, false);
+      applySklandSession(session, false);
     } catch (error) {
       const normalized = toDisplayError(error, "角色切换失败，请稍后重试。");
-      setInputError(normalized.message);
-      setInputErrorCode(normalized.code);
-      setApiError(normalized);
+      setSklandError(normalized);
+      try {
+        const current = await getSklandSession();
+        setSklandAccounts(current.accounts);
+        setSklandActiveAccountId(current.activeAccountId);
+        if (current.authenticated && current.snapshot) applySklandSnapshot(current.snapshot, false);
+      } catch {
+        // 保留上一份成功快照，等待用户再次操作。
+      }
     } finally {
       setSklandBusy(false);
     }
   }
 
   async function handleSklandLogout() {
+    if (!sklandActiveAccountId) return;
     setSklandBusy(true);
-    setInputError(null);
+    setSklandError(null);
     try {
-      await logoutSkland();
-      setSklandSnapshot(null);
-      if (boxSource === "skland") {
-        setOperbox(null);
-        setFileName(null);
-        setBoxSource("sample");
-        clearPlanResult();
-      }
+      const session = await logoutSkland(sklandActiveAccountId);
+      applySklandSession(session, false);
     } catch (error) {
       const normalized = toDisplayError(error, "退出森空岛失败，请稍后重试。");
-      setInputError(normalized.message);
-      setInputErrorCode(normalized.code);
-      setApiError(normalized);
+      setSklandError(normalized);
     } finally {
       setSklandBusy(false);
     }
@@ -743,31 +772,13 @@ function WorkbenchApp() {
   }
 
   function openSklandFromSetup() {
-    resumeSetupAfterSkland.current = true;
     setSetupOpen(false);
-    setSklandAccountOpen(true);
+    setPage("skland");
   }
 
-  function handleSklandAccountOpenChange(next: boolean) {
-    setSklandAccountOpen(next);
-    if (!next && resumeSetupAfterSkland.current) {
-      resumeSetupAfterSkland.current = false;
-      setSetupInitialStep("box");
-      setSetupOpen(true);
-    }
-  }
-
-  function handleSklandAuthenticated(snapshot: SklandSnapshot) {
-    applySklandSnapshot(snapshot);
-    if (resumeSetupAfterSkland.current) {
-      resumeSetupAfterSkland.current = false;
-      setSetupInitialStep("layout");
-      setSetupOpen(true);
-    }
-  }
-
-  function handleUseCurrentSklandBox() {
-    if (sklandSnapshot) applySklandSnapshot(sklandSnapshot, false);
+  function handleSklandAuthenticated(session: SklandSessionData) {
+    setSklandError(null);
+    applySklandSession(session);
   }
 
   function handleClearLocalData() {
@@ -862,19 +873,8 @@ function WorkbenchApp() {
                 <Settings2 />
                 <span className="hidden md:inline">配置干员数据与布局</span>
               </Button>
-              <SklandAccount
-                open={sklandAccountOpen}
-                onOpenChange={handleSklandAccountOpenChange}
-                configured={sklandConfigured}
-                disabledReason={sklandDisabledReason}
-                snapshot={sklandSnapshot}
-                busy={sklandBusy}
-                onAuthenticated={handleSklandAuthenticated}
-                onRefresh={handleSklandRefresh}
-                onRoleChange={handleSklandRole}
-                onLogout={handleSklandLogout}
-              />
               <RunButton canRun={canRun} loading={loading} onRun={handleRun} />
+              {sklandSnapshot ? <SklandTopAvatar snapshot={sklandSnapshot} /> : null}
             </div>
           </div>
         </header>
@@ -913,11 +913,25 @@ function WorkbenchApp() {
       ) : page === "skland" ? (
         <SklandStatus
           snapshot={sklandSnapshot}
+          accounts={sklandAccounts}
+          activeAccountId={sklandActiveAccountId}
+          sessionLoading={sklandSessionLoading}
           layoutMatches={sklandLayoutMatches ?? false}
+          layoutDirty={layoutDirty}
           configured={sklandConfigured}
           disabledReason={sklandDisabledReason}
-          onOpenAccount={() => setSklandAccountOpen(true)}
+          busy={sklandBusy}
+          error={sklandError}
+          onAuthenticated={handleSklandAuthenticated}
+          onRoleChange={handleSklandRole}
+          onLogout={handleSklandLogout}
           onApplyLayout={handleApplySklandLayout}
+          onContinueSetup={() => {
+            setSetupInitialStep("layout");
+            setSetupOpen(true);
+          }}
+          onOpenCalculator={() => setPage("calculator")}
+          onCopyUid={(uid) => void copyText(uid)}
         />
       ) : (
         <TrainingAdvice operbox={operbox} layout={layout} profile={result?.profile} onOpenCalculator={() => setPage("calculator")} />
@@ -940,10 +954,7 @@ function WorkbenchApp() {
         sklandSnapshot={sklandSnapshot}
         sklandConfigured={sklandConfigured}
         sklandDisabledReason={sklandDisabledReason}
-        sklandBusy={sklandBusy}
         onOpenSkland={openSklandFromSetup}
-        onRefreshSkland={handleSklandRefresh}
-        onUseSkland={handleUseCurrentSklandBox}
         onMaaFile={handleFile}
         onMaaPaste={handleMaaPaste}
         presets={PRESETS}

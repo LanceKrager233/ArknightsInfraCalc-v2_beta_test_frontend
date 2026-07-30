@@ -14,6 +14,7 @@ export const SESSION_KEY_V3 = "arknights-infra-calc-beta-session-v3";
 export const SESSION_KEY_V2 = "arknights-infra-calc-beta-session-v2";
 export const RESULT_CLEAR_WARNING_DISMISSED_KEY = "arknights-infra-calc-result-clear-warning-dismissed";
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const SKLAND_SOURCE_NAME = "森空岛同步";
 
 export interface PersistedSessionV4 {
   version: 4;
@@ -105,7 +106,16 @@ function normalizeSession(value: unknown, now: number): PersistedSessionV4 | nul
   const expiresAt = typeof value.expiresAt === "string" ? Date.parse(value.expiresAt) : savedAt + SESSION_TTL_MS;
   if (!Number.isFinite(savedAt) || !Number.isFinite(expiresAt) || expiresAt <= now) return null;
 
-  const boxSource = value.boxSource;
+  const boxSource = value.boxSource === "skland" || value.boxSource === "maa" || value.boxSource === "sample"
+    ? value.boxSource
+    : "sample";
+  const rawSourceName =
+    typeof value.sourceName === "string"
+      ? value.sourceName.slice(0, 80)
+      : typeof value.fileName === "string"
+        ? value.fileName.slice(0, 80)
+        : null;
+  const hasLegacySklandIdentity = boxSource === "skland" && rawSourceName?.startsWith("skland:");
   return {
     version: 4,
     savedAt: new Date(savedAt).toISOString(),
@@ -118,15 +128,10 @@ function normalizeSession(value: unknown, now: number): PersistedSessionV4 | nul
           : layout.template,
     layout: structuredClone(layout),
     operbox: operbox ? structuredClone(operbox) : null,
-    sourceName:
-      typeof value.sourceName === "string"
-        ? value.sourceName.slice(0, 80)
-        : typeof value.fileName === "string"
-          ? value.fileName.slice(0, 80)
-          : null,
-    boxSource: boxSource === "skland" || boxSource === "maa" || boxSource === "sample" ? boxSource : "sample",
+    sourceName: boxSource === "skland" ? SKLAND_SOURCE_NAME : rawSourceName,
+    boxSource,
     layoutDirty: Boolean(value.layoutDirty),
-    result: safeResult(value.result),
+    result: hasLegacySklandIdentity ? null : safeResult(value.result),
     activeShift: Number.isInteger(value.activeShift) ? Math.max(0, Math.min(2, Number(value.activeShift))) : 0,
   };
 }
@@ -134,7 +139,12 @@ function normalizeSession(value: unknown, now: number): PersistedSessionV4 | nul
 export function loadPersistedSession(storage: StorageLike, now = Date.now()): PersistedSessionV4 | null {
   const currentRaw = storage.getItem(SESSION_KEY_V4);
   const current = normalizeSession(parseJson(currentRaw), now);
-  if (current) return current;
+  if (current) {
+    if (currentRaw && currentRaw !== JSON.stringify(current)) {
+      storage.setItem(SESSION_KEY_V4, JSON.stringify(current));
+    }
+    return current;
+  }
   if (currentRaw) storage.removeItem(SESSION_KEY_V4);
 
   for (const legacyKey of [SESSION_KEY_V3, SESSION_KEY_V2]) {
@@ -154,12 +164,15 @@ export function persistSession(
   input: Omit<PersistedSessionV4, "version" | "savedAt" | "expiresAt">,
   now = Date.now()
 ): PersistedSessionV4 {
+  const hasLegacySklandIdentity =
+    input.boxSource === "skland" && input.sourceName?.startsWith("skland:");
   const value: PersistedSessionV4 = {
     ...input,
+    sourceName: input.boxSource === "skland" ? SKLAND_SOURCE_NAME : input.sourceName,
     version: 4,
     savedAt: new Date(now).toISOString(),
     expiresAt: new Date(now + SESSION_TTL_MS).toISOString(),
-    result: safeResult(input.result),
+    result: hasLegacySklandIdentity ? null : safeResult(input.result),
   };
   storage.setItem(SESSION_KEY_V4, JSON.stringify(value));
   storage.removeItem(SESSION_KEY_V3);

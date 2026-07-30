@@ -112,16 +112,22 @@ export function syncSkland(): Promise<SklandSessionData> {
   return requestData("/api/skland/sync", { method: "POST" });
 }
 
-export function selectSklandRole(uid: string): Promise<SklandSessionData> {
+export function selectSklandRole(accountId: string, uid: string): Promise<SklandSessionData> {
   return requestData("/api/skland/role", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ uid }),
+    body: JSON.stringify({ accountId, uid }),
   });
 }
 
-export function logoutSkland(): Promise<{ authenticated: false }> {
-  return requestData("/api/skland/session", { method: "DELETE" });
+export function logoutSkland(accountId?: string): Promise<SklandSessionData> {
+  return requestData("/api/skland/session", {
+    method: "DELETE",
+    ...(accountId ? {
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accountId }),
+    } : {}),
+  });
 }
 
 export function getSampleOperbox(): Promise<SampleOperboxData> {

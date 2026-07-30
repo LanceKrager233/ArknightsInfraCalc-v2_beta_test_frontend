@@ -195,13 +195,39 @@ export interface SklandRole {
   isDefault: boolean;
 }
 
+export interface SklandAccountSummary {
+  accountId: string;
+  selectedUid: string;
+  roles: SklandRole[];
+}
+
 export interface SklandPlayer {
   uid: string;
   nickname: string;
-  level: number;
+  level: number | null;
   channelName: string;
-  storeTs: number;
-  lastOnlineTs: number;
+  avatarUrl: string | null;
+  registerTs: number | null;
+  mainStageProgress: string | null;
+  resume: string | null;
+  subscriptionEnd: number | null;
+  storeTs: number | null;
+  lastOnlineTs: number | null;
+  sanity: {
+    current: number;
+    max: number;
+    completeRecoveryTime: number | null;
+  } | null;
+  secretary: {
+    id: string;
+    name: string;
+    skinName: string | null;
+  } | null;
+  counts: {
+    operators: number | null;
+    furniture: number | null;
+    skins: number | null;
+  };
 }
 
 export type SklandInfrastructureGroup =
@@ -218,27 +244,92 @@ export interface SklandInfrastructureOperator {
   id: string;
   name: string;
   morale: number;
+  workTime: number;
+  lastMoraleUpdateTs: number;
 }
 
-export interface SklandInfrastructureRoom {
+export interface SklandInfrastructureProduction {
+  stock: number | null;
+  capacity: number | null;
+  completed: number | null;
+  remaining: number | null;
+  completeWorkTime: number | null;
+}
+
+export interface SklandInfrastructureRoomBase<
+  TGroup extends SklandInfrastructureGroup = SklandInfrastructureGroup,
+> {
   key: string;
-  group: SklandInfrastructureGroup;
+  group: TGroup;
   index: number;
   level: number;
-  product?: string;
   operators: SklandInfrastructureOperator[];
-  production?: {
-    stock: number | null;
-    capacity: number | null;
-    completed: number | null;
-    remaining: number | null;
-    completeWorkTime: number | null;
+}
+
+export interface SklandTradingOrder {
+  delivery: Array<{
+    type: "material" | "originium_shard";
+    count: number;
+  }>;
+  reward: {
+    type: "lmd" | "orundum";
+    count: number;
   };
 }
 
+export type SklandControlRoom = SklandInfrastructureRoomBase<"control">;
+
+export interface SklandTradingRoom extends SklandInfrastructureRoomBase<"trading"> {
+  product: "gold" | "originium";
+  production: SklandInfrastructureProduction;
+  orders: SklandTradingOrder[];
+  lastUpdateTime: number;
+}
+
+export interface SklandManufactureRoom extends SklandInfrastructureRoomBase<"manufacture"> {
+  product: "gold" | "battle_record" | "originium" | "unknown";
+  production: SklandInfrastructureProduction;
+  speed: number;
+  lastUpdateTime: number;
+}
+
+export type SklandPowerRoom = SklandInfrastructureRoomBase<"power">;
+
+export interface SklandDormitoryRoom extends SklandInfrastructureRoomBase<"dormitory"> {
+  comfort: number;
+}
+
+export interface SklandMeetingRoom extends SklandInfrastructureRoomBase<"meeting"> {
+  clue: {
+    board: string[];
+    own: number;
+    received: number;
+    dailyReward: boolean;
+    needReceive: number;
+    sharing: boolean;
+    shareCompleteTime: number;
+  };
+  completeWorkTime: number;
+  lastUpdateTime: number;
+}
+
+export interface SklandHireRoom extends SklandInfrastructureRoomBase<"hire"> {
+  refreshCount: number;
+  completeWorkTime: number;
+}
+
+export type SklandInfrastructureRoom =
+  | SklandControlRoom
+  | SklandTradingRoom
+  | SklandManufactureRoom
+  | SklandPowerRoom
+  | SklandDormitoryRoom
+  | SklandMeetingRoom
+  | SklandHireRoom;
+
 export interface SklandInfrastructure {
   currentTs: number;
-  storeTs: number;
+  storeTs: number | null;
   layoutLabel: PresetDef["label"] | null;
   layoutSuggestion: BaseBlueprint | null;
   layoutWarning: string | null;
@@ -248,12 +339,109 @@ export interface SklandInfrastructure {
     value: number;
     maxValue: number;
     remainSecs: number;
+    lastUpdateTime: number;
   };
+  furnitureTotal: number;
   training: {
     trainee: string | null;
     trainer: string | null;
     remainSecs: number;
+    remainPoint: number;
+    speed: number;
+    completeWorkTime: number;
   } | null;
+}
+
+export interface SklandOperatorModule {
+  id: string;
+  name: string;
+  level: number;
+  locked: boolean;
+  isDefault: boolean;
+}
+
+export interface SklandOperatorStatus {
+  id: string;
+  name: string;
+  rarity: number;
+  profession: string;
+  subProfessionName: string;
+  elite: number;
+  level: number;
+  potential: number;
+  favorPercent: number;
+  mainSkillLevel: number;
+  skills: Array<{
+    index: number;
+    specializeLevel: number;
+  }>;
+  modules: SklandOperatorModule[];
+  currentSkinName: string | null;
+  acquiredAt: number;
+  isAssist: boolean;
+}
+
+export interface SklandOwnedSkin {
+  id: string;
+  name: string;
+  brandId: string;
+  operatorId: string;
+  operatorName: string;
+  obtainedAt: number;
+  isCurrent: boolean;
+}
+
+export interface SklandProgress {
+  recruit: Array<{
+    index: number;
+    startTs: number;
+    finishTs: number;
+  }> | null;
+  routine: {
+    daily: { current: number; total: number };
+    weekly: { current: number; total: number };
+  } | null;
+  campaign: {
+    records: Array<{
+      name: string;
+      zoneName: string | null;
+      maxKills: number;
+    }>;
+    reward: { current: number; total: number };
+  } | null;
+  tower: {
+    records: Array<{
+      name: string;
+      subName: string;
+      best: number;
+    }>;
+    reward: {
+      higher: { current: number; total: number };
+      lower: { current: number; total: number };
+      termTs: number;
+    };
+  } | null;
+  rogue: Array<{
+    name: string;
+    relicCount: number;
+    bankCurrent: number;
+    bankRecord: number;
+  }> | null;
+  activities: Array<{
+    name: string;
+    startTime: number;
+    endTime: number;
+    rewardEndTime: number;
+    isReplicate: boolean;
+    clearedStages: number;
+    totalStages: number;
+  }> | null;
+  bossRush: Array<{
+    played: boolean;
+    stageCode: string | null;
+    stageName: string | null;
+    difficulty: string;
+  }> | null;
 }
 
 export interface SklandSnapshot {
@@ -261,6 +449,9 @@ export interface SklandSnapshot {
   roles: SklandRole[];
   operbox: OperBoxEntry[];
   infrastructure: SklandInfrastructure;
+  operators: SklandOperatorStatus[];
+  skins: SklandOwnedSkin[];
+  progress: SklandProgress;
   sourceName: string;
   warnings: string[];
 }
@@ -274,6 +465,8 @@ export interface SklandSessionResponse {
   configured: boolean;
   authMethods?: SklandAuthMethods;
   disabledReason?: string | null;
+  accounts: SklandAccountSummary[];
+  activeAccountId: string | null;
   snapshot?: SklandSnapshot;
   error?: string;
   code?: string;
@@ -490,6 +683,7 @@ export type AppErrorCode =
   | "AIC-AUTH-2001"
   | "AIC-AUTH-2002"
   | "AIC-AUTH-2003"
+  | "AIC-AUTH-2004"
   | "AIC-PLAN-3001"
   | "AIC-PLAN-3002"
   | "AIC-PLAN-3003"
@@ -585,6 +779,8 @@ export interface SklandSessionData {
   configured: boolean;
   authMethods?: SklandAuthMethods;
   disabledReason?: string | null;
+  accounts: SklandAccountSummary[];
+  activeAccountId: string | null;
   snapshot?: SklandSnapshot;
 }
 
@@ -596,6 +792,8 @@ export interface SklandQrStartData {
 
 export interface SklandQrStatusData {
   status: "waiting" | "scanned" | "expired" | "authenticated";
+  accounts?: SklandAccountSummary[];
+  activeAccountId?: string | null;
   snapshot?: SklandSnapshot;
 }
 

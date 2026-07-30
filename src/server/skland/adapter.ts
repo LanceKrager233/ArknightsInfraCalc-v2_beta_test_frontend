@@ -12,6 +12,7 @@ import {
 import type { SklandQrStatusResponse, SklandSnapshot } from "@/types";
 import { DeviceIdCache } from "./device-id-cache";
 import { rolesFromBinding, snapshotFromPlayerInfo } from "./normalize";
+import { sklandLayoutSuggestion } from "./layout-suggestion";
 import { SKLAND_SESSION_TTL_SECONDS, type SklandSessionPayload } from "./session";
 
 const SCAN_TTL_MS = 10 * 60 * 1000;
@@ -128,7 +129,7 @@ async function snapshotWithClient(client: Client, payload: SklandSessionPayload)
   const info = await client.collections.player.getInfo({ uid: selectedUid });
   return {
     payload: { ...payload, selectedUid },
-    snapshot: snapshotFromPlayerInfo(info, roles, selectedUid),
+    snapshot: snapshotFromPlayerInfo(info, roles, selectedUid, sklandLayoutSuggestion(info)),
   };
 }
 
@@ -159,7 +160,7 @@ async function completeOAuthLogin(
   };
   return {
     session,
-    snapshot: snapshotFromPlayerInfo(info, roles, selectedUid),
+    snapshot: snapshotFromPlayerInfo(info, roles, selectedUid, sklandLayoutSuggestion(info)),
   };
 }
 

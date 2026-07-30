@@ -10,32 +10,68 @@ import {
 import { selectSessionRole, SklandServiceError } from "@/server/skland/adapter";
 import {
   assertSklandAvailable,
-  clearSklandSessionCookie,
-  readSklandSession,
-  setSklandSessionCookie,
+  readSklandAccountStore,
+  setSklandAccountStoreCookies,
+  sklandAccountSummaries,
   sklandErrorResponse,
+  type SklandAccountStore,
+  withUpdatedSklandAccount,
 } from "@/server/skland/http";
+import { removeSklandAccount } from "@/server/skland/session";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   const requestId = createRequestId();
   const startedAt = performance.now();
+  let previous: SklandAccountStore | null = null;
+  let targetAccountId: string | null = null;
   try {
     assertSameOrigin(request);
     enforceRateLimit("skland-action", requestClientIp(request), 30, 60 * 60_000);
     assertSklandAvailable(request);
-    const session = await readSklandSession();
-    if (!session) throw new SklandServiceError("AUTH_EXPIRED", "请先登录森空岛。", 401);
-    const body = await readJsonBody(request, 16 * 1024) as { uid?: unknown } | null;
+    previous = await readSklandAccountStore();
+    const body = await readJsonBody(request, 16 * 1024) as { accountId?: unknown; uid?: unknown } | null;
     if (typeof body?.uid !== "string") throw new PublicApiError("AIC-REQ-1001");
-    const result = await selectSessionRole(session, body.uid);
-    const response = successResponse({ authenticated: true, configured: true, snapshot: result.snapshot }, requestId);
-    setSklandSessionCookie(response, request, result.session);
+    if (body.accountId !== undefined && typeof body.accountId !== "string") throw new PublicApiError("AIC-REQ-1001");
+    targetAccountId = typeof body.accountId === "string" ? body.accountId : previous.activeAccountId;
+    const account = previous.accounts.find((current) => current.accountId === targetAccountId);
+    if (!account) throw new SklandServiceError("AUTH_EXPIRED", "请先登录森空岛。", 401);
+    if (!account.roles.some((role) => role.uid === body.uid)) throw new PublicApiError("AIC-REQ-1001");
+    const result = await selectSessionRole(account.session, body.uid);
+    const next = withUpdatedSklandAccount(previous, account.accountId, result.session, result.snapshot);
+    const response = successResponse({
+      authenticated: true,
+      configured: true,
+      accounts: sklandAccountSummaries(next),
+      activeAccountId: next.activeAccountId,
+      snapshot: result.snapshot,
+    }, requestId);
+    setSklandAccountStoreCookies(response, request, next, previous);
     return response;
   } catch (error) {
     const response = sklandErrorResponse(error, requestId, "/api/skland/role", startedAt);
-    if (error instanceof SklandServiceError && error.code === "AUTH_EXPIRED") clearSklandSessionCookie(response);
+    if (
+      previous &&
+      targetAccountId &&
+      error instanceof SklandServiceError &&
+      error.code === "AUTH_EXPIRED"
+    ) {
+      const removed = removeSklandAccount(
+        previous.accounts,
+        previous.activeAccountId === targetAccountId ? previous.activeAccountId : null,
+        targetAccountId
+      );
+      const next = {
+        ...previous,
+        accounts: removed.accounts,
+        activeAccountId: previous.activeAccountId === targetAccountId
+          ? removed.activeAccountId
+          : previous.activeAccountId,
+        migratedSnapshot: null,
+      };
+      setSklandAccountStoreCookies(response, request, next, previous);
+    }
     return response;
   }
 }

@@ -104,6 +104,61 @@ test("v2 and v3 migrate once to the v4 allowlist", () => {
   }
 });
 
+test("legacy Skland sessions discard UID-bearing source and plan labels during migration", () => {
+  const now = Date.parse("2026-07-28T00:00:00.000Z");
+  for (const sessionKey of [SESSION_KEY_V4, SESSION_KEY_V3]) {
+    const storage = new MemoryStorage();
+    storage.setItem(sessionKey, JSON.stringify({
+      version: sessionKey === SESSION_KEY_V4 ? 4 : 3,
+      savedAt: new Date(now).toISOString(),
+      expiresAt: new Date(now + SESSION_TTL_MS).toISOString(),
+      presetLabel: "243",
+      layout,
+      operbox,
+      sourceName: "skland:123456789:1785196800",
+      boxSource: "skland",
+      layoutDirty: false,
+      result: {
+        ...result,
+        profile: {
+          ...result.profile,
+          operbox_label: "skland:123456789:1785196800",
+        },
+      },
+      activeShift: 0,
+    }));
+
+    const migrated = loadPersistedSession(storage, now);
+    assert.equal(migrated?.sourceName, "森空岛同步");
+    assert.equal(migrated?.result, null);
+    assert.equal(JSON.stringify([...storage.values.values()]).includes("123456789"), false);
+  }
+});
+
+test("new Skland persistence always uses a non-identifying source label", () => {
+  const storage = new MemoryStorage();
+  const saved = persistSession(storage, {
+    presetLabel: "243",
+    layout,
+    operbox,
+    sourceName: "skland:123456789:1785196800",
+    boxSource: "skland",
+    layoutDirty: false,
+    result: {
+      ...result,
+      profile: {
+        ...result.profile,
+        operbox_label: "skland:123456789:1785196800",
+      },
+    },
+    activeShift: 0,
+  });
+
+  assert.equal(saved.sourceName, "森空岛同步");
+  assert.equal(saved.result, null);
+  assert.equal(JSON.stringify([...storage.values.values()]).includes("123456789"), false);
+});
+
 test("expired and corrupted sessions are removed", () => {
   const storage = new MemoryStorage();
   storage.setItem(SESSION_KEY_V4, "{bad");

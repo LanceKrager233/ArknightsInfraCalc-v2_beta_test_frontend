@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Database, FileJson, LayoutGrid, RefreshCw, ScanLine, Trash2, Upload } from "lucide-react";
+import { Check, Database, FileJson, LayoutGrid, ScanLine, Trash2, Upload } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -33,10 +33,7 @@ type SetupDialogProps = {
   sklandSnapshot: SklandSnapshot | null;
   sklandConfigured: boolean;
   sklandDisabledReason: string | null;
-  sklandBusy: boolean;
   onOpenSkland: () => void;
-  onRefreshSkland: () => Promise<void>;
-  onUseSkland: () => void;
   onMaaFile: (file: File) => Promise<boolean>;
   onMaaPaste: () => boolean;
   presets: PresetDef[];
@@ -62,9 +59,10 @@ function sourceLabel(source: BoxSource): string {
   return "243 全精二示例";
 }
 
-function formatSyncTime(timestamp: number | undefined): string {
-  if (!timestamp) return "尚未同步";
-  return new Intl.DateTimeFormat("zh-CN", { dateStyle: "short", timeStyle: "short" }).format(new Date(timestamp * 1000));
+function formatSyncTime(timestamp: number | null | undefined): string {
+  const date = timestamp && Number.isFinite(timestamp) ? new Date(timestamp * 1000) : null;
+  if (!date || Number.isNaN(date.getTime())) return "尚未同步";
+  return new Intl.DateTimeFormat("zh-CN", { dateStyle: "short", timeStyle: "short" }).format(date);
 }
 
 export function SetupDialog({
@@ -83,10 +81,7 @@ export function SetupDialog({
   sklandSnapshot,
   sklandConfigured,
   sklandDisabledReason,
-  sklandBusy,
   onOpenSkland,
-  onRefreshSkland,
-  onUseSkland,
   onMaaFile,
   onMaaPaste,
   presets,
@@ -119,11 +114,6 @@ export function SetupDialog({
 
   function importMaaPaste() {
     if (onMaaPaste()) setStep("layout");
-  }
-
-  function useSklandBox() {
-    onUseSkland();
-    setStep("layout");
   }
 
   return (
@@ -177,12 +167,9 @@ export function SetupDialog({
                                 {sklandSnapshot.player.channelName} · {sklandSnapshot.operbox.length} 名干员 · {formatSyncTime(sklandSnapshot.infrastructure.storeTs)}
                               </span>
                             </div>
-                            <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
-                              <Button className="h-10" type="button" variant="outline" disabled={sklandBusy} onClick={() => void onRefreshSkland()}>
-                                <RefreshCw className={sklandBusy ? "animate-spin" : ""} />刷新
-                              </Button>
-                              <Button className="h-10" type="button" onClick={useSklandBox}><Check />使用当前干员数据</Button>
-                            </div>
+                            <Button className="h-10 w-full sm:w-auto" type="button" variant="outline" onClick={onOpenSkland}>
+                              <Database />前往森空岛状态
+                            </Button>
                           </div>
                           {sklandSnapshot.warnings.length ? (
                             <ul className="grid gap-1 border-t border-border/70 pt-3 text-xs text-amber-700">
@@ -195,10 +182,12 @@ export function SetupDialog({
                           <ScanLine className="mx-auto size-7 text-primary" />
                           <strong className="mt-3 block">登录森空岛并同步干员数据</strong>
                           <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
-                            {sklandConfigured ? "扫码登录后会自动带回角色干员数据和基建状态。" : sklandDisabledReason ?? "当前未开放森空岛登录，可使用 MAA 导入。"}
+                            {sklandConfigured
+                              ? "登录、角色切换与退出已集中到侧边栏的森空岛状态中心。"
+                              : sklandDisabledReason ?? "当前未开放森空岛登录，可使用 MAA 导入。"}
                           </p>
-                          <Button type="button" className="mt-4 h-10" disabled={!sklandConfigured} onClick={onOpenSkland}>
-                            <ScanLine />登录森空岛
+                          <Button type="button" className="mt-4 h-10" onClick={onOpenSkland}>
+                            <ScanLine />前往森空岛状态
                           </Button>
                         </div>
                       )}

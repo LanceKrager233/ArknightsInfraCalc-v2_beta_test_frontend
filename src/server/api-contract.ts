@@ -24,6 +24,7 @@ export const ERROR_DEFINITIONS: Record<AppErrorCode, ErrorDefinition> = {
   "AIC-AUTH-2001": { status: 401, message: "森空岛登录已过期，请重新登录。", retryable: false },
   "AIC-AUTH-2002": { status: 403, message: "请求来源无效，请刷新页面后重试。", retryable: false },
   "AIC-AUTH-2003": { status: 503, message: "当前未开放森空岛登录，可使用 MAA 导入。", retryable: true },
+  "AIC-AUTH-2004": { status: 409, message: "同一浏览器最多可登录 5 个森空岛账号，请先退出一个账号。", retryable: false },
   "AIC-PLAN-3001": { status: 503, message: "排班服务暂不可用，请稍后重试。", retryable: true },
   "AIC-PLAN-3002": { status: 429, message: "已有排班任务或请求过于频繁，请稍后重试。", retryable: true },
   "AIC-PLAN-3003": { status: 504, message: "排班计算超时，请稍后重试。", retryable: true },

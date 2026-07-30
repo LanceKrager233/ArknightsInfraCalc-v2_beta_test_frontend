@@ -67,9 +67,206 @@ const sampleData = [{
   rarity: 5,
 }];
 
+const authenticatedSklandSnapshot = {
+  player: {
+    uid: "123456789",
+    nickname: "测试博士",
+    level: 120,
+    channelName: "官服",
+    avatarUrl: null,
+    registerTs: 1_600_000_000,
+    mainStageProgress: "14-21",
+    resume: "为了更好的明天。",
+    subscriptionEnd: 1_800_000_000,
+    storeTs: 1_700_000_090,
+    lastOnlineTs: 1_700_000_080,
+    sanity: { current: 120, max: 135, completeRecoveryTime: 1_700_010_000 },
+    secretary: { id: "char_002_amiya", name: "阿米娅", skinName: "见习联结者" },
+    counts: { operators: 2, furniture: 200, skins: 1 },
+  },
+  roles: [
+    { uid: "123456789", nickname: "测试博士", channelName: "官服", isDefault: true },
+    { uid: "987654321", nickname: "测试博士二号", channelName: "B服", isDefault: false },
+  ],
+  operbox: [
+    { id: "char_002_amiya", name: "阿米娅", elite: 2, level: 80, own: true, potential: 6, rarity: 5 },
+    { id: "char_003_kalts", name: "凯尔希", elite: 2, level: 90, own: true, potential: 1, rarity: 6 },
+  ],
+  infrastructure: {
+    currentTs: 1_700_000_100,
+    storeTs: 1_700_000_090,
+    layoutLabel: "243",
+    layoutSuggestion: layout243,
+    layoutWarning: null,
+    tiredOperators: ["阿米娅"],
+    labor: { value: 235, maxValue: 235, remainSecs: 0, lastUpdateTime: 1_700_000_000 },
+    furnitureTotal: 200,
+    training: {
+      trainee: "凯尔希",
+      trainer: "阿米娅",
+      remainSecs: 3_600,
+      remainPoint: 100,
+      speed: 1.2,
+      completeWorkTime: 1_700_003_700,
+    },
+    rooms: [
+      {
+        key: "control",
+        group: "control",
+        index: 0,
+        level: 5,
+        operators: [{ id: "char_002_amiya", name: "阿米娅", morale: 18, workTime: 7_200, lastMoraleUpdateTs: 1_700_000_050 }],
+      },
+      {
+        key: "trade-0",
+        group: "trading",
+        index: 0,
+        level: 3,
+        product: "gold",
+        operators: [],
+        production: { stock: 10, capacity: 10, completed: null, remaining: null, completeWorkTime: 1_700_001_200 },
+        orders: [{ delivery: [{ type: "material", count: 3 }], reward: { type: "lmd", count: 1_500 } }],
+        lastUpdateTime: 1_700_000_000,
+      },
+      {
+        key: "factory-0",
+        group: "manufacture",
+        index: 0,
+        level: 3,
+        product: "battle_record",
+        operators: [],
+        production: { stock: 2, capacity: 10, completed: 2, remaining: 8, completeWorkTime: 1_700_001_000 },
+        speed: 1.5,
+        lastUpdateTime: 1_700_000_000,
+      },
+      {
+        key: "dorm-0",
+        group: "dormitory",
+        index: 0,
+        level: 5,
+        operators: [],
+        comfort: 5_000,
+      },
+      {
+        key: "meeting",
+        group: "meeting",
+        index: 0,
+        level: 3,
+        operators: [],
+        clue: {
+          board: ["莱茵生命", "罗德岛"],
+          own: 4,
+          received: 1,
+          dailyReward: true,
+          needReceive: 2,
+          sharing: true,
+          shareCompleteTime: 1_700_005_000,
+        },
+        completeWorkTime: 1_700_003_000,
+        lastUpdateTime: 1_700_000_000,
+      },
+      {
+        key: "hire",
+        group: "hire",
+        index: 0,
+        level: 3,
+        operators: [],
+        refreshCount: 2,
+        completeWorkTime: 1_700_002_000,
+      },
+    ],
+  },
+  operators: [
+    {
+      id: "char_003_kalts",
+      name: "凯尔希",
+      rarity: 6,
+      profession: "MEDIC",
+      subProfessionName: "医师",
+      elite: 2,
+      level: 90,
+      potential: 1,
+      favorPercent: 200,
+      mainSkillLevel: 7,
+      skills: [{ index: 1, specializeLevel: 3 }, { index: 2, specializeLevel: 1 }],
+      modules: [{ id: "uniequip_1", name: "医者意志", level: 3, locked: false, isDefault: true }],
+      currentSkinName: "残余",
+      acquiredAt: 1_650_000_000,
+      isAssist: true,
+    },
+    {
+      id: "char_002_amiya",
+      name: "阿米娅",
+      rarity: 5,
+      profession: "CASTER",
+      subProfessionName: "中坚术师",
+      elite: 2,
+      level: 80,
+      potential: 6,
+      favorPercent: 200,
+      mainSkillLevel: 7,
+      skills: [{ index: 1, specializeLevel: 3 }],
+      modules: [],
+      currentSkinName: "见习联结者",
+      acquiredAt: 1_600_000_000,
+      isAssist: false,
+    },
+  ],
+  skins: [{
+    id: "skin_amiya",
+    name: "见习联结者",
+    brandId: "EPOQUE",
+    operatorId: "char_002_amiya",
+    operatorName: "阿米娅",
+    obtainedAt: 1_660_000_000,
+    isCurrent: true,
+  }],
+  progress: {
+    recruit: [{ index: 0, startTs: 1_699_990_000, finishTs: 1_700_000_050 }],
+    routine: { daily: { current: 8, total: 10 }, weekly: { current: 80, total: 100 } },
+    campaign: {
+      records: [{ name: "切尔诺伯格", zoneName: "乌萨斯", maxKills: 400 }],
+      reward: { current: 1_800, total: 1_800 },
+    },
+    tower: {
+      records: [{ name: "钢铁萝卜矿场", subName: "测试周期", best: 8 }],
+      reward: {
+        higher: { current: 1, total: 2 },
+        lower: { current: 3, total: 4 },
+        termTs: 1_800_000_000,
+      },
+    },
+    rogue: [{ name: "傀影与猩红孤钻", relicCount: 120, bankCurrent: 300, bankRecord: 500 }],
+    activities: [{
+      name: "测试活动",
+      startTime: 1_700_000_000,
+      endTime: 1_800_000_000,
+      rewardEndTime: 1_800_100_000,
+      isReplicate: false,
+      clearedStages: 8,
+      totalStages: 10,
+    }],
+    bossRush: [{ played: true, stageCode: "TN-1", stageName: "测试关卡", difficulty: "NORMAL" }],
+  },
+  sourceName: "森空岛同步",
+  warnings: [],
+};
+
+const primarySklandAccount = {
+  accountId: "account_primary",
+  selectedUid: authenticatedSklandSnapshot.player.uid,
+  roles: authenticatedSklandSnapshot.roles,
+};
+
 async function mockApis(
   page: Page,
-  options: { debugTools?: boolean; sklandConfigured?: boolean } = {}
+  options: {
+    debugTools?: boolean;
+    sklandConfigured?: boolean;
+    sklandSnapshot?: typeof authenticatedSklandSnapshot;
+    sklandAccounts?: typeof primarySklandAccount[];
+    activeAccountId?: string | null;
+  } = {}
 ) {
   await page.route("**/api/health", (route) => route.fulfill({
     status: 200,
@@ -89,22 +286,45 @@ async function mockApis(
       requestId,
     }),
   }));
-  await page.route("**/api/skland/session", (route) => route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    body: JSON.stringify({
-      success: true,
-      data: {
-        authenticated: false,
-        configured: Boolean(options.sklandConfigured),
-        authMethods: { qr: true },
-        disabledReason: options.sklandConfigured
-          ? null
-          : "当前未开放森空岛登录，可使用 MAA 导入。",
-      },
-      requestId,
-    }),
-  }));
+  await page.route("**/api/skland/session", (route) => {
+    const isLogout = route.request().method() === "DELETE";
+    const accounts = options.sklandAccounts
+      ?? (options.sklandSnapshot ? [{
+        ...primarySklandAccount,
+        selectedUid: options.sklandSnapshot.player.uid,
+        roles: options.sklandSnapshot.roles,
+      }] : []);
+    const activeAccountId = options.activeAccountId
+      ?? (accounts.length ? accounts[0].accountId : null);
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "X-Request-Id": requestId },
+      body: JSON.stringify({
+        success: true,
+        data: isLogout
+          ? {
+              authenticated: false,
+              configured: Boolean(options.sklandConfigured),
+              authMethods: { qr: true },
+              accounts: [],
+              activeAccountId: null,
+            }
+          : {
+              authenticated: Boolean(options.sklandSnapshot),
+              configured: Boolean(options.sklandConfigured),
+              authMethods: { qr: true },
+              accounts,
+              activeAccountId,
+              disabledReason: options.sklandConfigured
+                ? null
+                : "当前未开放森空岛登录，可使用 MAA 导入。",
+              ...(options.sklandSnapshot ? { snapshot: options.sklandSnapshot } : {}),
+            },
+        requestId,
+      }),
+    });
+  });
   await page.route("**/api/sample-operbox", (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
@@ -324,7 +544,8 @@ test("schedule visuals use the technical canvas, acrylic mesh, and responsive le
     const mesh = getComputedStyle(room, "::before");
     return {
       bodyFont: getComputedStyle(document.body).fontFamily,
-      backdropFilter: surface.backdropFilter || surface.webkitBackdropFilter,
+      backdropFilter: surface.backdropFilter
+        || (surface as CSSStyleDeclaration & { webkitBackdropFilter?: string }).webkitBackdropFilter,
       surfaceBackground: surface.backgroundColor,
       meshMask: mesh.maskImage || mesh.webkitMaskImage,
     };
@@ -401,32 +622,28 @@ test("Skland login shows QR on every viewport and offers a separate mobile app s
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto("/");
 
-  const accountButton = page.getByRole("button", { name: "登录森空岛" });
-  await accountButton.click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog.getByRole("heading", { name: "登录森空岛" })).toBeVisible();
-  await expect(dialog.getByRole("tab")).toHaveCount(0);
-  await expect(dialog.getByText(/手机号|验证码|密码/)).toHaveCount(0);
-  await expect(dialog.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
+  await expect(page.locator("header").getByRole("button", { name: "登录森空岛" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+  await page.getByRole("button", { name: "森空岛状态" }).click();
+  await expect(page.getByRole("heading", { name: "把当前罗德岛带进排班助手" })).toBeVisible();
+  await expect(page.getByText(/手机号|验证码|密码/)).toHaveCount(0);
+  expect(qrStartRequests).toBe(0);
+
+  await page.getByRole("button", { name: "生成登录二维码" }).click();
+  await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
   await expect(page.getByRole("button", { name: "打开森空岛 App" })).toHaveAttribute(
     "href",
     "https://bbs.hycdn.cn/u-link/download.html?schema=skland%3A%2F%2FgameCenter"
   );
-  await expect(page.getByText("此按钮只负责打开 App，不会自动完成登录。", { exact: false })).toBeVisible();
-
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("heading", { name: "登录森空岛" })).toHaveCount(0);
-  await expect(accountButton).toBeFocused();
+  await expect(page.getByText("按钮只负责打开 App。", { exact: false })).toBeVisible();
 
   await page.setViewportSize({ width: 1024, height: 800 });
-  await accountButton.click();
   await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
   await expect(page.getByRole("button", { name: "打开森空岛 App" })).toBeHidden();
   expect(qrStartRequests).toBe(1);
-  await page.keyboard.press("Escape");
 });
 
-test("Skland login explains slow preparation and reuses the in-flight request", async ({ page }) => {
+test("Skland login waits for an explicit click and explains slow preparation", async ({ page }) => {
   await mockApis(page, { sklandConfigured: true });
   let qrStartRequests = 0;
   let releaseQr: (() => void) | undefined;
@@ -463,20 +680,335 @@ test("Skland login explains slow preparation and reuses the in-flight request", 
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto("/");
 
-  const accountButton = page.getByRole("button", { name: "登录森空岛" });
-  await accountButton.focus();
-  await expect.poll(() => qrStartRequests).toBe(1);
-  await accountButton.click();
+  await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+  await page.getByRole("button", { name: "森空岛状态" }).click();
+  expect(qrStartRequests).toBe(0);
+  const generateButton = page.getByRole("button", { name: "生成登录二维码" });
+  await generateButton.click();
   await expect(page.getByText("正在生成二维码…")).toBeVisible();
-  await expect(page.getByText("正在连接鹰角登录服务，首次准备可能需要更久…")).toBeVisible({ timeout: 3_000 });
-  await page.keyboard.press("Escape");
-  await accountButton.click();
+  await expect(page.getByText("正在连接鹰角登录服务，首次准备可能需要更久。")).toBeVisible({ timeout: 3_000 });
   expect(qrStartRequests).toBe(1);
 
   releaseQr?.();
   await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
   expect(qrStartRequests).toBe(1);
-  await page.keyboard.press("Escape");
+});
+
+test("Skland status center keeps profile and recruitment in overview and supports role switching", async ({ page }) => {
+  const switchedSnapshot = {
+    ...authenticatedSklandSnapshot,
+    player: {
+      ...authenticatedSklandSnapshot.player,
+      uid: "987654321",
+      nickname: "测试博士二号",
+    },
+    sourceName: "森空岛同步",
+  };
+  let attendanceRequests = 0;
+  page.on("request", (request) => {
+    if (/attendance|sign/i.test(request.url())) attendanceRequests += 1;
+  });
+  await mockApis(page, {
+    sklandConfigured: true,
+    sklandSnapshot: authenticatedSklandSnapshot,
+  });
+  await page.route("**/api/skland/role", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    headers: { "X-Request-Id": requestId },
+    body: JSON.stringify({
+      success: true,
+      data: {
+        authenticated: true,
+        configured: true,
+        authMethods: { qr: true },
+        accounts: [{
+          ...primarySklandAccount,
+          selectedUid: switchedSnapshot.player.uid,
+          roles: switchedSnapshot.roles,
+        }],
+        activeAccountId: primarySklandAccount.accountId,
+        snapshot: switchedSnapshot,
+      },
+      requestId,
+    }),
+  }));
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "森空岛状态" }).click();
+
+  await expect(page.getByRole("img", { name: "测试博士的森空岛头像" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "测试博士" }).first()).toBeVisible();
+  await expect(page.getByText("UID 123••••789")).toBeVisible();
+  await expect(page.getByRole("combobox")).toContainText("测试博士 · 官服");
+  await expect(page.getByRole("combobox")).not.toContainText("123456789");
+  await expect(page.getByRole("tab", { name: "概览", exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "基建", exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "干员", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: "进度", exact: true })).toHaveCount(0);
+  await expect(page.getByText("当前理智")).toBeVisible();
+  await expect(page.getByText("4 项状态提醒")).toBeVisible();
+  await expect(page.getByText("博士档案", { exact: true })).toBeVisible();
+  await expect(page.getByText("收藏概况", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "公开招募" })).toBeVisible();
+  await expect(page.getByText("槽位 1")).toBeVisible();
+
+  await page.getByRole("tab", { name: "基建", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "当前基建", exact: true })).toBeVisible();
+  await expect(page.getByText("按计算器布局排列，快速核对进驻、心情与生产状态。", { exact: true })).toHaveCount(0);
+  await expect(page.locator("[data-skland-compact-layout]")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "控制中枢", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "贸易站 1", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "制造站 1", exact: true })).toBeVisible();
+  await expect(page.locator(".infra-room-surface").first()).toBeVisible();
+  await expect(page.locator('.level-diamonds[data-variant="compact"]').first()).toBeVisible();
+  await expect(page.locator(".infra-operator-slot").first()).toBeVisible();
+  await expect(page.getByRole("img", { name: "阿米娅" })).toBeVisible();
+  await expect(page.getByText("氛围 5000", { exact: true })).toBeVisible();
+  await expect(page.getByText("宿舍氛围 5000", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("当前进驻", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("设施运行正常", { exact: true })).toHaveCount(0);
+  await expect(page.locator("[data-infra-complete-time]").first()).toHaveText(/^\d{4}\.\d{1,2}\.\d{1,2} \d{2}:\d{2}$/);
+  await expect(page.getByText(/已有 4 · 待接收 2/)).toBeVisible();
+
+  await page.getByRole("combobox").click();
+  await page.getByRole("option", { name: "测试博士二号 · B服" }).click();
+  await expect(page.getByRole("heading", { name: "测试博士二号" }).first()).toBeVisible();
+  await expect(page.getByRole("img", { name: "测试博士二号的森空岛头像" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "刷新" })).toHaveCount(0);
+
+  await expect.poll(async () => page.evaluate(() => JSON.stringify(localStorage))).not.toContain("987654321");
+  const persisted = await page.evaluate(() => JSON.stringify(localStorage));
+  expect(persisted).not.toContain("为了更好的明天");
+  expect(persisted).not.toContain('"progress"');
+
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 768, height: 900 },
+    { width: 1440, height: 1000 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const dimensions = await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }));
+    expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
+  }
+
+  await page.getByRole("button", { name: "退出" }).click();
+  await expect(page.getByRole("heading", { name: "把当前罗德岛带进排班助手" })).toBeVisible();
+  expect(attendanceRequests).toBe(0);
+});
+
+test("Skland supports adding, switching, and individually logging out multiple accounts", async ({ page }) => {
+  const secondarySnapshot = {
+    ...authenticatedSklandSnapshot,
+    player: {
+      ...authenticatedSklandSnapshot.player,
+      uid: "246813579",
+      nickname: "第二账号博士",
+      channelName: "官服",
+    },
+    roles: [{
+      uid: "246813579",
+      nickname: "第二账号博士",
+      channelName: "官服",
+      isDefault: true,
+    }],
+  };
+  const secondaryAccount = {
+    accountId: "account_secondary",
+    selectedUid: secondarySnapshot.player.uid,
+    roles: secondarySnapshot.roles,
+  };
+  let currentSnapshot = authenticatedSklandSnapshot;
+  let currentAccounts = [primarySklandAccount];
+  let currentAccountId: string | null = primarySklandAccount.accountId;
+
+  await mockApis(page, {
+    sklandConfigured: true,
+    sklandSnapshot: authenticatedSklandSnapshot,
+  });
+  await page.route("**/api/skland/session", async (route) => {
+    if (route.request().method() === "DELETE") {
+      const body = route.request().postDataJSON() as { accountId?: string } | null;
+      currentAccounts = currentAccounts.filter((account) => account.accountId !== body?.accountId);
+      if (currentAccounts.length) {
+        const nextAccount = currentAccounts[0];
+        currentAccountId = nextAccount.accountId;
+        currentSnapshot = nextAccount.accountId === secondaryAccount.accountId
+          ? secondarySnapshot
+          : authenticatedSklandSnapshot;
+      } else {
+        currentAccountId = null;
+      }
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "X-Request-Id": requestId },
+      body: JSON.stringify({
+        success: true,
+        data: {
+          authenticated: currentAccounts.length > 0,
+          configured: true,
+          authMethods: { qr: true },
+          accounts: currentAccounts,
+          activeAccountId: currentAccountId,
+          ...(currentAccounts.length ? { snapshot: currentSnapshot } : {}),
+        },
+        requestId,
+      }),
+    });
+  });
+  await page.route("**/api/skland/auth/qr", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    headers: { "X-Request-Id": requestId },
+    body: JSON.stringify({
+      success: true,
+      data: {
+        scanId: "scan-second-account",
+        scanUrl: "hypergryph://scan_login?scanId=scan-second-account",
+        expiresInSeconds: 600,
+      },
+      requestId,
+    }),
+  }));
+  await page.route("**/api/skland/auth/qr/status", (route) => {
+    currentAccounts = [primarySklandAccount, secondaryAccount];
+    currentAccountId = secondaryAccount.accountId;
+    currentSnapshot = secondarySnapshot;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "X-Request-Id": requestId },
+      body: JSON.stringify({
+        success: true,
+        data: {
+          status: "authenticated",
+          accounts: currentAccounts,
+          activeAccountId: currentAccountId,
+          snapshot: currentSnapshot,
+        },
+        requestId,
+      }),
+    });
+  });
+  await page.route("**/api/skland/role", async (route) => {
+    const body = route.request().postDataJSON() as { accountId: string; uid: string };
+    const selectedAccount = currentAccounts.find((account) => account.accountId === body.accountId);
+    currentAccountId = body.accountId;
+    currentSnapshot = body.accountId === secondaryAccount.accountId
+      ? secondarySnapshot
+      : {
+          ...authenticatedSklandSnapshot,
+          player: {
+            ...authenticatedSklandSnapshot.player,
+            uid: body.uid,
+            nickname: selectedAccount?.roles.find((role) => role.uid === body.uid)?.nickname ?? "测试博士",
+          },
+        };
+    currentAccounts = currentAccounts.map((account) => account.accountId === body.accountId
+      ? { ...account, selectedUid: body.uid }
+      : account);
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "X-Request-Id": requestId },
+      body: JSON.stringify({
+        success: true,
+        data: {
+          authenticated: true,
+          configured: true,
+          accounts: currentAccounts,
+          activeAccountId: currentAccountId,
+          snapshot: currentSnapshot,
+        },
+        requestId,
+      }),
+    });
+  });
+
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "森空岛状态" }).click();
+
+  const topAvatar = page.locator("[data-skland-top-avatar]");
+  const accountSelect = page.locator("[data-skland-account-select]");
+  const addAccount = page.locator("[data-skland-add-account]");
+  const logout = page.locator("[data-skland-logout]");
+  await expect(topAvatar).toBeVisible();
+  await expect.poll(() => topAvatar.evaluate((element) => getComputedStyle(element).borderRadius)).not.toBe("9999px");
+  const controlHeights = await Promise.all([
+    accountSelect.evaluate((element) => element.getBoundingClientRect().height),
+    addAccount.evaluate((element) => element.getBoundingClientRect().height),
+    logout.evaluate((element) => element.getBoundingClientRect().height),
+  ]);
+  expect(new Set(controlHeights)).toEqual(new Set([44]));
+  await expect(logout).toHaveClass(/text-destructive/);
+
+  await addAccount.click();
+  await expect(page.getByRole("heading", { name: "添加森空岛账号" })).toBeVisible();
+  await page.getByRole("button", { name: "生成登录二维码" }).click();
+  await expect(page.getByRole("heading", { name: "第二账号博士" }).first()).toBeVisible({ timeout: 12_000 });
+
+  await accountSelect.click();
+  await expect(page.getByText("森空岛账号 1 · 测试博士", { exact: true })).toBeVisible();
+  await expect(page.getByText("森空岛账号 2 · 第二账号博士", { exact: true })).toBeVisible();
+  await page.getByRole("option", { name: "测试博士 · 官服" }).click();
+  await expect(page.getByRole("heading", { name: "测试博士" }).first()).toBeVisible();
+
+  await logout.click();
+  await expect(page.getByRole("heading", { name: "第二账号博士" }).first()).toBeVisible();
+  await logout.click();
+  await expect(page.getByRole("heading", { name: "把当前罗德岛带进排班助手" })).toBeVisible();
+
+  const persisted = await page.evaluate(() => JSON.stringify(localStorage));
+  expect(persisted).not.toContain(primarySklandAccount.accountId);
+  expect(persisted).not.toContain(secondaryAccount.accountId);
+  expect(persisted).not.toContain(secondarySnapshot.player.uid);
+});
+
+test("Skland disables adding another account after five accounts", async ({ page }) => {
+  const accounts = Array.from({ length: 5 }, (_, index) => ({
+    ...primarySklandAccount,
+    accountId: `account_limit_${index}`,
+  }));
+  await mockApis(page, {
+    sklandConfigured: true,
+    sklandSnapshot: authenticatedSklandSnapshot,
+    sklandAccounts: accounts,
+    activeAccountId: accounts[0].accountId,
+  });
+  await seedPreferences(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "森空岛状态" }).click();
+
+  const addAccount = page.locator("[data-skland-add-account]");
+  await expect(addAccount).toBeDisabled();
+  await expect(addAccount).toHaveAttribute("title", "最多可登录 5 个森空岛账号");
+});
+
+test("setup routes Skland account actions to the status center", async ({ page }) => {
+  await mockApis(page, {
+    sklandConfigured: true,
+    sklandSnapshot: authenticatedSklandSnapshot,
+  });
+  await seedPreferences(page);
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "配置干员数据与布局" }).first().click();
+  await page.getByRole("tab", { name: /导入干员数据/ }).click();
+  await page.getByRole("tab", { name: "森空岛同步" }).click();
+  await expect(page.getByText(/测试博士/).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "前往森空岛状态" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "使用当前干员数据" })).toHaveCount(0);
+  await page.getByRole("button", { name: "前往森空岛状态" }).click();
+  await expect(page.getByRole("heading", { name: "测试博士" }).first()).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
 test("settings clears local product data without logging out of Skland", async ({ page }) => {

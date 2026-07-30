@@ -1,6 +1,11 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
+import type { SklandAccountSummary, SklandRole } from "../../types.ts";
+
 export const SKLAND_SESSION_COOKIE = "skland_session_v1";
+export const SKLAND_ACCOUNT_INDEX_COOKIE = "skland_accounts_v2";
+export const SKLAND_ACCOUNT_COOKIE_PREFIX = "skland_account_v2_";
+export const SKLAND_ACCOUNT_LIMIT = 5;
 export const SKLAND_SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 export interface SklandSessionPayload {
@@ -12,6 +17,27 @@ export interface SklandSessionPayload {
   selectedUid: string;
   refreshedAt: number;
   expiresAt: number;
+}
+
+export interface SklandStoredAccount {
+  version: 2;
+  accountId: string;
+  session: SklandSessionPayload;
+  roles: SklandRole[];
+}
+
+export interface SklandAccountIndexPayload {
+  version: 2;
+  accountIds: string[];
+  activeAccountId: string | null;
+  expiresAt: number;
+}
+
+export class SklandAccountLimitError extends Error {
+  constructor() {
+    super(`同一浏览器最多可登录 ${SKLAND_ACCOUNT_LIMIT} 个森空岛账号。`);
+    this.name = "SklandAccountLimitError";
+  }
 }
 
 function configuredSecret(explicit?: string): string {
@@ -26,6 +52,71 @@ function keyFor(secret?: string): Buffer {
   return createHash("sha256").update(configuredSecret(secret)).digest();
 }
 
+function sealValue(value: unknown, secret?: string): string {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", keyFor(secret), iv);
+  const ciphertext = Buffer.concat([cipher.update(JSON.stringify(value), "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return Buffer.concat([iv, tag, ciphertext]).toString("base64url");
+}
+
+function unsealValue(value: string, secret?: string): unknown | null {
+  try {
+    const raw = Buffer.from(value, "base64url");
+    if (raw.length <= 28) return null;
+    const iv = raw.subarray(0, 12);
+    const tag = raw.subarray(12, 28);
+    const ciphertext = raw.subarray(28);
+    const decipher = createDecipheriv("aes-256-gcm", keyFor(secret), iv);
+    decipher.setAuthTag(tag);
+    return JSON.parse(Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8")) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function parsedSessionPayload(value: unknown, now: number): SklandSessionPayload | null {
+  if (!value || typeof value !== "object") return null;
+  const decoded = value as Partial<SklandSessionPayload>;
+  if (
+    decoded.version !== 1 ||
+    typeof decoded.cred !== "string" ||
+    typeof decoded.token !== "string" ||
+    typeof decoded.dId !== "string" ||
+    typeof decoded.userId !== "string" ||
+    typeof decoded.selectedUid !== "string" ||
+    typeof decoded.refreshedAt !== "number" ||
+    typeof decoded.expiresAt !== "number" ||
+    decoded.expiresAt <= now
+  ) {
+    return null;
+  }
+  return decoded as SklandSessionPayload;
+}
+
+function parsedRole(value: unknown): SklandRole | null {
+  if (!value || typeof value !== "object") return null;
+  const role = value as Partial<SklandRole>;
+  if (
+    typeof role.uid !== "string" ||
+    typeof role.nickname !== "string" ||
+    typeof role.channelName !== "string" ||
+    typeof role.isDefault !== "boolean"
+  ) {
+    return null;
+  }
+  return {
+    uid: role.uid,
+    nickname: role.nickname,
+    channelName: role.channelName,
+    isDefault: role.isDefault,
+  };
+}
+
+function validAccountId(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{8,64}$/.test(value);
+}
+
 export function isSklandConfigured(): boolean {
   return Buffer.byteLength(process.env.SKLAND_SESSION_SECRET ?? "", "utf8") >= 32;
 }
@@ -35,40 +126,128 @@ export function sklandDisabledReason(): string | null {
 }
 
 export function sealSklandSession(payload: SklandSessionPayload, secret?: string): string {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", keyFor(secret), iv);
-  const ciphertext = Buffer.concat([cipher.update(JSON.stringify(payload), "utf8"), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return Buffer.concat([iv, tag, ciphertext]).toString("base64url");
+  return sealValue(payload, secret);
 }
 
 export function unsealSklandSession(value: string, secret?: string, now = Date.now()): SklandSessionPayload | null {
-  try {
-    const raw = Buffer.from(value, "base64url");
-    if (raw.length <= 28) return null;
-    const iv = raw.subarray(0, 12);
-    const tag = raw.subarray(12, 28);
-    const ciphertext = raw.subarray(28);
-    const decipher = createDecipheriv("aes-256-gcm", keyFor(secret), iv);
-    decipher.setAuthTag(tag);
-    const decoded = JSON.parse(Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8")) as Partial<SklandSessionPayload>;
-    if (
-      decoded.version !== 1 ||
-      typeof decoded.cred !== "string" ||
-      typeof decoded.token !== "string" ||
-      typeof decoded.dId !== "string" ||
-      typeof decoded.userId !== "string" ||
-      typeof decoded.selectedUid !== "string" ||
-      typeof decoded.refreshedAt !== "number" ||
-      typeof decoded.expiresAt !== "number" ||
-      decoded.expiresAt <= now
-    ) {
-      return null;
-    }
-    return decoded as SklandSessionPayload;
-  } catch {
+  return parsedSessionPayload(unsealValue(value, secret), now);
+}
+
+export function sklandAccountCookieName(accountId: string): string {
+  if (!validAccountId(accountId)) throw new Error("森空岛账号标识无效。");
+  return `${SKLAND_ACCOUNT_COOKIE_PREFIX}${accountId}`;
+}
+
+export function sealSklandAccount(account: SklandStoredAccount, secret?: string): string {
+  return sealValue(account, secret);
+}
+
+export function unsealSklandAccount(value: string, secret?: string, now = Date.now()): SklandStoredAccount | null {
+  const decoded = unsealValue(value, secret);
+  if (!decoded || typeof decoded !== "object") return null;
+  const account = decoded as Partial<SklandStoredAccount>;
+  const session = parsedSessionPayload(account.session, now);
+  const roles = Array.isArray(account.roles) ? account.roles.map(parsedRole) : [];
+  if (
+    account.version !== 2 ||
+    !validAccountId(account.accountId) ||
+    !session ||
+    roles.some((role) => role === null) ||
+    roles.length === 0
+  ) {
     return null;
   }
+  return {
+    version: 2,
+    accountId: account.accountId,
+    session,
+    roles: roles as SklandRole[],
+  };
+}
+
+export function sealSklandAccountIndex(index: SklandAccountIndexPayload, secret?: string): string {
+  return sealValue(index, secret);
+}
+
+export function unsealSklandAccountIndex(value: string, secret?: string, now = Date.now()): SklandAccountIndexPayload | null {
+  const decoded = unsealValue(value, secret);
+  if (!decoded || typeof decoded !== "object") return null;
+  const index = decoded as Partial<SklandAccountIndexPayload>;
+  if (
+    index.version !== 2 ||
+    !Array.isArray(index.accountIds) ||
+    index.accountIds.some((accountId) => !validAccountId(accountId)) ||
+    new Set(index.accountIds).size !== index.accountIds.length ||
+    index.accountIds.length > SKLAND_ACCOUNT_LIMIT ||
+    (index.activeAccountId !== null && !validAccountId(index.activeAccountId)) ||
+    (index.activeAccountId !== null && !index.accountIds.includes(index.activeAccountId)) ||
+    typeof index.expiresAt !== "number" ||
+    index.expiresAt <= now
+  ) {
+    return null;
+  }
+  return {
+    version: 2,
+    accountIds: index.accountIds,
+    activeAccountId: index.activeAccountId ?? null,
+    expiresAt: index.expiresAt,
+  };
+}
+
+export function createSklandStoredAccount(
+  session: SklandSessionPayload,
+  roles: SklandRole[],
+  accountId = randomBytes(12).toString("base64url")
+): SklandStoredAccount {
+  return {
+    version: 2,
+    accountId,
+    session,
+    roles: roles.map((role) => ({ ...role })),
+  };
+}
+
+export function toPublicSklandAccount(account: SklandStoredAccount): SklandAccountSummary {
+  return {
+    accountId: account.accountId,
+    selectedUid: account.session.selectedUid,
+    roles: account.roles.map((role) => ({ ...role })),
+  };
+}
+
+export function upsertSklandAccount(
+  accounts: SklandStoredAccount[],
+  session: SklandSessionPayload,
+  roles: SklandRole[]
+): { accounts: SklandStoredAccount[]; account: SklandStoredAccount; replaced: boolean } {
+  const existingIndex = accounts.findIndex((account) => account.session.userId === session.userId);
+  if (existingIndex < 0 && accounts.length >= SKLAND_ACCOUNT_LIMIT) throw new SklandAccountLimitError();
+  const account = createSklandStoredAccount(
+    session,
+    roles,
+    existingIndex >= 0 ? accounts[existingIndex].accountId : undefined
+  );
+  if (existingIndex < 0) {
+    return { accounts: [...accounts, account], account, replaced: false };
+  }
+  const next = accounts.slice();
+  next[existingIndex] = account;
+  return { accounts: next, account, replaced: true };
+}
+
+export function removeSklandAccount(
+  accounts: SklandStoredAccount[],
+  activeAccountId: string | null,
+  accountId: string
+): { accounts: SklandStoredAccount[]; activeAccountId: string | null } {
+  const removedIndex = accounts.findIndex((account) => account.accountId === accountId);
+  if (removedIndex < 0) return { accounts, activeAccountId };
+  const next = accounts.filter((account) => account.accountId !== accountId);
+  if (activeAccountId !== accountId) return { accounts: next, activeAccountId };
+  return {
+    accounts: next,
+    activeAccountId: next[Math.min(removedIndex, next.length - 1)]?.accountId ?? null,
+  };
 }
 
 export function isSecureSklandRequest(request: Request, nodeEnv = process.env.NODE_ENV): boolean {

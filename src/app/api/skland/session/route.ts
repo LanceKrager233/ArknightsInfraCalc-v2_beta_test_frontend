@@ -2,17 +2,20 @@ import {
   assertSameOrigin,
   createRequestId,
   enforceRateLimit,
+  PublicApiError,
+  readJsonBody,
   requestClientIp,
   successResponse,
 } from "@/server/api-contract";
-import { loadSessionSnapshot, SklandServiceError } from "@/server/skland/adapter";
 import {
   assertSklandAvailable,
-  clearSklandSessionCookie,
-  readSklandSession,
-  setSklandSessionCookie,
+  loadActiveSklandAccount,
+  readSklandAccountStore,
+  setSklandAccountStoreCookies,
+  sklandAccountSummaries,
   sklandErrorResponse,
 } from "@/server/skland/http";
+import { removeSklandAccount } from "@/server/skland/session";
 import { isSecureSklandRequest, isSklandConfigured } from "@/server/skland/session";
 
 export const runtime = "nodejs";
@@ -27,26 +30,25 @@ export async function GET(request: Request) {
       configured: isSklandConfigured(),
       authMethods,
       disabledReason: "当前未开放森空岛登录，可使用 MAA 导入。",
+      accounts: [],
+      activeAccountId: null,
     }, requestId);
   }
   try {
-    const session = await readSklandSession();
-    if (!session) {
-      return successResponse({ authenticated: false, configured: true, authMethods }, requestId);
-    }
-    const result = await loadSessionSnapshot(session);
+    const previous = await readSklandAccountStore();
+    const loaded = await loadActiveSklandAccount(previous);
     const response = successResponse({
-      authenticated: true,
+      authenticated: Boolean(loaded.snapshot),
       configured: true,
       authMethods,
-      snapshot: result.snapshot,
+      accounts: sklandAccountSummaries(loaded.store),
+      activeAccountId: loaded.store.activeAccountId,
+      ...(loaded.snapshot ? { snapshot: loaded.snapshot } : {}),
     }, requestId);
-    setSklandSessionCookie(response, request, result.session);
+    setSklandAccountStoreCookies(response, request, loaded.store, previous);
     return response;
   } catch (error) {
-    const response = sklandErrorResponse(error, requestId, "/api/skland/session", startedAt);
-    if (error instanceof SklandServiceError && error.code === "AUTH_EXPIRED") clearSklandSessionCookie(response);
-    return response;
+    return sklandErrorResponse(error, requestId, "/api/skland/session", startedAt);
   }
 }
 
@@ -57,8 +59,27 @@ export async function DELETE(request: Request) {
     assertSameOrigin(request);
     enforceRateLimit("skland-action", requestClientIp(request), 30, 60 * 60_000);
     assertSklandAvailable(request);
-    const response = successResponse({ authenticated: false as const }, requestId);
-    clearSklandSessionCookie(response);
+    const previous = await readSklandAccountStore();
+    let next = previous;
+    if (request.body) {
+      const body = await readJsonBody(request, 16 * 1024) as { accountId?: unknown } | null;
+      if (typeof body?.accountId !== "string" || !body.accountId.trim()) throw new PublicApiError("AIC-REQ-1001");
+      if (!previous.accounts.some((account) => account.accountId === body.accountId)) throw new PublicApiError("AIC-REQ-1001");
+      const removed = removeSklandAccount(previous.accounts, previous.activeAccountId, body.accountId);
+      next = { ...previous, ...removed, migratedSnapshot: null };
+    } else {
+      next = { ...previous, accounts: [], activeAccountId: null, migratedSnapshot: null };
+    }
+    const loaded = await loadActiveSklandAccount(next);
+    const response = successResponse({
+      authenticated: Boolean(loaded.snapshot),
+      configured: true,
+      authMethods,
+      accounts: sklandAccountSummaries(loaded.store),
+      activeAccountId: loaded.store.activeAccountId,
+      ...(loaded.snapshot ? { snapshot: loaded.snapshot } : {}),
+    }, requestId);
+    setSklandAccountStoreCookies(response, request, loaded.store, previous);
     return response;
   } catch (error) {
     return sklandErrorResponse(error, requestId, "/api/skland/session", startedAt);
