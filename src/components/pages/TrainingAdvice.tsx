@@ -1,5 +1,6 @@
-import { ArrowUpRight, CircleAlert, ClipboardCheck } from "lucide-react";
+import { ArrowUpRight, CircleAlert, ClipboardCheck, GraduationCap } from "lucide-react";
 
+import { InfraTechnicalCard, InfraTechnicalHeading } from "@/components/InfraTechnicalCard";
 import { Button } from "@/components/ui/button";
 import { operatorPortraitFor } from "@/operatorPortraits";
 import type { BaseBlueprint, OperBoxEntry, UserProfile, UserProfileAction } from "@/types";
@@ -75,6 +76,19 @@ function actionDomainLabel(value: string): string {
   return labels[value.toLowerCase()] ?? "综合";
 }
 
+function actionDomainGroup(value: string): string {
+  const groups: Record<string, string> = {
+    trade: "trading",
+    trading: "trading",
+    manufacture: "manufacture",
+    manu: "manufacture",
+    power: "power",
+    control: "control",
+    general: "training",
+  };
+  return groups[value.toLowerCase()] ?? "training";
+}
+
 function actionKindLabel(value: string): string {
   const labels: Record<string, string> = {
     promote: "培养优先级",
@@ -96,32 +110,45 @@ function ActionCard({
   const state = !entry?.own ? "未拥有" : entry.elite >= 2 ? "已精二" : "待培养";
 
   return (
-    <article className="grid min-w-0 gap-4 bg-[#313131] p-4 text-white shadow-[0_10px_20px_rgba(0,0,0,0.18)] sm:grid-cols-[88px_minmax(0,1fr)_auto] sm:items-center">
-      <div className="relative size-[88px] overflow-hidden bg-[#3C3C3C]">
-        {portrait ? (
-          <img src={portrait} alt={action.operator} className="h-full w-full object-cover" />
-        ) : (
-          <div className="grid h-full place-items-center px-2 text-center text-xs font-semibold">{action.operator || "未知干员"}</div>
-        )}
-        <div className="absolute inset-x-0 bottom-0 truncate bg-black/70 px-1.5 py-1 text-center text-[11px] font-semibold">
-          {action.operator || "未指定干员"}
+    <InfraTechnicalCard
+      group={actionDomainGroup(action.domain_id)}
+      className="min-w-0"
+      dataSlot="training-advice-card"
+    >
+      <div className="grid min-w-0 gap-4 sm:grid-cols-[88px_minmax(0,1fr)_auto] sm:items-center">
+        <div className="relative size-[88px] overflow-hidden bg-[#3C3C3C] outline outline-1 -outline-offset-1 outline-white/12">
+          {portrait ? (
+            <img
+              src={portrait}
+              alt={action.operator}
+              width={88}
+              height={88}
+              loading="lazy"
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className="grid h-full place-items-center px-2 text-center text-xs font-semibold">{action.operator || "未知干员"}</div>
+          )}
+          <div className="absolute inset-x-0 bottom-0 truncate bg-black/70 px-1.5 py-1 text-center text-[11px] font-semibold">
+            {action.operator || "未指定干员"}
+          </div>
+        </div>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-white/55">
+            <span className="font-medium text-[var(--room-accent)]">{actionDomainLabel(action.domain_id)}</span>
+            <span aria-hidden="true">·</span>
+            <span>{actionKindLabel(action.kind)}</span>
+          </div>
+          <p className="mt-2 max-w-[72ch] text-pretty text-sm leading-6 text-white/82">{action.message}</p>
+        </div>
+        <div className="flex flex-wrap gap-2 sm:flex-col sm:items-end">
+          <span className="border border-[var(--room-accent)]/45 bg-black/18 px-2.5 py-1 text-xs font-semibold text-[var(--room-accent)]">
+            {action.priority || "未分级"}
+          </span>
+          <span className="border border-white/15 bg-white/7 px-2.5 py-1 text-xs text-white/70">{state}</span>
         </div>
       </div>
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-white/55">
-          <span>{actionDomainLabel(action.domain_id)}</span>
-          <span aria-hidden="true">/</span>
-          <span>{actionKindLabel(action.kind)}</span>
-        </div>
-        <p className="mt-2 text-sm leading-6 text-white/82">{action.message}</p>
-      </div>
-      <div className="flex flex-wrap gap-2 sm:flex-col sm:items-end">
-        <span className="border border-[#29BDF5]/50 bg-[#29BDF5]/12 px-2.5 py-1 text-xs font-semibold text-sky-100">
-          {action.priority || "未分级"}
-        </span>
-        <span className="border border-white/15 bg-white/7 px-2.5 py-1 text-xs text-white/70">{state}</span>
-      </div>
-    </article>
+    </InfraTechnicalCard>
   );
 }
 
@@ -142,40 +169,64 @@ export function TrainingAdvice({ operbox, layout, profile, onOpenCalculator }: T
           <h1 className="truncate text-[21px] font-medium leading-none text-[#313131]">训练建议</h1>
           <span className="text-xs text-[#313131]/52">{actions.length}</span>
         </div>
-        <div className="grid gap-4 bg-[#313131] p-4 text-white shadow-[0_10px_20px_rgba(0,0,0,0.24)] lg:grid-cols-[1.2fr_1fr]">
-          <div className="border-l-4 border-[#FFD501] pl-4">
-            <h2 className="text-[23px] font-medium leading-none">根据最近排班整理的培养方向</h2>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-white/70">
-              本页只展示最近一次排班结果中的结构化建议，不在前端维护干员组合、技能公式或效率估算。
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className="border border-white/10 bg-black/24 px-3 py-2"><span className="text-xs text-white/48">布局</span><strong className="block truncate text-base">{layout?.template || "-"}</strong></div>
-            <div className="border border-white/10 bg-black/24 px-3 py-2"><span className="text-xs text-white/48">房间</span><strong className="block text-base">{roomCounts.total || "-"}</strong></div>
-            <div className="border border-white/10 bg-black/24 px-3 py-2"><span className="text-xs text-white/48">已拥有</span><strong className="block text-base">{entries.length ? ownedTotal : "-"}</strong></div>
-            <div className="border border-white/10 bg-black/24 px-3 py-2"><span className="text-xs text-white/48">已精二</span><strong className="block text-base">{entries.length ? eliteTotal : "-"}</strong></div>
-            <div className="col-span-2 border border-white/10 bg-black/24 px-3 py-2 text-xs text-white/65 sm:col-span-4">
-              设施：{roomCounts.trade} 贸易 / {roomCounts.factory} 制造 / {roomCounts.power} 发电 / {roomCounts.dormitory} 宿舍
+        <InfraTechnicalCard group="manufacture" dataSlot="training-summary">
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(28rem,0.8fr)] lg:items-end">
+            <div>
+              <InfraTechnicalHeading icon={<GraduationCap className="size-4" aria-hidden="true" />}>
+                最近一次排班
+              </InfraTechnicalHeading>
+              <h2 className="mt-4 text-[23px] font-medium leading-tight tracking-[-0.02em]">
+                根据最近排班整理的培养方向
+              </h2>
+              <p className="mt-3 max-w-3xl text-pretty text-sm leading-6 text-white/70">
+                这里只展示求解器给出的结构化建议，不在前端重复维护干员组合、技能公式或效率估算。
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-px bg-white/10 sm:grid-cols-4">
+              {[
+                ["布局", layout?.template || "—"],
+                ["房间", roomCounts.total || "—"],
+                ["已拥有", entries.length ? ownedTotal : "—"],
+                ["已精二", entries.length ? eliteTotal : "—"],
+              ].map(([label, value]) => (
+                <div key={label} className="min-w-0 bg-black/24 px-3 py-3">
+                  <span className="text-[10px] text-white/48">{label}</span>
+                  <strong className="mt-1 block truncate text-2xl font-semibold tabular-nums text-[var(--room-accent)]">
+                    {value}
+                  </strong>
+                </div>
+              ))}
+              <div className="col-span-2 flex flex-wrap items-center gap-x-3 gap-y-1 bg-black/24 px-3 py-2 text-xs text-white/65 sm:col-span-4">
+                <span>设施</span>
+                <span>{roomCounts.trade} 贸易</span>
+                <span>{roomCounts.factory} 制造</span>
+                <span>{roomCounts.power} 发电</span>
+                <span>{roomCounts.dormitory} 宿舍</span>
+              </div>
             </div>
           </div>
-        </div>
+        </InfraTechnicalCard>
       </section>
 
       {issues.length ? (
-        <section className="flex gap-3 border border-[#FFD501]/45 bg-[#FFF7D6] p-4 text-sm text-[#5C4900]" aria-label="数据检查问题">
-          <CircleAlert className="mt-0.5 size-5 shrink-0" />
-          <div>
-            <strong>还需要补充以下信息</strong>
-            <ul className="mt-2 grid gap-1">
-              {issues.map((issue) => <li key={issue}>• {issue}</li>)}
-            </ul>
+        <InfraTechnicalCard group="manufacture" dataSlot="training-data-check">
+          <div className="flex gap-3 text-sm" aria-label="数据检查问题">
+            <CircleAlert className="mt-0.5 size-5 shrink-0 text-[var(--room-accent)]" />
+            <div>
+              <strong className="text-[var(--room-accent)]">还需要补充以下信息</strong>
+              <ul className="mt-2 grid gap-1 text-white/72">
+                {issues.map((issue) => <li key={issue}>• {issue}</li>)}
+              </ul>
+            </div>
           </div>
-        </section>
+        </InfraTechnicalCard>
       ) : (
-        <section className="flex gap-3 border border-[#5B8F00]/25 bg-[#F2F8E8] p-4 text-sm text-[#385B00]" aria-label="数据检查">
-          <ClipboardCheck className="mt-0.5 size-5 shrink-0" />
-          <p>当前基建设施与干员数据已通过基础检查，可以生成排班。</p>
-        </section>
+        <InfraTechnicalCard group="power" dataSlot="training-data-check">
+          <div className="flex gap-3 text-sm" aria-label="数据检查">
+            <ClipboardCheck className="mt-0.5 size-5 shrink-0 text-[var(--room-accent)]" />
+            <p className="text-white/76">当前基建设施与干员数据已通过基础检查，可以生成排班。</p>
+          </div>
+        </InfraTechnicalCard>
       )}
 
       <section className="min-w-0" aria-label="培养建议">
@@ -185,22 +236,24 @@ export function TrainingAdvice({ operbox, layout, profile, onOpenCalculator }: T
           <span className="text-xs text-[#313131]/52">{actions.length}</span>
         </div>
         {actions.length ? (
-          <div className="grid min-w-0 gap-3">
+          <div className="grid min-w-0 gap-3" data-training-advice-list>
             {actions.map((action, index) => (
               <ActionCard key={actionKey(action, index)} action={action} entry={ownedByName.get(action.operator)} />
             ))}
           </div>
         ) : (
-          <div className="grid min-h-[220px] place-items-center bg-[#313131] p-6 text-center text-white shadow-[0_10px_20px_rgba(0,0,0,0.18)]">
-            <div className="max-w-xl">
-              <ArrowUpRight className="mx-auto size-8 text-[#29BDF5]" />
+          <InfraTechnicalCard group="training" className="min-h-[220px]" dataSlot="training-empty">
+            <div className="grid min-h-[188px] place-items-center text-center">
+              <div className="max-w-xl">
+              <ArrowUpRight className="mx-auto size-8 text-[var(--room-accent)]" />
               <h3 className="mt-3 text-lg font-semibold">尚无培养建议</h3>
               <p className="mt-2 text-sm leading-6 text-white/62">先导入干员数据、确认基建布局并生成一次排班。</p>
-              <Button type="button" className="mt-4 min-h-11" onClick={onOpenCalculator}>
+              <Button type="button" className="mt-4 h-9 bg-white text-[#272a2b] hover:bg-white/90 max-sm:h-11" onClick={onOpenCalculator}>
                 前往生成排班
               </Button>
+              </div>
             </div>
-          </div>
+          </InfraTechnicalCard>
         )}
       </section>
     </div>

@@ -171,7 +171,7 @@ export function Panel({
 }) {
   return (
     <section className={cn("min-w-0 py-5", className)}>
-      <header className="mb-4 flex items-start justify-between gap-3">
+      <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-2">
           {icon ? <div className="mt-0.5 text-primary">{icon}</div> : null}
           <div className="min-w-0">
@@ -179,7 +179,7 @@ export function Panel({
             {description ? <p className="mt-0.5 text-xs text-muted-foreground">{description}</p> : null}
           </div>
         </div>
-        {action ? <div className="shrink-0">{action}</div> : null}
+        {action ? <div className="min-w-0 max-sm:w-full">{action}</div> : null}
       </header>
       <div>{children}</div>
     </section>
@@ -389,6 +389,7 @@ export function StatusBar({
   ready,
   onRetry,
   onCopyDiagnostic,
+  className,
 }: {
   loading: boolean;
   result: PublicPlanData | null;
@@ -396,6 +397,7 @@ export function StatusBar({
   ready: boolean;
   onRetry: () => void;
   onCopyDiagnostic: () => void;
+  className?: string;
 }) {
   const content = (() => {
     if (loading) {
@@ -431,8 +433,9 @@ export function StatusBar({
   return (
     <div
       className={cn(
-        "surface-shadow flex min-h-10 min-w-0 items-center gap-2 overflow-hidden rounded-lg px-3 py-1 text-sm max-sm:px-2",
-        content.className
+        "surface-shadow flex min-h-9 min-w-0 items-center gap-2 overflow-hidden rounded-lg px-3 py-1 text-sm max-sm:min-h-11 max-sm:px-2",
+        content.className,
+        className
       )}
       role={error ? "alert" : "status"}
       aria-live={error ? "assertive" : "polite"}
@@ -466,14 +469,14 @@ export function RunButton({
 }) {
   return (
     <Button
-      className="h-10 min-w-0 px-3 max-sm:size-11 max-sm:px-0"
+      className="h-9 min-w-0 px-3 max-sm:h-11 max-sm:px-3 max-sm:text-xs"
       aria-label={loading ? "计算中" : canRun ? "生成排班" : "请先导入干员数据"}
       title={!canRun ? "请先导入干员数据，并等待排班服务就绪。" : undefined}
       onClick={onRun}
       disabled={!canRun || loading}
     >
       {loading ? <Loader2 className="animate-spin" /> : <Play />}
-      <span className="hidden md:inline">{loading ? "计算中" : canRun ? "生成排班" : "请先导入数据"}</span>
+      <span>{loading ? "计算中" : canRun ? "生成排班" : "导入后生成"}</span>
     </Button>
   );
 }

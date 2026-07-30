@@ -370,7 +370,7 @@ async function seedPreferences(page: Page) {
   });
 }
 
-async function seedV4Session(page: Page) {
+async function seedV4Session(page: Page, seededResult: unknown = planData) {
   await page.addInitScript(({ layout, result, savedAt, expiresAt }) => {
     window.localStorage.setItem("arknights-infra-calc-beta-onboarding-v1", "1");
     window.localStorage.setItem("arknights-infra-calc-session-v4", JSON.stringify({
@@ -396,7 +396,7 @@ async function seedV4Session(page: Page) {
     }));
   }, {
     layout: layout243,
-    result: planData,
+    result: seededResult,
     savedAt: new Date(now).toISOString(),
     expiresAt: new Date(now + 30 * 24 * 60 * 60 * 1000).toISOString(),
   });
@@ -520,7 +520,72 @@ test("responsive navigation and the two locked areas keep their current behavior
 
   await expect(page.getByRole("button", { name: "基建计算器" })).toBeVisible();
   await expect(page.getByRole("button", { name: "练卡建议" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "森空岛状态" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "森空岛状态", exact: true })).toBeVisible();
+});
+
+test("calculator owns scheduling controls and training advice uses a single technical stream", async ({ page }) => {
+  const adviceResult = {
+    ...planData,
+    profile: {
+      ...profile,
+      actions: [
+        {
+          priority: "高",
+          kind: "promote",
+          operator: "阿米娅",
+          domain_id: "manufacture",
+          message: "优先完成精英化与技能等级，补齐制造站轮换深度。",
+        },
+        {
+          priority: "中",
+          kind: "advice",
+          operator: "凯尔希",
+          domain_id: "power",
+          message: "保留发电站轮换位，避免高心情干员长期空转。",
+        },
+      ],
+    },
+  };
+  await mockApis(page);
+  await seedV4Session(page, adviceResult);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  const calculatorControls = page.locator("[data-calculator-controls]");
+  const fullE2 = page.locator("[data-full-e2]");
+  const runButton = page.getByRole("button", { name: "生成排班" });
+  await expect(calculatorControls).toBeVisible();
+  const desktopControlHeights = await Promise.all([
+    fullE2.evaluate((element) => element.getBoundingClientRect().height),
+    runButton.evaluate((element) => element.getBoundingClientRect().height),
+  ]);
+  expect(desktopControlHeights[0]).toBe(desktopControlHeights[1]);
+  const controlOrder = await calculatorControls.locator("button").allTextContents();
+  expect(controlOrder.at(-2)).toContain("Full E2");
+  expect(controlOrder.at(-1)).toContain("生成排班");
+
+  await page.getByRole("button", { name: "练卡建议" }).click();
+  await expect(calculatorControls).toHaveCount(0);
+  await expect(page.locator('[data-slot="training-summary"]')).toHaveClass(/infra-room-surface/);
+  await expect(page.locator('[data-slot="training-data-check"]')).toHaveClass(/infra-room-surface/);
+  const adviceCards = page.locator('[data-slot="training-advice-card"]');
+  await expect(adviceCards).toHaveCount(2);
+  const cardBoxes = await adviceCards.evaluateAll((elements) => elements.map((element) => {
+    const box = element.getBoundingClientRect();
+    return { left: box.left, top: box.top, width: box.width };
+  }));
+  expect(cardBoxes[0].left).toBeCloseTo(cardBoxes[1].left, 0);
+  expect(cardBoxes[0].width).toBeCloseTo(cardBoxes[1].width, 0);
+  expect(cardBoxes[1].top).toBeGreaterThan(cardBoxes[0].top);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+  await page.getByRole("button", { name: "基建计算器" }).click();
+  const mobileHeights = await Promise.all([
+    page.locator("[data-full-e2]").evaluate((element) => element.getBoundingClientRect().height),
+    page.getByRole("button", { name: "生成排班" }).evaluate((element) => element.getBoundingClientRect().height),
+  ]);
+  expect(Math.min(...mobileHeights)).toBeGreaterThanOrEqual(44);
 });
 
 test("schedule visuals use the technical canvas, acrylic mesh, and responsive level markers", async ({ page }) => {
@@ -619,12 +684,17 @@ test("Skland login shows QR on every viewport and offers a separate mobile app s
     }),
   }));
   await seedPreferences(page);
-  await page.setViewportSize({ width: 375, height: 812 });
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
+  await expect(page.locator("[data-skland-sidebar-login-icon]")).toBeVisible();
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.reload();
 
   await expect(page.locator("header").getByRole("button", { name: "登录森空岛" })).toHaveCount(0);
   await page.getByRole("button", { name: "Toggle Sidebar" }).click();
-  await page.getByRole("button", { name: "森空岛状态" }).click();
+  await expect(page.locator("[data-skland-sidebar-login-icon]")).toBeVisible();
+  await expect(page.getByText("登录森空岛", { exact: true })).toBeVisible();
+  await page.locator("[data-skland-sidebar-account]").click();
   await expect(page.getByRole("heading", { name: "把当前罗德岛带进排班助手" })).toBeVisible();
   await expect(page.getByText(/手机号|验证码|密码/)).toHaveCount(0);
   expect(qrStartRequests).toBe(0);
@@ -681,7 +751,7 @@ test("Skland login waits for an explicit click and explains slow preparation", a
   await page.goto("/");
 
   await page.getByRole("button", { name: "Toggle Sidebar" }).click();
-  await page.getByRole("button", { name: "森空岛状态" }).click();
+  await page.getByRole("button", { name: "森空岛状态", exact: true }).click();
   expect(qrStartRequests).toBe(0);
   const generateButton = page.getByRole("button", { name: "生成登录二维码" });
   await generateButton.click();
@@ -736,7 +806,8 @@ test("Skland status center keeps profile and recruitment in overview and support
   await seedPreferences(page);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
-  await page.getByRole("button", { name: "森空岛状态" }).click();
+  await page.getByRole("button", { name: "森空岛状态", exact: true }).click();
+  await expect(page.locator("[data-calculator-controls]")).toHaveCount(0);
 
   await expect(page.getByRole("img", { name: "测试博士的森空岛头像" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "测试博士" }).first()).toBeVisible();
@@ -745,6 +816,7 @@ test("Skland status center keeps profile and recruitment in overview and support
   await expect(page.getByRole("combobox")).not.toContainText("123456789");
   await expect(page.getByRole("tab", { name: "概览", exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: "基建", exact: true })).toBeVisible();
+  await expect(page.locator("[data-skland-view-tabs]")).toHaveAttribute("data-variant", "default");
   await expect(page.getByRole("tab", { name: "干员", exact: true })).toHaveCount(0);
   await expect(page.getByRole("tab", { name: "进度", exact: true })).toHaveCount(0);
   await expect(page.getByText("当前理智")).toBeVisible();
@@ -755,6 +827,9 @@ test("Skland status center keeps profile and recruitment in overview and support
   await expect(page.getByText("槽位 1")).toBeVisible();
 
   await page.getByRole("tab", { name: "基建", exact: true }).click();
+  await expect(page.locator('[data-slot="skland-layout-sync"]')).toHaveClass(/infra-room-surface/);
+  await expect(page.locator('[data-slot="skland-training-room"]')).toHaveClass(/infra-room-surface/);
+  await expect(page.locator('[data-slot="skland-infra-assets"]')).toHaveClass(/infra-room-surface/);
   await expect(page.getByRole("heading", { name: "当前基建", exact: true })).toBeVisible();
   await expect(page.getByText("按计算器布局排列，快速核对进驻、心情与生产状态。", { exact: true })).toHaveCount(0);
   await expect(page.locator("[data-skland-compact-layout]")).toBeVisible();
@@ -770,7 +845,8 @@ test("Skland status center keeps profile and recruitment in overview and support
   await expect(page.getByText("当前进驻", { exact: true })).toHaveCount(0);
   await expect(page.getByText("设施运行正常", { exact: true })).toHaveCount(0);
   await expect(page.locator("[data-infra-complete-time]").first()).toHaveText(/^\d{4}\.\d{1,2}\.\d{1,2} \d{2}:\d{2}$/);
-  await expect(page.getByText(/已有 4 · 待接收 2/)).toBeVisible();
+  const clueStatus = page.locator("p").filter({ hasText: "已有 4 · 待接收 2 · 已接收 1" });
+  await expect(clueStatus).toContainText("线索交流至");
 
   await page.getByRole("combobox").click();
   await page.getByRole("option", { name: "测试博士二号 · B服" }).click();
@@ -934,21 +1010,39 @@ test("Skland supports adding, switching, and individually logging out multiple a
   await seedPreferences(page);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
-  await page.getByRole("button", { name: "森空岛状态" }).click();
+  await page.getByRole("button", { name: "森空岛状态", exact: true }).click();
 
-  const topAvatar = page.locator("[data-skland-top-avatar]");
+  const sidebarAccount = page.locator("[data-skland-sidebar-account]");
+  const sidebarAvatar = page.locator("[data-skland-sidebar-avatar]");
   const accountSelect = page.locator("[data-skland-account-select]");
   const addAccount = page.locator("[data-skland-add-account]");
   const logout = page.locator("[data-skland-logout]");
-  await expect(topAvatar).toBeVisible();
-  await expect.poll(() => topAvatar.evaluate((element) => getComputedStyle(element).borderRadius)).not.toBe("9999px");
+  await expect(sidebarAccount).toBeVisible();
+  await expect(sidebarAvatar).toBeVisible();
+  const avatarBox = await sidebarAvatar.boundingBox();
+  expect(avatarBox?.width).toBeCloseTo(40, 0);
+  await expect.poll(() => sidebarAvatar.evaluate((element) => getComputedStyle(element).borderRadius)).not.toBe("9999px");
   const controlHeights = await Promise.all([
     accountSelect.evaluate((element) => element.getBoundingClientRect().height),
     addAccount.evaluate((element) => element.getBoundingClientRect().height),
     logout.evaluate((element) => element.getBoundingClientRect().height),
   ]);
-  expect(new Set(controlHeights)).toEqual(new Set([44]));
+  expect(new Set(controlHeights)).toEqual(new Set([36]));
   await expect(logout).toHaveClass(/text-destructive/);
+
+  await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+  await expect(page.getByText("森空岛 · 官服", { exact: true })).toBeVisible();
+  await sidebarAccount.click();
+  await expect(page.getByRole("heading", { name: "测试博士" }).first()).toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobileControlHeights = await Promise.all([
+    accountSelect.evaluate((element) => element.getBoundingClientRect().height),
+    addAccount.evaluate((element) => element.getBoundingClientRect().height),
+    logout.evaluate((element) => element.getBoundingClientRect().height),
+  ]);
+  expect(new Set(mobileControlHeights)).toEqual(new Set([44]));
+  await page.setViewportSize({ width: 1440, height: 1000 });
 
   await addAccount.click();
   await expect(page.getByRole("heading", { name: "添加森空岛账号" })).toBeVisible();
@@ -965,6 +1059,7 @@ test("Skland supports adding, switching, and individually logging out multiple a
   await expect(page.getByRole("heading", { name: "第二账号博士" }).first()).toBeVisible();
   await logout.click();
   await expect(page.getByRole("heading", { name: "把当前罗德岛带进排班助手" })).toBeVisible();
+  await expect(page.locator("[data-skland-sidebar-login-icon]")).toBeVisible();
 
   const persisted = await page.evaluate(() => JSON.stringify(localStorage));
   expect(persisted).not.toContain(primarySklandAccount.accountId);
@@ -985,7 +1080,7 @@ test("Skland disables adding another account after five accounts", async ({ page
   });
   await seedPreferences(page);
   await page.goto("/");
-  await page.getByRole("button", { name: "森空岛状态" }).click();
+  await page.getByRole("button", { name: "森空岛状态", exact: true }).click();
 
   const addAccount = page.locator("[data-skland-add-account]");
   await expect(addAccount).toBeDisabled();
@@ -1003,7 +1098,7 @@ test("setup routes Skland account actions to the status center", async ({ page }
   await page.getByRole("button", { name: "配置干员数据与布局" }).first().click();
   await page.getByRole("tab", { name: /导入干员数据/ }).click();
   await page.getByRole("tab", { name: "森空岛同步" }).click();
-  await expect(page.getByText(/测试博士/).first()).toBeVisible();
+  await expect(page.getByRole("dialog").getByText(/测试博士/).first()).toBeVisible();
   await expect(page.getByRole("button", { name: "前往森空岛状态" })).toBeVisible();
   await expect(page.getByRole("button", { name: "使用当前干员数据" })).toHaveCount(0);
   await page.getByRole("button", { name: "前往森空岛状态" }).click();

@@ -47,6 +47,10 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LevelDiamonds, OperatorSlot, roomVisualFor } from "@/components";
+import {
+  InfraTechnicalCard as OverviewTechnicalCard,
+  InfraTechnicalHeading as OverviewTechnicalHeading,
+} from "@/components/InfraTechnicalCard";
 import { cn } from "@/lib/utils";
 import { operatorPortraitFor } from "@/operatorPortraits";
 import { roomGridTone } from "@/schedule-view-presentation";
@@ -215,64 +219,6 @@ function ProgressMeter({
           style={{ width: `${percent}%` }}
         />
       </div>
-    </div>
-  );
-}
-
-function OverviewTechnicalCard({
-  group,
-  className,
-  children,
-}: {
-  group: string;
-  className?: string;
-  children: ReactNode;
-}) {
-  const visual = roomVisualFor(group);
-  const gridTone = roomGridTone(group);
-  const style = {
-    "--room-accent": visual.accent,
-    "--room-level": visual.level,
-    "--room-grid-color": gridTone.color,
-    "--room-grid-opacity": gridTone.opacity,
-    "--room-grid-fade-start": gridTone.fadeStart,
-  } as CSSProperties;
-
-  return (
-    <article
-      className={cn(
-        "infra-room-surface relative overflow-hidden px-4 py-4 text-white",
-        className
-      )}
-      data-overview-card
-      style={style}
-    >
-      <div
-        className="infra-room-emblem pointer-events-none absolute inset-0 bg-left bg-no-repeat"
-        style={{
-          backgroundImage: `url(${visual.background})`,
-          backgroundPosition: "-18px center",
-          backgroundSize: "auto 176px",
-        }}
-        aria-hidden="true"
-      />
-      <div className="relative z-10 h-full">{children}</div>
-    </article>
-  );
-}
-
-function OverviewTechnicalHeading({
-  icon,
-  children,
-}: {
-  icon: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex min-h-6 items-center gap-2">
-      <span className="h-5 w-1 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
-      <span className="text-[var(--room-accent)]">{icon}</span>
-      <h3 className="text-xs font-medium tracking-wide text-white/66">{children}</h3>
     </div>
   );
 }
@@ -652,8 +598,17 @@ function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
           ) : room.group === "meeting" ? (
             <div className="grid gap-1">
               <p>线索板：{room.clue.board.join("、") || "暂无"}</p>
-              <p>已有 {room.clue.own} · 待接收 {room.clue.needReceive} · 已接收 {room.clue.received}</p>
-              <p>{room.clue.sharing ? `线索交流至 ${formatDateTime(room.clue.shareCompleteTime)}` : "当前未进行线索交流"}</p>
+              <p className="flex flex-wrap items-baseline gap-x-2">
+                <span>已有 {room.clue.own} · 待接收 {room.clue.needReceive} · 已接收 {room.clue.received}</span>
+                <span className="flex items-baseline gap-x-2 xl:ml-auto">
+                  <span aria-hidden="true">·</span>
+                  <span className="whitespace-nowrap">
+                    {room.clue.sharing
+                      ? `线索交流至 ${formatDateTime(room.clue.shareCompleteTime)}`
+                      : "当前未进行线索交流"}
+                  </span>
+                </span>
+              </p>
             </div>
           ) : room.group === "hire" ? (
             <p>下次完成 {formatDateTime(room.completeWorkTime)}</p>
@@ -707,51 +662,72 @@ function InfrastructureTab({
   return (
     <div className="grid gap-7">
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <Card className="surface-shadow ring-0 md:col-span-2 xl:col-span-1">
-          <CardHeader>
-            <CardDescription>布局同步</CardDescription>
-            <CardTitle className="flex items-center gap-2">
-              {layoutMatches ? <Check className="size-4 text-emerald-600" /> : <AlertTriangle className="size-4 text-amber-600" />}
+        <OverviewTechnicalCard
+          group="control"
+          className="min-h-40 md:col-span-2 xl:col-span-1"
+          dataSlot="skland-layout-sync"
+        >
+          <div className="flex h-full flex-col">
+            <OverviewTechnicalHeading
+              icon={layoutMatches
+                ? <Check className="size-4" aria-hidden="true" />
+                : <AlertTriangle className="size-4" aria-hidden="true" />}
+            >
+              布局同步
+            </OverviewTechnicalHeading>
+            <p className="mt-5 text-2xl font-semibold tracking-[-0.02em] text-[var(--room-accent)]">
               {layoutMatches ? "当前布局一致" : "布局需要确认"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            <p className="text-xs leading-5 text-muted-foreground">
+            </p>
+            <p className="mt-2 text-xs leading-5 text-white/58">
               森空岛识别为 {infrastructure.layoutLabel ?? "未支持的布局"}。
             </p>
             {!layoutMatches && infrastructure.layoutSuggestion ? (
-              <Button type="button" className="h-11" variant="outline" onClick={requestApplyLayout}>
+              <Button
+                type="button"
+                className="mt-auto h-9 border-white/22 bg-white/5 text-white hover:bg-white/10 hover:text-white max-sm:h-11"
+                variant="outline"
+                onClick={requestApplyLayout}
+              >
                 <Building2 />应用森空岛布局
               </Button>
             ) : null}
-          </CardContent>
-        </Card>
+          </div>
+        </OverviewTechnicalCard>
 
-        <Card className="surface-shadow ring-0">
-          <CardHeader>
-            <CardDescription>训练室</CardDescription>
-            <CardTitle>{infrastructure.training?.trainee ?? "当前空闲"}</CardTitle>
-          </CardHeader>
-          <CardContent className="text-xs leading-5 text-muted-foreground">
+        <OverviewTechnicalCard group="training" className="min-h-40" dataSlot="skland-training-room">
+          <div className="flex h-full flex-col">
+            <OverviewTechnicalHeading icon={<Activity className="size-4" aria-hidden="true" />}>
+              训练室
+            </OverviewTechnicalHeading>
+            <p className="mt-5 text-2xl font-semibold tracking-[-0.02em] text-[var(--room-accent)]">
+              {infrastructure.training?.trainee ?? "当前空闲"}
+            </p>
+            <div className="mt-auto pt-4 text-xs leading-5 text-white/58">
             {infrastructure.training ? (
               <>
                 <p>协助：{infrastructure.training.trainer ?? "无"}</p>
                 <p>剩余 {formatDuration(infrastructure.training.remainSecs)} · 加速 {Math.round(infrastructure.training.speed * 100)}%</p>
               </>
             ) : "暂无训练任务"}
-          </CardContent>
-        </Card>
+            </div>
+          </div>
+        </OverviewTechnicalCard>
 
-        <Card className="surface-shadow ring-0">
-          <CardHeader>
-            <CardDescription>基建资产</CardDescription>
-            <CardTitle>{infrastructure.furnitureTotal} 件家具</CardTitle>
-          </CardHeader>
-          <CardContent className="text-xs leading-5 text-muted-foreground">
-            <p>无人机 {infrastructure.labor.value}/{infrastructure.labor.maxValue}</p>
-            <p>低心情干员 {infrastructure.tiredOperators.length} 名</p>
-          </CardContent>
-        </Card>
+        <OverviewTechnicalCard group="power" className="min-h-40" dataSlot="skland-infra-assets">
+          <div className="flex h-full flex-col">
+            <OverviewTechnicalHeading icon={<Boxes className="size-4" aria-hidden="true" />}>
+              基建资产
+            </OverviewTechnicalHeading>
+            <p className="mt-5 text-3xl font-semibold tabular-nums text-[var(--room-accent)]">
+              {infrastructure.furnitureTotal}
+              <span className="ml-1 text-sm font-normal text-white/58">件家具</span>
+            </p>
+            <div className="mt-auto flex flex-wrap gap-x-4 gap-y-1 pt-4 text-xs text-white/58">
+              <span>无人机 {infrastructure.labor.value}/{infrastructure.labor.maxValue}</span>
+              <span>低心情干员 {infrastructure.tiredOperators.length} 名</span>
+            </div>
+          </div>
+        </OverviewTechnicalCard>
       </section>
 
       {infrastructure.layoutWarning ? (
@@ -1288,7 +1264,7 @@ export function SklandStatus({
             }}
           >
             <SelectTrigger
-              className="col-span-2 h-11 w-full data-[size=default]:h-11 sm:w-56"
+              className="col-span-2 h-9 w-full data-[size=default]:h-9 max-sm:h-11 max-sm:data-[size=default]:h-11 sm:w-56"
               data-skland-account-select
             >
               <SelectValue placeholder="选择账号与角色" />
@@ -1314,7 +1290,7 @@ export function SklandStatus({
           </Select>
           <Button
             type="button"
-            className="h-11"
+            className="h-9 max-sm:h-11"
             variant="outline"
             disabled={busy || accounts.length >= 5}
             title={accounts.length >= 5 ? "最多可登录 5 个森空岛账号" : undefined}
@@ -1325,7 +1301,7 @@ export function SklandStatus({
           </Button>
           <Button
             type="button"
-            className="h-11"
+            className="h-9 max-sm:h-11"
             variant="destructive"
             disabled={busy}
             onClick={() => void onLogout()}
@@ -1376,9 +1352,9 @@ export function SklandStatus({
 
       <Tabs defaultValue="overview">
         <div className="-mx-3 overflow-x-auto px-3 pb-1">
-          <TabsList variant="line" className="min-w-max">
-            <TabsTrigger value="overview" className="h-11 px-4"><Database />概览</TabsTrigger>
-            <TabsTrigger value="infrastructure" className="h-11 px-4"><Building2 />基建</TabsTrigger>
+          <TabsList className="min-w-max" data-skland-view-tabs>
+            <TabsTrigger value="overview" className="h-9 px-4 max-sm:h-11"><Database />概览</TabsTrigger>
+            <TabsTrigger value="infrastructure" className="h-9 px-4 max-sm:h-11"><Building2 />基建</TabsTrigger>
           </TabsList>
         </div>
         <TabsContent value="overview" className="pt-5">

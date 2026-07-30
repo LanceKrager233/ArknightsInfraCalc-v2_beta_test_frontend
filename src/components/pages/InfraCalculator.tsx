@@ -12,13 +12,16 @@ import {
   IssuePanel,
   Panel,
   PlanTelemetry,
+  RunButton,
   ScheduleBoard,
   ShiftTabs,
+  StatusBar,
 } from "@/components";
 import { ShiftComparisonCard } from "@/skland-components";
 import type { RoomRow } from "@/schedule";
 import type {
   BaseBlueprint,
+  DisplayError,
   FeedbackData,
   IssueReport,
   MaaPlan,
@@ -44,8 +47,15 @@ interface InfraCalculatorProps {
   feedbackResult: FeedbackData | null;
   feedbackError: string | null;
   sampleLoading: boolean;
+  loading: boolean;
+  canRun: boolean;
+  plannerReady: boolean;
+  statusError: DisplayError | null;
   onLoadSample: () => Promise<boolean>;
   onOpenSetup: () => void;
+  onRun: () => void;
+  onRetry: () => void;
+  onCopyDiagnostic: () => void;
   onSetActiveShift: (shift: number) => void;
   onMarkIssue: (row: RoomRow) => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
@@ -64,8 +74,9 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     activePlan, closestComparison,
     resultClearNotice,
     issueForPanel, issueReport, feedbackResult, feedbackError,
-    sampleLoading,
-    onLoadSample, onOpenSetup, onSetActiveShift, onMarkIssue,
+    sampleLoading, loading, canRun, plannerReady, statusError,
+    onLoadSample, onOpenSetup, onRun, onRetry, onCopyDiagnostic,
+    onSetActiveShift, onMarkIssue,
     onFactoryRecipeChange, onTradeOrderChange,
     onDownloadMaa, onDownloadBundle, onCopyCommand,
     onClearResultNotice, onDismissResultClearWarning,
@@ -91,10 +102,42 @@ export function InfraCalculator(props: InfraCalculatorProps) {
             icon={<ShieldCheck className="size-4" />}
             className="min-h-[calc(100vh-112px)]"
             action={(
-              <Button type="button" size="sm" className="max-sm:min-h-11" disabled={sampleLoading} aria-label="载入 243 全精二测试干员数据" onClick={() => void onLoadSample()}>
-                {sampleLoading ? <Loader2 className="animate-spin" /> : <FlaskConical />}
-                {sampleLoading ? "正在载入" : "Full E2 测试"}
-              </Button>
+              <div
+                className="grid w-[min(72vw,52rem)] grid-cols-[minmax(12rem,1fr)_auto_auto_auto] items-center gap-2 max-sm:w-full max-sm:grid-cols-2"
+                data-calculator-controls
+              >
+                <StatusBar
+                  loading={loading}
+                  result={result}
+                  error={statusError}
+                  ready={plannerReady}
+                  onRetry={onRetry}
+                  onCopyDiagnostic={onCopyDiagnostic}
+                  className="max-sm:col-span-2"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9 max-sm:col-span-2 max-sm:h-11 max-sm:justify-start"
+                  aria-label="配置干员数据与布局"
+                  onClick={onOpenSetup}
+                >
+                  <Settings2 />
+                  配置
+                </Button>
+                <Button
+                  type="button"
+                  className="h-9 max-sm:h-11 max-sm:text-xs"
+                  disabled={sampleLoading}
+                  aria-label="载入 243 全精二测试干员数据"
+                  onClick={() => void onLoadSample()}
+                  data-full-e2
+                >
+                  {sampleLoading ? <Loader2 className="animate-spin" /> : <FlaskConical />}
+                  {sampleLoading ? "正在载入" : "Full E2 测试"}
+                </Button>
+                <RunButton canRun={canRun} loading={loading} onRun={onRun} />
+              </div>
             )}
           >
             {!operbox ? (

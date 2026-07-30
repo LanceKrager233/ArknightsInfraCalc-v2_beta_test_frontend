@@ -1,15 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Settings2 } from "lucide-react";
 
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar, type AppPage } from "@/components/layout/AppSidebar";
 import { InfraCalculator } from "@/components/pages/InfraCalculator";
 import { SklandStatus } from "@/components/pages/SklandStatus";
 import { TrainingAdvice } from "@/components/pages/TrainingAdvice";
-
-import { Button } from "@/components/ui/button";
 
 import {
   getHealth,
@@ -37,8 +34,6 @@ import {
 } from "./blueprint";
 import {
   IssueNoteModal,
-  RunButton,
-  StatusBar,
 } from "./components";
 import { copyText, downloadJson } from "./download";
 import { ONBOARDING_STORAGE_KEY, initialSetupStep, shouldAutoOpenSetup, type SetupStep } from "./onboarding";
@@ -77,28 +72,6 @@ function displayError(code: DisplayError["code"], message: string, retryable = f
 
 function resolvePreset(value: PresetDef | undefined): PresetDef {
   return PRESETS.find((preset) => preset.label === value?.label) ?? PRESETS[0];
-}
-
-function SklandTopAvatar({ snapshot }: { snapshot: SklandSnapshot }) {
-  const label = `${snapshot.player.nickname}的森空岛头像`;
-  return (
-    <div
-      className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-primary text-sm font-semibold text-primary-foreground ring-1 ring-foreground/12"
-      role="img"
-      aria-label={label}
-      title={`森空岛 · ${snapshot.player.nickname}`}
-      data-skland-top-avatar
-    >
-      {snapshot.player.avatarUrl ? (
-        <img
-          src={snapshot.player.avatarUrl}
-          alt=""
-          referrerPolicy="no-referrer"
-          className="size-full object-cover"
-        />
-      ) : snapshot.player.nickname.slice(0, 1)}
-    </div>
-  );
 }
 
 function parseLayoutJson(value: unknown): BaseBlueprint | null {
@@ -846,37 +819,11 @@ function WorkbenchApp() {
 
   return (
     <SidebarProvider defaultOpen={false}>
-      <AppSidebar page={page} onPageChange={setPage} />
+      <AppSidebar page={page} snapshot={sklandSnapshot} onPageChange={setPage} />
       <SidebarInset>
-        <header className="sticky top-0 z-30 border-b bg-background/95 px-2 py-2 backdrop-blur-sm sm:px-[clamp(1.75rem,10vw,12rem)] sm:py-3">
+        <header className="sticky top-0 z-30 flex border-b bg-background/95 px-2 py-2 backdrop-blur-sm md:hidden">
           <h1 className="sr-only">明日方舟基建排班助手</h1>
-          <div className="flex items-center gap-1 sm:gap-2">
-            <SidebarTrigger className="h-11 w-11 shrink-0 md:hidden" />
-            <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-1 sm:gap-2">
-              <StatusBar
-                loading={loading}
-                result={result}
-                error={statusError}
-                ready={cliReady}
-                onRetry={() => void handleRetry()}
-                onCopyDiagnostic={() => {
-                  if (statusError) void copyText(`${statusError.code}${statusError.requestId ? ` · ${statusError.requestId}` : ""}`);
-                }}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                className="h-10 min-w-0 px-3 max-sm:size-11 max-sm:px-0"
-                aria-label="配置干员数据与布局"
-                onClick={openSetup}
-              >
-                <Settings2 />
-                <span className="hidden md:inline">配置干员数据与布局</span>
-              </Button>
-              <RunButton canRun={canRun} loading={loading} onRun={handleRun} />
-              {sklandSnapshot ? <SklandTopAvatar snapshot={sklandSnapshot} /> : null}
-            </div>
-          </div>
+          <SidebarTrigger className="h-11 w-11 shrink-0" />
         </header>
 
       <div className="px-3 py-4 sm:px-[clamp(1.75rem,10vw,12rem)]">
@@ -898,8 +845,17 @@ function WorkbenchApp() {
           feedbackResult={feedbackResult}
           feedbackError={feedbackError}
           sampleLoading={sampleLoading}
+          loading={loading}
+          canRun={canRun}
+          plannerReady={cliReady}
+          statusError={statusError}
           onLoadSample={handleLoadSample}
           onOpenSetup={openSetup}
+          onRun={handleRun}
+          onRetry={() => void handleRetry()}
+          onCopyDiagnostic={() => {
+            if (statusError) void copyText(`${statusError.code}${statusError.requestId ? ` · ${statusError.requestId}` : ""}`);
+          }}
           onSetActiveShift={setActiveShift}
           onMarkIssue={handleMarkIssue}
           onFactoryRecipeChange={handleFactoryRecipeChange}
