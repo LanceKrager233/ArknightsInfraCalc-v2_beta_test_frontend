@@ -20,6 +20,13 @@ export default defineConfig({
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
     },
+    {
+      name: "webkit",
+      use: { ...devices["Desktop Safari"] },
+      // WebKit is consistently slower when hydrating the full restored schedule
+      // and completing the multi-account flow on Windows CI/dev machines.
+      timeout: 60_000,
+    },
   ],
   webServer: {
     command: `npx next dev --webpack -H 127.0.0.1 -p ${webServerPort}`,

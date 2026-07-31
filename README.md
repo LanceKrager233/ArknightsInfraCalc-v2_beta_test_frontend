@@ -23,6 +23,15 @@ http://127.0.0.1:5174
 npm run check
 npm run build
 npm run test:e2e
+npm run test:e2e:webkit
+```
+
+`npm run test:e2e`运行默认 Chromium 门禁；涉及响应式、触控或 Safari 兼容性的 UI 改动还应运行独立 WebKit 门禁。
+
+设施卡片的透明徽记由现有 WebP 素材确定性提取。调整提取规则后重新生成并核对产物：
+
+```powershell
+npm run assets:room-emblems
 ```
 
 ### 开发调试模式

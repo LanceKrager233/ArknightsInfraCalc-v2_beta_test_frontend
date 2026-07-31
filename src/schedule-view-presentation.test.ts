@@ -117,7 +117,7 @@ test("reuses list room backgrounds in every compact card", () => {
   );
   assert.deepEqual(presentation.COMPACT_ROOM_BACKGROUND_STYLE, {
     backgroundPosition: "-18px center",
-    backgroundSize: "auto 176px",
+    backgroundSize: "auto 100%",
   });
 });
 

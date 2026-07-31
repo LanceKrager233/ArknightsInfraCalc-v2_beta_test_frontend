@@ -28,15 +28,17 @@ npm run dev
 npm run check
 npm run build
 npm run test:e2e
+npm run test:e2e:webkit
 ```
 
-`npm run check`依次运行 lint、单元/持久化测试和公开 API 契约测试。完整合并门禁还包括生产构建和 Playwright E2E。
+`npm run check`依次运行 lint、单元/持久化测试和公开 API 契约测试。`npm run test:e2e`运行默认 Chromium 门禁；涉及响应式、触控或 Safari 兼容性的 UI 改动还应运行独立 WebKit 门禁。完整合并门禁还包括生产构建和 Playwright E2E。
 
 ## 核心目录
 
 | 路径 | 责任 |
 | --- | --- |
 | `src/App.tsx` | 工作台状态、恢复门控、页面编排 |
+| `src/components/layout/AppTopBar.tsx` | 全局粘性账号入口与移动端侧栏触发器 |
 | `src/api.ts` | 统一解析公开 API envelope，抛出带错误码的 `ApiClientError` |
 | `src/types.ts` | 内部类型、公开 DTO、错误码 |
 | `src/persistence.ts` | v4 本地保存、迁移、过期清理和白名单 |
@@ -45,6 +47,7 @@ npm run test:e2e
 | `src/server/infra.ts` | CLI 查找、长驻进程、内部运行记录和反馈落盘 |
 | `src/app/api/*/route.ts` | 公开 HTTP 路由 |
 | `e2e/production-readiness.spec.ts` | hydration、产品主流程和锁定区域回归 |
+| `scripts/extract-room-emblems.mjs` | 从现有 WebP 确定性提取透明高清设施徽记 |
 | `.github/workflows/frontend-quality.yml` | PR 与 main push 质量门禁 |
 
 ## 公开 API 契约
@@ -203,6 +206,7 @@ npm ci
 npm run check
 npm run build
 npm run test:e2e
+npm run test:e2e:webkit
 ```
 
 随后在真实浏览器检查 `/api/health`、Full E2、三班切换、MAA 导出、反馈提交和 v4 恢复。生产部署、回滚和存储目录规则继续以仓库 `AGENTS.md` 为准。

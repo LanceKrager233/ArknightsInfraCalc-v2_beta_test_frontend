@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { InfraTechnicalCard, InfraTechnicalHeading } from "@/components/InfraTechnicalCard";
 
 import type { FactoryRecipe, PowerBudget, TradeOrder } from "./blueprint";
 import { roomSummary } from "./blueprint";
@@ -120,7 +121,10 @@ export function SetupDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="h-[min(820px,calc(100dvh-1rem))] max-w-[calc(100vw-1rem)] grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-[min(1040px,calc(100vw-2rem))]">
         <DialogHeader className="px-5 py-5 pr-16 sm:px-7">
-          <DialogTitle className="text-lg">配置干员数据（Box）与布局</DialogTitle>
+          <DialogTitle className="flex items-center gap-3 text-lg">
+            <span className="h-6 w-1 shrink-0 bg-primary" aria-hidden="true" />
+            配置干员数据（Box）与布局
+          </DialogTitle>
           <DialogDescription className="text-pretty">导入干员数据，再确认基建设施。修改会立即应用，但不会自动生成排班。</DialogDescription>
         </DialogHeader>
 
@@ -159,24 +163,39 @@ export function SetupDialog({
                     </TabsList>
                     <TabsContent value="skland" className="pt-4">
                       {sklandSnapshot ? (
-                        <div className="grid gap-4">
-                          <div className="flex flex-wrap items-center justify-between gap-4">
-                            <div className="min-w-0">
-                              <strong className="block truncate">{sklandSnapshot.player.nickname}</strong>
-                              <span className="mt-1 block text-xs text-muted-foreground">
-                                {sklandSnapshot.player.channelName} · {sklandSnapshot.operbox.length} 名干员 · {formatSyncTime(sklandSnapshot.infrastructure.storeTs)}
+                        <InfraTechnicalCard group="trading" showEmblem={false} className="rounded-xl p-4 sm:p-5">
+                          <InfraTechnicalHeading icon={<Database className="size-4" />}>森空岛已同步</InfraTechnicalHeading>
+                          <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-white/10 text-sm font-semibold ring-1 ring-white/10">
+                                {sklandSnapshot.player.avatarUrl ? (
+                                  <img
+                                    src={sklandSnapshot.player.avatarUrl}
+                                    alt=""
+                                    width={44}
+                                    height={44}
+                                    referrerPolicy="no-referrer"
+                                    className="size-full object-cover"
+                                  />
+                                ) : sklandSnapshot.player.nickname.slice(0, 1)}
                               </span>
+                              <div className="min-w-0">
+                                <strong className="block truncate text-white">{sklandSnapshot.player.nickname}</strong>
+                                <span className="mt-1 block text-xs text-white/60">
+                                  {sklandSnapshot.player.channelName} · {sklandSnapshot.operbox.length} 名干员 · {formatSyncTime(sklandSnapshot.infrastructure.storeTs)}
+                                </span>
+                              </div>
                             </div>
-                            <Button className="h-10 w-full sm:w-auto" type="button" variant="outline" onClick={onOpenSkland}>
+                            <Button className="h-11 w-full border-white/18 bg-white/8 text-white hover:bg-white/14 hover:text-white sm:w-auto" type="button" variant="outline" onClick={onOpenSkland}>
                               <Database />前往森空岛状态
                             </Button>
                           </div>
                           {sklandSnapshot.warnings.length ? (
-                            <ul className="grid gap-1 border-t border-border/70 pt-3 text-xs text-amber-700">
+                            <ul className="mt-4 grid gap-1 border-t border-white/10 pt-3 text-xs text-amber-200">
                               {sklandSnapshot.warnings.map((warning) => <li key={warning}>· {warning}</li>)}
                             </ul>
                           ) : null}
-                        </div>
+                        </InfraTechnicalCard>
                       ) : (
                         <div className="rounded-lg border border-dashed border-border/80 px-4 py-8 text-center">
                           <ScanLine className="mx-auto size-7 text-primary" />
@@ -198,7 +217,9 @@ export function SetupDialog({
                         value={maaPaste}
                         onChange={(event) => onMaaPasteChange(event.target.value)}
                         placeholder="粘贴 Arknights_OperBox_Export.json 内容"
-                        className="min-h-28 resize-y rounded-lg font-mono text-xs"
+                        className="min-h-28 resize-y rounded-lg font-mono text-base sm:text-sm"
+                        aria-invalid={Boolean(inputError)}
+                        aria-describedby={inputError ? "setup-box-error" : undefined}
                       />
                       <Button type="button" variant="outline" className="h-10 w-full" disabled={!maaPaste.trim()} onClick={importMaaPaste}>
                         导入粘贴内容
@@ -208,24 +229,25 @@ export function SetupDialog({
                 </section>
 
                 {hasBox ? (
-                  <section className="surface-shadow grid gap-3 rounded-xl bg-card p-4 sm:p-5">
+                  <InfraTechnicalCard group="control" showEmblem={false} className="grid gap-3 rounded-xl p-4 sm:p-5">
+                    <InfraTechnicalHeading icon={<Database className="size-4" />}>当前干员数据</InfraTechnicalHeading>
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <span className="text-xs text-muted-foreground">当前干员数据来源</span>
-                        <strong className="mt-0.5 block truncate">{sourceLabel(boxSource)}</strong>
-                        {fileName ? <span className="block truncate text-xs text-muted-foreground">{fileName}</span> : null}
+                        <span className="text-xs text-white/58">数据来源</span>
+                        <strong className="mt-0.5 block truncate text-white">{sourceLabel(boxSource)}</strong>
+                        {fileName ? <span className="block truncate text-xs text-white/58">{fileName}</span> : null}
                       </div>
-                      <span className="text-sm font-medium tabular-nums">{operbox?.length ?? 0} 条记录</span>
+                      <span className="text-sm font-medium tabular-nums text-white">{operbox?.length ?? 0} 条记录</span>
                     </div>
                     <AccountStats operbox={operbox} />
                     {operbox && countOwned(operbox) === 0 ? (
-                      <Alert className="rounded-lg border-amber-200 bg-amber-50 text-amber-700">
-                        <AlertDescription className="text-amber-700">练度表已读入，但没有识别到 own=true，仍可继续配置。</AlertDescription>
+                      <Alert className="rounded-lg border-amber-300/30 bg-amber-300/10 text-amber-100">
+                        <AlertDescription className="text-amber-100">练度表已读入，但没有识别到 own=true，仍可继续配置。</AlertDescription>
                       </Alert>
                     ) : null}
-                  </section>
+                  </InfraTechnicalCard>
                 ) : null}
-                {inputError ? <p className="text-sm text-destructive" role="alert">{inputError}</p> : null}
+                {inputError ? <p id="setup-box-error" className="text-sm text-destructive" role="alert">{inputError}</p> : null}
                 {storageNotice ? (
                   <Alert className="rounded-lg border-amber-200 bg-amber-50 text-amber-700" role="status">
                     <AlertDescription className="text-amber-700">
@@ -278,10 +300,11 @@ export function SetupDialog({
                       <FileJson />导出布局文件
                     </Button>
                   </details>
-                  <div className="mt-4 rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">
-                    <span className="block font-medium text-foreground">当前 {preset.label}</span>
-                    <span className="mt-1 block">{roomSummary(layout)}</span>
-                  </div>
+                  <InfraTechnicalCard group="manufacture" showEmblem={false} className="mt-4 rounded-lg px-3 py-3 shadow-none">
+                    <span className="block text-xs text-white/58">当前布局</span>
+                    <strong className="mt-1 block text-sm text-white">{preset.label}</strong>
+                    <span className="mt-1 block text-xs text-white/62">{roomSummary(layout)}</span>
+                  </InfraTechnicalCard>
                 </section>
                 <section className="surface-shadow min-w-0 rounded-xl bg-muted/25 p-4 sm:p-5">
                   <div className="mb-4">
@@ -294,14 +317,14 @@ export function SetupDialog({
                     onTradeOrderChange={onTradeOrderChange}
                     onRoomLevelChange={onRoomLevelChange}
                   />
-                  {inputError ? <p className="mt-3 text-sm text-destructive" role="alert">{inputError}</p> : null}
+                  {inputError ? <p id="setup-layout-error" className="mt-3 text-sm text-destructive" role="alert">{inputError}</p> : null}
                 </section>
               </div>
             </ScrollArea>
           </TabsContent>
         </Tabs>
 
-        <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-border/70 bg-background/95 px-5 py-3 backdrop-blur-sm sm:px-7">
+        <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-border/70 bg-background px-5 py-3 sm:px-7">
           <Button className="h-10" type="button" variant="ghost" disabled={!resultClearWarningDismissed} onClick={onRestoreResultClearWarning}>
             恢复切换提示
           </Button>

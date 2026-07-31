@@ -261,10 +261,16 @@ export function TrainingAdvice({ operbox, layout, profile, onOpenCalculator }: T
                   className="mx-auto size-8 text-[var(--room-accent)]"
                   aria-hidden="true"
                 />
-                <h3 className="mt-3 text-lg font-semibold">尚无培养建议</h3>
-                <p className="mt-2 text-sm leading-6 text-white/62">先导入干员数据、确认基建布局并生成一次排班。</p>
+                <h3 className="mt-3 text-lg font-semibold">
+                  {profile ? "本次排班暂无培养建议" : "尚无培养建议"}
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-white/62">
+                  {profile
+                    ? "当前干员与布局没有需要优先培养的项目，可以继续使用现有排班。"
+                    : "先导入干员数据、确认基建布局并生成一次排班。"}
+                </p>
                 <Button type="button" className="mt-4 h-9 bg-white text-[#272a2b] hover:bg-white/90 max-sm:h-11" onClick={onOpenCalculator}>
-                  前往生成排班
+                  {profile ? "查看当前排班" : "前往生成排班"}
                 </Button>
               </div>
             </div>

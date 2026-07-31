@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar, type AppPage } from "@/components/layout/AppSidebar";
+import { AppTopBar } from "@/components/layout/AppTopBar";
 import { InfraCalculator } from "@/components/pages/InfraCalculator";
 import { SklandStatus } from "@/components/pages/SklandStatus";
 import { TrainingAdvice } from "@/components/pages/TrainingAdvice";
@@ -736,15 +737,20 @@ function WorkbenchApp() {
 
   function handleSetupOpenChange(next: boolean) {
     setSetupOpen(next);
-    if (!next) markOnboardingSeen();
+    if (!next) {
+      setInputError(null);
+      markOnboardingSeen();
+    }
   }
 
   function closeSetup() {
     markOnboardingSeen();
+    setInputError(null);
     setSetupOpen(false);
   }
 
   function openSklandFromSetup() {
+    setInputError(null);
     setSetupOpen(false);
     setPage("skland");
   }
@@ -801,7 +807,7 @@ function WorkbenchApp() {
     () => buildIssueReport(issueForPanel, fileName, result?.debug?.command),
     [issueForPanel, fileName, result?.debug?.command]
   );
-  const statusError = inputError
+  const statusError = inputError && !setupOpen
     ? displayError(inputErrorCode, inputError)
     : apiError ?? storageNotice;
 
@@ -819,12 +825,13 @@ function WorkbenchApp() {
 
   return (
     <SidebarProvider defaultOpen={false}>
-      <AppSidebar page={page} snapshot={sklandSnapshot} onPageChange={setPage} />
+      <AppSidebar page={page} onPageChange={setPage} />
       <SidebarInset>
-        <header className="sticky top-0 z-30 flex border-b bg-background/95 px-2 py-2 backdrop-blur-sm md:hidden">
-          <h1 className="sr-only">明日方舟基建排班助手</h1>
-          <SidebarTrigger className="h-11 w-11 shrink-0" />
-        </header>
+        <AppTopBar
+          snapshot={sklandSnapshot}
+          sessionLoading={sklandSessionLoading}
+          onOpenSkland={() => setPage("skland")}
+        />
 
       <div className="px-3 py-4 sm:px-[clamp(1.75rem,10vw,12rem)]">
       {page === "calculator" ? (

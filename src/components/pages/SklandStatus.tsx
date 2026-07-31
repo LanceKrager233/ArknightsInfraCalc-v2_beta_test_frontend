@@ -435,19 +435,19 @@ function OverviewTab({
           </OverviewTechnicalHeading>
           <dl className="mt-5 grid grid-cols-3 divide-x divide-white/10 border-y border-white/10 py-3">
             <div className="px-3 first:pl-0">
-              <dt className="text-[10px] text-white/50">干员</dt>
+              <dt className="text-xs text-white/50">干员</dt>
               <dd className="mt-1 text-2xl font-semibold tabular-nums text-[var(--room-accent)]">
                 {player.counts.operators ?? "—"}
               </dd>
             </div>
             <div className="px-3">
-              <dt className="text-[10px] text-white/50">皮肤</dt>
+              <dt className="text-xs text-white/50">皮肤</dt>
               <dd className="mt-1 text-2xl font-semibold tabular-nums text-[var(--room-accent)]">
                 {player.counts.skins ?? "—"}
               </dd>
             </div>
             <div className="px-3">
-              <dt className="text-[10px] text-white/50">家具</dt>
+              <dt className="text-xs text-white/50">家具</dt>
               <dd className="mt-1 text-2xl font-semibold tabular-nums text-[var(--room-accent)]">
                 {player.counts.furniture ?? "—"}
               </dd>
@@ -505,7 +505,7 @@ function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
     <article
       className={`infra-room-surface relative gap-2 overflow-hidden px-3 py-2 text-white ${
         isPowerRoom
-          ? "grid grid-cols-[minmax(0,1fr)_auto] items-start"
+          ? "grid grid-cols-[minmax(0,1fr)_auto] items-start max-sm:grid-cols-1"
           : "flex min-h-36 flex-col"
       }`}
       data-room-group={room.group}
@@ -517,11 +517,11 @@ function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
           style={{
             backgroundImage: `url(${visual.background})`,
             backgroundPosition: "-18px center",
-            backgroundSize: "auto 176px",
+            backgroundSize: "auto 100%",
           }}
           aria-hidden="true"
         />
-        <div className="relative z-10 flex min-h-7 items-center justify-between gap-3">
+        <div className="relative z-10 flex min-h-7 flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
             <span className="infra-room-accent h-5 w-1 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
             <h4 className="truncate text-sm font-medium tracking-[-0.02em] text-white [text-shadow:0_2px_3px_rgba(0,0,0,0.75)]">
@@ -529,7 +529,7 @@ function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
             </h4>
             <LevelDiamonds level={room.level} maxLevel={roomMaxLevel(room)} variant="compact" />
           </div>
-          <div className="ml-auto flex shrink-0 items-center gap-2 text-[10px] text-white/64">
+          <div className="ml-auto flex shrink-0 items-center gap-2 text-xs text-white/64 max-sm:ml-3 max-sm:w-full max-sm:flex-wrap">
             {productionRoom ? (
               <strong className="infra-room-value text-xs font-semibold text-[var(--room-accent)]">
                 {PRODUCT_LABELS[productionRoom.product] ?? productionRoom.product}
@@ -545,11 +545,11 @@ function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
       <div
         className={`relative z-10 min-w-0 ${
           isPowerRoom
-            ? "flex justify-end"
+            ? "flex justify-end max-sm:justify-start"
             : "grid flex-1 content-between gap-2"
         }`}
       >
-        <div className={`flex flex-wrap items-start gap-3 ${isPowerRoom ? "justify-end" : ""}`}>
+        <div className={`flex flex-wrap items-start gap-3 ${isPowerRoom ? "justify-end max-sm:justify-start" : ""}`}>
           {room.operators.length ? room.operators.map((operator) => (
             <OperatorSlot
               key={`${room.key}-${operator.id}`}
@@ -564,7 +564,7 @@ function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
           )) : <span className="py-2 text-sm text-white/48">当前没有进驻干员</span>}
         </div>
 
-        {hasRoomDetails ? <div className="border-t border-white/10 pt-2 text-[10px] leading-4 text-white/58">
+        {hasRoomDetails ? <div className="border-t border-white/10 pt-2 text-xs leading-5 text-white/58">
           {productionRoom ? (
             <dl className="flex flex-wrap items-baseline gap-x-4 gap-y-1.5 xl:flex-nowrap">
               <div className="flex items-baseline gap-1 whitespace-nowrap">
@@ -759,22 +759,28 @@ function InfrastructureTab({
           className="grid items-stretch gap-3 xl:-mx-[80px] xl:grid-cols-[minmax(0,55fr)_minmax(19rem,45fr)]"
           data-skland-compact-layout
         >
-          <div className="flex min-w-0 flex-col gap-3">
+          <div
+            className="flex min-w-0 flex-col gap-3 xl:justify-between"
+            data-skland-compact-column="production"
+          >
             {controlRooms.map((room) => <RoomCard key={room.key} room={room} />)}
 
-            <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+            {workRooms.length ? <div className="grid min-w-0 gap-3 sm:grid-cols-2">
               {workRooms.map((room) => <RoomCard key={room.key} room={room} />)}
-            </div>
+            </div> : null}
 
-            <div className="grid min-w-0 items-start gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {powerRooms.length ? <div className="grid min-w-0 items-start gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {powerRooms.map((room) => <RoomCard key={room.key} room={room} />)}
-            </div>
+            </div> : null}
           </div>
 
-          <div className="flex min-w-0 flex-col gap-3">
-            <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.65fr)]">
+          <div
+            className="flex min-w-0 flex-col gap-3"
+            data-skland-compact-column="auxiliary"
+          >
+            {functionRooms.length ? <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.65fr)]">
               {functionRooms.map((room) => <RoomCard key={room.key} room={room} />)}
-            </div>
+            </div> : null}
 
             {dormitoryRooms.map((room) => <RoomCard key={room.key} room={room} />)}
           </div>
@@ -1235,12 +1241,16 @@ export function SklandStatus({
           {snapshot.player.avatarUrl ? (
             <img
               src={snapshot.player.avatarUrl}
-              alt=""
+              alt={`${snapshot.player.nickname}的森空岛头像`}
               referrerPolicy="no-referrer"
               className="size-14 shrink-0 rounded-xl object-cover ring-1 ring-foreground/10"
             />
           ) : (
-            <div className="grid size-14 shrink-0 place-items-center rounded-xl bg-primary text-lg font-semibold text-primary-foreground">
+            <div
+              className="grid size-14 shrink-0 place-items-center rounded-xl bg-primary text-lg font-semibold text-primary-foreground"
+              role="img"
+              aria-label={`${snapshot.player.nickname}的森空岛头像`}
+            >
               {snapshot.player.nickname.slice(0, 1)}
             </div>
           )}

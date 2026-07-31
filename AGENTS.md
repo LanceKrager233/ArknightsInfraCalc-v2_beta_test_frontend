@@ -46,7 +46,7 @@
 | `src/app/layout.tsx`、`src/app/page.tsx` | App Router 根布局与应用入口 |
 | `src/App.tsx` | 顶层状态、页面编排、持久化与求解主流程 |
 | `src/components/pages/*` | 基建计算器、练卡建议、森空岛状态三个一级页面 |
-| `src/components/layout/AppSidebar.tsx` | 三个一级导航及移动端侧栏行为 |
+| `src/components/layout/AppSidebar.tsx`、`src/components/layout/AppTopBar.tsx` | 三个一级导航、移动端侧栏行为与全局账号入口 |
 | `src/setup-dialog.tsx` | Box 导入、森空岛入口和布局配置流程 |
 | `src/components.tsx` | 业务 UI 组件 |
 | `src/components/ui/*` | shadcn/Base UI primitives |
@@ -62,6 +62,7 @@
 | `src/server/infra.ts` | CLI 查找、长驻 serve 客户端、运行记录、反馈和 CLI release 存储 |
 | `src/server/skland/*` | 森空岛会话加密、Cookie、扫码、同步、角色切换与数据归一化 |
 | `src/internal-field-safety.ts` | 递归剔除内部字段 |
+| `scripts/extract-room-emblems.mjs` | 从现有 WebP 确定性提取透明高清设施徽记 |
 | `fixtures/operbox_full_e2.json` | 首页 Full E2 的 243 全精二样例 |
 | `bin/infra-cli*`、`bin/data/` | 当前平台 CLI 与可选运行数据 |
 | `e2e/production-readiness.spec.ts` | 产品边界、响应式、持久化、调试开关与森空岛 UI 回归 |
@@ -160,12 +161,14 @@ npm run test:api-contract
 npm run check
 npm run build
 npm run test:e2e
+npm run test:e2e:webkit
 npm start
 ```
 
 - `npm run check` 依次运行 lint、单元测试和 API 契约测试。
 - `npm run build` 进行 Next 生产构建并覆盖 TypeScript 集成检查。
 - `npm run test:e2e` 默认在 5184 端口自动启动 Next，并用 Playwright 拦截外部 API；通常不需要真实 CLI 或森空岛凭据。
+- `npm run test:e2e:webkit` 使用同一套 E2E 场景执行独立 WebKit 兼容性门禁。
 - `npm start` 默认监听 `0.0.0.0:5174`。
 - CI 依次执行 `npm ci`、lint、单元测试、契约测试、build 和 Chromium E2E。
 

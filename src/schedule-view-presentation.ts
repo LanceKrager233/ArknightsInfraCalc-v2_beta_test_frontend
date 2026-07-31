@@ -70,7 +70,7 @@ export const COMPACT_ROOM_BACKGROUND_CLASS =
 
 export const COMPACT_ROOM_BACKGROUND_STYLE = {
   backgroundPosition: "-18px center",
-  backgroundSize: "auto 176px",
+  backgroundSize: "auto 100%",
 } satisfies CSSProperties;
 
 const PRODUCT_FALLBACK =

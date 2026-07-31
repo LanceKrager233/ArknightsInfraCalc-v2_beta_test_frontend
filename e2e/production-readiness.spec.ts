@@ -57,6 +57,25 @@ const planData = {
   diagnosticId,
 };
 
+const scheduleVisualPlanData = {
+  ...planData,
+  maa: {
+    ...planData.maa,
+    plans: [0, 1, 2].map((index) => ({
+      ...maaPlan(index),
+      rooms: {
+        trading: [{
+          product: "LMD",
+          operators: ["阿米娅", "凯尔希", "贝洛内"],
+          sort: true,
+          autofill: false,
+        }],
+        processing: [{ operators: ["阿米娅"] }],
+      },
+    })),
+  },
+};
+
 const sampleData = [{
   id: "char_002_amiya",
   name: "阿米娅",
@@ -266,6 +285,7 @@ async function mockApis(
     sklandSnapshot?: typeof authenticatedSklandSnapshot;
     sklandAccounts?: typeof primarySklandAccount[];
     activeAccountId?: string | null;
+    sklandSessionDelayMs?: number;
   } = {}
 ) {
   await page.route("**/api/health", (route) => route.fulfill({
@@ -286,7 +306,10 @@ async function mockApis(
       requestId,
     }),
   }));
-  await page.route("**/api/skland/session", (route) => {
+  await page.route("**/api/skland/session", async (route) => {
+    if (options.sklandSessionDelayMs) {
+      await new Promise((resolve) => setTimeout(resolve, options.sklandSessionDelayMs));
+    }
     const isLogout = route.request().method() === "DELETE";
     const accounts = options.sklandAccounts
       ?? (options.sklandSnapshot ? [{
@@ -475,6 +498,25 @@ test("Full E2 stays in place and completes generation, shifts, MAA export, and f
   await fullE2.click();
   await expect(page.getByText("先导入干员数据")).toHaveCount(0);
 
+  const productControlLayouts = await Promise.all([
+    page.getByRole("group", { name: /贸易站 1 订单/ }).first(),
+    page.getByRole("group", { name: /制造站 1 配方/ }).first(),
+  ].map(async (controls) => {
+    await expect(controls).toBeVisible();
+    return controls.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        columns: style.gridTemplateColumns,
+        columnGap: style.columnGap,
+        rowGap: style.rowGap,
+      };
+    });
+  }));
+  expect(productControlLayouts).toEqual([
+    { columns: "90px 90px", columnGap: "8px", rowGap: "10px" },
+    { columns: "90px 90px", columnGap: "8px", rowGap: "10px" },
+  ]);
+
   await page.getByRole("button", { name: "生成排班" }).click();
   await expect(page.getByText("排班已生成")).toBeVisible();
   await page.getByRole("tab", { name: /β 6h/ }).click();
@@ -521,6 +563,100 @@ test("responsive navigation and the two locked areas keep their current behavior
   await expect(page.getByRole("button", { name: "基建计算器" })).toBeVisible();
   await expect(page.getByRole("button", { name: "练卡建议" })).toBeVisible();
   await expect(page.getByRole("button", { name: "森空岛状态", exact: true })).toBeVisible();
+});
+
+test("the top account bar stays pinned on every page and treats local Box data as logged out", async ({ page }) => {
+  await mockApis(page, { sklandSessionDelayMs: 12_000 });
+  await seedV4Session(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  const topbar = page.locator("[data-app-topbar]");
+  await expect(topbar).toBeVisible({ timeout: 15_000 });
+  const topbarStyle = await topbar.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      backgroundColor: style.backgroundColor,
+      borderBottomWidth: style.borderBottomWidth,
+      boxShadow: style.boxShadow,
+    };
+  });
+  expect(topbarStyle.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+  expect(topbarStyle.borderBottomWidth).toBe("0px");
+  expect(topbarStyle.boxShadow).toBe("none");
+  await expect(page.locator("[data-skland-topbar-loading]")).toBeVisible();
+  await expect(topbar.getByRole("button", { name: "登录森空岛" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator("[data-skland-sidebar-account]")).toHaveCount(0);
+
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await expect.poll(async () => (await topbar.boundingBox())?.y ?? -1).toBeCloseTo(0, 0);
+
+  for (const destination of ["练卡建议", "森空岛状态", "基建计算器"]) {
+    await topbar.getByRole("button", { name: "Toggle Sidebar" }).click();
+    await page.getByRole("button", { name: destination, exact: true }).click();
+    await expect(topbar.getByRole("button", { name: "登录森空岛" })).toBeVisible();
+  }
+});
+
+test("mobile interactive targets remain at least 44 CSS pixels", async ({ page }) => {
+  await mockApis(page);
+  await seedV4Session(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  const undersized = await page.locator('button:not(:disabled), a[href], input:not([type="hidden"]), [role="tab"]:not([aria-disabled="true"])').evaluateAll((elements) => (
+    elements.flatMap((element) => {
+      if (element.getAttribute("aria-label") === "Open Next.js Dev Tools") return [];
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      if (style.visibility === "hidden" || style.display === "none" || rect.width === 0 || rect.height === 0) return [];
+      if (rect.width >= 44 && rect.height >= 44) return [];
+      return [{
+        name: element.getAttribute("aria-label") || element.textContent?.trim() || element.tagName,
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      }];
+    })
+  ));
+  expect(undersized).toEqual([]);
+});
+
+test("an empty generated profile explains that no training action is needed", async ({ page }) => {
+  await mockApis(page);
+  await seedV4Session(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "练卡建议" }).click();
+
+  await expect(page.getByRole("heading", { name: "本次排班暂无培养建议" })).toBeVisible();
+  await expect(page.getByText("当前干员与布局没有需要优先培养的项目，可以继续使用现有排班。")).toBeVisible();
+  await expect(page.getByRole("button", { name: "查看当前排班" })).toBeVisible();
+  await expect(page.getByText("先导入干员数据、确认基建布局并生成一次排班。")).toHaveCount(0);
+});
+
+test("setup owns Box parse errors and uses technical summary surfaces", async ({ page }) => {
+  await mockApis(page, {
+    sklandConfigured: true,
+    sklandSnapshot: authenticatedSklandSnapshot,
+  });
+  await seedV4Session(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "配置干员数据与布局" }).first().click();
+  const dialog = page.getByRole("dialog");
+  await page.getByRole("tab", { name: /导入干员数据/ }).click();
+  await page.getByRole("tab", { name: "森空岛同步" }).click();
+  await expect(dialog.locator(".infra-room-surface")).toHaveCount(2);
+  await page.getByRole("tab", { name: "MAA 导入" }).click();
+  const textarea = dialog.getByPlaceholder("粘贴 Arknights_OperBox_Export.json 内容");
+  await textarea.fill("not valid json");
+  await dialog.getByRole("button", { name: "导入粘贴内容" }).click();
+
+  await expect(textarea).toHaveAttribute("aria-invalid", "true");
+  await expect(dialog.locator('[role="alert"]')).toHaveCount(1);
+  await expect.poll(() => page.locator('[role="alert"]').evaluateAll((elements) => (
+    elements.filter((element) => element.textContent?.trim()).length
+  ))).toBe(1);
 });
 
 test("calculator owns scheduling controls and training advice uses a single technical stream", async ({ page }) => {
@@ -592,9 +728,9 @@ test("calculator owns scheduling controls and training advice uses a single tech
   expect(Math.min(...mobileHeights)).toBeGreaterThanOrEqual(44);
 });
 
-test("schedule visuals use the technical canvas, acrylic mesh, and responsive level markers", async ({ page }) => {
+test("schedule visuals use a stable technical canvas and responsive level markers", async ({ page }) => {
   await mockApis(page);
-  await seedV4Session(page);
+  await seedV4Session(page, scheduleVisualPlanData);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 
@@ -602,7 +738,7 @@ test("schedule visuals use the technical canvas, acrylic mesh, and responsive le
   const roomSurface = page.locator(".infra-room-surface").first();
   const listDiamonds = page.locator('.level-diamonds[data-variant="list"]').first();
 
-  await expect(canvas).toBeVisible();
+  await expect(canvas).toBeVisible({ timeout: 15_000 });
   await expect(roomSurface).toBeVisible();
   await expect(listDiamonds).toBeVisible();
 
@@ -611,19 +747,33 @@ test("schedule visuals use the technical canvas, acrylic mesh, and responsive le
     if (!room) throw new Error("Missing room surface");
     const surface = getComputedStyle(room);
     const mesh = getComputedStyle(room, "::before");
+    const emblem = room.querySelector<HTMLElement>(".infra-room-emblem");
+    if (!emblem) throw new Error("Missing room emblem");
+    const emblemStyle = getComputedStyle(emblem);
     return {
       bodyFont: getComputedStyle(document.body).fontFamily,
       backdropFilter: surface.backdropFilter
         || (surface as CSSStyleDeclaration & { webkitBackdropFilter?: string }).webkitBackdropFilter,
       surfaceBackground: surface.backgroundColor,
       meshMask: mesh.maskImage || mesh.webkitMaskImage,
+      emblemImage: emblemStyle.backgroundImage,
+      emblemBackgroundSize: emblemStyle.backgroundSize,
+      emblemOpacity: emblemStyle.opacity,
+      emblemFilter: emblemStyle.filter,
+      emblemBlendMode: emblemStyle.mixBlendMode,
     };
   });
   expect(visualStyles.bodyFont).toContain("Noto Sans SC");
   expect(visualStyles.bodyFont).not.toContain("Segoe UI");
-  expect(visualStyles.backdropFilter).toContain("blur(12px)");
+  expect(visualStyles.backdropFilter).toBe("none");
   expect(visualStyles.surfaceBackground).toBe("rgb(39, 42, 43)");
   expect(visualStyles.meshMask).toContain("facility-grid.svg");
+  expect(visualStyles.emblemImage).toContain("building-room-emblems/emblem_");
+  expect(visualStyles.emblemImage).toContain(".png");
+  expect(visualStyles.emblemBackgroundSize).toBe("auto 100%");
+  expect(visualStyles.emblemOpacity).toBe("0.16");
+  expect(visualStyles.emblemFilter).toBe("none");
+  expect(visualStyles.emblemBlendMode).toBe("normal");
 
   const listBox = await listDiamonds.boundingBox();
   expect(listBox?.height).toBeCloseTo(20, 0);
@@ -648,6 +798,19 @@ test("schedule visuals use the technical canvas, acrylic mesh, and responsive le
     scrollWidth: element.scrollWidth,
   }));
   expect(tabletGridSize.scrollWidth).toBeLessThanOrEqual(tabletGridSize.clientWidth);
+  const tabletTradeRoom = page.locator('[data-room-group="trading"]').first();
+  const tabletTradeLayout = await tabletTradeRoom.evaluate((element) => ({
+    flexDirection: getComputedStyle(element).flexDirection,
+  }));
+  expect(tabletTradeLayout.flexDirection).toBe("column");
+  const tabletTradeSections = tabletTradeRoom.locator(":scope > div");
+  const tabletTradeSummaryBox = await tabletTradeSections.nth(0).boundingBox();
+  const tabletTradeOccupancyBox = await tabletTradeSections.nth(1).boundingBox();
+  expect(tabletTradeSummaryBox).not.toBeNull();
+  expect(tabletTradeOccupancyBox).not.toBeNull();
+  expect(tabletTradeOccupancyBox!.y).toBeGreaterThanOrEqual(
+    tabletTradeSummaryBox!.y + tabletTradeSummaryBox!.height - 1
+  );
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole("tab", { name: "一图流布局" })).toBeDisabled();
@@ -690,15 +853,16 @@ test("Skland login shows QR on every viewport and offers a separate mobile app s
   await seedPreferences(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
-  await expect(page.locator("[data-skland-sidebar-login-icon]")).toBeVisible();
+  await expect(page.locator("[data-app-topbar]").getByRole("button", { name: "登录森空岛" })).toBeVisible();
+  await expect(page.locator("[data-skland-sidebar-account]")).toHaveCount(0);
   await page.setViewportSize({ width: 375, height: 812 });
   await page.reload();
 
-  await expect(page.locator("header").getByRole("button", { name: "登录森空岛" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Toggle Sidebar" }).click();
-  await expect(page.locator("[data-skland-sidebar-login-icon]")).toBeVisible();
-  await expect(page.getByText("登录森空岛", { exact: true })).toBeVisible();
-  await page.locator("[data-skland-sidebar-account]").click();
+  const topbarLogin = page.locator("[data-app-topbar]").getByRole("button", { name: "登录森空岛" });
+  await expect(topbarLogin).toBeVisible();
+  const loginBox = await topbarLogin.boundingBox();
+  expect(loginBox?.height).toBeGreaterThanOrEqual(44);
+  await topbarLogin.click();
   await expect(page.getByRole("heading", { name: "把当前罗德岛带进排班助手" })).toBeVisible();
   await expect(page.getByText(/手机号|验证码|密码/)).toHaveCount(0);
   expect(qrStartRequests).toBe(0);
@@ -847,6 +1011,23 @@ test("Skland status center keeps profile and recruitment in overview and support
   await expect(page.getByRole("heading", { name: "当前基建", exact: true })).toBeVisible();
   await expect(page.getByText("按计算器布局排列，快速核对进驻、心情与生产状态。", { exact: true })).toHaveCount(0);
   await expect(page.locator("[data-skland-compact-layout]")).toBeVisible();
+  const compactColumns = page.locator("[data-skland-compact-column]");
+  await expect(compactColumns).toHaveCount(2);
+  const compactColumnBottoms = await compactColumns.evaluateAll((columns) => columns.map((column) => (
+    column.getBoundingClientRect().bottom
+  )));
+  expect(Math.abs(compactColumnBottoms[0] - compactColumnBottoms[1])).toBeLessThanOrEqual(1);
+  const compactLastRoomBottoms = await compactColumns.evaluateAll((columns) => columns.map((column) => {
+    const rooms = column.querySelectorAll<HTMLElement>("article[data-room-group]");
+    return rooms.item(rooms.length - 1).getBoundingClientRect().bottom;
+  }));
+  expect(Math.abs(compactLastRoomBottoms[0] - compactLastRoomBottoms[1])).toBeLessThanOrEqual(1);
+  const compactRoomEmblem = page.locator("[data-skland-compact-layout] .infra-room-emblem").first();
+  await expect(compactRoomEmblem).toBeVisible();
+  await expect.poll(() => compactRoomEmblem.evaluate((element) => ({
+    backgroundSize: getComputedStyle(element).backgroundSize,
+    opacity: getComputedStyle(element).opacity,
+  }))).toEqual({ backgroundSize: "auto 100%", opacity: "0.16" });
   await expect(page.getByRole("heading", { name: "控制中枢", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "贸易站 1", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "制造站 1", exact: true })).toBeVisible();
@@ -1026,19 +1207,18 @@ test("Skland supports adding, switching, and individually logging out multiple a
   await page.goto("/");
   await page.getByRole("button", { name: "森空岛状态", exact: true }).click();
 
-  const sidebarAccount = page.locator("[data-skland-sidebar-account]");
-  const sidebarAvatar = page.locator("[data-skland-sidebar-avatar]");
+  const topbarAccount = page.locator("[data-skland-topbar-account]");
+  const topbarAvatar = page.locator("[data-skland-topbar-avatar]");
   const accountSelect = page.locator("[data-skland-account-select]");
   const addAccount = page.locator("[data-skland-add-account]");
   const logout = page.locator("[data-skland-logout]");
-  await expect(sidebarAccount).toBeVisible();
-  await expect(sidebarAvatar).toBeVisible();
-  const avatarBox = await sidebarAvatar.boundingBox();
-  const sidebarAccountBox = await sidebarAccount.boundingBox();
-  expect(avatarBox?.width).toBeCloseTo(36, 0);
-  expect((avatarBox?.x ?? 0) + (avatarBox?.width ?? 0) / 2)
-    .toBeCloseTo((sidebarAccountBox?.x ?? 0) + (sidebarAccountBox?.width ?? 0) / 2, 0);
-  await expect.poll(() => sidebarAvatar.evaluate((element) => getComputedStyle(element).borderRadius)).not.toBe("9999px");
+  await expect(topbarAccount).toBeVisible();
+  await expect(topbarAvatar).toBeVisible();
+  const avatarBox = await topbarAvatar.boundingBox();
+  const topbarAccountBox = await topbarAccount.boundingBox();
+  expect(avatarBox?.width).toBeCloseTo(44, 0);
+  expect(topbarAccountBox?.height).toBeCloseTo(44, 0);
+  await expect.poll(() => topbarAccount.evaluate((element) => getComputedStyle(element).borderRadius)).not.toBe("9999px");
   const controlHeights = await Promise.all([
     accountSelect.evaluate((element) => element.getBoundingClientRect().height),
     addAccount.evaluate((element) => element.getBoundingClientRect().height),
@@ -1047,9 +1227,7 @@ test("Skland supports adding, switching, and individually logging out multiple a
   expect(new Set(controlHeights)).toEqual(new Set([36]));
   await expect(logout).toHaveClass(/text-destructive/);
 
-  await page.getByRole("button", { name: "Toggle Sidebar" }).click();
-  await expect(page.getByText("森空岛 · 官服", { exact: true })).toBeVisible();
-  await sidebarAccount.click();
+  await topbarAccount.click();
   await expect(page.getByRole("heading", { name: "测试博士" }).first()).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -1076,7 +1254,7 @@ test("Skland supports adding, switching, and individually logging out multiple a
   await expect(page.getByRole("heading", { name: "第二账号博士" }).first()).toBeVisible();
   await logout.click();
   await expect(page.getByRole("heading", { name: "把当前罗德岛带进排班助手" })).toBeVisible();
-  await expect(page.locator("[data-skland-sidebar-login-icon]")).toBeVisible();
+  await expect(page.locator("[data-app-topbar]").getByRole("button", { name: "登录森空岛" })).toBeVisible();
 
   const persisted = await page.evaluate(() => JSON.stringify(localStorage));
   expect(persisted).not.toContain(primarySklandAccount.accountId);

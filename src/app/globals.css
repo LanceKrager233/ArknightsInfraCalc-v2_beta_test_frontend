@@ -89,7 +89,6 @@
     --sidebar-accent-foreground: oklch(0.205 0 0);
     --sidebar-border: oklch(0.922 0 0);
     --sidebar-ring: oklch(0.708 0 0);
-    --infra-room-surface: #272a2b;
     --infra-room-surface-solid: #272a2b;
     --infra-room-edge: oklch(0.94 0.012 220 / 0.14);
     --infra-room-edge-hover: oklch(0.94 0.012 220 / 0.22);
@@ -213,9 +212,9 @@
 }
 
 .infra-room-emblem {
-  opacity: 0.3;
-  mix-blend-mode: screen;
-  filter: grayscale(1) contrast(2.6) brightness(1.55);
+  opacity: 0.16;
+  mix-blend-mode: normal;
+  filter: none;
 }
 
 .infra-room-accent {
@@ -284,14 +283,6 @@
   }
 }
 
-@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
-  .infra-room-surface {
-    background-color: var(--infra-room-surface);
-    -webkit-backdrop-filter: blur(12px) saturate(1.12);
-    backdrop-filter: blur(12px) saturate(1.12);
-  }
-}
-
 @media (max-width: 639px) {
   .infra-room-surface::before {
     opacity: calc(var(--room-grid-opacity, 0.09) * 0.55);
@@ -303,13 +294,6 @@
     --level-diamond-height: 16px;
     --level-diamond-width: 8px;
     --level-diamond-gap: 1.5px;
-  }
-
-  @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
-    .infra-room-surface {
-      -webkit-backdrop-filter: blur(8px) saturate(1.08);
-      backdrop-filter: blur(8px) saturate(1.08);
-    }
   }
 }
 

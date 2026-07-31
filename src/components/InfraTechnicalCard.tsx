@@ -43,7 +43,7 @@ export function InfraTechnicalCard({
           style={{
             backgroundImage: `url(${visual.background})`,
             backgroundPosition: "-18px center",
-            backgroundSize: "auto 176px",
+            backgroundSize: "auto 100%",
           }}
           aria-hidden="true"
         />

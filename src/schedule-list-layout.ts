@@ -58,7 +58,7 @@ export function listRoomTitleSizeClass(): string {
 }
 
 export function listMobileOperatorGridClass(): string {
-  return "max-sm:grid max-sm:w-full max-sm:max-w-[304px] max-sm:grid-cols-5 max-sm:[column-gap:0.375rem] max-sm:gap-y-2 max-sm:overflow-visible max-sm:pb-2";
+  return "max-[819px]:grid max-[819px]:w-full max-[819px]:max-w-[304px] max-[819px]:grid-cols-5 max-[819px]:[column-gap:0.375rem] max-[819px]:gap-y-2 max-[819px]:overflow-visible max-[819px]:pb-2";
 }
 
 export function listFunctionalOperatorPosition(
