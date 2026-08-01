@@ -29,6 +29,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -314,7 +321,7 @@ export function LayoutEditor({
                 </div>
                 <Label className="flex items-center gap-1 text-xs text-muted-foreground">
                   等级
-                  <span className="flex h-10 w-16 items-center overflow-hidden rounded-lg border border-input">
+                  <span className="hidden h-10 w-16 items-center overflow-hidden rounded-lg border border-input sm:flex">
                     <button
                       type="button"
                       aria-label={`${room.id} 等级减一`}
@@ -337,6 +344,24 @@ export function LayoutEditor({
                       <ChevronRight className="size-3.5" />
                     </button>
                   </span>
+                  <div className="sm:hidden">
+                    <Select
+                      items={Array.from({ length: levelMax }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))}
+                      value={String(room.level)}
+                      onValueChange={(value) => onRoomLevelChange(room.id, Number(value))}
+                    >
+                      <SelectTrigger size="sm" className="h-10 w-16 [&>[data-slot=select-value]]:justify-center" aria-label={`${room.id} 等级`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="min-w-0" align="center">
+                        {Array.from({ length: levelMax }, (_, i) => i + 1).map((level) => (
+                          <SelectItem key={level} value={String(level)} className="[&>*:first-child]:justify-center">
+                            {level}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </Label>
               </div>
 
