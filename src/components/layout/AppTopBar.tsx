@@ -19,7 +19,7 @@ export function AppTopBar({ snapshot, sessionLoading, onOpenSkland }: AppTopBarP
 
   return (
     <header
-      className="sticky top-0 z-40 bg-transparent [padding-top:env(safe-area-inset-top)]"
+      className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur-sm md:border-b-0 md:bg-transparent md:backdrop-blur-none [padding-top:env(safe-area-inset-top)]"
       data-app-topbar
     >
       <h1 className="sr-only">明日方舟基建排班助手</h1>
