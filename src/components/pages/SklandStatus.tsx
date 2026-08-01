@@ -775,7 +775,7 @@ function InfrastructureTab({
           </div>
 
           <div
-            className="flex min-w-0 flex-col gap-3"
+            className="flex min-w-0 flex-col gap-3 xl:justify-between"
             data-skland-compact-column="auxiliary"
           >
             {functionRooms.length ? <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.65fr)]">
