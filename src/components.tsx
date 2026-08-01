@@ -3,6 +3,8 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   CircleHelp,
   Copy,
   Download,
@@ -26,7 +28,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -313,19 +314,29 @@ export function LayoutEditor({
                 </div>
                 <Label className="flex items-center gap-1 text-xs text-muted-foreground">
                   等级
-                  <Input
-                    aria-label={`${room.id} 等级`}
-                    type="number"
-                    min={1}
-                    max={levelMax}
-                    step={1}
-                    value={room.level}
-                    className="h-10 w-16 rounded-lg px-2 text-center text-sm tabular-nums"
-                    onChange={(event) => {
-                      const level = Number(event.target.value);
-                      if (Number.isInteger(level) && level >= 1 && level <= levelMax) onRoomLevelChange(room.id, level);
-                    }}
-                  />
+                  <span className="flex h-10 w-16 items-center overflow-hidden rounded-lg border border-input">
+                    <button
+                      type="button"
+                      aria-label={`${room.id} 等级减一`}
+                      className="flex h-full w-6 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent"
+                      disabled={room.level <= 1}
+                      onClick={() => onRoomLevelChange(room.id, room.level - 1)}
+                    >
+                      <ChevronLeft className="size-3.5" />
+                    </button>
+                    <span className="flex-1 text-center text-sm tabular-nums" aria-label={`${room.id} 等级`}>
+                      {room.level}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={`${room.id} 等级加一`}
+                      className="flex h-full w-6 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent"
+                      disabled={room.level >= levelMax}
+                      onClick={() => onRoomLevelChange(room.id, room.level + 1)}
+                    >
+                      <ChevronRight className="size-3.5" />
+                    </button>
+                  </span>
                 </Label>
               </div>
 
