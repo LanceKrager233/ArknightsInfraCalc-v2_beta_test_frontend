@@ -271,6 +271,56 @@ const authenticatedSklandSnapshot = {
   warnings: [],
 };
 
+function mockInfrastructureOperators(prefix: string, count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `${prefix}-${index}`,
+    name: `${prefix}-${index + 1}`,
+    morale: 24 - index,
+    workTime: 7_200 + index * 300,
+    lastMoraleUpdateTs: 1_700_000_050,
+  }));
+}
+
+const productionHeavySklandSnapshot = {
+  ...authenticatedSklandSnapshot,
+  infrastructure: {
+    ...authenticatedSklandSnapshot.infrastructure,
+    rooms: [
+      {
+        ...authenticatedSklandSnapshot.infrastructure.rooms[0],
+        operators: mockInfrastructureOperators("control", 5),
+      },
+      ...Array.from({ length: 2 }, (_, index) => ({
+        ...authenticatedSklandSnapshot.infrastructure.rooms[1],
+        key: `trade-${index}`,
+        index,
+        operators: mockInfrastructureOperators(`trade-${index}`, 3),
+      })),
+      ...Array.from({ length: 4 }, (_, index) => ({
+        ...authenticatedSklandSnapshot.infrastructure.rooms[2],
+        key: `factory-${index}`,
+        index,
+        operators: mockInfrastructureOperators(`factory-${index}`, 3),
+      })),
+      ...Array.from({ length: 3 }, (_, index) => ({
+        key: `power-${index}`,
+        group: "power",
+        index,
+        level: 3,
+        operators: mockInfrastructureOperators(`power-${index}`, 1),
+      })),
+      authenticatedSklandSnapshot.infrastructure.rooms[4],
+      authenticatedSklandSnapshot.infrastructure.rooms[5],
+      ...Array.from({ length: 4 }, (_, index) => ({
+        ...authenticatedSklandSnapshot.infrastructure.rooms[3],
+        key: `dorm-${index}`,
+        index,
+        operators: mockInfrastructureOperators(`dorm-${index}`, 5),
+      })),
+    ],
+  },
+};
+
 const primarySklandAccount = {
   accountId: "account_primary",
   selectedUid: authenticatedSklandSnapshot.player.uid,
@@ -581,8 +631,8 @@ test("the top account bar stays pinned on every page and treats local Box data a
       boxShadow: style.boxShadow,
     };
   });
-  expect(topbarStyle.backgroundColor).toBe("rgba(0, 0, 0, 0)");
-  expect(topbarStyle.borderBottomWidth).toBe("0px");
+  expect(topbarStyle.backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+  expect(topbarStyle.borderBottomWidth).toBe("1px");
   expect(topbarStyle.boxShadow).toBe("none");
   await expect(page.locator("[data-skland-topbar-loading]")).toBeVisible();
   await expect(topbar.getByRole("button", { name: "登录森空岛" })).toBeVisible({ timeout: 15_000 });
@@ -596,6 +646,18 @@ test("the top account bar stays pinned on every page and treats local Box data a
     await page.getByRole("button", { name: destination, exact: true }).click();
     await expect(topbar.getByRole("button", { name: "登录森空岛" })).toBeVisible();
   }
+
+  await page.setViewportSize({ width: 768, height: 900 });
+  await expect.poll(() => topbar.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      backgroundColor: style.backgroundColor,
+      borderBottomWidth: style.borderBottomWidth,
+    };
+  })).toEqual({
+    backgroundColor: "rgba(0, 0, 0, 0)",
+    borderBottomWidth: "0px",
+  });
 });
 
 test("mobile interactive targets remain at least 44 CSS pixels", async ({ page }) => {
@@ -657,6 +719,36 @@ test("setup owns Box parse errors and uses technical summary surfaces", async ({
   await expect.poll(() => page.locator('[role="alert"]').evaluateAll((elements) => (
     elements.filter((element) => element.textContent?.trim()).length
   ))).toBe(1);
+});
+
+test("layout level controls clamp edits and expose the power-safe 342 defaults", async ({ page }) => {
+  await mockApis(page);
+  await seedV4Session(page);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "配置干员数据与布局" }).first().click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("tab", { name: /配置基建/ }).click();
+
+  const controlLevel = dialog.locator('input[aria-label="control 等级"]:visible');
+  await expect(controlLevel).toHaveValue("5");
+  await dialog.getByRole("button", { name: "control 等级减一" }).click();
+  await expect(controlLevel).toHaveValue("4");
+  await controlLevel.fill("999");
+  await controlLevel.press("Enter");
+  await expect(controlLevel).toHaveValue("5");
+
+  await dialog.getByRole("button", { name: /^342/ }).click();
+  await expect(dialog.locator('input[aria-label="trade_2 等级"]:visible')).toHaveValue("2");
+  await expect(dialog.locator('input[aria-label="dorm_1 等级"]:visible')).toHaveValue("2");
+  await expect(dialog.getByText("发电 540 / 耗电 540", { exact: true })).toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobileTradeLevel = dialog.locator('input[aria-label="trade_2 等级"]:visible');
+  await mobileTradeLevel.click();
+  await page.getByRole("option", { name: "1", exact: true }).click();
+  await expect(mobileTradeLevel).toHaveValue("1");
 });
 
 test("calculator owns scheduling controls and training advice uses a single technical stream", async ({ page }) => {
@@ -1070,6 +1162,31 @@ test("Skland status center keeps profile and recruitment in overview and support
   await page.getByRole("button", { name: "退出" }).click();
   await expect(page.getByRole("heading", { name: "把当前罗德岛带进排班助手" })).toBeVisible();
   expect(attendanceRequests).toBe(0);
+});
+
+test("Skland compact layout aligns both column endings when production is taller", async ({ page }) => {
+  await mockApis(page, {
+    sklandConfigured: true,
+    sklandSnapshot: productionHeavySklandSnapshot,
+  });
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "森空岛状态", exact: true }).click();
+  await page.getByRole("tab", { name: "基建", exact: true }).click();
+
+  const compactColumns = page.locator("[data-skland-compact-column]");
+  await expect(compactColumns).toHaveCount(2);
+  await expect.poll(() => compactColumns.nth(1).evaluate((column) => (
+    getComputedStyle(column).justifyContent
+  ))).toBe("space-between");
+
+  const compactLastRoomBottoms = await compactColumns.evaluateAll((columns) => columns.map((column) => {
+    const rooms = column.querySelectorAll<HTMLElement>("article[data-room-group]");
+    return rooms.item(rooms.length - 1).getBoundingClientRect().bottom;
+  }));
+  expect(Math.abs(compactLastRoomBottoms[0] - compactLastRoomBottoms[1])).toBeLessThanOrEqual(1);
 });
 
 test("Skland supports adding, switching, and individually logging out multiple accounts", async ({ page }) => {

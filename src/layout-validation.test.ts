@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { validateLayoutJson } from "./layout-validation.ts";
@@ -51,4 +52,13 @@ test("rejects unknown kinds, duplicate IDs, and padded IDs", () => {
   assert.ok(errors.some((message) => message.includes("房间 ID 重复")));
   assert.ok(errors.some((message) => message.includes("kind 不受支持")));
   assert.ok(errors.some((message) => message.includes("首尾空格")));
+});
+
+test("342 preset keeps the intended power-safe room levels", () => {
+  const layout = JSON.parse(readFileSync(new URL("./layouts/342.json", import.meta.url), "utf8"));
+  const levels = Object.fromEntries(layout.rooms.map((room: { id: string; level: number }) => [room.id, room.level]));
+
+  assert.equal(levels.trade_2, 2);
+  assert.equal(levels.dorm_1, 2);
+  assert.deepEqual(validateLayoutJson(layout), []);
 });
