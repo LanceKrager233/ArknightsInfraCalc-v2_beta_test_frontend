@@ -30,12 +30,13 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Combobox,
+  ComboboxContent,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "@/components/ui/combobox";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -269,6 +270,110 @@ export function PresetSelector({
   );
 }
 
+function RoomLevelControl({
+  roomId,
+  level,
+  levelMax,
+  onChange,
+}: {
+  roomId: string;
+  level: number;
+  levelMax: number;
+  onChange: (level: number) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const display = draft ?? String(level);
+
+  const commit = (raw: string) => {
+    const n = Number(raw.trim());
+    const next = Number.isInteger(n) ? Math.max(1, Math.min(levelMax, n)) : level;
+    onChange(next);
+    setDraft(null);
+  };
+
+  const levelOptions = Array.from({ length: levelMax }, (_, i) => String(i + 1));
+
+  return (
+    <>
+      {/* PC：左右箭头 + 中间可输入 */}
+      <span className="hidden h-10 w-20 items-center overflow-hidden rounded-lg border border-input sm:flex">
+        <button
+          type="button"
+          aria-label={`${roomId} 等级减一`}
+          className="flex h-full w-7 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent"
+          disabled={level <= 1}
+          onClick={() => {
+            setDraft(null);
+            onChange(Math.max(1, level - 1));
+          }}
+        >
+          <ChevronLeft className="size-3.5" />
+        </button>
+        <Input
+          type="text"
+          inputMode="numeric"
+          aria-label={`${roomId} 等级`}
+          value={display}
+          onFocus={() => setDraft(String(level))}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={(event) => commit(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") commit((event.target as HTMLInputElement).value);
+          }}
+          className="h-full w-12 min-w-0 flex-1 rounded-none border-0 bg-transparent px-0 text-center text-sm tabular-nums focus-visible:ring-0"
+        />
+        <button
+          type="button"
+          aria-label={`${roomId} 等级加一`}
+          className="flex h-full w-7 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent"
+          disabled={level >= levelMax}
+          onClick={() => {
+            setDraft(null);
+            onChange(Math.min(levelMax, level + 1));
+          }}
+        >
+          <ChevronRight className="size-3.5" />
+        </button>
+      </span>
+
+      {/* 移动端：Combobox 选择 + 输入 */}
+      <div className="sm:hidden">
+        <Combobox
+          items={levelOptions}
+          value={String(level)}
+          onValueChange={(value) => {
+            if (value) onChange(Number(value));
+          }}
+          itemToStringValue={(item) => item}
+        >
+          <ComboboxInput
+            aria-label={`${roomId} 等级`}
+            className="w-20 [&_[data-slot=input-group-control]]:text-center"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            onBlur={(event) => {
+              const raw = event.currentTarget.value;
+              if (raw) {
+                const n = Number(raw);
+                onChange(Number.isInteger(n) ? Math.max(1, Math.min(levelMax, n)) : level);
+              }
+            }}
+          />
+          <ComboboxContent className="w-20 min-w-0" align="start">
+            <ComboboxList>
+              {(item) => (
+                <ComboboxItem key={item} value={item} className="justify-center text-center">
+                  {item}
+                </ComboboxItem>
+              )}
+            </ComboboxList>
+          </ComboboxContent>
+        </Combobox>
+      </div>
+    </>
+  );
+}
+
 export function LayoutEditor({
   layout,
   onFactoryRecipeChange,
@@ -321,47 +426,12 @@ export function LayoutEditor({
                 </div>
                 <Label className="flex items-center gap-1 text-xs text-muted-foreground">
                   等级
-                  <span className="hidden h-10 w-16 items-center overflow-hidden rounded-lg border border-input sm:flex">
-                    <button
-                      type="button"
-                      aria-label={`${room.id} 等级减一`}
-                      className="flex h-full w-6 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent"
-                      disabled={room.level <= 1}
-                      onClick={() => onRoomLevelChange(room.id, room.level - 1)}
-                    >
-                      <ChevronLeft className="size-3.5" />
-                    </button>
-                    <span className="flex-1 text-center text-sm tabular-nums" aria-label={`${room.id} 等级`}>
-                      {room.level}
-                    </span>
-                    <button
-                      type="button"
-                      aria-label={`${room.id} 等级加一`}
-                      className="flex h-full w-6 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent"
-                      disabled={room.level >= levelMax}
-                      onClick={() => onRoomLevelChange(room.id, room.level + 1)}
-                    >
-                      <ChevronRight className="size-3.5" />
-                    </button>
-                  </span>
-                  <div className="sm:hidden">
-                    <Select
-                      items={Array.from({ length: levelMax }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))}
-                      value={String(room.level)}
-                      onValueChange={(value) => onRoomLevelChange(room.id, Number(value))}
-                    >
-                      <SelectTrigger size="sm" className="h-10 w-16 [&>[data-slot=select-value]]:justify-center" aria-label={`${room.id} 等级`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="min-w-0" align="center">
-                        {Array.from({ length: levelMax }, (_, i) => i + 1).map((level) => (
-                          <SelectItem key={level} value={String(level)} className="[&>*:first-child]:justify-center">
-                            {level}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <RoomLevelControl
+                    roomId={room.id}
+                    level={room.level}
+                    levelMax={levelMax}
+                    onChange={(level) => onRoomLevelChange(room.id, level)}
+                  />
                 </Label>
               </div>
 
