@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 
-import { roomVisualFor } from "@/components";
 import { cn } from "@/lib/utils";
+import { roomVisualFor } from "@/room-visuals";
 import { roomGridTone } from "@/schedule-view-presentation";
 
 export function InfraTechnicalCard({
@@ -34,6 +34,7 @@ export function InfraTechnicalCard({
         className
       )}
       data-infra-technical-card
+      data-room-group={group}
       data-slot={dataSlot}
       style={style}
     >

@@ -20,6 +20,7 @@ import { CSSProperties, ChangeEvent, ReactNode, useEffect, useState } from "reac
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { InfraTechnicalCard } from "@/components/InfraTechnicalCard";
 import {
   Dialog,
   DialogContent,
@@ -42,6 +43,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
+import { roomVisualFor } from "@/room-visuals";
+
+export { roomVisualFor } from "@/room-visuals";
 
 import {
   FACTORY_RECIPE_OPTIONS,
@@ -111,6 +115,7 @@ export function ProductToggleGroup<T extends string>({
   columns,
   tone = "default",
   surface = "default",
+  layout = "compact",
   ariaLabel,
 }: {
   value: T;
@@ -119,9 +124,12 @@ export function ProductToggleGroup<T extends string>({
   columns: 2 | 3 | 4;
   tone?: "default" | "trade" | "factory";
   surface?: "default" | "room";
+  layout?: "compact" | "fill";
   ariaLabel: string;
 }) {
-  const compactRoomProductControls = surface === "room" && (tone === "trade" || tone === "factory");
+  const roomProductControls = surface === "room" && (tone === "trade" || tone === "factory");
+  const compactRoomProductControls = roomProductControls && layout === "compact";
+  const fillRoomProductControls = roomProductControls && layout === "fill";
 
   return (
     <ToggleGroup
@@ -138,6 +146,7 @@ export function ProductToggleGroup<T extends string>({
           ? "w-fit grid-cols-[repeat(2,70px)] gap-x-2 gap-y-2.5 sm:grid-cols-[repeat(2,90px)]"
           : cn(
               "w-full",
+              fillRoomProductControls && "gap-x-2 gap-y-2.5",
               columns === 4 ? "grid-cols-4 sm:grid-cols-2" : columns === 2 ? "grid-cols-2" : "grid-cols-3"
             )
       )}
@@ -155,9 +164,10 @@ export function ProductToggleGroup<T extends string>({
             variant="outline"
             className={cn(
               "min-w-0 px-2 text-xs",
-              surface === "room" && "infra-room-control",
+              surface === "room" && "infra-room-control border-white/20 bg-[#3C3C3C]/70 px-1.5 text-xs text-white hover:bg-[#4B4B4B] hover:text-white sm:px-2",
               surface === "default" && "min-h-10",
-              surface === "room" && "max-w-[90px] max-sm:max-w-[70px] border-white/20 bg-[#3C3C3C]/70 px-1.5 text-xs text-white hover:bg-[#4B4B4B] hover:text-white sm:px-2",
+              compactRoomProductControls && "max-w-[90px] max-sm:max-w-[70px]",
+              fillRoomProductControls && "w-full",
               tone === "trade" &&
                 "aria-pressed:border-[#22BBFF] aria-pressed:bg-[#22BBFF] aria-pressed:text-[#313131] data-[state=on]:border-[#22BBFF] data-[state=on]:bg-[#22BBFF] data-[state=on]:text-[#313131]",
               isOriginiumTrade &&
@@ -224,7 +234,7 @@ export function FileDrop({
   }
 
   return (
-    <Label className="flex min-h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-background px-4 py-5 text-center transition-[color,background-color,border-color,scale] duration-150 ease-out active:scale-[0.96] hover:border-primary/40 hover:bg-muted/40 motion-reduce:transform-none">
+    <Label className="flex min-h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-[4px] border border-dashed bg-background px-4 py-5 text-center transition-[color,background-color,border-color,scale] duration-150 ease-out active:scale-[0.96] hover:border-primary/40 hover:bg-muted/40 motion-reduce:transform-none">
       <Upload className="size-5 text-primary" />
       <span className="font-medium text-foreground">{fileName ?? "上传练度 JSON / XLSX"}</span>
       <span className="text-xs text-muted-foreground">
@@ -253,7 +263,7 @@ export function PresetSelector({
         if (next) onSelect(next);
       }}
       spacing={2}
-      className="grid w-full grid-cols-2 gap-2"
+      className="grid w-full grid-cols-2 gap-2 rounded-none"
     >
       {presets.map((preset) => (
         <ToggleGroupItem
@@ -261,17 +271,24 @@ export function PresetSelector({
           value={preset.label}
           variant="outline"
           className={cn(
-            "interactive-surface-shadow h-auto min-h-18 justify-between rounded-lg border-0 bg-card px-3 py-3 text-left hover:bg-muted/55",
-            selected.label === preset.label && "bg-muted text-foreground ring-2 ring-primary ring-offset-2 hover:bg-muted hover:text-foreground"
+            "infra-preset-surface group/preset relative isolate h-auto min-h-20 justify-between overflow-hidden rounded-none border border-white/10 bg-[#272A2B] px-3 py-3 text-left text-white transition-[background-color,border-color,scale] duration-150 ease-out hover:border-white/22 hover:bg-[#303435] hover:text-white active:scale-[0.96] motion-reduce:transform-none",
+            selected.label === preset.label && "border-[#FFD800]/72 bg-[#303027] text-white hover:border-[#FFD800]/82 hover:bg-[#343329] hover:text-white"
           )}
         >
-          <span className="flex min-w-0 flex-col items-start gap-1">
+          <span
+            className={cn(
+              "absolute left-3 top-0 h-0.5 w-9 bg-[#FFD800] transition-opacity duration-150",
+              selected.label === preset.label ? "opacity-100" : "opacity-0"
+            )}
+            aria-hidden="true"
+          />
+          <span className="relative z-10 flex min-w-0 flex-col items-start gap-1">
             <span className="text-lg font-semibold leading-none tabular-nums">{preset.label}</span>
-            <span className="text-xs font-normal text-muted-foreground">
+            <span className="text-xs font-normal text-white/58">
               {preset.trading} 贸 / {preset.manufacture} 制 / {preset.power} 电
             </span>
           </span>
-          {selected.label === preset.label ? <Check className="size-4 shrink-0 text-primary" aria-hidden="true" /> : null}
+          {selected.label === preset.label ? <Check className="relative z-10 size-4 shrink-0 text-[#FFD800]" aria-hidden="true" /> : null}
         </ToggleGroupItem>
       ))}
     </ToggleGroup>
@@ -283,11 +300,13 @@ function RoomLevelControl({
   level,
   levelMax,
   onChange,
+  surface = "default",
 }: {
   roomId: string;
   level: number;
   levelMax: number;
   onChange: (level: number) => void;
+  surface?: "default" | "room";
 }) {
   const [draft, setDraft] = useState<string | null>(null);
   const display = draft ?? String(level);
@@ -304,13 +323,19 @@ function RoomLevelControl({
   return (
     <>
       {/* PC：左右箭头 + 中间可输入 */}
-      <div className="hidden h-10 w-20 items-center overflow-hidden rounded-lg border border-input sm:flex">
+      <div className={cn(
+        "hidden h-10 w-20 items-center overflow-hidden rounded-[4px] border sm:flex",
+        surface === "room" ? "border-white/20 bg-[#3C3C3C]/78" : "border-input"
+      )}>
         <Button
           type="button"
           variant="ghost"
           size="icon-sm"
           aria-label={`${roomId} 等级减一`}
-          className="h-full w-7 rounded-none text-muted-foreground hover:bg-muted hover:text-foreground"
+          className={cn(
+            "h-full w-7 rounded-none",
+            surface === "room" ? "text-white/62 hover:bg-white/10 hover:text-white disabled:text-white/28" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+          )}
           disabled={level <= 1}
           onClick={() => {
             setDraft(null);
@@ -333,14 +358,20 @@ function RoomLevelControl({
               event.currentTarget.blur();
             }
           }}
-          className="h-full w-12 min-w-0 flex-1 rounded-none border-0 bg-transparent px-0 text-center text-sm tabular-nums focus-visible:ring-0"
+          className={cn(
+            "h-full w-12 min-w-0 flex-1 rounded-none border-0 bg-transparent px-0 text-center text-sm tabular-nums focus-visible:ring-0",
+            surface === "room" && "text-white caret-white"
+          )}
         />
         <Button
           type="button"
           variant="ghost"
           size="icon-sm"
           aria-label={`${roomId} 等级加一`}
-          className="h-full w-7 rounded-none text-muted-foreground hover:bg-muted hover:text-foreground"
+          className={cn(
+            "h-full w-7 rounded-none",
+            surface === "room" ? "text-white/62 hover:bg-white/10 hover:text-white disabled:text-white/28" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+          )}
           disabled={level >= levelMax}
           onClick={() => {
             setDraft(null);
@@ -364,7 +395,10 @@ function RoomLevelControl({
         >
           <ComboboxInput
             aria-label={`${roomId} 等级`}
-            className="w-20 [&_[data-slot=input-group-control]]:text-center"
+            className={cn(
+              "w-20 rounded-[4px] [&_[data-slot=input-group-control]]:text-center",
+              surface === "room" && "border-white/20 bg-[#3C3C3C]/78 text-white shadow-none [&_[data-slot=input-group-button]]:text-white/62 [&_[data-slot=input-group-control]]:text-white"
+            )}
             inputMode="numeric"
             pattern="[0-9]*"
             onBlur={(event) => {
@@ -389,6 +423,19 @@ function RoomLevelControl({
       </div>
     </>
   );
+}
+
+function roomVisualGroupForKind(kind: BaseBlueprint["rooms"][number]["kind"]): string {
+  if (kind === "trade_post") return "trading";
+  if (kind === "factory") return "manufacture";
+  if (kind === "power_plant") return "power";
+  if (kind === "control_center") return "control";
+  if (kind === "dormitory") return "dormitory";
+  if (kind === "meeting_room") return "meeting";
+  if (kind === "workshop") return "processing";
+  if (kind === "training_room") return "training";
+  if (kind === "office") return "hire";
+  return "default";
 }
 
 export function LayoutEditor({
@@ -420,71 +467,76 @@ export function LayoutEditor({
           </div>
           <div className={cn("grid gap-2.5", !["trade", "factory"].includes(group.key) && "sm:grid-cols-2")}>
             {group.rooms.map((room) => {
-          const isTrade = room.kind === "trade_post";
-          const isFactory = room.kind === "factory";
-          const activeOrder = isTrade ? tradeOrderFor(room) : null;
-          const activeRecipe = isFactory ? factoryRecipeFor(room) : null;
-          const product = productLabel(room);
-          const levelMax = maxRoomLevel(room.kind);
+              const isTrade = room.kind === "trade_post";
+              const isFactory = room.kind === "factory";
+              const activeOrder = isTrade ? tradeOrderFor(room) : null;
+              const activeRecipe = isFactory ? factoryRecipeFor(room) : null;
+              const product = productLabel(room);
+              const levelMax = maxRoomLevel(room.kind);
+              const visualGroup = roomVisualGroupForKind(room.kind);
 
-          return (
-            <div
-              key={room.id}
-              className={cn(
-                "surface-shadow relative rounded-xl bg-card p-3 pl-4 before:absolute before:inset-y-3 before:left-0 before:w-1 before:rounded-r-full before:bg-transparent",
-                isTrade && "before:bg-blue-500",
-                isFactory && "before:bg-amber-400"
-              )}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-medium">{roomKindLabel(room.kind)}</div>
-                  <div className="truncate text-xs text-muted-foreground">{room.id}</div>
-                </div>
-                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <span>等级</span>
-                  <RoomLevelControl
-                    roomId={room.id}
-                    level={room.level}
-                    levelMax={levelMax}
-                    onChange={(level) => onRoomLevelChange(room.id, level)}
-                  />
-                </div>
-              </div>
+              return (
+                <InfraTechnicalCard
+                  key={room.id}
+                  group={visualGroup}
+                  dataSlot="setup-room-card"
+                  className="min-h-[92px] rounded-none p-3 sm:p-3.5"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="infra-room-accent mb-2 block h-0.5 w-8 bg-[var(--room-accent)]" aria-hidden="true" />
+                      <div className="truncate text-sm font-medium text-white">{roomKindLabel(room.kind)}</div>
+                      <div className="truncate text-xs text-white/58">{room.id}</div>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-white/58">
+                      <span>等级</span>
+                      <RoomLevelControl
+                        roomId={room.id}
+                        level={room.level}
+                        levelMax={levelMax}
+                        surface="room"
+                        onChange={(level) => onRoomLevelChange(room.id, level)}
+                      />
+                    </div>
+                  </div>
 
-              {isTrade && activeOrder ? (
-                <div className="mt-2">
-                  <ProductToggleGroup
-                    ariaLabel={`${room.id} 订单`}
-                    value={activeOrder}
-                    options={TRADE_ORDER_OPTIONS.map((option) => ({
-                      value: option.order,
-                      label: option.label,
-                    }))}
-                    columns={2}
-                    tone="trade"
-                    onChange={(order) => onTradeOrderChange(room.id, order)}
-                  />
-                </div>
-              ) : isFactory && activeRecipe ? (
-                <div className="mt-2">
-                  <ProductToggleGroup
-                    ariaLabel={`${room.id} 配方`}
-                    value={activeRecipe}
-                    options={FACTORY_RECIPE_OPTIONS.map((option) => ({
-                      value: option.recipe,
-                      label: option.label,
-                    }))}
-                    columns={2}
-                    tone="factory"
-                    onChange={(recipe) => onFactoryRecipeChange(room.id, recipe)}
-                  />
-                </div>
-              ) : product ? (
-                <div className="mt-2 text-xs text-muted-foreground">{product}</div>
-              ) : null}
-            </div>
-          );
+                  {isTrade && activeOrder ? (
+                    <div className="mt-2">
+                      <ProductToggleGroup
+                        ariaLabel={`${room.id} 订单`}
+                        value={activeOrder}
+                        options={TRADE_ORDER_OPTIONS.map((option) => ({
+                          value: option.order,
+                          label: option.label,
+                        }))}
+                        columns={2}
+                        tone="trade"
+                        surface="room"
+                        layout="fill"
+                        onChange={(order) => onTradeOrderChange(room.id, order)}
+                      />
+                    </div>
+                  ) : isFactory && activeRecipe ? (
+                    <div className="mt-2">
+                      <ProductToggleGroup
+                        ariaLabel={`${room.id} 配方`}
+                        value={activeRecipe}
+                        options={FACTORY_RECIPE_OPTIONS.map((option) => ({
+                          value: option.recipe,
+                          label: option.label,
+                        }))}
+                        columns={2}
+                        tone="factory"
+                        surface="room"
+                        layout="fill"
+                        onChange={(recipe) => onFactoryRecipeChange(room.id, recipe)}
+                      />
+                    </div>
+                  ) : product ? (
+                    <div className="mt-2 text-xs text-white/62">{product}</div>
+                  ) : null}
+                </InfraTechnicalCard>
+              );
             })}
           </div>
         </section>
@@ -844,75 +896,12 @@ export function PlanTelemetry({
   );
 }
 
-type RoomVisual = {
-  accent: string;
-  level: string;
-  background: string;
-};
-
 const ROOM_SLOT_COUNT = 5;
 const AUXILIARY_ROOM_GROUPS = new Set(["dormitory", "hire", "meeting", "processing"]);
 
 function roomSlotCountFor(group: string) {
   if (group === "trading" || group === "manufacture") return 3;
   return ROOM_SLOT_COUNT;
-}
-
-const ROOM_VISUALS: Record<string, RoomVisual> = {
-  trading: {
-    accent: "#22BBFF",
-    level: "#22BBFF",
-    background: "/images/building-room-emblems/emblem_trading.png",
-  },
-  manufacture: {
-    accent: "#FFD800",
-    level: "#FFD800",
-    background: "/images/building-room-emblems/emblem_manufacture.png",
-  },
-  power: {
-    accent: "#B8F03A",
-    level: "#B8F03A",
-    background: "/images/building-room-emblems/emblem_power.png",
-  },
-  control: {
-    accent: "#FFFFFF",
-    level: "#FFFFFF",
-    background: "/images/building-room-emblems/emblem_control.png",
-  },
-  dormitory: {
-    accent: "#016E65",
-    level: "#FFFFFF",
-    background: "/images/building-room-emblems/emblem_dormitory.png",
-  },
-  meeting: {
-    accent: "#FFFFFF",
-    level: "#FFFFFF",
-    background: "/images/building-room-emblems/emblem_meeting.png",
-  },
-  processing: {
-    accent: "#FFFFFF",
-    level: "#FFFFFF",
-    background: "/images/building-room-emblems/emblem_workshop.png",
-  },
-  hire: {
-    accent: "#FFFFFF",
-    level: "#FFFFFF",
-    background: "/images/building-room-emblems/emblem_hire.png",
-  },
-  training: {
-    accent: "#FFFFFF",
-    level: "#FFFFFF",
-    background: "/images/building-room-emblems/emblem_training.png",
-  },
-  default: {
-    accent: "#FFFFFF",
-    level: "#FFFFFF",
-    background: "/images/building-room-emblems/emblem_none.png",
-  },
-};
-
-export function roomVisualFor(group: string): RoomVisual {
-  return ROOM_VISUALS[group] ?? ROOM_VISUALS.default;
 }
 
 export function LevelDiamonds({

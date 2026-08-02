@@ -161,6 +161,110 @@
   box-shadow: var(--shadow-border);
 }
 
+.dialog-acrylic {
+  background-color: color-mix(in oklch, var(--popover) 88%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(1.1);
+  backdrop-filter: blur(20px) saturate(1.1);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.72),
+    inset 0 0 0 1px rgb(255 255 255 / 0.42),
+    0 24px 64px rgb(12 19 24 / 0.24),
+    0 8px 22px rgb(12 19 24 / 0.12);
+}
+
+.dialog-acrylic::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background-image: url("/images/ui/facility-grid.svg");
+  background-position: right top;
+  background-repeat: repeat;
+  background-size: 112px 112px;
+  opacity: 0.035;
+  -webkit-mask-image: linear-gradient(135deg, transparent 10%, black 62%, black 100%);
+  mask-image: linear-gradient(135deg, transparent 10%, black 62%, black 100%);
+}
+
+.dialog-acrylic[data-setup-dialog] {
+  background-color: color-mix(in oklch, var(--popover) 72%, transparent);
+}
+
+.dialog-acrylic-footer {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.38);
+}
+
+.setup-dialog-footer {
+  position: relative;
+  z-index: 2;
+  background-color: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.setup-dialog-footer {
+  box-shadow:
+    inset 0 1px 0 rgb(12 19 24 / 0.06),
+    inset 0 -1px 0 rgb(255 255 255 / 0.46);
+}
+
+.setup-step-list {
+  background-color: color-mix(in oklch, var(--popover) 62%, transparent);
+  box-shadow:
+    inset 0 0 0 1px rgb(12 19 24 / 0.04),
+    inset 0 1px 0 rgb(255 255 255 / 0.42);
+}
+
+.setup-step-trigger {
+  transition:
+    color 150ms var(--infra-ease-out),
+    background-color 150ms var(--infra-ease-out),
+    box-shadow 150ms var(--infra-ease-out),
+    opacity 150ms var(--infra-ease-out);
+}
+
+.setup-step-trigger[data-active] {
+  border-color: rgb(255 255 255 / 0.12);
+  background-color: #272a2b;
+  color: rgb(255 255 255 / 0.92);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
+}
+
+.setup-step-trigger[data-active] .setup-step-index {
+  background-color: #ffd800;
+  color: #272a2b;
+  box-shadow: 0 0 9px rgb(255 216 0 / 0.22);
+}
+
+.setup-config-panel {
+  background-color: color-mix(in oklch, var(--card) 54%, transparent);
+  outline: 1px solid rgb(12 19 24 / 0.07);
+  outline-offset: -1px;
+}
+
+[data-setup-dialog] .infra-room-surface,
+[data-setup-dialog] .infra-room-surface:hover,
+[data-setup-dialog] .infra-preset-surface,
+[data-setup-dialog] .infra-preset-surface[aria-pressed="true"],
+[data-setup-dialog] .infra-preset-surface[data-state="on"] {
+  box-shadow: none;
+}
+
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .dialog-acrylic {
+    background-color: var(--popover);
+  }
+}
+
+@media (max-width: 639px) {
+  .dialog-acrylic {
+    -webkit-backdrop-filter: blur(12px) saturate(1.06);
+    backdrop-filter: blur(12px) saturate(1.06);
+  }
+
+}
+
 .interactive-surface-shadow {
   box-shadow: var(--shadow-border);
   transition-property: box-shadow;
@@ -239,6 +343,31 @@
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--room-accent) 24%, transparent),
     0 0 7px color-mix(in srgb, var(--room-accent) 32%, transparent);
+}
+
+.infra-preset-surface::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 18%, #ffd800 100%);
+  opacity: 0.055;
+  -webkit-mask-image: url("/images/ui/facility-grid.svg");
+  mask-image: url("/images/ui/facility-grid.svg");
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+  -webkit-mask-size: 96px 96px;
+  mask-size: 96px 96px;
+}
+
+.infra-preset-surface[aria-pressed="true"],
+.infra-preset-surface[data-state="on"] {
+  border-color: rgb(255 216 0 / 0.72);
+  background-color: #303027;
+  color: rgb(255 255 255 / 0.94);
 }
 
 .level-diamonds {

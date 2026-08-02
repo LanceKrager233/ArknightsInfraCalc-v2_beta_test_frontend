@@ -124,15 +124,7 @@ export function SetupDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-[min(820px,calc(100dvh-1rem))] max-w-[calc(100vw-1rem)] grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-[min(1040px,calc(100vw-2rem))]">
-        <DialogHeader className="px-5 py-5 pr-16 sm:px-7">
-          <DialogTitle className="flex items-center gap-3 text-lg">
-            <span className="h-6 w-1 shrink-0 bg-primary" aria-hidden="true" />
-            配置干员数据（Box）、换班与布局
-          </DialogTitle>
-          <DialogDescription className="text-pretty">导入干员数据，再确认换班方式与基建设施。修改会立即应用，但不会自动生成排班。</DialogDescription>
-        </DialogHeader>
-
+      <DialogContent data-setup-dialog className="h-[min(820px,calc(100dvh-1rem))] max-w-[calc(100vw-1rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-[16px] p-0 sm:max-w-[min(1040px,calc(100vw-2rem))]">
         <Tabs
           value={step}
           onValueChange={(value) => {
@@ -140,39 +132,45 @@ export function SetupDialog({
           }}
           className="contents"
         >
-          <TabsList className="mx-4 grid h-auto w-auto grid-cols-2 rounded-xl bg-muted/70 p-1 sm:mx-7">
-            <TabsTrigger value="box" className="h-12 justify-start gap-3 rounded-lg px-3 text-left">
-              <span className="grid size-7 shrink-0 place-items-center rounded-md bg-background text-xs font-semibold shadow-xs">1</span>
-              <span className="min-w-0">
-                <strong className="block text-sm">导入干员数据</strong>
-                <span className="hidden truncate text-xs font-normal text-muted-foreground sm:block">森空岛、MAA 或测试样例</span>
-              </span>
-            </TabsTrigger>
-            <TabsTrigger value="layout" disabled={!hasBox} className="h-12 justify-start gap-3 rounded-lg px-3 text-left">
-              <span className="grid size-7 shrink-0 place-items-center rounded-md bg-background text-xs font-semibold shadow-xs">2</span>
-              <span className="min-w-0">
-                <strong className="block text-sm">配置基建与换班</strong>
-                <span className="hidden truncate text-xs font-normal text-muted-foreground sm:block">布局、换班、等级、产品和订单</span>
-              </span>
-            </TabsTrigger>
-          </TabsList>
+          <div data-setup-top className="px-4 pt-4 sm:px-7 sm:pt-6">
+            <DialogTitle className="flex min-h-10 items-center gap-3 pr-12 text-lg">
+              <span className="h-6 w-1 shrink-0 bg-primary" aria-hidden="true" />
+              配置干员数据（Box）、换班与布局
+            </DialogTitle>
+            <TabsList data-setup-step-list className="setup-step-list mt-3 grid h-auto w-full grid-cols-2 rounded-none bg-foreground/[0.045] p-1">
+              <TabsTrigger value="box" className="setup-step-trigger h-12 justify-start gap-3 rounded-none px-3 text-left">
+                <span className="setup-step-index grid size-7 shrink-0 place-items-center rounded-[4px] bg-background/72 text-xs font-semibold shadow-xs">1</span>
+                <span className="min-w-0">
+                  <strong className="block text-sm">导入干员数据</strong>
+                  <span className="hidden truncate text-xs font-normal text-muted-foreground sm:block">森空岛、MAA 或测试样例</span>
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="layout" disabled={!hasBox} className="setup-step-trigger h-12 justify-start gap-3 rounded-none px-3 text-left">
+                <span className="setup-step-index grid size-7 shrink-0 place-items-center rounded-[4px] bg-background/72 text-xs font-semibold shadow-xs">2</span>
+                <span className="min-w-0">
+                  <strong className="block text-sm">配置基建与换班</strong>
+                  <span className="hidden truncate text-xs font-normal text-muted-foreground sm:block">布局、换班、等级、产品和订单</span>
+                </span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
-          <TabsContent value="box" className="min-h-0 overflow-hidden px-5 py-5 sm:px-7 sm:py-6">
+          <TabsContent value="box" className="min-h-0 overflow-hidden overscroll-contain">
             <ScrollArea className="h-full">
-              <div className="mx-auto grid max-w-3xl gap-5 px-5 sm:px-7">
-                <section className="surface-shadow rounded-xl bg-card p-4 sm:p-5">
+              <div data-setup-box-content className="grid w-full gap-4 px-4 py-4 sm:px-7 sm:py-6">
+                <section className="setup-config-panel p-4 sm:p-5">
                   <Tabs value={inputMode} onValueChange={(value) => onInputModeChange(value as "skland" | "maa")}>
-                    <TabsList className="h-auto w-full rounded-lg sm:w-auto">
-                      <TabsTrigger value="skland"><Database />森空岛同步</TabsTrigger>
-                      <TabsTrigger value="maa"><FileJson />MAA 导入</TabsTrigger>
+                    <TabsList className="h-auto w-full rounded-[4px] sm:w-auto">
+                      <TabsTrigger value="skland" className="rounded-[4px]"><Database />森空岛同步</TabsTrigger>
+                      <TabsTrigger value="maa" className="rounded-[4px]"><FileJson />MAA 导入</TabsTrigger>
                     </TabsList>
                     <TabsContent value="skland" className="pt-4">
                       {sklandSnapshot ? (
-                        <InfraTechnicalCard group="trading" showEmblem={false} className="rounded-xl p-4 sm:p-5">
+                        <InfraTechnicalCard group="trading" showEmblem={false} className="rounded-none p-4 sm:p-5">
                           <InfraTechnicalHeading icon={<Database className="size-4" />}>森空岛已同步</InfraTechnicalHeading>
                           <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
                             <div className="flex min-w-0 items-center gap-3">
-                              <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-white/10 text-sm font-semibold ring-1 ring-white/10">
+                              <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-[4px] bg-white/10 text-sm font-semibold ring-1 ring-white/10">
                                 {sklandSnapshot.player.avatarUrl ? (
                                   <img
                                     src={sklandSnapshot.player.avatarUrl}
@@ -222,7 +220,7 @@ export function SetupDialog({
                         value={maaPaste}
                         onChange={(event) => onMaaPasteChange(event.target.value)}
                         placeholder="粘贴 Arknights_OperBox_Export.json 内容"
-                        className="min-h-28 resize-y rounded-lg font-mono text-base sm:text-sm"
+                        className="min-h-28 resize-y rounded-[4px] font-mono text-base sm:text-sm"
                         aria-invalid={Boolean(inputError)}
                         aria-describedby={inputError ? "setup-box-error" : undefined}
                       />
@@ -234,7 +232,7 @@ export function SetupDialog({
                 </section>
 
                 {hasBox ? (
-                  <InfraTechnicalCard group="control" showEmblem={false} className="grid gap-3 rounded-xl p-4 sm:p-5">
+                  <InfraTechnicalCard group="control" showEmblem={false} className="grid gap-3 rounded-none p-4 sm:p-5">
                     <InfraTechnicalHeading icon={<Database className="size-4" />}>当前干员数据</InfraTechnicalHeading>
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -246,7 +244,7 @@ export function SetupDialog({
                     </div>
                     <AccountStats operbox={operbox} />
                     {operbox && countOwned(operbox) === 0 ? (
-                      <Alert className="rounded-lg border-amber-300/30 bg-amber-300/10 text-amber-100">
+                      <Alert className="rounded-[4px] border-amber-300/30 bg-amber-300/10 text-amber-100">
                         <AlertDescription className="text-amber-100">练度表已读入，但没有识别到 own=true，仍可继续配置。</AlertDescription>
                       </Alert>
                     ) : null}
@@ -260,7 +258,7 @@ export function SetupDialog({
                     </AlertDescription>
                   </Alert>
                 ) : null}
-                <section className="surface-shadow rounded-xl bg-card p-4 sm:p-5">
+                <section className="setup-config-panel p-4 sm:p-5">
                   <h3 className="text-sm font-semibold">本地数据</h3>
                   <p className="mt-1 text-xs leading-5 text-muted-foreground">
                     布局、干员数据和最近排班会在此浏览器保存 30 天。清除后会重置当前页面，但不会自动退出森空岛账号。
@@ -273,10 +271,10 @@ export function SetupDialog({
             </ScrollArea>
           </TabsContent>
 
-          <TabsContent value="layout" className="min-h-0 overflow-hidden  px-5 py-5 sm:px-7 sm:py-6">
+          <TabsContent value="layout" className="min-h-0 overflow-hidden overscroll-contain">
             <ScrollArea className="h-full">
-              <div className="grid gap-5 px-5 sm:px-7 lg:grid-cols-[280px_minmax(0,1fr)]">
-                <section className="surface-shadow min-w-0 self-start rounded-xl bg-card p-4 lg:sticky lg:top-0">
+              <div data-setup-layout-columns className="grid gap-0 px-4 py-4 sm:px-7 sm:py-6 lg:grid-cols-[280px_1px_minmax(0,1fr)]">
+                <section className="min-w-0 self-start pb-5 lg:sticky lg:top-0 lg:pr-5">
                   <div className="mb-4 flex items-start gap-2">
                     <LayoutGrid className="mt-0.5 size-4 text-primary" />
                     <div>
@@ -289,7 +287,7 @@ export function SetupDialog({
                     <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">高级设置</summary>
                     <RotationSettings value={rotationProfile} onChange={onRotationProfileChange} />
                     <p className="mb-2 mt-4 border-t border-border/70 pt-4 text-xs text-muted-foreground">导入或导出布局文件，适合跨设备复用配置。</p>
-                    <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed text-sm font-medium text-muted-foreground transition-[color,border-color,background-color,scale] duration-150 ease-out active:scale-[0.96] hover:border-primary hover:bg-muted/40 hover:text-primary motion-reduce:transform-none">
+                    <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-[4px] border border-dashed text-sm font-medium text-muted-foreground transition-[color,border-color,background-color,scale] duration-150 ease-out active:scale-[0.96] hover:border-primary hover:bg-muted/40 hover:text-primary motion-reduce:transform-none">
                       <Upload className="size-4" />导入布局文件
                       <input
                         className="sr-only"
@@ -306,13 +304,14 @@ export function SetupDialog({
                       <FileJson />导出布局文件
                     </Button>
                   </details>
-                  <InfraTechnicalCard group="manufacture" showEmblem={false} className="mt-4 rounded-lg px-3 py-3 shadow-none">
+                  <InfraTechnicalCard group="manufacture" showEmblem={false} className="mt-4 rounded-none px-3 py-3 shadow-none">
                     <span className="block text-xs text-white/58">当前布局</span>
                     <strong className="mt-1 block text-sm text-white">{preset.label}</strong>
                     <span className="mt-1 block text-xs text-white/62">{roomSummary(layout)}</span>
                   </InfraTechnicalCard>
                 </section>
-                <section className="surface-shadow min-w-0 rounded-xl bg-muted/25 p-4 sm:p-5">
+                <div data-setup-layout-divider className="h-px bg-foreground/8 lg:h-auto lg:w-px" aria-hidden="true" />
+                <section className="min-w-0 pt-5 lg:pl-5 lg:pt-0">
                   <div className="mb-4">
                     <h3 className="text-sm font-semibold">设施等级、产品与订单</h3>
                     <p className="mt-0.5 text-xs text-muted-foreground">所有调整即时写入排班输入。</p>
@@ -330,25 +329,29 @@ export function SetupDialog({
           </TabsContent>
         </Tabs>
 
-        <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-border/70 bg-background px-5 py-3 sm:px-7">
-          <Button className="h-10" type="button" variant="ghost" disabled={!resultClearWarningDismissed} onClick={onRestoreResultClearWarning}>
+        <footer data-setup-footer className="setup-dialog-footer flex flex-nowrap items-center justify-between gap-2 px-4 py-3 sm:px-7">
+          <Button className="h-10 max-sm:hidden" type="button" variant="ghost" disabled={!resultClearWarningDismissed} onClick={onRestoreResultClearWarning}>
             恢复切换提示
           </Button>
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className="flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-2">
             {step === "box" ? (
               <>
                 <Button className="h-10" type="button" variant="ghost" onClick={onSkip}>稍后设置</Button>
-                <Button className="h-10" type="button" disabled={!hasBox} onClick={() => setStep("layout")}>下一步：配置基建与换班</Button>
+                <Button className="h-10" type="button" disabled={!hasBox} onClick={() => setStep("layout")}>
+                  下一步<span className="max-sm:hidden">：配置基建与换班</span>
+                </Button>
               </>
             ) : (
               <>
-                <Button className="h-10" type="button" variant="ghost" onClick={() => setStep("box")}>上一步：修改干员数据</Button>
-                <span className="flex items-center gap-3">
-                  <span className={`text-sm font-normal ${powerBudget.ok ? "text-muted-foreground" : "text-red-600"}`}>
+                <Button className="h-10 shrink-0" type="button" variant="ghost" onClick={() => setStep("box")}>
+                  上一步<span className="max-sm:hidden">：修改干员数据</span>
+                </Button>
+                <span className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:gap-3">
+                  <span className={`whitespace-nowrap text-xs font-normal sm:text-sm ${powerBudget.ok ? "text-muted-foreground" : "text-red-600"}`}>
                     发电 {powerBudget.generated} / 耗电 {powerBudget.consumed}
                     {!powerBudget.ok && " — 电量不足"}
                   </span>
-                  <Button className="h-10" type="button" disabled={!powerBudget.ok} onClick={onFinish}><Check />完成设置</Button>
+                  <Button className="h-10 shrink-0" type="button" disabled={!powerBudget.ok} onClick={onFinish}><Check />完成设置</Button>
                 </span>
               </>
             )}
