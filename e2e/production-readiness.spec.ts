@@ -930,17 +930,27 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   await rotationTrigger.click();
   const [triggerBox, popupBox] = await Promise.all([
     rotationTrigger.boundingBox(),
-    page.locator('[data-slot="select-content"]').boundingBox(),
+    page.locator('[data-slot="combobox-content"]').boundingBox(),
   ]);
   expect(triggerBox).not.toBeNull();
   expect(popupBox).not.toBeNull();
   expect(Math.abs((triggerBox?.x ?? 0) - (popupBox?.x ?? 0))).toBeLessThanOrEqual(1);
   expect(popupBox?.width).toBeCloseTo(triggerBox?.width ?? 0, 0);
+  await expect(dialog.locator('[data-slot="select-trigger"]')).toHaveCount(0);
   await expect(page.getByRole("option", { name: /自动轮换/ })).toHaveCount(0);
   await expect(page.getByRole("option", { name: /一天两换/ })).toHaveCount(0);
   await expect(page.getByRole("option", { name: /自定义/ })).toHaveCount(0);
   await expect(page.getByRole("option")).toHaveCount(4);
-  await page.getByRole("option", { name: /菲亚梅塔轮换 · 8\/8\/4\/4/ }).click();
+  await rotationTrigger.fill("菲亚梅塔");
+  await expect(page.getByRole("option")).toHaveCount(1);
+  await rotationTrigger.press("Enter");
+  await expect(rotationTrigger).toHaveValue("菲亚梅塔轮换 · 8/8/4/4");
+  await rotationTrigger.click();
+  await expect(page.locator('[data-slot="combobox-content"]')).toBeVisible();
+  await rotationTrigger.fill("不存在的方案");
+  await expect(page.getByText("没有匹配的换班方式", { exact: true })).toBeVisible();
+  await rotationTrigger.press("Escape");
+  await expect(rotationTrigger).toHaveValue("菲亚梅塔轮换 · 8/8/4/4");
   await expect(dialog.getByText("完整循环 24 小时")).toBeVisible();
   await expect(dialog.getByText("第 4 班 4h")).toBeVisible();
   await dialog.getByRole("button", { name: "完成设置" }).click();
@@ -980,7 +990,14 @@ test("layout level controls clamp edits and expose the power-safe 342 defaults",
   await page.setViewportSize({ width: 390, height: 844 });
   const mobileTradeLevel = dialog.locator('input[aria-label="trade_2 等级"]:visible');
   await mobileTradeLevel.click();
-  await page.getByRole("option", { name: "1", exact: true }).click();
+  const firstLevelOption = page.getByRole("option", { name: "1", exact: true });
+  const [levelInputBox, levelPopupBox] = await Promise.all([
+    mobileTradeLevel.boundingBox(),
+    page.locator('[data-slot="combobox-content"]').boundingBox(),
+  ]);
+  expect(levelPopupBox?.width).toBeCloseTo(levelInputBox?.width ?? 0, 0);
+  expect(await firstLevelOption.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+  await firstLevelOption.click();
   await expect(mobileTradeLevel).toHaveValue("1");
 });
 
@@ -1312,8 +1329,17 @@ test("Skland status center keeps profile and recruitment in overview and support
   await expect(page.getByRole("img", { name: "测试博士的森空岛头像" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "测试博士" }).first()).toBeVisible();
   await expect(page.getByText("UID 123••••789")).toBeVisible();
-  await expect(page.getByRole("combobox")).toContainText("测试博士 · 官服");
-  await expect(page.getByRole("combobox")).not.toContainText("123456789");
+  const accountCombobox = page.getByRole("combobox", { name: "选择账号与角色" });
+  await expect(accountCombobox).toHaveValue("测试博士 · 官服");
+  await expect(accountCombobox).not.toHaveValue(/123456789/);
+  await accountCombobox.click();
+  const [accountInputBox, accountPopupBox] = await Promise.all([
+    accountCombobox.boundingBox(),
+    page.locator('[data-slot="combobox-content"]').boundingBox(),
+  ]);
+  expect(accountPopupBox?.width).toBeCloseTo(accountInputBox?.width ?? 0, 0);
+  await accountCombobox.press("Escape");
+  await expect(page.locator('[data-slot="select-trigger"]')).toHaveCount(0);
   await expect(page.getByRole("tab", { name: "概览", exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: "基建", exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: "进度", exact: true })).toHaveCount(0);
@@ -1393,7 +1419,7 @@ test("Skland status center keeps profile and recruitment in overview and support
   const clueStatus = page.locator("p").filter({ hasText: "已有 4 · 待接收 2 · 已接收 1" });
   await expect(clueStatus).toContainText("线索交流至");
 
-  await page.getByRole("combobox").click();
+  await accountCombobox.click();
   await page.getByRole("option", { name: "测试博士二号 · B服" }).click();
   await expect(page.getByRole("heading", { name: "测试博士二号" }).first()).toBeVisible();
   await expect(page.getByRole("img", { name: "测试博士二号的森空岛头像" })).toBeVisible();
@@ -1682,10 +1708,14 @@ test("Skland supports adding, switching, and individually logging out multiple a
   await page.getByRole("button", { name: "生成登录二维码" }).click();
   await expect(page.getByRole("heading", { name: "第二账号博士" }).first()).toBeVisible({ timeout: 12_000 });
 
-  await accountSelect.click();
+  const accountCombobox = page.getByRole("combobox", { name: "选择账号与角色" });
+  await accountCombobox.fill("测试博士");
+  await expect(page.getByRole("option", { name: "测试博士 · 官服" })).toBeVisible();
+  await expect(page.getByRole("option", { name: "第二账号博士 · 官服" })).toHaveCount(0);
   await expect(page.getByText("森空岛账号 1 · 测试博士", { exact: true })).toBeVisible();
-  await expect(page.getByText("森空岛账号 2 · 第二账号博士", { exact: true })).toBeVisible();
+  await expect(page.getByText("森空岛账号 2 · 第二账号博士", { exact: true })).toHaveCount(0);
   await page.getByRole("option", { name: "测试博士 · 官服" }).click();
+  await expect(accountCombobox).toHaveValue("测试博士 · 官服");
   await expect(page.getByRole("heading", { name: "测试博士" }).first()).toBeVisible();
 
   await logout.click();

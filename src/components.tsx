@@ -376,7 +376,7 @@ function RoomLevelControl({
               }
             }}
           />
-          <ComboboxContent className="w-20 min-w-0" align="start">
+          <ComboboxContent align="start">
             <ComboboxList>
               {(item) => (
                 <ComboboxItem key={item} value={item} className="justify-center text-center">

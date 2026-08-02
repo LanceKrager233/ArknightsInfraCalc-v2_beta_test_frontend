@@ -1,15 +1,17 @@
 "use client";
 
 import { Clock3 } from "lucide-react";
+import { useState } from "react";
 
-import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "@/components/ui/combobox";
+import { Label } from "@/components/ui/label";
 
 import {
   ROTATION_OPTIONS,
@@ -22,8 +24,15 @@ type RotationSettingsProps = {
   onChange: (value: RotationProfile) => void;
 };
 
+const ROTATION_COMBOBOX_OPTIONS = ROTATION_OPTIONS.map((option) => ({
+  value: option.profile,
+  label: `${option.label} · ${option.durations.join("/")}`,
+}));
+
 export function RotationSettings({ value, onChange }: RotationSettingsProps) {
+  const [query, setQuery] = useState<string | null>(null);
   const selected = rotationOption(value);
+  const selectedComboboxOption = ROTATION_COMBOBOX_OPTIONS.find((option) => option.value === value) ?? null;
   const cycleHours = selected.durations.reduce((total, duration) => total + duration, 0);
 
   return (
@@ -38,18 +47,41 @@ export function RotationSettings({ value, onChange }: RotationSettingsProps) {
 
       <div className="mt-3 grid gap-2">
         <Label htmlFor="rotation-profile" className="text-xs text-muted-foreground">换班方式</Label>
-        <Select value={value} onValueChange={(profile) => onChange(profile as RotationProfile)}>
-          <SelectTrigger id="rotation-profile" className="min-h-11 w-full bg-background" aria-label="换班方式">
-            <SelectValue>{selected.label}</SelectValue>
-          </SelectTrigger>
-          <SelectContent align="start">
-            {ROTATION_OPTIONS.map((option) => (
-              <SelectItem key={option.profile} value={option.profile}>
-                {option.label} · {option.durations.join("/")}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Combobox
+          items={ROTATION_COMBOBOX_OPTIONS}
+          value={selectedComboboxOption}
+          inputValue={query ?? selectedComboboxOption?.label ?? ""}
+          itemToStringValue={(option) => option.label}
+          isItemEqualToValue={(option, selectedOption) => option.value === selectedOption.value}
+          autoHighlight
+          onInputValueChange={(inputValue) => setQuery(inputValue)}
+          onOpenChange={(open) => {
+            if (!open) setQuery(null);
+          }}
+          onValueChange={(option) => {
+            if (option) {
+              setQuery(null);
+              onChange(option.value);
+            }
+          }}
+        >
+          <ComboboxInput
+            id="rotation-profile"
+            className="h-11 w-full bg-background"
+            aria-label="换班方式"
+            placeholder="搜索换班方式"
+          />
+          <ComboboxContent align="start">
+            <ComboboxEmpty>没有匹配的换班方式</ComboboxEmpty>
+            <ComboboxList>
+              {(option) => (
+                <ComboboxItem key={option.value} value={option}>
+                  {option.label}
+                </ComboboxItem>
+              )}
+            </ComboboxList>
+          </ComboboxContent>
+        </Combobox>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-1.5" aria-label="班次时长">

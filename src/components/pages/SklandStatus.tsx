@@ -26,6 +26,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  Combobox,
+  ComboboxCollection,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxGroup,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxLabel,
+  ComboboxList,
+  ComboboxSeparator,
+} from "@/components/ui/combobox";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -34,16 +46,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectSeparator,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LevelDiamonds, OperatorSlot, roomVisualFor } from "@/components";
@@ -105,6 +107,59 @@ const RARITY_OPTIONS = [
   { value: "all", label: "全部星级" },
   ...[6, 5, 4, 3, 2, 1].map((value) => ({ value: String(value), label: `${value} 星` })),
 ];
+
+type FilterOption = {
+  value: string;
+  label: string;
+};
+
+function OperatorFilterCombobox({
+  label,
+  value,
+  options,
+  onValueChange,
+}: {
+  label: string;
+  value: string;
+  options: FilterOption[];
+  onValueChange: (value: string) => void;
+}) {
+  const [query, setQuery] = useState<string | null>(null);
+  const selected = options.find((option) => option.value === value) ?? null;
+
+  return (
+    <Combobox
+      items={options}
+      value={selected}
+      inputValue={query ?? selected?.label ?? ""}
+      itemToStringValue={(option) => option.label}
+      isItemEqualToValue={(option, selectedOption) => option.value === selectedOption.value}
+      autoHighlight
+      onInputValueChange={(inputValue) => setQuery(inputValue)}
+      onOpenChange={(open) => {
+        if (!open) setQuery(null);
+      }}
+      onValueChange={(option) => {
+        if (option) {
+          setQuery(null);
+          onValueChange(option.value);
+        }
+      }}
+    >
+      <ComboboxInput className="h-11 w-full" aria-label={label} placeholder={`搜索${label}`} />
+      <ComboboxContent>
+        <ComboboxEmpty>没有匹配的{label}</ComboboxEmpty>
+        <ComboboxList>
+          {(option) => (
+            <ComboboxItem key={option.value} value={option}>
+              {option.label}
+            </ComboboxItem>
+          )}
+        </ComboboxList>
+      </ComboboxContent>
+    </Combobox>
+  );
+}
 
 interface SklandStatusProps {
   snapshot: SklandSnapshot | null;
@@ -1006,38 +1061,24 @@ export function OperatorsTab({ snapshot }: { snapshot: SklandSnapshot }) {
             aria-label="搜索干员或皮肤"
           />
         </label>
-        <Select
+        <OperatorFilterCombobox
+          label="星级"
           value={rarity}
-          items={RARITY_OPTIONS}
+          options={RARITY_OPTIONS}
           onValueChange={(value) => {
-            setRarity(value ?? "all");
+            setRarity(value);
             setOperatorLimit(INITIAL_LIST_LIMIT);
           }}
-        >
-          <SelectTrigger className="h-11 w-full"><SelectValue placeholder="星级" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">全部星级</SelectItem>
-            {RARITY_OPTIONS.slice(1).map((option) => (
-              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
+        />
+        <OperatorFilterCombobox
+          label="职业"
           value={profession}
-          items={professionOptions}
+          options={professionOptions}
           onValueChange={(value) => {
-            setProfession(value ?? "all");
+            setProfession(value);
             setOperatorLimit(INITIAL_LIST_LIMIT);
           }}
-        >
-          <SelectTrigger className="h-11 w-full"><SelectValue placeholder="职业" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">全部职业</SelectItem>
-            {professionOptions.slice(1).map((option) => (
-              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        />
       </div>
 
       <Tabs defaultValue="operators">
@@ -1285,6 +1326,7 @@ export function SklandStatus({
   onCopyUid,
 }: SklandStatusProps) {
   const [addAccountOpen, setAddAccountOpen] = useState(false);
+  const [accountQuery, setAccountQuery] = useState<string | null>(null);
   if (sessionLoading) return <LoadingState />;
 
   if (!snapshot) {
@@ -1311,15 +1353,22 @@ export function SklandStatus({
     );
   }
 
-  const selectionItems = accounts.flatMap((account) =>
-    account.roles.map((role) => ({
-      value: `${account.accountId}:${role.uid}`,
-      label: `${role.nickname} · ${role.channelName}`,
-      accountId: account.accountId,
-      uid: role.uid,
-    }))
-  );
+  const selectionGroups = accounts.map((account, accountIndex) => {
+    const selectedRole = account.roles.find((role) => role.uid === account.selectedUid) ?? account.roles[0];
+    return {
+      value: account.accountId,
+      label: `森空岛账号 ${accountIndex + 1}${selectedRole ? ` · ${selectedRole.nickname}` : ""}`,
+      items: account.roles.map((role) => ({
+        value: `${account.accountId}:${role.uid}`,
+        label: `${role.nickname} · ${role.channelName}`,
+        accountId: account.accountId,
+        uid: role.uid,
+      })),
+    };
+  });
+  const selectionItems = selectionGroups.flatMap((group) => group.items);
   const selectedValue = activeAccountId ? `${activeAccountId}:${snapshot.player.uid}` : "";
+  const selectedItem = selectionItems.find((item) => item.value === selectedValue) ?? null;
 
   return (
     <div className="grid gap-6">
@@ -1362,40 +1411,55 @@ export function SklandStatus({
         </div>
 
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
-          <Select
-            value={selectedValue}
-            items={selectionItems}
-            disabled={busy}
-            onValueChange={(value) => {
-              const selection = selectionItems.find((item) => item.value === value);
-              if (selection && value !== selectedValue) void onRoleChange(selection.accountId, selection.uid);
-            }}
+          <div
+            className="col-span-2 h-9 w-full max-sm:h-11 sm:w-56"
+            data-skland-account-select
           >
-            <SelectTrigger
-              className="col-span-2 h-9 w-full data-[size=default]:h-9 max-sm:h-11 max-sm:data-[size=default]:h-11 sm:w-56"
-              data-skland-account-select
+            <Combobox
+              items={selectionGroups}
+              value={selectedItem}
+              inputValue={accountQuery ?? selectedItem?.label ?? ""}
+              disabled={busy}
+              itemToStringValue={(item) => item.label}
+              isItemEqualToValue={(item, current) => item.value === current.value}
+              filter={(item, query) => item.label.toLocaleLowerCase("zh-CN").includes(query.trim().toLocaleLowerCase("zh-CN"))}
+              autoHighlight
+              onInputValueChange={(inputValue) => setAccountQuery(inputValue)}
+              onOpenChange={(open) => {
+                if (!open) setAccountQuery(null);
+              }}
+              onValueChange={(selection) => {
+                if (selection && selection.value !== selectedValue) {
+                  setAccountQuery(null);
+                  void onRoleChange(selection.accountId, selection.uid);
+                }
+              }}
             >
-              <SelectValue placeholder="选择账号与角色" />
-            </SelectTrigger>
-            <SelectContent className="min-w-64">
-              {accounts.map((account, accountIndex) => {
-                const selectedRole = account.roles.find((role) => role.uid === account.selectedUid) ?? account.roles[0];
-                return (
-                  <SelectGroup key={account.accountId}>
-                    {accountIndex > 0 ? <SelectSeparator /> : null}
-                    <SelectLabel>
-                      森空岛账号 {accountIndex + 1}{selectedRole ? ` · ${selectedRole.nickname}` : ""}
-                    </SelectLabel>
-                    {account.roles.map((role) => (
-                      <SelectItem key={`${account.accountId}:${role.uid}`} value={`${account.accountId}:${role.uid}`}>
-                        {role.nickname} · {role.channelName}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                );
-              })}
-            </SelectContent>
-          </Select>
+              <ComboboxInput
+                className="h-full w-full"
+                aria-label="选择账号与角色"
+                placeholder="搜索账号与角色"
+              />
+              <ComboboxContent>
+                <ComboboxEmpty>没有匹配的账号或角色</ComboboxEmpty>
+                <ComboboxList>
+                  {(group, groupIndex) => (
+                    <ComboboxGroup key={group.value} items={group.items}>
+                      {groupIndex > 0 ? <ComboboxSeparator /> : null}
+                      <ComboboxLabel>{group.label}</ComboboxLabel>
+                      <ComboboxCollection>
+                        {(item) => (
+                          <ComboboxItem key={item.value} value={item}>
+                            {item.label}
+                          </ComboboxItem>
+                        )}
+                      </ComboboxCollection>
+                    </ComboboxGroup>
+                  )}
+                </ComboboxList>
+              </ComboboxContent>
+            </Combobox>
+          </div>
           <Button
             type="button"
             className="h-9 max-sm:h-11"
