@@ -327,6 +327,40 @@ test("rejects credential-bearing HTTPS avatar URLs", () => {
   assert.equal(snapshot.player.avatarUrl, null);
 });
 
+test("treats targetSkill -1 as an idle training room even when occupant fields remain", () => {
+  const info = playerInfo();
+  const training = info.building.training;
+  if (!training?.trainee) assert.fail("training fixture is missing");
+  training.trainee.targetSkill = -1;
+  training.remainPoint = -1;
+  training.remainSecs = -1;
+
+  const snapshot = snapshotFromPlayerInfo(info, roles, "123456789", noLayoutSuggestion);
+  assert.equal(snapshot.infrastructure.training, null);
+});
+
+test("treats a training room without a trainee as idle", () => {
+  const info = playerInfo();
+  const training = info.building.training;
+  if (!training) assert.fail("training fixture is missing");
+  training.trainee = null;
+
+  const snapshot = snapshotFromPlayerInfo(info, roles, "123456789", noLayoutSuggestion);
+  assert.equal(snapshot.infrastructure.training, null);
+});
+
+test("keeps a zero-second training task with a concrete target skill as completed", () => {
+  const info = playerInfo();
+  const training = info.building.training;
+  if (!training?.trainee) assert.fail("training fixture is missing");
+  training.remainPoint = 0;
+  training.remainSecs = 0;
+
+  const snapshot = snapshotFromPlayerInfo(info, roles, "123456789", noLayoutSuggestion);
+  assert.equal(snapshot.infrastructure.training?.trainee, "测试干员");
+  assert.equal(snapshot.infrastructure.training?.remainSecs, 0);
+});
+
 test("keeps optional metadata gaps safe without inventing named records", () => {
   const info = playerInfo();
   info.building.hire = null;

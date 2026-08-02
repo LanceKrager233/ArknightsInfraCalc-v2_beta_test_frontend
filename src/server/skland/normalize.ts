@@ -227,14 +227,19 @@ function infrastructureFromPlayerInfo(
         completeWorkTime: nonNegative(building.hire.completeWorkTime),
       }]
     : [];
-  const training = building.training
+  const trainingRoom = building.training;
+  const hasTrainingTask = Boolean(
+    trainingRoom?.trainee
+    && finiteNumber(trainingRoom.trainee.targetSkill, -1) >= 0
+  );
+  const training = trainingRoom && hasTrainingTask
     ? {
-        trainee: nameFor(info, building.training.trainee?.charId),
-        trainer: nameFor(info, building.training.trainer?.charId),
-        remainSecs: nonNegative(building.training.remainSecs),
-        remainPoint: nonNegative(building.training.remainPoint),
-        speed: nonNegative(building.training.speed),
-        completeWorkTime: nonNegative(info.currentTs) + nonNegative(building.training.remainSecs),
+        trainee: nameFor(info, trainingRoom.trainee?.charId),
+        trainer: nameFor(info, trainingRoom.trainer?.charId),
+        remainSecs: nonNegative(trainingRoom.remainSecs),
+        remainPoint: nonNegative(trainingRoom.remainPoint),
+        speed: nonNegative(trainingRoom.speed),
+        completeWorkTime: nonNegative(info.currentTs) + nonNegative(trainingRoom.remainSecs),
       }
     : null;
   return {

@@ -1032,6 +1032,10 @@ test("Skland status center keeps profile and recruitment in overview and support
       uid: "987654321",
       nickname: "测试博士二号",
     },
+    infrastructure: {
+      ...authenticatedSklandSnapshot.infrastructure,
+      training: null,
+    },
     sourceName: "森空岛同步",
   };
   let attendanceRequests = 0;
@@ -1140,6 +1144,11 @@ test("Skland status center keeps profile and recruitment in overview and support
   await expect(page.getByRole("heading", { name: "测试博士二号" }).first()).toBeVisible();
   await expect(page.getByRole("img", { name: "测试博士二号的森空岛头像" })).toBeVisible();
   await expect(page.getByRole("button", { name: "刷新" })).toHaveCount(0);
+  const trainingRoom = page.locator('[data-slot="skland-training-room"]');
+  await expect(trainingRoom.getByText("当前空闲", { exact: true })).toBeVisible();
+  await expect(trainingRoom.getByText("暂无训练任务", { exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "概览", exact: true }).click();
+  await expect(page.getByText("训练任务已完成", { exact: true })).toHaveCount(0);
 
   await expect.poll(async () => page.evaluate(() => JSON.stringify(localStorage))).not.toContain("987654321");
   const persisted = await page.evaluate(() => JSON.stringify(localStorage));
