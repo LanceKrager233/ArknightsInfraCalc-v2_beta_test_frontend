@@ -55,6 +55,13 @@ function optionalNonNegative(value: unknown): number | null {
   return Number.isFinite(numeric) ? Math.max(0, numeric) : null;
 }
 
+function recruitState(value: unknown): "locked" | "standby" | "recruiting" | "completed" {
+  if (value === 1) return "standby";
+  if (value === 2) return "recruiting";
+  if (value === 3) return "completed";
+  return "locked";
+}
+
 function safeHttpsUrl(value: unknown): string | null {
   if (typeof value !== "string" || !value.trim()) return null;
   try {
@@ -168,6 +175,7 @@ function infrastructureFromPlayerInfo(
     production: {
       stock: value.stock.length,
       capacity: nonNegative(value.stockLimit),
+      unitCapacity: null,
       completed: null,
       remaining: null,
       completeWorkTime: value.completeWorkTime || null,
@@ -190,6 +198,10 @@ function infrastructureFromPlayerInfo(
     production: {
       stock: nonNegative(value.weight),
       capacity: nonNegative(value.capacity),
+      unitCapacity: (() => {
+        const formulaWeight = nonNegative(info.manufactureFormulaInfoMap[Number(value.formulaId)]?.weight);
+        return formulaWeight > 0 ? Math.floor(nonNegative(value.capacity) / formulaWeight) : null;
+      })(),
       completed: nonNegative(value.complete),
       remaining: nonNegative(value.remain),
       completeWorkTime: value.completeWorkTime || null,
@@ -231,11 +243,14 @@ function infrastructureFromPlayerInfo(
   const hasTrainingTask = Boolean(
     trainingRoom?.trainee
     && finiteNumber(trainingRoom.trainee.targetSkill, -1) >= 0
+    && finiteNumber(trainingRoom.remainPoint) > 0
+    && finiteNumber(trainingRoom.remainSecs) > 0
   );
   const training = trainingRoom && hasTrainingTask
     ? {
         trainee: nameFor(info, trainingRoom.trainee?.charId),
         trainer: nameFor(info, trainingRoom.trainer?.charId),
+        skillIndex: finiteNumber(trainingRoom.trainee?.targetSkill) + 1,
         remainSecs: nonNegative(trainingRoom.remainSecs),
         remainPoint: nonNegative(trainingRoom.remainPoint),
         speed: nonNegative(trainingRoom.speed),
@@ -328,6 +343,7 @@ function progressFromPlayerInfo(info: PlayerInfo): SklandProgress {
         index,
         startTs: nonNegative(slot.startTs),
         finishTs: nonNegative(slot.finishTs),
+        state: recruitState(slot.state),
       }))
     : null;
   const routine = info.routine?.daily && info.routine?.weekly

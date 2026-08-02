@@ -123,6 +123,7 @@ const authenticatedSklandSnapshot = {
     training: {
       trainee: "凯尔希",
       trainer: "阿米娅",
+      skillIndex: 2,
       remainSecs: 3_600,
       remainPoint: 100,
       speed: 1.2,
@@ -143,7 +144,7 @@ const authenticatedSklandSnapshot = {
         level: 3,
         product: "gold",
         operators: [],
-        production: { stock: 10, capacity: 10, completed: null, remaining: null, completeWorkTime: 1_700_001_200 },
+        production: { stock: 10, capacity: 10, unitCapacity: null, completed: null, remaining: null, completeWorkTime: 1_700_001_200 },
         orders: [{ delivery: [{ type: "material", count: 3 }], reward: { type: "lmd", count: 1_500 } }],
         lastUpdateTime: 1_700_000_000,
       },
@@ -154,7 +155,7 @@ const authenticatedSklandSnapshot = {
         level: 3,
         product: "battle_record",
         operators: [],
-        production: { stock: 2, capacity: 10, completed: 2, remaining: 8, completeWorkTime: 1_700_001_000 },
+        production: { stock: 2, capacity: 10, unitCapacity: 78, completed: 2, remaining: 8, completeWorkTime: 1_700_001_000 },
         speed: 1.5,
         lastUpdateTime: 1_700_000_000,
       },
@@ -163,7 +164,10 @@ const authenticatedSklandSnapshot = {
         group: "dormitory",
         index: 0,
         level: 5,
-        operators: [],
+        operators: [
+          { id: "char_003_kalts", name: "凯尔希", morale: 24, workTime: 0, lastMoraleUpdateTs: 1_700_000_050 },
+          { id: "char_002_amiya", name: "阿米娅", morale: 18, workTime: 0, lastMoraleUpdateTs: 1_700_000_050 },
+        ],
         comfort: 5_000,
       },
       {
@@ -241,7 +245,7 @@ const authenticatedSklandSnapshot = {
     isCurrent: true,
   }],
   progress: {
-    recruit: [{ index: 0, startTs: 1_699_990_000, finishTs: 1_700_000_050 }],
+    recruit: [{ index: 0, startTs: 1_699_990_000, finishTs: 1_700_000_050, state: "completed" }],
     routine: { daily: { current: 8, total: 10 }, weekly: { current: 80, total: 100 } },
     campaign: {
       records: [{ name: "切尔诺伯格", zoneName: "乌萨斯", maxKills: 400 }],
@@ -1082,21 +1086,34 @@ test("Skland status center keeps profile and recruitment in overview and support
   await expect(page.getByRole("combobox")).not.toContainText("123456789");
   await expect(page.getByRole("tab", { name: "概览", exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: "基建", exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "进度", exact: true })).toHaveCount(0);
   await expect(page.locator("[data-skland-view-tabs]")).toHaveAttribute("data-variant", "default");
   await expect(page.locator("[data-skland-view-tabs] svg")).toHaveCount(0);
   const sklandViewTabHeight = await page.getByRole("tab", { name: "概览", exact: true })
     .evaluate((element) => element.getBoundingClientRect().height);
   expect(sklandViewTabHeight).toBe(scheduleViewTabHeight);
   await expect(page.getByRole("tab", { name: "干员", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("tab", { name: "进度", exact: true })).toHaveCount(0);
-  await expect(page.getByText("当前理智")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "实时数据", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "基建数据", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "当前理智", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "无人机", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "日常与周常", exact: true })).toBeVisible();
+  await expect(page.locator("[data-skland-metric]")).toHaveCount(0);
   await expect(page.getByText("4 项状态提醒")).toBeVisible();
   await expect(page.getByText("博士档案", { exact: true })).toBeVisible();
   await expect(page.getByText("收藏概况", { exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "公开招募" })).toBeVisible();
-  await expect(page.getByText("槽位 1")).toBeVisible();
+  const overviewRecruit = page.locator('section[aria-labelledby="overview-recruit-title"]');
+  await expect(overviewRecruit.getByRole("heading", { name: "公开招募", exact: true })).toBeVisible();
+  await expect(overviewRecruit.getByText("槽位 1")).toBeVisible();
 
   await page.getByRole("tab", { name: "基建", exact: true }).click();
+  await expect(page.getByRole("region", { name: "基建概览", exact: true })).toBeVisible();
+  await expect(page.locator('[data-skland-metric="rest"]')).toHaveAttribute("data-metric-tone", "green");
+  await expect(page.locator('[data-skland-metric="trading"]')).toHaveAttribute("data-metric-tone", "blue");
+  await expect(page.locator('[data-skland-metric="manufacture"]')).toHaveAttribute("data-metric-tone", "amber");
+  await expect(page.locator('[data-skland-metric="clue"]')).toHaveAttribute("data-metric-tone", "orange");
+  await expect(page.locator('[data-skland-metric] .infra-room-surface')).toHaveCount(4);
+  await expect(page.locator('[data-skland-metric] .infra-room-emblem')).toHaveCount(0);
   await expect(page.locator('[data-slot="skland-layout-sync"]')).toHaveClass(/infra-room-surface/);
   await expect(page.locator('[data-slot="skland-training-room"]')).toHaveClass(/infra-room-surface/);
   await expect(page.locator('[data-slot="skland-infra-assets"]')).toHaveClass(/infra-room-surface/);
@@ -1130,7 +1147,7 @@ test("Skland status center keeps profile and recruitment in overview and support
   await expect(page.locator(".infra-room-surface").first()).toBeVisible();
   await expect(page.locator('.level-diamonds[data-variant="compact"]').first()).toBeVisible();
   await expect(page.locator(".infra-operator-slot").first()).toBeVisible();
-  await expect(page.getByRole("img", { name: "阿米娅" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "阿米娅" }).first()).toBeVisible();
   await expect(page.getByText("氛围 5000", { exact: true })).toBeVisible();
   await expect(page.getByText("宿舍氛围 5000", { exact: true })).toHaveCount(0);
   await expect(page.getByText("当前进驻", { exact: true })).toHaveCount(0);
@@ -1171,6 +1188,42 @@ test("Skland status center keeps profile and recruitment in overview and support
   await page.getByRole("button", { name: "退出" }).click();
   await expect(page.getByRole("heading", { name: "把当前罗德岛带进排班助手" })).toBeVisible();
   expect(attendanceRequests).toBe(0);
+});
+
+test("Skland base metrics reuse the existing technical card grid and keyboard tab navigation", async ({ page }) => {
+  await mockApis(page, {
+    sklandConfigured: true,
+    sklandSnapshot: authenticatedSklandSnapshot,
+  });
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "森空岛状态", exact: true }).click();
+  await page.getByRole("tab", { name: "基建", exact: true }).click();
+
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 768, height: 960 },
+    { width: 1440, height: 1000 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const buildingCards = page.locator('[data-skland-metric-section="building"] [data-skland-metric]');
+    await expect(buildingCards).toHaveCount(4);
+    await expect(page.locator("[data-skland-overview-grid] > *")).toHaveCount(7);
+    await expect(page.locator("[data-skland-metric-glyph]")).toHaveCount(0);
+
+    const horizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(horizontalOverflow).toBeLessThanOrEqual(1);
+  }
+
+  const overviewTab = page.getByRole("tab", { name: "概览", exact: true });
+  const infrastructureTab = page.getByRole("tab", { name: "基建", exact: true });
+  await expect(page.getByRole("tab", { name: "进度", exact: true })).toHaveCount(0);
+  await overviewTab.focus();
+  await overviewTab.press("ArrowRight");
+  await expect(infrastructureTab).toBeFocused();
+  await infrastructureTab.press("ArrowRight");
+  await expect(overviewTab).toBeFocused();
 });
 
 test("Skland compact layout aligns both column endings when production is taller", async ({ page }) => {

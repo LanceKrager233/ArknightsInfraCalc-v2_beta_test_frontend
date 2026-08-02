@@ -285,6 +285,9 @@ test("normalizes the complete public Skland dashboard without leaking raw respon
   assert.equal(trading?.orders[0]?.reward.count, 1_500);
   const manufacture = snapshot.infrastructure.rooms.find((room) => room.group === "manufacture");
   assert.equal(manufacture?.product, "gold");
+  assert.equal(manufacture?.production.unitCapacity, 10);
+  assert.equal(snapshot.infrastructure.training?.skillIndex, 2);
+  assert.equal(snapshot.progress.recruit?.[0]?.state, "completed");
   const meeting = snapshot.infrastructure.rooms.find((room) => room.group === "meeting");
   assert.deepEqual(meeting?.clue.board, ["莱茵生命", "罗德岛"]);
 
@@ -315,6 +318,16 @@ test("rejects non-HTTPS avatars and preserves unknown factory recipes as an expl
   assert.equal(snapshot.player.avatarUrl, null);
   const manufacture = snapshot.infrastructure.rooms.find((room) => room.group === "manufacture");
   assert.equal(manufacture?.product, "unknown");
+  assert.equal(manufacture?.production.unitCapacity, 10);
+});
+
+test("keeps manufacture unit capacity unavailable when formula metadata is missing", () => {
+  const info = playerInfo();
+  info.manufactureFormulaInfoMap = {};
+
+  const snapshot = snapshotFromPlayerInfo(info, roles, "123456789", noLayoutSuggestion);
+  const manufacture = snapshot.infrastructure.rooms.find((room) => room.group === "manufacture");
+  assert.equal(manufacture?.production.unitCapacity, null);
 });
 
 test("rejects credential-bearing HTTPS avatar URLs", () => {
@@ -349,7 +362,7 @@ test("treats a training room without a trainee as idle", () => {
   assert.equal(snapshot.infrastructure.training, null);
 });
 
-test("keeps a zero-second training task with a concrete target skill as completed", () => {
+test("treats a zero-progress training task with a concrete target skill as idle", () => {
   const info = playerInfo();
   const training = info.building.training;
   if (!training?.trainee) assert.fail("training fixture is missing");
@@ -357,8 +370,22 @@ test("keeps a zero-second training task with a concrete target skill as complete
   training.remainSecs = 0;
 
   const snapshot = snapshotFromPlayerInfo(info, roles, "123456789", noLayoutSuggestion);
-  assert.equal(snapshot.infrastructure.training?.trainee, "测试干员");
-  assert.equal(snapshot.infrastructure.training?.remainSecs, 0);
+  assert.equal(snapshot.infrastructure.training, null);
+});
+
+test("maps every upstream recruitment state to a semantic public state", () => {
+  const info = playerInfo();
+  info.recruit = [0, 1, 2, 3].map((state, index) => ({
+    startTs: 1_700_000_000 + index,
+    finishTs: 1_700_000_100 + index,
+    state: state as 0 | 1 | 2 | 3,
+  }));
+
+  const snapshot = snapshotFromPlayerInfo(info, roles, "123456789", noLayoutSuggestion);
+  assert.deepEqual(
+    snapshot.progress.recruit?.map((slot) => slot.state),
+    ["locked", "standby", "recruiting", "completed"]
+  );
 });
 
 test("keeps optional metadata gaps safe without inventing named records", () => {

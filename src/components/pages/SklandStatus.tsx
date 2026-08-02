@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -55,6 +55,10 @@ import { cn } from "@/lib/utils";
 import { operatorPortraitFor } from "@/operatorPortraits";
 import { roomGridTone } from "@/schedule-view-presentation";
 import { SklandLoginPanel } from "@/skland-components";
+import {
+  deriveSklandBuildingMetrics,
+  type SklandStatusMetric,
+} from "@/skland-status-metrics";
 import type {
   DisplayError,
   SklandAccountSummary,
@@ -161,6 +165,16 @@ function formatDuration(seconds: number): string {
   return `${Math.max(1, minutes)} 分钟`;
 }
 
+function useMinuteTimestamp(baseTimestamp: number): number {
+  const [elapsedMinutes, setElapsedMinutes] = useState(0);
+  useEffect(() => {
+    setElapsedMinutes(0);
+    const timer = window.setInterval(() => setElapsedMinutes((value) => value + 1), 60_000);
+    return () => window.clearInterval(timer);
+  }, [baseTimestamp]);
+  return baseTimestamp + elapsedMinutes * 60;
+}
+
 function maskedUid(uid: string): string {
   if (uid.length <= 6) return `${uid.slice(0, 2)}••${uid.slice(-2)}`;
   return `${uid.slice(0, 3)}••••${uid.slice(-3)}`;
@@ -242,11 +256,11 @@ function OverviewTab({
       && room.production.stock >= room.production.capacity
   );
   const readyRecruit = (progress.recruit ?? []).filter(
-    (slot) => slot.finishTs > 0 && slot.finishTs <= infrastructure.currentTs
+    (slot) => slot.state === "completed"
+      || (slot.state === "recruiting" && slot.finishTs > 0 && slot.finishTs <= infrastructure.currentTs)
   );
   const dronesFull = infrastructure.labor.maxValue > 0
     && infrastructure.labor.value >= infrastructure.labor.maxValue;
-  const trainingReady = Boolean(infrastructure.training?.trainee && infrastructure.training.remainSecs === 0);
   const attentionItems = [
     infrastructure.tiredOperators.length
       ? `${infrastructure.tiredOperators.length} 名干员心情过低`
@@ -256,7 +270,6 @@ function OverviewTab({
       : null,
     readyRecruit.length ? `${readyRecruit.length} 个公开招募槽位已完成` : null,
     dronesFull ? "无人机已达到上限" : null,
-    trainingReady ? "训练任务已完成" : null,
   ].filter((item): item is string => Boolean(item));
 
   return (
@@ -464,17 +477,25 @@ function OverviewTab({
           {progress.recruit?.length ? (
             <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {progress.recruit.map((slot) => {
-                const finished = slot.finishTs > 0 && slot.finishTs <= infrastructure.currentTs;
+                const finished = slot.state === "completed"
+                  || (slot.state === "recruiting" && slot.finishTs > 0 && slot.finishTs <= infrastructure.currentTs);
+                const label = finished
+                  ? "已完成"
+                  : slot.state === "locked"
+                    ? "未解锁"
+                    : slot.state === "standby"
+                      ? "空闲"
+                      : "进行中";
                 return (
                   <div key={slot.index} className="border-t border-white/12 bg-black/12 px-3 py-3 text-sm">
                     <div className="flex items-center justify-between gap-3">
                       <strong>槽位 {slot.index + 1}</strong>
                       <span className={finished ? "text-[var(--room-accent)]" : "text-white/58"}>
-                        {finished ? "已完成" : "进行中"}
+                        {label}
                       </span>
                     </div>
                     <p className="mt-2 whitespace-nowrap text-xs tabular-nums text-white/58">
-                      {formatDateTime(slot.finishTs)}
+                      {slot.finishTs > 0 ? formatDateTime(slot.finishTs) : "暂无计时"}
                     </p>
                   </div>
                 );
@@ -635,6 +656,41 @@ function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
   );
 }
 
+function BuildingMetricCard({ metric }: { metric: SklandStatusMetric }) {
+  const group = metric.visual === "rest"
+    ? "dormitory"
+    : metric.visual === "clue"
+      ? "meeting"
+      : metric.visual;
+
+  return (
+    <div
+      className="h-full min-w-0"
+      data-skland-metric={metric.id}
+      data-metric-tone={metric.tone}
+    >
+      <OverviewTechnicalCard group={group} className="h-full min-h-40" showEmblem={false}>
+        <div className="flex h-full min-w-0 flex-col">
+          <OverviewTechnicalHeading icon={<Activity className="size-4" aria-hidden="true" />}>
+            {metric.label}
+          </OverviewTechnicalHeading>
+          <div className="mt-5 flex min-w-0 items-end gap-1">
+            <strong className="min-w-0 truncate text-3xl font-semibold leading-none tabular-nums text-[var(--room-accent)]">
+              {metric.value}
+            </strong>
+            {metric.total !== null ? (
+              <span className="mb-0.5 shrink-0 text-sm leading-none tabular-nums text-white/52">
+                / {metric.total}
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-auto pt-4 text-xs leading-5 text-white/58">{metric.hint}</p>
+        </div>
+      </OverviewTechnicalCard>
+    </div>
+  );
+}
+
 function InfrastructureTab({
   snapshot,
   layoutMatches,
@@ -648,6 +704,8 @@ function InfrastructureTab({
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const { infrastructure } = snapshot;
+  const now = useMinuteTimestamp(infrastructure.currentTs);
+  const buildingMetrics = useMemo(() => deriveSklandBuildingMetrics(snapshot, now), [snapshot, now]);
   const controlRooms = infrastructure.rooms.filter((room) => room.group === "control");
   const workRooms = infrastructure.rooms.filter((room) => room.group === "trading" || room.group === "manufacture");
   const powerRooms = infrastructure.rooms.filter((room) => room.group === "power");
@@ -661,7 +719,12 @@ function InfrastructureTab({
 
   return (
     <div className="grid gap-7">
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <section
+        className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
+        aria-label="基建概览"
+        data-skland-overview-grid
+        data-skland-metric-section="building"
+      >
         <OverviewTechnicalCard
           group="control"
           className="min-h-40 md:col-span-2 xl:col-span-1"
@@ -711,7 +774,7 @@ function InfrastructureTab({
             <div className="mt-auto pt-4 text-xs leading-5 text-white/58">
             {infrastructure.training ? (
               <>
-                <p>协助：{infrastructure.training.trainer ?? "无"}</p>
+                <p>技能 {infrastructure.training.skillIndex} · 协助：{infrastructure.training.trainer ?? "无"}</p>
                 <p>剩余 {formatDuration(infrastructure.training.remainSecs)} · 加速 {Math.round(infrastructure.training.speed * 100)}%</p>
               </>
             ) : "暂无训练任务"}
@@ -739,6 +802,8 @@ function InfrastructureTab({
             </div>
           </div>
         </OverviewTechnicalCard>
+
+        {buildingMetrics.map((metric) => <BuildingMetricCard key={metric.id} metric={metric} />)}
       </section>
 
       {infrastructure.layoutWarning ? (
@@ -1042,6 +1107,7 @@ function ProgressSection({
 
 export function ProgressTab({ snapshot }: { snapshot: SklandSnapshot }) {
   const { player, progress } = snapshot;
+  const now = useMinuteTimestamp(snapshot.infrastructure.currentTs);
   return (
     <div className="grid gap-7">
       <section className="grid gap-4 md:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
@@ -1078,14 +1144,24 @@ export function ProgressTab({ snapshot }: { snapshot: SklandSnapshot }) {
         {progress.recruit?.length ? (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {progress.recruit.map((slot) => {
-              const finished = slot.finishTs > 0 && slot.finishTs <= snapshot.infrastructure.currentTs;
+              const finished = slot.state === "completed"
+                || (slot.state === "recruiting" && slot.finishTs > 0 && slot.finishTs <= now);
+              const label = finished
+                ? "已完成"
+                : slot.state === "locked"
+                  ? "未解锁"
+                  : slot.state === "standby"
+                    ? "空闲"
+                    : "进行中";
               return (
                 <div key={slot.index} className="rounded-lg bg-muted/45 p-3 text-sm">
                   <div className="flex items-center justify-between">
                     <strong>槽位 {slot.index + 1}</strong>
-                    <Badge variant={finished ? "secondary" : "outline"}>{finished ? "已完成" : "进行中"}</Badge>
+                    <Badge variant={finished ? "secondary" : "outline"}>{label}</Badge>
                   </div>
-                  <p className="mt-2 text-xs text-muted-foreground">{formatDateTime(slot.finishTs)}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {slot.finishTs > 0 ? formatDateTime(slot.finishTs) : "暂无计时"}
+                  </p>
                 </div>
               );
             })}

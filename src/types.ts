@@ -251,6 +251,7 @@ export interface SklandInfrastructureOperator {
 export interface SklandInfrastructureProduction {
   stock: number | null;
   capacity: number | null;
+  unitCapacity: number | null;
   completed: number | null;
   remaining: number | null;
   completeWorkTime: number | null;
@@ -345,6 +346,7 @@ export interface SklandInfrastructure {
   training: {
     trainee: string | null;
     trainer: string | null;
+    skillIndex: number;
     remainSecs: number;
     remainPoint: number;
     speed: number;
@@ -396,6 +398,7 @@ export interface SklandProgress {
     index: number;
     startTs: number;
     finishTs: number;
+    state: "locked" | "standby" | "recruiting" | "completed";
   }> | null;
   routine: {
     daily: { current: number; total: number };
