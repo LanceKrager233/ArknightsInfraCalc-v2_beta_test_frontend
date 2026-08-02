@@ -13,14 +13,16 @@ import type {
   HealthApiResponse,
   OperBoxEntry,
   PlanApiResponse,
+  RotationProfile,
 } from "@/types";
 import { isSklandConfigured, sklandDisabledReason } from "@/server/skland/session";
-import { normalizeServeRoomEfficiency } from "@/efficiency";
 import {
   inspectPlanComputeCapability,
   parsePlanComputePayload,
 } from "./plan-protocol";
+import { normalizeRotationResult } from "@/rotation-result";
 import { parseShiftFile } from "./shift-parser";
+import { isRotationProfile } from "@/rotation-settings";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -47,6 +49,7 @@ type PlanRequestBody = {
   layout: BaseBlueprint;
   operbox: OperBoxEntry[];
   sourceName?: string | null;
+  rotation: RotationProfile;
 };
 
 const repoRoot = path.resolve(/* turbopackIgnore: true */ process.cwd());
@@ -193,6 +196,9 @@ function assertPlanBody(body: unknown): asserts body is PlanRequestBody {
   if (!Array.isArray(body.operbox) || body.operbox.length === 0) {
     throw new Error("请求缺少非空 operbox 数组。");
   }
+  if (!isRotationProfile(body.rotation)) {
+    throw new Error("请求缺少受支持的 rotation 参数。");
+  }
 }
 
 function safePathSegment(value: unknown) {
@@ -247,78 +253,6 @@ async function readShiftFiles(outputDir: string) {
   } catch {
     return { shifts: [], files: [], errors: [`未找到 output_dir：${outputDir}`] };
   }
-}
-
-function buildRotationJson(profileJson: unknown, shifts: unknown[]) {
-  if (!isObject(profileJson) || !isObject(profileJson.rotation)) {
-    return shifts.length === 0
-      ? undefined
-      : {
-          shifts,
-          daily: {
-            trade: null,
-            manu: null,
-            power: null,
-          },
-        };
-  }
-
-  const rotation = profileJson.rotation;
-  return {
-    shifts,
-    daily: {
-      trade: rotation.daily_trade_efficiency ?? rotation.daily_trade ?? null,
-      manu: rotation.daily_manufacture_efficiency ?? rotation.daily_manu ?? null,
-      power: rotation.daily_power_efficiency ?? rotation.daily_power ?? null,
-    },
-  };
-}
-
-function normalizeRotationShifts(shifts: unknown[]): unknown[] {
-  return shifts.map((value, index) => {
-    if (!isObject(value)) return value;
-
-    const durationHours =
-      typeof value.duration_hours === "number" && Number.isFinite(value.duration_hours)
-        ? value.duration_hours
-        : index === 0
-          ? 12
-          : 6;
-
-    if (!isObject(value.efficiencies)) {
-      return {
-        ...value,
-        duration_hours: durationHours,
-      };
-    }
-
-    const efficiencies = value.efficiencies;
-    const roomLines = Array.isArray(efficiencies.room_lines)
-      ? efficiencies.room_lines.map((line) => {
-          if (!isObject(line)) return line;
-          return normalizeServeRoomEfficiency(line);
-        })
-      : [];
-    return {
-      ...value,
-      duration_hours: durationHours,
-      scores: {
-        trade_score: Number(efficiencies.trade_efficiency ?? 0),
-        manu_prod_sum: Number(efficiencies.manufacture_efficiency ?? 0) * 100,
-        power_charge_sum: Number(efficiencies.power_efficiency ?? 0) * 100,
-        room_lines: roomLines,
-      },
-    };
-  });
-}
-
-function rotationShiftsFromPlanCompute(rotation: JsonRecord): unknown[] {
-  return Array.isArray(rotation.shifts) ? normalizeRotationShifts(rotation.shifts) : [];
-}
-
-function rotationShiftsFromServe(response: JsonRecord): unknown[] {
-  const result = response.result;
-  return isObject(result) && Array.isArray(result.shifts) ? normalizeRotationShifts(result.shifts) : [];
 }
 
 function countRoomsByKind(layout: BaseBlueprint, kind: string) {
@@ -825,6 +759,7 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
     let serveResult: ServeResult;
     let profileJson: unknown;
     let maaJson: unknown;
+    let rotationSource: unknown;
     let serveShifts: unknown[] = [];
     let shiftFiles: string[] = [];
     let shiftReadErrors: string[] = [];
@@ -841,7 +776,7 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
           operbox: body.sourceName ?? null,
         },
         options: {
-          rotation: "abc_12_6_6",
+          rotation: body.rotation,
           top: 20,
           system_preferences: {},
           maa_title: `${body.sourceName ?? "Arknights InfraCalc"} · ${String(body.layout.template ?? "layout")}`,
@@ -856,7 +791,8 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
       }
       profileJson = payload?.profile;
       maaJson = payload?.maa;
-      serveShifts = payload ? rotationShiftsFromPlanCompute(payload.rotation) : [];
+      rotationSource = payload?.rotation;
+      serveShifts = payload && Array.isArray(payload.rotation.shifts) ? payload.rotation.shifts : [];
       if (profileJson) await writeJson(profilePath, profileJson);
       if (maaJson) await writeJson(maaPath, maaJson);
     } else {
@@ -867,13 +803,16 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
         maa_out: maaPath,
         output_dir: shiftsDir,
         top: 20,
+        rotation: body.rotation,
         maa_title: `${body.sourceName ?? "Arknights InfraCalc"} · ${String(body.layout.template ?? "layout")}`,
       });
 
       profileJson = await readJsonIfExists(profilePath);
       maaJson = await readJsonIfExists(maaPath);
       const shiftRead = await readShiftFiles(shiftsDir);
-      const responseShifts = rotationShiftsFromServe(serveResult.response);
+      const responseResult = isObject(serveResult.response.result) ? serveResult.response.result : undefined;
+      rotationSource = responseResult;
+      const responseShifts = responseResult && Array.isArray(responseResult.shifts) ? responseResult.shifts : [];
       serveShifts = responseShifts.length > 0 ? responseShifts : shiftRead.shifts;
       shiftFiles = shiftRead.files.map((file) => path.relative(repoRoot, file));
       shiftReadErrors = shiftRead.errors;
@@ -887,7 +826,12 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
     await writeFile(serveRequestLinePath, `${JSON.stringify(serveResult.request)}\n`, "utf-8");
     await writeJson(serveResponsePath, serveResult.response);
 
-    const rotationJson = buildRotationJson(profileJson, serveShifts);
+    const rotationJson = normalizeRotationResult({
+      source: rotationSource,
+      shifts: serveShifts,
+      profile: profileJson,
+      fallbackProfile: body.rotation,
+    });
     await writeFile(stdoutPath, serveResult.stdout, "utf-8");
     await writeFile(stderrPath, serveResult.stderr, "utf-8");
 
@@ -1098,5 +1042,10 @@ export async function activateCliRelease(id: string) {
 export async function runOpsSmokeTest() {
   const sample = await getSampleOperbox();
   const layout = JSON.parse(await readFile(path.join(repoRoot, "src", "layouts", "243.json"), "utf-8")) as BaseBlueprint;
-  return runPlan({ layout, operbox: sample.operbox as OperBoxEntry[], sourceName: "ops-smoke-243-full-e2" });
+  return runPlan({
+    layout,
+    operbox: sample.operbox as OperBoxEntry[],
+    sourceName: "ops-smoke-243-full-e2",
+    rotation: "abc_12_6_6",
+  });
 }

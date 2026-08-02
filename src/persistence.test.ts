@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { PublicPlanData } from "./types.ts";
+import type { PublicPlanData, RotationProfile } from "./types.ts";
+import { DEFAULT_ROTATION_PROFILE } from "./rotation-settings.ts";
 import {
   clearLocalProductData,
   loadPersistedSession,
@@ -40,6 +41,7 @@ const operbox = [{ id: "char_1", name: "测试干员", elite: 2, level: 90, own:
 const result = {
   profile: {
     schema_version: 4,
+    rotation_profile: DEFAULT_ROTATION_PROFILE,
     layout_label: "243",
     operbox_label: "示例",
     baseline_label: "产品推荐基准",
@@ -52,11 +54,48 @@ const result = {
     narration_hints: [],
   },
   maa: { title: "排班", plans: [] },
-  rotation: { shifts: [], daily: { trade: null, manu: null, power: null } },
+  rotation: { profile: DEFAULT_ROTATION_PROFILE, shifts: [], daily: { trade: null, manu: null, power: null } },
   durationMs: 10,
   diagnosticId: "diag",
   debug: { command: "must be removed", stdout: "secret" },
 };
+
+function resultWithShifts(count: number, rotationProfile: RotationProfile = DEFAULT_ROTATION_PROFILE): PublicPlanData {
+  const durations = count === 4 ? [8, 8, 4, 4] : Array.from({ length: count }, () => 12);
+  return {
+    ...result,
+    profile: {
+      ...result.profile,
+      rotation_profile: rotationProfile,
+    },
+    maa: {
+      title: "排班",
+      plans: Array.from({ length: count }, (_, index) => ({
+        name: `班次 ${index + 1}`,
+        rooms: {},
+      })),
+    },
+    rotation: {
+      profile: rotationProfile,
+      shifts: Array.from({ length: count }, (_, index) => ({
+        index,
+        duration_hours: durations[index],
+        active_teams: ["alpha"],
+        resting_team: "beta",
+        scores: {
+          trade_score: 0,
+          manu_prod_sum: 0,
+          power_charge_sum: 0,
+          room_lines: [],
+        },
+        weighted_trade: 0,
+        weighted_manu: 0,
+        weighted_power: 0,
+      })),
+      daily: { trade: 1, manu: 2, power: 3 },
+    },
+  };
+}
 
 test("v4 persistence stores expiry metadata and strips debug fields", () => {
   const storage = new MemoryStorage();
@@ -68,10 +107,12 @@ test("v4 persistence stores expiry metadata and strips debug fields", () => {
     sourceName: "示例",
     boxSource: "sample",
     layoutDirty: false,
+    rotationProfile: DEFAULT_ROTATION_PROFILE,
     result,
     activeShift: 1,
   }, now);
   assert.equal(Date.parse(saved.expiresAt) - now, SESSION_TTL_MS);
+  assert.equal(saved.rotationProfile, DEFAULT_ROTATION_PROFILE);
   assert.equal(saved.result?.debug, undefined);
   assert.equal((JSON.parse(storage.getItem(SESSION_KEY_V4) ?? "{}").result as Record<string, unknown>).debug, undefined);
 });
@@ -97,6 +138,7 @@ test("v2 and v3 migrate once to the v4 allowlist", () => {
     }));
     const migrated = loadPersistedSession(storage, Date.parse("2026-07-28T00:00:00.000Z"));
     assert.equal(migrated?.version, 4);
+    assert.equal(migrated?.rotationProfile, DEFAULT_ROTATION_PROFILE);
     assert.equal(migrated?.result?.diagnosticId, "legacy-diag");
     assert.equal(migrated?.result?.debug, undefined);
     assert.equal(storage.getItem(legacyKey), null);
@@ -144,6 +186,7 @@ test("new Skland persistence always uses a non-identifying source label", () => 
     sourceName: "skland:123456789:1785196800",
     boxSource: "skland",
     layoutDirty: false,
+    rotationProfile: DEFAULT_ROTATION_PROFILE,
     result: {
       ...result,
       profile: {
@@ -188,6 +231,7 @@ test("quota failures surface without corrupting the previous session", () => {
     sourceName: "示例",
     boxSource: "sample",
     layoutDirty: false,
+    rotationProfile: DEFAULT_ROTATION_PROFILE,
     result: null,
     activeShift: 0,
   }));
@@ -207,11 +251,73 @@ test("internal fields nested in persisted result data are stripped", () => {
     sourceName: "示例",
     boxSource: "sample",
     layoutDirty: false,
+    rotationProfile: DEFAULT_ROTATION_PROFILE,
     result: unsafeResult,
     activeShift: 0,
   });
 
   assert.equal("cliPath" in saved.result!.profile, false);
+});
+
+test("v4 persistence restores the fourth shift when the result has four plans", () => {
+  const storage = new MemoryStorage();
+  persistSession(storage, {
+    presetLabel: "243",
+    layout,
+    operbox,
+    sourceName: "示例",
+    boxSource: "sample",
+    layoutDirty: false,
+    rotationProfile: "fiammetta_8_8_4_4",
+    result: resultWithShifts(4, "fiammetta_8_8_4_4"),
+    activeShift: 3,
+  });
+
+  assert.equal(loadPersistedSession(storage)?.activeShift, 3);
+});
+
+test("v4 persistence clamps a stale shift index to the available result", () => {
+  const storage = new MemoryStorage();
+  const saved = persistSession(storage, {
+    presetLabel: "243",
+    layout,
+    operbox,
+    sourceName: "示例",
+    boxSource: "sample",
+    layoutDirty: false,
+    rotationProfile: "main_backup_12_12",
+    result: resultWithShifts(2, "main_backup_12_12"),
+    activeShift: 3,
+  });
+
+  assert.equal(saved.activeShift, 1);
+  assert.equal(loadPersistedSession(storage)?.activeShift, 1);
+});
+
+test("old v4 results migrate a missing rotation profile from the saved setting", () => {
+  const storage = new MemoryStorage();
+  const now = Date.parse("2026-07-28T00:00:00.000Z");
+  const legacyResult = JSON.parse(JSON.stringify(resultWithShifts(4))) as Record<string, Record<string, unknown>>;
+  delete legacyResult.profile.rotation_profile;
+  delete legacyResult.rotation.profile;
+  storage.setItem(SESSION_KEY_V4, JSON.stringify({
+    version: 4,
+    savedAt: new Date(now).toISOString(),
+    expiresAt: new Date(now + SESSION_TTL_MS).toISOString(),
+    presetLabel: "243",
+    layout,
+    operbox,
+    sourceName: "示例",
+    boxSource: "sample",
+    layoutDirty: false,
+    rotationProfile: "fiammetta_8_8_4_4",
+    result: legacyResult,
+    activeShift: 3,
+  }));
+
+  const migrated = loadPersistedSession(storage, now);
+  assert.equal(migrated?.result?.rotation.profile, "fiammetta_8_8_4_4");
+  assert.equal(migrated?.activeShift, 3);
 });
 
 test("clear removes all session generations and product preferences", () => {
