@@ -929,7 +929,7 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   const rotationTrigger = dialog.getByRole("combobox", { name: "换班方式" });
   await rotationTrigger.click();
   const [triggerBox, popupBox] = await Promise.all([
-    rotationTrigger.boundingBox(),
+    rotationTrigger.locator("xpath=..").boundingBox(),
     page.locator('[data-slot="combobox-content"]').boundingBox(),
   ]);
   expect(triggerBox).not.toBeNull();
@@ -991,11 +991,11 @@ test("layout level controls clamp edits and expose the power-safe 342 defaults",
   const mobileTradeLevel = dialog.locator('input[aria-label="trade_2 等级"]:visible');
   await mobileTradeLevel.click();
   const firstLevelOption = page.getByRole("option", { name: "1", exact: true });
-  const [levelInputBox, levelPopupBox] = await Promise.all([
-    mobileTradeLevel.boundingBox(),
+  const [levelFieldBox, levelPopupBox] = await Promise.all([
+    mobileTradeLevel.locator("xpath=..").boundingBox(),
     page.locator('[data-slot="combobox-content"]').boundingBox(),
   ]);
-  expect(levelPopupBox?.width).toBeCloseTo(levelInputBox?.width ?? 0, 0);
+  expect(levelPopupBox?.width).toBeCloseTo(levelFieldBox?.width ?? 0, 0);
   expect(await firstLevelOption.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
   await firstLevelOption.click();
   await expect(mobileTradeLevel).toHaveValue("1");
@@ -1333,11 +1333,11 @@ test("Skland status center keeps profile and recruitment in overview and support
   await expect(accountCombobox).toHaveValue("测试博士 · 官服");
   await expect(accountCombobox).not.toHaveValue(/123456789/);
   await accountCombobox.click();
-  const [accountInputBox, accountPopupBox] = await Promise.all([
-    accountCombobox.boundingBox(),
+  const [accountFieldBox, accountPopupBox] = await Promise.all([
+    accountCombobox.locator("xpath=..").boundingBox(),
     page.locator('[data-slot="combobox-content"]').boundingBox(),
   ]);
-  expect(accountPopupBox?.width).toBeCloseTo(accountInputBox?.width ?? 0, 0);
+  expect(accountPopupBox?.width).toBeCloseTo(accountFieldBox?.width ?? 0, 0);
   await accountCombobox.press("Escape");
   await expect(page.locator('[data-slot="select-trigger"]')).toHaveCount(0);
   await expect(page.getByRole("tab", { name: "概览", exact: true })).toBeVisible();
