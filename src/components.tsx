@@ -19,8 +19,8 @@ import {
 import { CSSProperties, ChangeEvent, ReactNode, useEffect, useRef, useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Accordion, AccordionItem, AccordionPanel, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
-import { InfraTechnicalCard } from "@/components/InfraTechnicalCard";
 import {
   Dialog,
   DialogContent,
@@ -60,7 +60,6 @@ import {
 } from "./blueprint";
 import { CompactScheduleView } from "@/components/CompactScheduleView";
 import { manufacturePoolReady, presentRoomEfficiency, profileEfficiency, RoomEfficiencyPresentation } from "./efficiency";
-import { countElite2, countOwned, countSixStar } from "./operbox";
 import {
   relativeMetricDelta,
   rotationMetricValue,
@@ -96,7 +95,6 @@ import {
   IssueReport,
   MaaJson,
   MaaPlan,
-  OperBoxEntry,
   PublicPlanData,
   PresetDef,
   RotationJson,
@@ -269,7 +267,7 @@ export function PresetSelector({
         if (next) onSelect(next);
       }}
       spacing={2}
-      className="grid w-full grid-cols-2 gap-2 rounded-none"
+      className="grid w-full grid-cols-2 gap-2 rounded-none sm:grid-cols-3 lg:grid-cols-5"
     >
       {presets.map((preset) => (
         <ToggleGroupItem
@@ -277,7 +275,7 @@ export function PresetSelector({
           value={preset.label}
           variant="outline"
           className={cn(
-            "infra-preset-surface group/preset relative isolate h-auto min-h-20 justify-between overflow-hidden rounded-none border border-white/10 bg-[#272A2B] px-3 py-3 text-left text-white transition-[background-color,border-color,scale] duration-150 ease-out hover:border-white/22 hover:bg-[#303435] hover:text-white active:scale-[0.96] motion-reduce:transform-none",
+            "infra-preset-surface group/preset relative isolate h-auto min-h-18 justify-between overflow-hidden rounded-none border border-white/10 bg-[#272A2B] px-3 py-3 text-left text-white transition-[background-color,border-color,scale] duration-150 ease-out hover:border-white/22 hover:bg-[#303435] hover:text-white active:scale-[0.96] motion-reduce:transform-none",
             selected.label === preset.label && "border-[#FFD800]/72 bg-[#303027] text-white hover:border-[#FFD800]/82 hover:bg-[#343329] hover:text-white"
           )}
         >
@@ -456,23 +454,26 @@ export function LayoutEditor({
   onRoomLevelChange: (roomId: string, level: number) => void;
 }) {
   const roomGroups = [
-    { key: "function", label: "控制与功能区", rooms: layout.rooms.filter((room) => !["trade_post", "factory", "power_plant", "dormitory"].includes(room.kind)) },
     { key: "trade", label: "贸易站", rooms: layout.rooms.filter((room) => room.kind === "trade_post") },
     { key: "factory", label: "制造站", rooms: layout.rooms.filter((room) => room.kind === "factory") },
     { key: "power", label: "发电站", rooms: layout.rooms.filter((room) => room.kind === "power_plant") },
+    { key: "function", label: "控制与功能区", rooms: layout.rooms.filter((room) => !["trade_post", "factory", "power_plant", "dormitory"].includes(room.kind)) },
     { key: "dormitory", label: "宿舍", rooms: layout.rooms.filter((room) => room.kind === "dormitory") },
   ].filter((group) => group.rooms.length > 0);
 
   return (
-    <div className="grid gap-5">
+    <Accordion multiple defaultValue={["trade", "factory"]} aria-label="设施设置" className="gap-2.5">
       {roomGroups.map((group) => (
-        <section key={group.key} className="grid gap-2.5" aria-labelledby={`layout-group-${group.key}`}>
-          <div className="flex items-center justify-between gap-3">
-            <h4 id={`layout-group-${group.key}`} className="text-sm font-semibold text-balance">{group.label}</h4>
-            <span className="text-xs tabular-nums text-muted-foreground">{group.rooms.length} 个设施</span>
-          </div>
-          <div className={cn("grid gap-2.5", !["trade", "factory"].includes(group.key) && "sm:grid-cols-2")}>
-            {group.rooms.map((room) => {
+        <AccordionItem key={group.key} value={group.key} data-facility-group={group.key}>
+          <AccordionTrigger>
+            <span className="flex min-w-0 flex-1 items-center justify-between gap-3">
+              <span>{group.label}</span>
+              <span className="text-xs font-normal tabular-nums text-muted-foreground">{group.rooms.length}</span>
+            </span>
+          </AccordionTrigger>
+          <AccordionPanel>
+            <div className="divide-y divide-border/70">
+            {group.rooms.map((room, roomIndex) => {
               const isTrade = room.kind === "trade_post";
               const isFactory = room.kind === "factory";
               const activeOrder = isTrade ? tradeOrderFor(room) : null;
@@ -480,34 +481,38 @@ export function LayoutEditor({
               const product = productLabel(room);
               const levelMax = maxRoomLevel(room.kind);
               const visualGroup = roomVisualGroupForKind(room.kind);
+              const displayName = group.rooms.length > 1
+                ? `${roomKindLabel(room.kind)} ${roomIndex + 1}`
+                : roomKindLabel(room.kind);
 
               return (
-                <InfraTechnicalCard
+                <div
                   key={room.id}
-                  group={visualGroup}
-                  dataSlot="setup-room-card"
-                  className="min-h-[92px] rounded-none p-3 sm:p-3.5"
+                  data-slot="setup-room-row"
+                  data-room-group={visualGroup}
+                  className={cn(
+                    "grid min-h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-3 px-4 py-3",
+                    (isTrade || isFactory) && "sm:grid-cols-[minmax(8rem,1fr)_auto_minmax(18rem,1.4fr)]"
+                  )}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <span className="infra-room-accent mb-2 block h-0.5 w-8 bg-[var(--room-accent)]" aria-hidden="true" />
-                      <div className="truncate text-sm font-medium text-white">{roomKindLabel(room.kind)}</div>
-                      <div className="truncate text-xs text-white/58">{room.id}</div>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-xs text-white/58">
-                      <span>等级</span>
-                      <RoomLevelControl
-                        roomId={room.id}
-                        level={room.level}
-                        levelMax={levelMax}
-                        surface="room"
-                        onChange={(level) => onRoomLevelChange(room.id, level)}
-                      />
-                    </div>
+                  <div className="min-w-0">
+                    <span className="block truncate text-sm font-medium text-foreground">{displayName}</span>
+                    {!isTrade && !isFactory && product ? (
+                      <span className="mt-0.5 block truncate text-xs text-muted-foreground">{product}</span>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span aria-hidden="true">Lv.</span>
+                    <RoomLevelControl
+                      roomId={room.id}
+                      level={room.level}
+                      levelMax={levelMax}
+                      onChange={(level) => onRoomLevelChange(room.id, level)}
+                    />
                   </div>
 
                   {isTrade && activeOrder ? (
-                    <div className="mt-2">
+                    <div className="col-span-2 sm:col-span-1">
                       <ProductToggleGroup
                         ariaLabel={`${room.id} 订单`}
                         value={activeOrder}
@@ -517,13 +522,12 @@ export function LayoutEditor({
                         }))}
                         columns={2}
                         tone="trade"
-                        surface="room"
                         layout="fill"
                         onChange={(order) => onTradeOrderChange(room.id, order)}
                       />
                     </div>
                   ) : isFactory && activeRecipe ? (
-                    <div className="mt-2">
+                    <div className="col-span-2 sm:col-span-1">
                       <ProductToggleGroup
                         ariaLabel={`${room.id} 配方`}
                         value={activeRecipe}
@@ -531,42 +535,21 @@ export function LayoutEditor({
                           value: option.recipe,
                           label: option.label,
                         }))}
-                        columns={2}
+                        columns={3}
                         tone="factory"
-                        surface="room"
                         layout="fill"
                         onChange={(recipe) => onFactoryRecipeChange(room.id, recipe)}
                       />
                     </div>
-                  ) : product ? (
-                    <div className="mt-2 text-xs text-white/62">{product}</div>
                   ) : null}
-                </InfraTechnicalCard>
+                </div>
               );
             })}
-          </div>
-        </section>
+            </div>
+          </AccordionPanel>
+        </AccordionItem>
       ))}
-    </div>
-  );
-}
-
-export function AccountStats({ operbox }: { operbox: OperBoxEntry[] | null }) {
-  const stats = [
-    ["拥有干员", countOwned(operbox)],
-    ["精二干员", countElite2(operbox)],
-    ["六星干员", countSixStar(operbox)],
-  ] as const;
-
-  return (
-    <div className="mt-4 grid grid-cols-3 divide-x divide-white/10 border-y border-white/10">
-      {stats.map(([label, value]) => (
-        <div key={label} className="px-3 py-3">
-          <div className="text-xs text-white/58">{label}</div>
-          <div className="mt-1 text-xl font-semibold tabular-nums text-white">{value}</div>
-        </div>
-      ))}
-    </div>
+    </Accordion>
   );
 }
 

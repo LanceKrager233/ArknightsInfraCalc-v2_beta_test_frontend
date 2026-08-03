@@ -206,37 +206,44 @@
 }
 
 .setup-step-list {
-  background-color: color-mix(in oklch, var(--popover) 62%, transparent);
-  box-shadow:
-    inset 0 0 0 1px rgb(12 19 24 / 0.04),
-    inset 0 1px 0 rgb(255 255 255 / 0.42);
+  background: transparent;
+  box-shadow: none;
 }
 
 .setup-step-trigger {
   transition:
     color 150ms var(--infra-ease-out),
-    background-color 150ms var(--infra-ease-out),
-    box-shadow 150ms var(--infra-ease-out),
     opacity 150ms var(--infra-ease-out);
 }
 
-.setup-step-trigger[data-active] {
-  border-color: rgb(255 255 255 / 0.12);
-  background-color: #272a2b;
-  color: rgb(255 255 255 / 0.92);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
+.setup-step-trigger::after {
+  display: none;
 }
 
-.setup-step-trigger[data-active] .setup-step-index {
-  background-color: #ffd800;
-  color: #272a2b;
-  box-shadow: 0 0 9px rgb(255 216 0 / 0.22);
+.setup-step-trigger[data-active] {
+  background: transparent;
+  color: var(--foreground);
+  box-shadow: none;
+}
+
+.setup-data-summary,
+.setup-import-action {
+  border: 1px solid color-mix(in oklch, var(--border) 82%, transparent);
+  background-color: color-mix(in oklch, var(--card) 66%, transparent);
 }
 
 .setup-config-panel {
-  background-color: color-mix(in oklch, var(--card) 54%, transparent);
+  background-color: color-mix(in oklch, var(--card) 48%, transparent);
   outline: 1px solid rgb(12 19 24 / 0.07);
   outline-offset: -1px;
+}
+
+.setup-quiet-details > summary {
+  list-style-position: inside;
+}
+
+.setup-quiet-details[open] > summary {
+  color: var(--foreground);
 }
 
 [data-setup-dialog] .infra-room-surface,

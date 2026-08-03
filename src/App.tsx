@@ -797,6 +797,10 @@ function WorkbenchApp() {
     setPage("skland");
   }
 
+  function useSklandSnapshotFromSetup() {
+    if (sklandSnapshot) applySklandSnapshot(sklandSnapshot);
+  }
+
   function handleSklandAuthenticated(session: SklandSessionData) {
     setSklandError(null);
     applySklandSession(session);
@@ -960,6 +964,7 @@ function WorkbenchApp() {
         sklandConfigured={sklandConfigured}
         sklandDisabledReason={sklandDisabledReason}
         onOpenSkland={openSklandFromSetup}
+        onUseSklandSnapshot={useSklandSnapshotFromSetup}
         onMaaFile={handleFile}
         onMaaPaste={handleMaaPaste}
         presets={PRESETS}

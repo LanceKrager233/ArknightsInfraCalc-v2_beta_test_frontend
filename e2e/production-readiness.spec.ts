@@ -969,7 +969,7 @@ test("an empty generated profile explains that no training action is needed", as
   await expect(page.getByText("先导入干员数据、确认基建布局并生成一次排班。")).toHaveCount(0);
 });
 
-test("setup owns Box parse errors and uses technical summary surfaces", async ({ page }) => {
+test("setup keeps Box parse errors local and actionable", async ({ page }) => {
   await mockApis(page, {
     sklandConfigured: true,
     sklandSnapshot: authenticatedSklandSnapshot,
@@ -981,10 +981,13 @@ test("setup owns Box parse errors and uses technical summary surfaces", async ({
   const setupTrigger = page.getByRole("button", { name: "配置Box与布局" }).first();
   await setupTrigger.click();
   const dialog = page.getByRole("dialog");
-  await page.getByRole("tab", { name: /导入干员数据/ }).click();
-  await page.getByRole("tab", { name: "森空岛同步" }).click();
-  await expect(dialog.locator(".infra-room-surface")).toHaveCount(2);
-  await page.getByRole("tab", { name: "MAA 导入" }).click();
+  await page.getByRole("tab", { name: "干员数据", exact: true }).click();
+  await expect(dialog.locator(".setup-data-summary")).toHaveCount(1);
+  await dialog.getByRole("button", { name: "更换", exact: true }).click();
+  await page.getByRole("tab", { name: "森空岛", exact: true }).click();
+  await expect(dialog.locator(".setup-import-action")).toHaveCount(1);
+  await page.getByRole("tab", { name: "MAA", exact: true }).click();
+  await dialog.getByRole("button", { name: "粘贴 JSON", exact: true }).click();
   const [boxContentBox, boxViewportBox] = await Promise.all([
     dialog.locator("[data-setup-box-content]").boundingBox(),
     dialog.locator('[data-slot="scroll-area-viewport"]:visible').boundingBox(),
@@ -994,7 +997,7 @@ test("setup owns Box parse errors and uses technical summary surfaces", async ({
   expect(boxContentBox?.width).toBeCloseTo(boxViewportBox?.width ?? 0, 0);
   const textarea = dialog.getByPlaceholder("粘贴 Arknights_OperBox_Export.json 内容");
   await textarea.fill("not valid json");
-  await dialog.getByRole("button", { name: "导入粘贴内容" }).click();
+  await dialog.getByRole("button", { name: "导入 JSON" }).click();
 
   await expect(textarea).toHaveAttribute("aria-invalid", "true");
   await expect(dialog.locator('[role="alert"]')).toHaveCount(1);
@@ -1004,6 +1007,25 @@ test("setup owns Box parse errors and uses technical summary surfaces", async ({
   await dialog.getByRole("button", { name: "Close" }).click();
   await expect(dialog).toBeHidden();
   await expect(setupTrigger).toBeFocused();
+});
+
+test("fresh MAA import requires one facility review before completion", async ({ page }) => {
+  await mockApis(page);
+  await seedPreferences(page);
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "配置Box与布局" }).first().click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("tab", { name: "MAA", exact: true }).click();
+  await dialog.getByRole("button", { name: "粘贴 JSON", exact: true }).click();
+  await dialog.getByLabel("JSON 内容").fill(JSON.stringify(sampleData));
+  await dialog.getByRole("button", { name: "导入 JSON", exact: true }).click();
+
+  await expect(dialog.getByRole("tab", { name: "基建与换班", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(dialog.getByRole("button", { name: "检查设施", exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "检查设施", exact: true }).click();
+  await expect(dialog.getByRole("tab", { name: "设施设置", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(dialog.getByRole("button", { name: "完成", exact: true })).toBeEnabled();
 });
 
 test("setup exposes and persists only worker-supported rotation profiles", async ({ page }) => {
@@ -1030,53 +1052,38 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   await expect(dialog.getByText("导入干员数据，再确认换班方式与基建设施。修改会立即应用，但不会自动生成排班。")).toHaveCount(0);
   await expect(dialog.locator("[data-setup-footer]")).toBeVisible();
   await expect(dialog.locator("[data-setup-footer]")).toHaveClass(/setup-dialog-footer/);
-  await dialog.getByRole("tab", { name: /配置基建/ }).click();
+  await expect(dialog.getByRole("heading", { name: "排班设置" })).toBeVisible();
+  const closeButton = dialog.getByRole("button", { name: "Close" });
+  await expect(closeButton).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await closeButton.hover();
+  await expect(closeButton).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(dialog.getByText("森空岛、MAA 或测试样例", { exact: true })).toHaveCount(0);
+  await expect(dialog.getByText("布局、换班、等级、产品和订单", { exact: true })).toHaveCount(0);
+  const stepList = dialog.getByRole("tablist", { name: "设置步骤" });
+  await expect(stepList.locator(":scope > *")).toHaveCount(3);
+  expect((await stepList.boundingBox())?.width ?? Infinity).toBeLessThan(260);
+  await dialog.getByRole("tab", { name: "干员数据", exact: true }).click();
+  await expect.poll(async () => (await dialog.boundingBox())?.height ?? Infinity).toBeLessThan(480);
+  const collapsedDialogHeight = (await dialog.boundingBox())?.height ?? 0;
+  await dialog.getByRole("button", { name: "更换", exact: true }).click();
+  await expect(dialog.locator("#setup-import-options")).toBeVisible();
+  await expect.poll(async () => (await dialog.boundingBox())?.height ?? Infinity).toBeLessThan(700);
+  expect((await dialog.boundingBox())?.height ?? 0).toBeGreaterThan(collapsedDialogHeight);
+  await dialog.getByRole("button", { name: "收起", exact: true }).click();
+  await dialog.getByRole("tab", { name: "基建与换班", exact: true }).click();
+  const completedDataStep = dialog.getByRole("tab", { name: "干员数据", exact: true });
+  await expect(completedDataStep.locator("svg")).toHaveCount(0);
+  await expect(completedDataStep).toHaveClass(/text-emerald-700/);
+  expect(await completedDataStep.evaluate((element) => getComputedStyle(element, "::after").display)).toBe("none");
 
   const selectedPreset = dialog.getByRole("button", { name: /^243/ });
   await expect(selectedPreset).toHaveAttribute("aria-pressed", "true");
   await expect(selectedPreset).toHaveCSS("background-color", "rgb(48, 48, 39)");
   await expect(selectedPreset).toHaveCSS("box-shadow", "none");
-  const layoutColumns = dialog.locator("[data-setup-layout-columns]");
-  const [stepListBox, layoutFrame] = await Promise.all([
-    dialog.locator("[data-setup-step-list]").boundingBox(),
-    layoutColumns.evaluate((element) => {
-      const rect = element.getBoundingClientRect();
-      const style = getComputedStyle(element);
-      return {
-        left: rect.left + Number.parseFloat(style.paddingLeft),
-        right: rect.right - Number.parseFloat(style.paddingRight),
-      };
-    }),
-  ]);
-  expect(stepListBox).not.toBeNull();
-  expect(Math.abs((stepListBox?.x ?? 0) - layoutFrame.left)).toBeLessThanOrEqual(1);
-  expect(Math.abs(((stepListBox?.x ?? 0) + (stepListBox?.width ?? 0)) - layoutFrame.right)).toBeLessThanOrEqual(1);
-  expect(await layoutColumns.evaluate((element) => getComputedStyle(element).gridTemplateColumns)).toMatch(/^280px 1px /);
-  expect(await dialog.locator("[data-setup-layout-divider]").evaluate((element) => element.getBoundingClientRect().width)).toBe(1);
-  const [dialogBox, setupScrollbarBox] = await Promise.all([
-    dialog.boundingBox(),
-    dialog.locator('[data-slot="scroll-area-scrollbar"]:visible').boundingBox(),
-  ]);
-  expect(dialogBox).not.toBeNull();
-  expect(setupScrollbarBox).not.toBeNull();
-  expect(Math.abs(
-    ((dialogBox?.x ?? 0) + (dialogBox?.width ?? 0))
-      - ((setupScrollbarBox?.x ?? 0) + (setupScrollbarBox?.width ?? 0))
-  )).toBeLessThanOrEqual(1);
-  await expect(dialog.locator('[data-slot="setup-room-card"]')).toHaveCount(18);
-  await expect(dialog.locator('[data-slot="setup-room-card"][data-room-group="trading"]')).toHaveCount(2);
-  await expect(dialog.locator('[data-slot="setup-room-card"][data-room-group="manufacture"]')).toHaveCount(4);
-  await expect(dialog.locator('[data-slot="setup-room-card"][data-room-group="power"]')).toHaveCount(3);
-  const activeTradeOrder = dialog.getByRole("group", { name: "trade_1 订单" }).getByRole("button", { name: "龙门商法" });
-  const tradeOrderGroup = dialog.getByRole("group", { name: "trade_1 订单" });
-  expect(await tradeOrderGroup.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return { columnGap: style.columnGap, rowGap: style.rowGap };
-  })).toEqual({ columnGap: "8px", rowGap: "10px" });
-  await expect(dialog.locator('[data-slot="setup-room-card"]').first()).toHaveCSS("box-shadow", "none");
-  await expect(activeTradeOrder).toHaveClass(/infra-room-control/);
-  await expect(activeTradeOrder).toHaveAttribute("aria-pressed", "true");
-  await dialog.getByText("高级设置", { exact: true }).click();
+  const presetColumns = await dialog
+    .getByRole("group", { name: "布局预设" })
+    .evaluate((element) => getComputedStyle(element).gridTemplateColumns);
+  expect(presetColumns.split(" ").filter(Boolean)).toHaveLength(5);
 
   const rotationTrigger = dialog.getByRole("combobox", { name: "换班方式" });
   await rotationTrigger.click();
@@ -1103,9 +1110,9 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   await expect(page.getByText("没有匹配的换班方式", { exact: true })).toBeVisible();
   await rotationTrigger.press("Escape");
   await expect(rotationTrigger).toHaveValue("菲亚梅塔轮换 · 8/8/4/4");
-  await expect(dialog.getByText("完整循环 24 小时")).toBeVisible();
-  await expect(dialog.getByText("第 4 班 4h")).toBeVisible();
-  await dialog.getByRole("button", { name: "完成设置" }).click();
+  await expect(dialog.getByText("完整循环 24 小时")).toHaveCount(0);
+  await expect(dialog.getByText("第 4 班 4h")).toHaveCount(0);
+  await dialog.getByRole("button", { name: "完成", exact: true }).click();
 
   await page.getByRole("button", { name: "生成排班" }).click();
   await expect.poll(() => planRequests).toBe(1);
@@ -1124,9 +1131,20 @@ test("layout level controls clamp edits and expose the power-safe 342 defaults",
 
   await page.getByRole("button", { name: "配置Box与布局" }).first().click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("tab", { name: /配置基建/ }).click();
-  const activeTradeOrder = dialog.getByRole("group", { name: "trade_1 订单" }).getByRole("button", { name: "龙门商法" });
+  await dialog.getByRole("tab", { name: "基建与换班", exact: true }).click();
 
+  await dialog.getByRole("button", { name: /^342/ }).click();
+  await expect(dialog.getByRole("button", { name: "检查设施", exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "检查设施", exact: true }).click();
+
+  const tradeGroup = dialog.locator('[data-facility-group="trade"]');
+  const factoryGroup = dialog.locator('[data-facility-group="factory"]');
+  const functionGroup = dialog.locator('[data-facility-group="function"]');
+  await expect(tradeGroup.locator('[data-slot="accordion-trigger"]')).toHaveAttribute("aria-expanded", "true");
+  await expect(factoryGroup.locator('[data-slot="accordion-trigger"]')).toHaveAttribute("aria-expanded", "true");
+  await expect(functionGroup.locator('[data-slot="accordion-trigger"]')).toHaveAttribute("aria-expanded", "false");
+
+  await functionGroup.locator('[data-slot="accordion-trigger"]').click();
   const controlLevel = dialog.locator('input[aria-label="control 等级"]:visible');
   await expect(controlLevel).toHaveValue("5");
   await dialog.getByRole("button", { name: "control 等级减一" }).click();
@@ -1135,10 +1153,19 @@ test("layout level controls clamp edits and expose the power-safe 342 defaults",
   await controlLevel.press("Enter");
   await expect(controlLevel).toHaveValue("5");
 
-  await dialog.getByRole("button", { name: /^342/ }).click();
+  await dialog.locator('[data-facility-group="power"] [data-slot="accordion-trigger"]').click();
+  await dialog.locator('[data-facility-group="dormitory"] [data-slot="accordion-trigger"]').click();
+  const activeTradeOrder = dialog.getByRole("group", { name: "trade_1 订单" }).getByRole("button", { name: "龙门商法" });
+  await expect(activeTradeOrder).toHaveAttribute("aria-pressed", "true");
+  await expect(dialog.locator('[data-slot="setup-room-row"]')).toHaveCount(18);
+  await expect(dialog.locator('[data-slot="setup-room-row"][data-room-group="trading"]')).toHaveCount(3);
+  await expect(dialog.locator('[data-slot="setup-room-row"][data-room-group="manufacture"]')).toHaveCount(4);
+  await expect(dialog.locator('[data-slot="setup-room-row"][data-room-group="power"]')).toHaveCount(2);
   await expect(dialog.locator('input[aria-label="trade_2 等级"]:visible')).toHaveValue("2");
   await expect(dialog.locator('input[aria-label="dorm_1 等级"]:visible')).toHaveValue("2");
-  await expect(dialog.getByText("发电 540 / 耗电 540", { exact: true })).toBeVisible();
+  const normalPowerStatus = dialog.getByText("电力正常 · 540/540", { exact: true });
+  await expect(normalPowerStatus).toBeVisible();
+  await expect(normalPowerStatus).toHaveClass(/text-emerald-700/);
 
   await page.setViewportSize({ width: 768, height: 900 });
   const mediumOverflow = await dialog.evaluate((element) => ({
@@ -1969,14 +1996,40 @@ test("setup routes Skland account actions to the status center", async ({ page }
   await page.goto("/");
 
   await page.getByRole("button", { name: "配置Box与布局" }).first().click();
-  await page.getByRole("tab", { name: /导入干员数据/ }).click();
-  await page.getByRole("tab", { name: "森空岛同步" }).click();
+  await page.getByRole("tab", { name: "干员数据", exact: true }).click();
+  await page.getByRole("button", { name: "更换", exact: true }).click();
+  await page.getByRole("tab", { name: "森空岛", exact: true }).click();
   await expect(page.getByRole("dialog").getByText(/测试博士/).first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "前往森空岛状态" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "前往森空岛同步" })).toBeVisible();
   await expect(page.getByRole("button", { name: "使用当前干员数据" })).toHaveCount(0);
-  await page.getByRole("button", { name: "前往森空岛状态" }).click();
+  await page.getByRole("button", { name: "前往森空岛同步" }).click();
   await expect(page.getByRole("heading", { name: "测试博士" }).first()).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("setup can restore cached Skland data after switching to the sample", async ({ page }) => {
+  await mockApis(page, {
+    sklandConfigured: true,
+    sklandSnapshot: authenticatedSklandSnapshot,
+  });
+  await seedV4Session(page);
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "配置Box与布局" }).first().click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("tab", { name: "干员数据", exact: true }).click();
+  await dialog.getByRole("button", { name: "更换", exact: true }).click();
+  await dialog.getByRole("tab", { name: "森空岛", exact: true }).click();
+
+  await expect(dialog.getByRole("button", { name: "使用森空岛数据", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "重新同步", exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "使用森空岛数据", exact: true }).click();
+
+  await expect(dialog.getByRole("tab", { name: "基建与换班", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(dialog.getByRole("button", { name: "检查设施", exact: true })).toBeVisible();
+  await dialog.getByRole("tab", { name: "干员数据", exact: true }).click();
+  await expect(dialog.getByText("森空岛同步", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("2 名干员 · 2 名可用", { exact: true })).toBeVisible();
 });
 
 test("settings clears local product data without logging out of Skland", async ({ page }) => {
@@ -1992,8 +2045,9 @@ test("settings clears local product data without logging out of Skland", async (
   await page.goto("/");
 
   await page.getByRole("button", { name: "配置Box与布局" }).click();
-  await page.getByRole("tab", { name: /导入干员数据/ }).click();
-  const storageCopy = page.getByText(/会在此浏览器保存 30 天/);
+  await page.getByRole("tab", { name: "干员数据", exact: true }).click();
+  await page.getByText("数据管理", { exact: true }).click();
+  const storageCopy = page.getByText("数据在此浏览器保存 30 天。", { exact: true });
   await storageCopy.scrollIntoViewIfNeeded();
   await expect(storageCopy).toBeVisible();
   await page.getByRole("button", { name: "清除本地数据" }).first().click();
