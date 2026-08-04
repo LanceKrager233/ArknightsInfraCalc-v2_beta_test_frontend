@@ -27,7 +27,7 @@ const LIST_FUNCTIONAL_FACILITY_ORDER: Partial<Record<RoomGroup, number>> = {
 };
 
 export const LIST_OPERATOR_ORIGIN_PX = 248;
-export const LIST_OPERATOR_FRAME_SIZE_PX = 88;
+export const LIST_OPERATOR_FRAME_SIZE_PX = 80;
 export const LIST_OPERATOR_GAP_MAX_PX = 20;
 export const LIST_FUNCTIONAL_GROUP_GAP_PX = 12;
 export const LIST_MEETING_OPERATOR_WIDTH_PX =

@@ -122,7 +122,7 @@ test("keeps meeting operators on the same origin and existing gap", () => {
 
 test("uses a fixed three-column functional facility grid on desktop", () => {
   assert.equal(LIST_OPERATOR_ORIGIN_PX, 248);
-  assert.equal(LIST_OPERATOR_FRAME_SIZE_PX, 88);
+  assert.equal(LIST_OPERATOR_FRAME_SIZE_PX, 80);
   assert.equal(LIST_OPERATOR_GAP_MAX_PX, 20);
   assert.equal(LIST_FUNCTIONAL_GROUP_GAP_PX, 12);
   assert.equal(

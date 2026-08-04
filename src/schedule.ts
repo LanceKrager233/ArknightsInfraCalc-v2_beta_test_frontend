@@ -1,4 +1,4 @@
-import { operatorPortraitFor } from "./operatorPortraits";
+import { operatorPresentationFor, type BuildingSkillPresentation } from "./operatorPortraits";
 import { maaRoomAutofill } from "./schedule-autofill";
 import { BaseBlueprint, BlueprintRoom, MaaOperatorSlot, MaaPlan, MaaRoom, MaaRooms, RoomEfficiency, RoomKind, RotationShift } from "./types";
 
@@ -27,6 +27,7 @@ export interface RoomOperatorSlot {
   label: string;
   skill?: number;
   portrait?: string;
+  buildingSkill?: BuildingSkillPresentation;
 }
 
 const GROUP_LABELS: Record<RoomGroup, string> = {
@@ -121,10 +122,11 @@ function operatorSlot(value: unknown): RoomOperatorSlot | null {
   if (typeof value === "string") {
     const name = value.trim();
     if (!name) return null;
+    const presentation = operatorPresentationFor({ name });
     return {
       name,
       label: name,
-      portrait: operatorPortraitFor(name),
+      portrait: presentation.portrait,
     };
   }
 
@@ -132,11 +134,13 @@ function operatorSlot(value: unknown): RoomOperatorSlot | null {
     const slot = value as MaaOperatorSlot;
     const name = slot.name?.trim();
     if (!name) return null;
+    const presentation = operatorPresentationFor({ name, skill: slot.skill });
     return {
       name,
       label: slot.skill ? `${name} S${slot.skill}` : name,
       skill: slot.skill,
-      portrait: operatorPortraitFor(name),
+      portrait: presentation.portrait,
+      buildingSkill: presentation.buildingSkill,
     };
   }
 

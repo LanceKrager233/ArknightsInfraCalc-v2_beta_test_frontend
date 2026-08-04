@@ -632,7 +632,7 @@ function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
               slot={{
                 name: operator.name,
                 label: `${operator.name} · 已工作 ${formatDuration(operator.workTime)}`,
-                portrait: operatorPortraitFor(operator.name),
+                portrait: operatorPortraitFor(operator.name, operator.id),
               }}
               currentMorale={operator.morale}
               compactView

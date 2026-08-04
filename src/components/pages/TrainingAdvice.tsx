@@ -107,7 +107,7 @@ function ActionCard({
   action: UserProfileAction;
   entry?: OperBoxEntry;
 }) {
-  const portrait = operatorPortraitFor(action.operator);
+  const portrait = operatorPortraitFor(action.operator, entry?.id);
   const currentElite = action.current_elite ?? entry?.elite;
   const state = !entry?.own
     ? "未拥有"
@@ -124,14 +124,14 @@ function ActionCard({
       dataSlot="training-advice-card"
       showEmblem={false}
     >
-      <div className="grid min-w-0 gap-4 sm:grid-cols-[88px_minmax(0,1fr)_auto] sm:items-center">
-        <div className="relative size-[88px] overflow-hidden bg-[#3C3C3C] outline outline-1 -outline-offset-1 outline-white/12">
+      <div className="grid min-w-0 gap-4 sm:grid-cols-[80px_minmax(0,1fr)_auto] sm:items-center">
+        <div className="relative size-20 overflow-hidden bg-[#3C3C3C] outline outline-1 -outline-offset-1 outline-white/12">
           {portrait ? (
             <img
               src={portrait}
               alt={action.operator}
-              width={88}
-              height={88}
+              width={80}
+              height={80}
               loading="lazy"
               className="h-full w-full object-cover"
             />

@@ -1,0 +1,150 @@
+name: Sync arkntools assets
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+    inputs:
+      allow_removals:
+        description: "Allow confirmed removals from managed asset directories"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-arkntools-assets
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      UPDATE_BRANCH: automation/arkntools-assets
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Checkout frontend
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout public arkntools data
+        uses: actions/checkout@v4
+        with:
+          repository: arkntools/arknights-toolbox-data
+          path: .tmp/arkntools-data
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /assets/data/character.json
+            /assets/data/building.json
+            /assets/locales/cn/character.json
+            /assets/locales/cn/building.json
+            /assets/img/avatar
+            /assets/img/building_skill
+            /LICENSE
+            /package.json
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Capture previous generated catalogs
+        shell: bash
+        run: |
+          git show HEAD:src/generated/arkntools/operator-catalog.json > "$RUNNER_TEMP/operators-before.json" || printf '[]\n' > "$RUNNER_TEMP/operators-before.json"
+          git show HEAD:src/generated/arkntools/building-skill-catalog.json > "$RUNNER_TEMP/skills-before.json" || printf '{}\n' > "$RUNNER_TEMP/skills-before.json"
+
+      - name: Read upstream commit
+        id: upstream
+        shell: bash
+        run: echo "sha=$(git -C .tmp/arkntools-data rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Generate and validate assets
+        shell: bash
+        run: |
+          arguments=(--source .tmp/arkntools-data --source-sha "${{ steps.upstream.outputs.sha }}")
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.allow_removals }}" == "true" ]]; then
+            arguments+=(--allow-removals)
+          fi
+          npm run assets:sync:arkntools -- "${arguments[@]}"
+
+      - name: Run pre-PR quality gates
+        run: |
+          npm run check
+          npm run build
+
+      - name: Detect generated changes
+        id: changes
+        shell: bash
+        run: |
+          if [[ -n "$(git status --porcelain -- public/images/operator-portraits public/images/building-skills src/generated/arkntools)" ]]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No arkntools asset changes for ${{ steps.upstream.outputs.sha }}." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Build pull request body
+        if: steps.changes.outputs.changed == 'true'
+        shell: bash
+        run: |
+          node scripts/arkntools-pr-summary.mjs \
+            --before-operators "$RUNNER_TEMP/operators-before.json" \
+            --before-skills "$RUNNER_TEMP/skills-before.json" \
+            > "$RUNNER_TEMP/arkntools-pr-body.md"
+          cat "$RUNNER_TEMP/arkntools-pr-body.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit and push managed update branch
+        if: steps.changes.outputs.changed == 'true'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin "$UPDATE_BRANCH:refs/remotes/origin/$UPDATE_BRANCH" || true
+          git switch -C "$UPDATE_BRANCH"
+          git add -- public/images/operator-portraits public/images/building-skills src/generated/arkntools
+          git commit -m "chore: 同步 arkntools 干员资源"
+          git push --force-with-lease origin "HEAD:$UPDATE_BRANCH"
+
+      - name: Create or refresh pull request
+        if: steps.changes.outputs.changed == 'true'
+        id: pull-request
+        shell: bash
+        run: |
+          number="$(gh pr list --base main --head "$UPDATE_BRANCH" --state open --json number --jq '.[0].number // empty')"
+          if [[ -z "$number" ]]; then
+            gh pr create \
+              --base main \
+              --head "$UPDATE_BRANCH" \
+              --title "chore: 同步 arkntools 干员素材与基建技能" \
+              --body-file "$RUNNER_TEMP/arkntools-pr-body.md"
+          else
+            gh pr edit "$number" \
+              --title "chore: 同步 arkntools 干员素材与基建技能" \
+              --body-file "$RUNNER_TEMP/arkntools-pr-body.md"
+          fi
+
+      - name: Dispatch full frontend quality workflow
+        if: steps.changes.outputs.changed == 'true'
+        shell: bash
+        run: gh workflow run frontend-quality.yml --ref "$UPDATE_BRANCH"
+
+      - name: Report failure
+        if: failure()
+        shell: bash
+        run: |
+          echo "## arkntools 资源同步失败" >> "$GITHUB_STEP_SUMMARY"
+          echo "未创建或刷新自动资源 PR；main 中最后一次已验证资源保持不变。" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,435 @@
+import { lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile, copyFile } from "node:fs/promises";
+import path from "node:path";
+
+import sharp from "sharp";
+
+export const ARKNTOOLS_REPOSITORY = "https://github.com/arkntools/arknights-toolbox-data";
+export const GENERATED_VERSION = 1;
+
+const MANAGED_PATHS = [
+  "public/images/operator-portraits",
+  "public/images/building-skills",
+  "src/generated/arkntools",
+];
+
+const SOURCE_PATHS = {
+  characterData: "assets/data/character.json",
+  buildingData: "assets/data/building.json",
+  characterLocale: "assets/locales/cn/character.json",
+  buildingLocale: "assets/locales/cn/building.json",
+  portraits: "assets/img/avatar",
+  buildingSkills: "assets/img/building_skill",
+};
+
+const SAFE_ASSET_NAME = /^[A-Za-z0-9_&]+$/;
+
+function isObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+function assertInside(root, target, label) {
+  const relative = path.relative(path.resolve(root), path.resolve(target));
+  assert(relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative), `${label} 超出受管目录。`);
+}
+
+async function readJson(filePath, label) {
+  const stat = await lstat(filePath);
+  assert(stat.isFile() && !stat.isSymbolicLink(), `${label} 必须是普通文件。`);
+  try {
+    return JSON.parse(await readFile(filePath, "utf8"));
+  } catch (error) {
+    throw new Error(`${label} 不是有效 JSON：${error instanceof Error ? error.message : String(error)}`, { cause: error });
+  }
+}
+
+function sortedObject(entries) {
+  return Object.fromEntries([...entries].sort(([left], [right]) => left.localeCompare(right, "en")));
+}
+
+function sameKeys(left, right, leftLabel, rightLabel) {
+  const leftKeys = Object.keys(left).sort();
+  const rightKeys = Object.keys(right).sort();
+  assert(
+    leftKeys.length === rightKeys.length && leftKeys.every((value, index) => value === rightKeys[index]),
+    `${leftLabel} 与 ${rightLabel} 的干员集合不一致。`
+  );
+}
+
+export function stripGameMarkup(value) {
+  assert(typeof value === "string", "基建技能描述必须是字符串。");
+  return value
+    .replace(/<[^>]*>/g, "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function parseUnlock(value) {
+  assert(typeof value === "string", "基建技能解锁条件必须是字符串。");
+  const match = /^(\d+)_(\d+)$/.exec(value);
+  assert(match, `无法解析基建技能解锁条件：${value}`);
+  const elite = Number(match[1]);
+  const level = Number(match[2]);
+  assert(Number.isInteger(elite) && elite >= 0 && elite <= 2, `非法精英阶段：${value}`);
+  assert(Number.isInteger(level) && level >= 1 && level <= 90, `非法等级：${value}`);
+  return { elite, level };
+}
+
+async function mapLimit(items, limit, mapper) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await mapper(items[index], index);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
+  return results;
+}
+
+async function validatePng(filePath, width, height, label) {
+  const stat = await lstat(filePath);
+  assert(stat.isFile() && !stat.isSymbolicLink(), `${label} 必须是普通 PNG 文件。`);
+  const metadata = await sharp(filePath).metadata();
+  assert(metadata.format === "png", `${label} 不是 PNG。`);
+  assert(metadata.width === width && metadata.height === height, `${label} 尺寸应为 ${width}×${height}。`);
+}
+
+async function inspectSourceIcon(filePath, label) {
+  const stat = await lstat(filePath);
+  assert(stat.isFile() && !stat.isSymbolicLink(), `${label} 必须是普通 PNG 文件。`);
+  const metadata = await sharp(filePath).metadata();
+  assert(metadata.format === "png", `${label} 不是 PNG。`);
+  const exact = metadata.width === 36 && metadata.height === 36;
+  const knownNarrowInput = metadata.width === 35 && metadata.height === 36;
+  assert(exact || knownNarrowInput, `${label} 尺寸应为 36×36，最多只允许宽度缺少一个透明像素。`);
+  return { normalizeWidth: knownNarrowInput };
+}
+
+function normalizeCommit(value) {
+  assert(typeof value === "string" && /^[0-9a-f]{40}$/i.test(value), "必须提供 40 位上游 commit SHA。");
+  return value.toLowerCase();
+}
+
+function relativeAssetPath(directory, name) {
+  return `/images/${directory}/${name}.png`;
+}
+
+async function loadSource(sourceRoot, sourceSha) {
+  const resolvedSource = path.resolve(sourceRoot);
+  const [characterData, buildingData, characterLocale, buildingLocale] = await Promise.all([
+    readJson(path.join(resolvedSource, SOURCE_PATHS.characterData), "干员数据"),
+    readJson(path.join(resolvedSource, SOURCE_PATHS.buildingData), "基建数据"),
+    readJson(path.join(resolvedSource, SOURCE_PATHS.characterLocale), "干员中文本地化"),
+    readJson(path.join(resolvedSource, SOURCE_PATHS.buildingLocale), "基建中文本地化"),
+  ]);
+
+  assert(isObject(characterData), "干员数据根节点必须是对象。");
+  assert(isObject(characterLocale), "干员本地化根节点必须是对象。");
+  assert(isObject(buildingData) && isObject(buildingData.char) && isObject(buildingData.buff?.data), "基建数据结构不完整。");
+  assert(isObject(buildingLocale?.buff?.name) && isObject(buildingLocale?.buff?.description), "基建本地化结构不完整。");
+  sameKeys(characterData, characterLocale, "干员数据", "干员本地化");
+  sameKeys(characterData, buildingData.char, "干员数据", "基建技能映射");
+
+  const names = new Map();
+  const referencedSkillIds = new Set();
+  const referencedIcons = new Set();
+  const operators = [];
+
+  for (const shortId of Object.keys(characterData).sort((left, right) => left.localeCompare(right, "en"))) {
+    assert(SAFE_ASSET_NAME.test(shortId), `不安全的干员 ID：${shortId}`);
+    const metadata = characterData[shortId];
+    const name = characterLocale[shortId];
+    const rawSkills = buildingData.char[shortId];
+    assert(isObject(metadata), `干员 ${shortId} 的数据无效。`);
+    assert(typeof name === "string" && name.trim(), `干员 ${shortId} 缺少中文名称。`);
+    assert(!names.has(name), `干员名称重复：${name}（${names.get(name)}、${shortId}）。`);
+    assert(Number.isInteger(metadata.star) && metadata.star >= 1 && metadata.star <= 6, `干员 ${shortId} 的稀有度无效。`);
+    assert(Number.isInteger(metadata.profession), `干员 ${shortId} 的职业字段无效。`);
+    assert(Number.isInteger(metadata.position), `干员 ${shortId} 的站位字段无效。`);
+    assert(Array.isArray(rawSkills), `干员 ${shortId} 的基建技能必须是数组。`);
+    names.set(name, shortId);
+
+    const buildingSkills = rawSkills.map((rawSkill, offset) => {
+      assert(isObject(rawSkill), `干员 ${shortId} 的第 ${offset + 1} 个基建技能无效。`);
+      assert(typeof rawSkill.id === "string" && rawSkill.id.trim(), `干员 ${shortId} 的第 ${offset + 1} 个基建技能缺少 ID。`);
+      assert(buildingData.buff.data[rawSkill.id], `干员 ${shortId} 引用了未知基建技能 ${rawSkill.id}。`);
+      referencedSkillIds.add(rawSkill.id);
+      return {
+        index: offset + 1,
+        id: rawSkill.id,
+        ...parseUnlock(rawSkill.unlock),
+      };
+    });
+
+    operators.push({
+      id: `char_${shortId}`,
+      name,
+      rarity: metadata.star,
+      profession: metadata.profession,
+      position: metadata.position,
+      portrait: relativeAssetPath("operator-portraits", shortId),
+      buildingSkills,
+    });
+  }
+
+  const skills = [];
+  for (const skillId of Object.keys(buildingData.buff.data).sort((left, right) => left.localeCompare(right, "en"))) {
+    const metadata = buildingData.buff.data[skillId];
+    assert(isObject(metadata), `基建技能 ${skillId} 的数据无效。`);
+    assert(typeof metadata.icon === "string" && SAFE_ASSET_NAME.test(metadata.icon), `基建技能 ${skillId} 的图标名不安全。`);
+    assert(typeof metadata.desc === "string" && metadata.desc.trim(), `基建技能 ${skillId} 缺少描述索引。`);
+    const name = buildingLocale.buff.name[skillId];
+    const rawDescription = buildingLocale.buff.description[metadata.desc];
+    assert(typeof name === "string" && name.trim(), `基建技能 ${skillId} 缺少中文名称。`);
+    assert(typeof rawDescription === "string" && rawDescription.trim(), `基建技能 ${skillId} 缺少中文描述。`);
+    referencedIcons.add(metadata.icon);
+    skills.push({
+      id: skillId,
+      name,
+      description: stripGameMarkup(rawDescription),
+      icon: relativeAssetPath("building-skills", metadata.icon),
+    });
+  }
+
+  for (const skillId of referencedSkillIds) {
+    assert(buildingData.buff.data[skillId], `缺少被干员引用的基建技能 ${skillId}。`);
+  }
+
+  const portraitFiles = operators.map((operator) => {
+    const shortId = operator.id.slice("char_".length);
+    return {
+      name: `${shortId}.png`,
+      source: path.join(resolvedSource, SOURCE_PATHS.portraits, `${shortId}.png`),
+    };
+  });
+  const iconFiles = [...referencedIcons].sort((left, right) => left.localeCompare(right, "en")).map((icon) => ({
+    name: `${icon}.png`,
+    source: path.join(resolvedSource, SOURCE_PATHS.buildingSkills, `${icon}.png`),
+  }));
+
+  await mapLimit(portraitFiles, 16, ({ source, name }) => validatePng(source, 80, 80, `干员头像 ${name}`));
+  await mapLimit(iconFiles, 16, async (file) => {
+    Object.assign(file, await inspectSourceIcon(file.source, `基建技能图标 ${file.name}`));
+  });
+
+  const skillCatalog = sortedObject(skills.map((skill) => [skill.id, skill]));
+  const manifest = {
+    version: GENERATED_VERSION,
+    source: {
+      repository: ARKNTOOLS_REPOSITORY,
+      commit: normalizeCommit(sourceSha),
+    },
+    counts: {
+      operators: operators.length,
+      buildingSkills: skills.length,
+      portraits: portraitFiles.length,
+      buildingSkillIcons: iconFiles.length,
+    },
+  };
+
+  return { operators, skills: skillCatalog, manifest, portraitFiles, iconFiles };
+}
+
+function json(value) {
+  return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+async function writeStage(stageRoot, generated) {
+  const portraitTarget = path.join(stageRoot, MANAGED_PATHS[0]);
+  const iconTarget = path.join(stageRoot, MANAGED_PATHS[1]);
+  const dataTarget = path.join(stageRoot, MANAGED_PATHS[2]);
+  await Promise.all([mkdir(portraitTarget, { recursive: true }), mkdir(iconTarget, { recursive: true }), mkdir(dataTarget, { recursive: true })]);
+
+  await Promise.all([
+    mapLimit(generated.portraitFiles, 16, ({ source, name }) => copyFile(source, path.join(portraitTarget, name))),
+    mapLimit(generated.iconFiles, 16, ({ source, name, normalizeWidth }) => normalizeWidth
+      ? sharp(source)
+          .extend({ right: 1, background: { r: 0, g: 0, b: 0, alpha: 0 } })
+          .png({ compressionLevel: 9 })
+          .toFile(path.join(iconTarget, name))
+      : copyFile(source, path.join(iconTarget, name))),
+    writeFile(path.join(dataTarget, "operator-catalog.json"), json(generated.operators), "utf8"),
+    writeFile(path.join(dataTarget, "building-skill-catalog.json"), json(generated.skills), "utf8"),
+    writeFile(path.join(dataTarget, "source.json"), json(generated.manifest), "utf8"),
+  ]);
+}
+
+async function listRegularPngNames(directory, label) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    assert(entry.isFile() && !entry.isSymbolicLink(), `${label} 只能包含普通文件：${entry.name}`);
+    assert(entry.name.endsWith(".png") && SAFE_ASSET_NAME.test(entry.name.slice(0, -4)), `${label} 包含不安全文件名：${entry.name}`);
+    files.push(entry.name);
+  }
+  return files.sort((left, right) => left.localeCompare(right, "en"));
+}
+
+export async function checkGeneratedAssets(root) {
+  const resolvedRoot = path.resolve(root);
+  const dataRoot = path.join(resolvedRoot, MANAGED_PATHS[2]);
+  const [operators, skills, manifest] = await Promise.all([
+    readJson(path.join(dataRoot, "operator-catalog.json"), "已生成干员目录"),
+    readJson(path.join(dataRoot, "building-skill-catalog.json"), "已生成基建技能目录"),
+    readJson(path.join(dataRoot, "source.json"), "已生成来源清单"),
+  ]);
+  assert(Array.isArray(operators), "已生成干员目录必须是数组。");
+  assert(isObject(skills), "已生成基建技能目录必须是对象。");
+  assert(isObject(manifest) && manifest.version === GENERATED_VERSION, "已生成来源清单版本无效。");
+  normalizeCommit(manifest.source?.commit);
+  assert(manifest.source?.repository === ARKNTOOLS_REPOSITORY, "已生成来源仓库无效。");
+
+  const ids = new Set();
+  const names = new Set();
+  const portraitNames = [];
+  const referencedIcons = new Set();
+  for (const operator of operators) {
+    assert(isObject(operator), "已生成干员条目无效。");
+    assert(typeof operator.id === "string" && operator.id.startsWith("char_") && SAFE_ASSET_NAME.test(operator.id.slice(5)), `已生成干员 ID 无效：${operator.id}`);
+    assert(typeof operator.name === "string" && operator.name.trim(), `已生成干员 ${operator.id} 缺少名称。`);
+    assert(!ids.has(operator.id), `已生成干员 ID 重复：${operator.id}`);
+    assert(!names.has(operator.name), `已生成干员名称重复：${operator.name}`);
+    ids.add(operator.id);
+    names.add(operator.name);
+    const shortId = operator.id.slice(5);
+    assert(operator.portrait === relativeAssetPath("operator-portraits", shortId), `干员 ${operator.id} 的头像路径无效。`);
+    portraitNames.push(`${shortId}.png`);
+    assert(Array.isArray(operator.buildingSkills), `干员 ${operator.id} 的基建技能无效。`);
+    operator.buildingSkills.forEach((skill, offset) => {
+      assert(skill.index === offset + 1, `干员 ${operator.id} 的基建技能序号不连续。`);
+      assert(skills[skill.id], `干员 ${operator.id} 引用了未知基建技能 ${skill.id}。`);
+      assert(Number.isInteger(skill.elite) && skill.elite >= 0 && skill.elite <= 2, `干员 ${operator.id} 的基建技能精英阶段无效。`);
+      assert(Number.isInteger(skill.level) && skill.level >= 1 && skill.level <= 90, `干员 ${operator.id} 的基建技能等级无效。`);
+    });
+  }
+
+  for (const [skillId, skill] of Object.entries(skills)) {
+    assert(isObject(skill) && skill.id === skillId, `已生成基建技能 ${skillId} 无效。`);
+    assert(typeof skill.name === "string" && skill.name.trim(), `已生成基建技能 ${skillId} 缺少名称。`);
+    assert(typeof skill.description === "string" && skill.description.trim(), `已生成基建技能 ${skillId} 缺少描述。`);
+    assert(!/<[^>]*>/.test(skill.description), `已生成基建技能 ${skillId} 仍包含富文本标记。`);
+    const prefix = "/images/building-skills/";
+    assert(typeof skill.icon === "string" && skill.icon.startsWith(prefix) && skill.icon.endsWith(".png"), `已生成基建技能 ${skillId} 的图标路径无效。`);
+    const icon = skill.icon.slice(prefix.length, -4);
+    assert(SAFE_ASSET_NAME.test(icon), `已生成基建技能 ${skillId} 的图标名不安全。`);
+    referencedIcons.add(`${icon}.png`);
+  }
+
+  const portraitDirectory = path.join(resolvedRoot, MANAGED_PATHS[0]);
+  const iconDirectory = path.join(resolvedRoot, MANAGED_PATHS[1]);
+  const [actualPortraits, actualIcons] = await Promise.all([
+    listRegularPngNames(portraitDirectory, "干员头像目录"),
+    listRegularPngNames(iconDirectory, "基建技能图标目录"),
+  ]);
+  const expectedPortraits = portraitNames.sort((left, right) => left.localeCompare(right, "en"));
+  const expectedIcons = [...referencedIcons].sort((left, right) => left.localeCompare(right, "en"));
+  assert(JSON.stringify(actualPortraits) === JSON.stringify(expectedPortraits), "干员头像目录与生成目录不一致。");
+  assert(JSON.stringify(actualIcons) === JSON.stringify(expectedIcons), "基建技能图标目录与生成目录不一致。");
+  assert(manifest.counts?.operators === operators.length, "来源清单的干员数量不一致。");
+  assert(manifest.counts?.buildingSkills === Object.keys(skills).length, "来源清单的基建技能数量不一致。");
+  assert(manifest.counts?.portraits === actualPortraits.length, "来源清单的头像数量不一致。");
+  assert(manifest.counts?.buildingSkillIcons === actualIcons.length, "来源清单的技能图标数量不一致。");
+
+  await mapLimit(actualPortraits, 16, (name) => validatePng(path.join(portraitDirectory, name), 80, 80, `干员头像 ${name}`));
+  await mapLimit(actualIcons, 16, (name) => validatePng(path.join(iconDirectory, name), 36, 36, `基建技能图标 ${name}`));
+  return manifest;
+}
+
+async function existingManifest(root) {
+  try {
+    return await readJson(path.join(root, MANAGED_PATHS[2], "source.json"), "现有来源清单");
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+async function existingManagedFiles(root) {
+  const files = new Set();
+  for (const relative of MANAGED_PATHS) {
+    const target = path.join(root, relative);
+    try {
+      const entries = await readdir(target, { recursive: true, withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isFile()) files.add(path.join(relative, entry.parentPath ? path.relative(target, entry.parentPath) : "", entry.name).replaceAll("\\", "/"));
+      }
+    } catch (error) {
+      if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT")) throw error;
+    }
+  }
+  return files;
+}
+
+async function desiredManagedFiles(stageRoot) {
+  return existingManagedFiles(stageRoot);
+}
+
+async function installStage(root, stageRoot) {
+  const backupRoot = await mkdtemp(path.join(root, ".tmp", "arkntools-assets-backup-"));
+  const installed = [];
+  const backedUp = [];
+  try {
+    for (const relative of MANAGED_PATHS) {
+      const target = path.join(root, relative);
+      const staged = path.join(stageRoot, relative);
+      const backup = path.join(backupRoot, relative);
+      assertInside(root, target, `受管路径 ${relative}`);
+      await mkdir(path.dirname(target), { recursive: true });
+      try {
+        await lstat(target);
+        await mkdir(path.dirname(backup), { recursive: true });
+        await rename(target, backup);
+        backedUp.push({ target, backup });
+      } catch (error) {
+        if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT")) throw error;
+      }
+      await rename(staged, target);
+      installed.push(target);
+    }
+  } catch (error) {
+    for (const target of installed.reverse()) await rm(target, { recursive: true, force: true });
+    for (const { target, backup } of backedUp.reverse()) await rename(backup, target);
+    throw error;
+  } finally {
+    await rm(backupRoot, { recursive: true, force: true });
+  }
+}
+
+export async function generateAssets({ sourceRoot, sourceSha, outputRoot, allowRemovals = false }) {
+  const root = path.resolve(outputRoot);
+  const generated = await loadSource(sourceRoot, sourceSha);
+  const currentManifest = await existingManifest(root);
+  if (currentManifest && generated.manifest.counts.operators < currentManifest.counts?.operators && !allowRemovals) {
+    throw new Error(`上游干员数量从 ${currentManifest.counts.operators} 降至 ${generated.manifest.counts.operators}；请人工确认后使用 --allow-removals。`);
+  }
+
+  await mkdir(path.join(root, ".tmp"), { recursive: true });
+  const stageRoot = await mkdtemp(path.join(root, ".tmp", "arkntools-assets-stage-"));
+  try {
+    await writeStage(stageRoot, generated);
+    await checkGeneratedAssets(stageRoot);
+    const [beforeFiles, afterFiles] = await Promise.all([existingManagedFiles(root), desiredManagedFiles(stageRoot)]);
+    const removals = [...beforeFiles].filter((file) => !afterFiles.has(file)).sort();
+    if (removals.length > 0 && !allowRemovals) {
+      throw new Error(`本次更新将删除 ${removals.length} 个受管文件；请人工确认后使用 --allow-removals。首个文件：${removals[0]}`);
+    }
+    await installStage(root, stageRoot);
+    await checkGeneratedAssets(root);
+    return { manifest: generated.manifest, removals };
+  } finally {
+    await rm(stageRoot, { recursive: true, force: true });
+  }
+}

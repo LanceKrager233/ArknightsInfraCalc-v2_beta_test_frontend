@@ -1065,7 +1065,7 @@ function OperatorSlotShell({
         "infra-operator-slot min-w-0 shrink-0",
         compactView
           ? COMPACT_OPERATOR_SIZE_CLASS
-          : "[--operator-slot-size:clamp(70px,7.3vw,88px)] max-sm:[--operator-slot-size:clamp(56px,16vw,76px)]",
+          : "[--operator-slot-size:clamp(70px,7.3vw,80px)] max-sm:[--operator-slot-size:clamp(56px,16vw,76px)]",
         compactFactory && "min-[1800px]:[--operator-slot-size:70px]",
         centerFrameInList && "max-sm:w-full sm:relative sm:h-full sm:w-[var(--operator-slot-size)]",
       )}
@@ -1092,6 +1092,46 @@ function OperatorSlotShell({
         {label}
       </span>
     </div>
+  );
+}
+
+function buildingSkillUnlockLabel(elite: number, level: number): string {
+  if (elite === 0 && level === 1) return "初始解锁";
+  if (elite === 0) return `等级 ${level} 解锁`;
+  if (level === 1) return `精英 ${elite} 解锁`;
+  return `精英 ${elite} · 等级 ${level} 解锁`;
+}
+
+function BuildingSkillBadge({ skill }: { skill: NonNullable<RoomRow["operatorSlots"][number]["buildingSkill"]> }) {
+  const [open, setOpen] = useState(false);
+  const unlockLabel = buildingSkillUnlockLabel(skill.elite, skill.level);
+  return (
+    <Tooltip open={open} onOpenChange={setOpen}>
+      <TooltipTrigger
+        closeOnClick={false}
+        render={
+          <button
+            type="button"
+            className="absolute right-0 top-0 z-10 flex size-10 items-center justify-center border-b border-l border-white/22 bg-black/76 text-white outline-none transition-colors hover:bg-black/88 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FFD800] max-sm:size-11"
+            aria-label={`基建技能 S${skill.index}：${skill.name}，${unlockLabel}`}
+            onFocus={() => setOpen(true)}
+            onBlur={() => setOpen(false)}
+            onClick={() => setOpen(true)}
+          >
+            <img src={skill.icon} alt="" className="size-9 shrink-0 object-contain" aria-hidden="true" />
+          </button>
+        }
+      />
+      <TooltipContent
+        side="top"
+        align="end"
+        className="max-w-80 flex-col items-start gap-1.5 whitespace-normal px-3 py-2 text-left leading-relaxed"
+      >
+        <span className="font-semibold">S{skill.index} · {skill.name}</span>
+        <span className="text-background/72">{unlockLabel}</span>
+        <span>{skill.description}</span>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -1158,6 +1198,16 @@ export function OperatorSlot({
               {slot.name}
             </div>
           )}
+          {slot.buildingSkill ? (
+            <BuildingSkillBadge skill={slot.buildingSkill} />
+          ) : typeof slot.skill === "number" ? (
+            <span
+              className="absolute right-0 top-0 z-10 flex size-9 items-center justify-center border-b border-l border-white/22 bg-black/76 text-xs font-semibold text-white"
+              aria-label={`基建技能 S${slot.skill}，暂无技能资料`}
+            >
+              S{slot.skill}
+            </span>
+          ) : null}
           {typeof currentMorale === "number" ? (
           <span
             className="absolute bottom-0.5 left-0.5 flex items-center gap-0.5 whitespace-nowrap rounded-sm bg-black/72 px-1 py-0.5 text-xs font-normal leading-none text-white shadow-[0_1px_3px_rgba(0,0,0,0.5)] [&_svg]:size-2.5 max-sm:bottom-0.5 max-sm:left-0.5 max-sm:px-0.5 max-sm:[&_svg]:size-2.5"

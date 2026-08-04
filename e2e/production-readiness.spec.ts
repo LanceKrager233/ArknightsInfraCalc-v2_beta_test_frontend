@@ -152,11 +152,11 @@ const scheduleVisualPlanData = {
       rooms: {
         trading: [{
           product: "LMD",
-          operators: ["阿米娅", "凯尔希", "贝洛内"],
+          operators: [{ name: "阿米娅", skill: 1 }, { name: "凯尔希", skill: 99 }, "贝洛内"],
           sort: true,
           autofill: false,
         }],
-        processing: [{ operators: ["阿米娅"] }],
+        processing: [{ operators: [{ name: "阿米娅", skill: 2 }] }],
       },
     })),
   },
@@ -1280,6 +1280,16 @@ test("schedule visuals use a stable technical canvas and responsive level marker
   await listViewTab.click();
   await expect(listDiamonds).toBeVisible();
 
+  const buildingSkillBadge = page.getByRole("button", { name: /基建技能 S1：合作协议/ }).first();
+  await expect(buildingSkillBadge).toBeVisible();
+  await buildingSkillBadge.focus();
+  await expect(page.getByText("S1 · 合作协议").first()).toBeVisible();
+  await expect(page.getByText(/所有贸易站订单效率\+7%/).first()).toBeVisible();
+  await expect(page.getByLabel("基建技能 S99，暂无技能资料").first()).toBeVisible();
+  await expect.poll(() => page.locator('img[src^="/images/building-skills/"]').first().evaluate(
+    (image) => (image as HTMLImageElement).naturalWidth
+  )).toBe(36);
+
   const visualStyles = await page.evaluate(() => {
     const room = document.querySelector<HTMLElement>(".infra-room-surface");
     if (!room) throw new Error("Missing room surface");
@@ -1360,6 +1370,9 @@ test("schedule visuals use a stable technical canvas and responsive level marker
   expect(mobileBox?.height).toBeCloseTo(16, 0);
   const mobileDiamondBox = await mobileDiamonds.locator(".level-diamond").first().boundingBox();
   expect(mobileDiamondBox?.width).toBeCloseTo(8, 0);
+  const mobileSkillBox = await buildingSkillBadge.boundingBox();
+  expect(mobileSkillBox?.width).toBeGreaterThanOrEqual(44);
+  expect(mobileSkillBox?.height).toBeGreaterThanOrEqual(44);
 });
 
 test("Skland login shows QR on every viewport and offers a separate mobile app shortcut", async ({ page }) => {

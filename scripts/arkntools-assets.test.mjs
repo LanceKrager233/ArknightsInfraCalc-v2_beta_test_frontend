@@ -1,0 +1,135 @@
+import assert from "node:assert/strict";
+import { mkdtemp, mkdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+
+import sharp from "sharp";
+
+import { checkGeneratedAssets, generateAssets, parseUnlock, stripGameMarkup } from "./arkntools-assets-lib.mjs";
+
+const SOURCE_SHA = "0123456789abcdef0123456789abcdef01234567";
+
+async function makeTemp(t) {
+  const root = await mkdtemp(path.join(os.tmpdir(), "arkntools-assets-test-"));
+  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+  return root;
+}
+
+async function png(filePath, width, height, color) {
+  await sharp({ create: { width, height, channels: 4, background: color } }).png().toFile(filePath);
+}
+
+async function createSource(root, operatorIds = ["001_alpha", "002_beta"]) {
+  const directories = [
+    "assets/data",
+    "assets/locales/cn",
+    "assets/img/avatar",
+    "assets/img/building_skill",
+  ];
+  await Promise.all(directories.map((directory) => mkdir(path.join(root, directory), { recursive: true })));
+
+  const characters = Object.fromEntries(operatorIds.map((id, index) => [id, {
+    star: index === 0 ? 6 : 5,
+    profession: index + 1,
+    position: 10,
+  }]));
+  const names = Object.fromEntries(operatorIds.map((id, index) => [id, index === 0 ? "测试甲" : "测试乙"]));
+  const charSkills = Object.fromEntries(operatorIds.map((id, index) => [id, [{
+    id: index === 0 ? "skill_alpha" : "skill_beta",
+    unlock: index === 0 ? "0_1" : "2_1",
+  }]]));
+  const buffData = {
+    skill_alpha: { icon: "icon_shared", desc: "desc_alpha" },
+    ...(operatorIds.length > 1 ? { skill_beta: { icon: "icon_beta", desc: "desc_beta" } } : {}),
+  };
+  const buffNames = {
+    skill_alpha: "技能甲",
+    ...(operatorIds.length > 1 ? { skill_beta: "技能乙" } : {}),
+  };
+  const descriptions = {
+    desc_alpha: "进驻时，生产力<@cc.vup>+10%</>。",
+    ...(operatorIds.length > 1 ? { desc_beta: "精英后<$cc.test><@cc.kw>生效</></>。" } : {}),
+  };
+
+  await Promise.all([
+    writeFile(path.join(root, "assets/data/character.json"), JSON.stringify(characters), "utf8"),
+    writeFile(path.join(root, "assets/locales/cn/character.json"), JSON.stringify(names), "utf8"),
+    writeFile(path.join(root, "assets/data/building.json"), JSON.stringify({ char: charSkills, buff: { data: buffData } }), "utf8"),
+    writeFile(path.join(root, "assets/locales/cn/building.json"), JSON.stringify({ buff: { name: buffNames, description: descriptions } }), "utf8"),
+    ...operatorIds.map((id, index) => png(path.join(root, `assets/img/avatar/${id}.png`), 80, 80, { r: index * 40, g: 20, b: 30, alpha: 1 })),
+    png(path.join(root, "assets/img/building_skill/icon_shared.png"), 35, 36, { r: 10, g: 20, b: 30, alpha: 1 }),
+    ...(operatorIds.length > 1
+      ? [png(path.join(root, "assets/img/building_skill/icon_beta.png"), 36, 36, { r: 30, g: 20, b: 10, alpha: 1 })]
+      : []),
+  ]);
+}
+
+test("strips game markup and parses unlock requirements", () => {
+  assert.equal(stripGameMarkup("进驻<$cc.test><@cc.kw>制造站</></> &amp; 生效"), "进驻制造站 & 生效");
+  assert.deepEqual(parseUnlock("2_30"), { elite: 2, level: 30 });
+  assert.throws(() => parseUnlock("3_1"), /非法精英阶段/);
+  assert.throws(() => parseUnlock("bad"), /无法解析/);
+});
+
+test("generates deterministic catalogs and normalizes the known 35px icon input", async (t) => {
+  const root = await makeTemp(t);
+  const source = path.join(root, "source");
+  const first = path.join(root, "first");
+  const second = path.join(root, "second");
+  await createSource(source);
+
+  await generateAssets({ sourceRoot: source, sourceSha: SOURCE_SHA, outputRoot: first, allowRemovals: true });
+  await generateAssets({ sourceRoot: source, sourceSha: SOURCE_SHA, outputRoot: second, allowRemovals: true });
+  const manifest = await checkGeneratedAssets(first);
+  assert.deepEqual(manifest.counts, { operators: 2, buildingSkills: 2, portraits: 2, buildingSkillIcons: 2 });
+
+  const relativeFiles = [
+    "src/generated/arkntools/operator-catalog.json",
+    "src/generated/arkntools/building-skill-catalog.json",
+    "src/generated/arkntools/source.json",
+    "public/images/building-skills/icon_shared.png",
+  ];
+  for (const relative of relativeFiles) {
+    assert.deepEqual(await readFile(path.join(first, relative)), await readFile(path.join(second, relative)));
+  }
+  const normalized = await sharp(path.join(first, "public/images/building-skills/icon_shared.png")).metadata();
+  assert.deepEqual([normalized.width, normalized.height], [36, 36]);
+});
+
+test("rejects duplicate names and missing referenced images before installing output", async (t) => {
+  const root = await makeTemp(t);
+  const duplicateSource = path.join(root, "duplicate");
+  const missingImageSource = path.join(root, "missing-image");
+  await createSource(duplicateSource);
+  await createSource(missingImageSource);
+
+  const duplicateLocalePath = path.join(duplicateSource, "assets/locales/cn/character.json");
+  await writeFile(duplicateLocalePath, JSON.stringify({ "001_alpha": "重名", "002_beta": "重名" }), "utf8");
+  await assert.rejects(
+    generateAssets({ sourceRoot: duplicateSource, sourceSha: SOURCE_SHA, outputRoot: path.join(root, "duplicate-output"), allowRemovals: true }),
+    /干员名称重复/
+  );
+
+  await unlink(path.join(missingImageSource, "assets/img/building_skill/icon_beta.png"));
+  await assert.rejects(
+    generateAssets({ sourceRoot: missingImageSource, sourceSha: SOURCE_SHA, outputRoot: path.join(root, "missing-output"), allowRemovals: true }),
+    /ENOENT/
+  );
+});
+
+test("blocks managed file removals unless explicitly confirmed", async (t) => {
+  const root = await makeTemp(t);
+  const fullSource = path.join(root, "full-source");
+  const reducedSource = path.join(root, "reduced-source");
+  const output = path.join(root, "output");
+  await createSource(fullSource);
+  await createSource(reducedSource, ["001_alpha"]);
+  await generateAssets({ sourceRoot: fullSource, sourceSha: SOURCE_SHA, outputRoot: output, allowRemovals: true });
+
+  await assert.rejects(
+    generateAssets({ sourceRoot: reducedSource, sourceSha: SOURCE_SHA, outputRoot: output }),
+    /上游干员数量从 2 降至 1/
+  );
+  assert.equal((await checkGeneratedAssets(output)).counts.operators, 2);
+});
