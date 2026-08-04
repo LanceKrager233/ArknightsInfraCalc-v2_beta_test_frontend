@@ -21,7 +21,9 @@ export function LegalDocument({
         <header className="mt-8 border-b border-border pb-7">
           <p className="text-xs font-medium tracking-wide text-primary">{eyebrow}</p>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">{title}</h1>
-          <p className="mt-3 text-sm text-muted-foreground">版本与生效日期：{effectiveDate}</p>
+          <p className="mt-3 text-sm text-muted-foreground">
+            版本与生效日期：<span className="font-number">{effectiveDate}</span>
+          </p>
         </header>
         <div className="prose prose-neutral mt-8 max-w-none space-y-8 text-sm leading-7 dark:prose-invert [&_a]:font-medium [&_a]:text-foreground [&_a]:underline [&_a]:underline-offset-4 [&_h2]:mb-3 [&_h2]:mt-0 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:text-base [&_h3]:font-semibold [&_li]:my-1 [&_p]:my-2">
           {children}

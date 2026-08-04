@@ -88,7 +88,7 @@ function CompactRoomCard({
   const header = (
     <div className={COMPACT_HEADER_CLASS}>
       <span className="infra-room-accent h-5 w-1 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
-      <span className={COMPACT_ROOM_TITLE_CLASS}>{row.title}</span>
+      <span className={`${COMPACT_ROOM_TITLE_CLASS} font-number`}>{row.title}</span>
       <LevelDiamonds
         level={row.level}
         maxLevel={layoutRoom ? maxRoomLevel(layoutRoom.kind) : row.level}
@@ -124,7 +124,7 @@ function CompactRoomCard({
         <div className="font-technical flex flex-wrap items-center gap-x-1.5 text-xs tracking-[0.01em] text-white/76">
           <span className="infra-room-value font-semibold tabular-nums text-[var(--room-accent)]">{efficiency.primaryValue}</span>
           {efficiency.details.map((detail) => (
-            <span key={detail.label} className={detail.kind === "cross-station" ? "text-[#C8F75A]" : undefined}>
+            <span key={detail.label} className={`font-number ${detail.kind === "cross-station" ? "text-[#C8F75A]" : ""}`}>
               / {detail.label} {detail.value}
             </span>
           ))}

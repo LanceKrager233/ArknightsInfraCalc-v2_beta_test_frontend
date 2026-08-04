@@ -28,6 +28,53 @@ async function expectUnifiedDialogAction(
   await expect(button).toHaveCSS("font-size", "13px");
 }
 
+async function expectVisibleNumbersUseNumberFont(page: Page, scope: Locator = page.locator("body")) {
+  await page.evaluate(() => document.fonts.ready);
+  const audit = await scope.evaluate((root) => {
+    const numberFamily = getComputedStyle(document.documentElement)
+      .getPropertyValue("--font-number-source")
+      .split(",")[0]
+      .trim()
+      .replace(/^['"]|['"]$/g, "");
+    const elements = [root, ...Array.from(root.querySelectorAll<HTMLElement>("*"))]
+      .filter((element): element is HTMLElement => element instanceof HTMLElement);
+    const failures: Array<{ tag: string; text: string; fontFamily: string }> = [];
+
+    for (const element of elements) {
+      if (element.closest("svg, [aria-hidden='true']")) continue;
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      if (style.display === "none" || style.visibility === "hidden" || rect.width === 0 || rect.height === 0) continue;
+
+      const directText = Array.from(element.childNodes)
+        .filter((node) => node.nodeType === Node.TEXT_NODE)
+        .map((node) => node.textContent ?? "")
+        .join(" ");
+      const controlValue = element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement
+        ? element.value
+        : "";
+      const numericText = `${directText} ${controlValue}`.replace(/\s+/g, " ").trim();
+      if (!/\d/.test(numericText) || style.fontFamily.includes(numberFamily)) continue;
+
+      failures.push({
+        tag: element.tagName.toLowerCase(),
+        text: numericText.slice(0, 100),
+        fontFamily: style.fontFamily,
+      });
+    }
+
+    return {
+      failures,
+      loaded: Boolean(numberFamily) && document.fonts.check(`16px "${numberFamily}"`, "0123456789+-.,%/:−"),
+      numberFamily,
+    };
+  });
+
+  expect(audit.numberFamily).toBeTruthy();
+  expect(audit.loaded).toBe(true);
+  expect(audit.failures, JSON.stringify(audit.failures, null, 2)).toEqual([]);
+}
+
 const profile = {
   schema_version: 4,
   rotation_profile: "abc_12_6_6",
@@ -1477,6 +1524,65 @@ test("schedule visuals use a stable technical canvas and responsive level marker
   const mobileSkillBox = await buildingSkillBadge.boundingBox();
   expect(mobileSkillBox?.width).toBeGreaterThanOrEqual(44);
   expect(mobileSkillBox?.height).toBeGreaterThanOrEqual(44);
+});
+
+test("self-hosts Bender Bold for every visible numeric expression without responsive overflow", async ({ page }) => {
+  await mockApis(page, {
+    sklandConfigured: true,
+    sklandSnapshot: authenticatedSklandSnapshot,
+  });
+  await seedV4Session(page, scheduleVisualPlanData);
+  const fontRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.resourceType() === "font") fontRequests.push(request.url());
+  });
+
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/");
+  await expect(page.locator("[data-infra-canvas]")).toBeVisible({ timeout: 15_000 });
+
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 768, height: 900 },
+    { width: 1440, height: 1000 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expectVisibleNumbersUseNumberFont(page);
+    const dimensions = await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }));
+    expect(dimensions.scrollWidth, JSON.stringify({ viewport, dimensions })).toBeLessThanOrEqual(dimensions.clientWidth + 1);
+  }
+
+  await page.getByRole("button", { name: "配置Box与布局" }).first().click();
+  const setupDialog = page.getByRole("dialog");
+  await expect(setupDialog).toBeVisible();
+  await expectVisibleNumbersUseNumberFont(page, setupDialog);
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "练卡建议" }).click();
+  await expect(page.getByRole("heading", { name: "训练建议" })).toBeVisible();
+  await expectVisibleNumbersUseNumberFont(page);
+
+  await page.getByRole("button", { name: "森空岛状态", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "测试博士" }).first()).toBeVisible();
+  await expectVisibleNumbersUseNumberFont(page);
+  await page.getByRole("tab", { name: "基建", exact: true }).click();
+  await expectVisibleNumbersUseNumberFont(page);
+
+  for (const path of ["/privacy", "/terms"]) {
+    await page.goto(path);
+    await expectVisibleNumbersUseNumberFont(page);
+  }
+
+  const loadedFontResources = await page.evaluate(() => performance.getEntriesByType("resource")
+    .map((entry) => entry.name)
+    .filter((url) => /\.(?:otf|woff2?)(?:\?|$)/i.test(url)));
+  const allFontUrls = [...new Set([...fontRequests, ...loadedFontResources])];
+  expect(allFontUrls.some((url) => /\.otf(?:\?|$)/i.test(url))).toBe(true);
+  expect(allFontUrls.every((url) => new URL(url).origin === new URL(page.url()).origin)).toBe(true);
+  expect(allFontUrls.join("\n")).not.toMatch(/1001fonts|fonts2u|fontsquirrel|hypergryph/i);
 });
 
 test("publishes the site terms and privacy policy with upstream policy links", async ({ page }) => {

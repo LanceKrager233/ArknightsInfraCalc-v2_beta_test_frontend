@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Barlow_Condensed, Noto_Sans_SC } from "next/font/google";
+import localFont from "next/font/local";
 import "overlayscrollbars/overlayscrollbars.css";
 
 import { PageScrollbar } from "@/components/ui/page-scrollbar";
@@ -23,6 +24,19 @@ const technicalFont = Barlow_Condensed({
   fallback: ["Arial Narrow", "sans-serif"],
 });
 
+const numberFont = localFont({
+  src: "./fonts/Bender-Bold.otf",
+  variable: "--font-number-source",
+  weight: "400",
+  style: "normal",
+  display: "swap",
+  preload: true,
+  adjustFontFallback: false,
+  declarations: [
+    { prop: "unicode-range", value: "U+0025, U+002B, U+002C-003A, U+2212" },
+  ],
+});
+
 export const metadata: Metadata = {
   title: "明日方舟基建排班助手",
   description: "导入干员数据，生成三班排班并导出到 MAA。",
@@ -36,7 +50,7 @@ export default function RootLayout({
   return (
     <html
       lang="zh-CN"
-      className={`${uiFont.variable} ${technicalFont.variable} antialiased`}
+      className={`${uiFont.variable} ${technicalFont.variable} ${numberFont.variable} antialiased`}
       suppressHydrationWarning
     >
       <body>

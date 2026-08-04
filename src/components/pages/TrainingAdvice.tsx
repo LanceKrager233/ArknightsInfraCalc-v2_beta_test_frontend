@@ -148,10 +148,10 @@ function ActionCard({
             <span aria-hidden="true">·</span>
             <span>{actionKindLabel(action.kind)}</span>
           </div>
-          <p className="mt-2 max-w-[72ch] text-pretty text-sm leading-6 text-white/82">{action.message}</p>
+          <p className="font-number mt-2 max-w-[72ch] text-pretty text-sm leading-6 text-white/82">{action.message}</p>
         </div>
         <div className="flex flex-wrap gap-2 sm:flex-col sm:items-end">
-          <span className="border border-[var(--room-accent)]/45 bg-black/18 px-2.5 py-1 text-xs font-semibold text-[var(--room-accent)]">
+          <span className="font-number border border-[var(--room-accent)]/45 bg-black/18 px-2.5 py-1 text-xs font-semibold text-[var(--room-accent)]">
             {action.priority || "未分级"}
           </span>
           <span className="border border-white/15 bg-white/7 px-2.5 py-1 text-xs text-white/70">{state}</span>
@@ -176,7 +176,7 @@ export function TrainingAdvice({ operbox, layout, profile, onOpenCalculator }: T
         <div className="mb-2 flex min-w-0 items-center gap-2.5">
           <span className="h-7 w-1.5 shrink-0 bg-[#FFD501]" aria-hidden="true" />
           <h1 className="truncate text-[21px] font-medium leading-none text-[#313131]">训练建议</h1>
-          <span className="text-xs text-[#313131]/52">{actions.length}</span>
+          <span className="font-number text-xs text-[#313131]/52">{actions.length}</span>
         </div>
         <InfraTechnicalCard group="manufacture" dataSlot="training-summary" showEmblem={false}>
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(28rem,0.8fr)] lg:items-end">
@@ -204,10 +204,10 @@ export function TrainingAdvice({ operbox, layout, profile, onOpenCalculator }: T
               ))}
               <div className="col-span-2 flex flex-wrap items-center gap-x-3 gap-y-1 bg-black/24 px-3 py-2 text-xs text-white/65 sm:col-span-4">
                 <span>设施</span>
-                <span>{roomCounts.trade} 贸易</span>
-                <span>{roomCounts.factory} 制造</span>
-                <span>{roomCounts.power} 发电</span>
-                <span>{roomCounts.dormitory} 宿舍</span>
+                <span><span className="font-number">{roomCounts.trade}</span> 贸易</span>
+                <span><span className="font-number">{roomCounts.factory}</span> 制造</span>
+                <span><span className="font-number">{roomCounts.power}</span> 发电</span>
+                <span><span className="font-number">{roomCounts.dormitory}</span> 宿舍</span>
               </div>
             </div>
           </div>
@@ -245,7 +245,7 @@ export function TrainingAdvice({ operbox, layout, profile, onOpenCalculator }: T
         <div className="mb-2 flex min-w-0 items-center gap-2.5">
           <span className="h-7 w-1.5 shrink-0 bg-[#29BDF5]" aria-hidden="true" />
           <h2 className="truncate text-[21px] font-medium leading-none text-[#313131]">培养建议</h2>
-          <span className="text-xs text-[#313131]/52">{actions.length}</span>
+          <span className="font-number text-xs text-[#313131]/52">{actions.length}</span>
         </div>
         {actions.length ? (
           <div className="grid min-w-0 gap-3" data-training-advice-list>

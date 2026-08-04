@@ -263,7 +263,7 @@ export function SetupDialog({
                       <div className="min-w-0">
                         <h3 id="setup-current-data-title" className="truncate text-sm font-semibold">{currentDataLabel}</h3>
                         <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                          {operbox?.length ?? 0} 名干员 · {ownedCount} 名可用
+                          <span className="font-number">{operbox?.length ?? 0}</span> 名干员 · <span className="font-number">{ownedCount}</span> 名可用
                         </p>
                       </div>
                     </div>
@@ -300,7 +300,7 @@ export function SetupDialog({
                             </strong>
                             {sklandSnapshot ? (
                               <span className="mt-0.5 block text-xs text-muted-foreground">
-                                {sklandSnapshot.operbox.length} 名干员 · {formatSyncTime(sklandSnapshot.infrastructure.storeTs)}
+                                <span className="font-number">{sklandSnapshot.operbox.length}</span> 名干员 · <span className="font-number">{formatSyncTime(sklandSnapshot.infrastructure.storeTs)}</span>
                               </span>
                             ) : !sklandConfigured && sklandDisabledReason ? (
                               <span className="mt-0.5 block text-xs text-muted-foreground">{sklandDisabledReason}</span>
@@ -373,7 +373,7 @@ export function SetupDialog({
                 <details className="setup-quiet-details">
                   <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">数据管理</summary>
                   <div className="flex flex-wrap items-center justify-between gap-3 py-3">
-                    <span className="text-xs text-muted-foreground">数据在此浏览器保存 30 天。</span>
+                    <span className="text-xs text-muted-foreground">数据在此浏览器保存 <span className="font-number">30</span> 天。</span>
                     <Button type="button" variant="outline" className="min-h-11" onClick={() => setClearConfirmOpen(true)}>
                       <Trash2 />清除本地数据
                     </Button>

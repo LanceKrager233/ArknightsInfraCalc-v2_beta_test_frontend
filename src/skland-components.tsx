@@ -210,9 +210,9 @@ export function SklandLoginPanel({
           <div className="mt-6 grid gap-3 text-sm text-muted-foreground">
             <p className="flex items-start gap-2">
               <ShieldCheck className="mt-0.5 size-4 shrink-0 text-emerald-600" aria-hidden="true" />
-              <span className="md:hidden">登录凭证加密存入 HttpOnly Cookie，最长保留 7 天。</span>
+              <span className="md:hidden">登录凭证加密存入 HttpOnly Cookie，最长保留 <span className="font-number">7</span> 天。</span>
               <span className="hidden md:inline">
-                登录凭证会加密存入此浏览器的 HttpOnly Cookie，请求期间由服务端解密使用，最长保留 7 天，不写入业务数据库。
+                登录凭证会加密存入此浏览器的 HttpOnly Cookie，请求期间由服务端解密使用，最长保留 <span className="font-number">7</span> 天，不写入业务数据库。
               </span>
             </p>
             <p>
@@ -352,7 +352,7 @@ export function ShiftComparisonCard({ comparison }: { comparison: ShiftCompariso
         <div>
           <span className="text-xs font-medium text-muted-foreground">当前状态匹配</span>
           <h3 id="closest-shift-title" className="mt-0.5 text-base font-semibold">
-            当前最接近第 {comparison.planIndex + 1} 班
+            当前最接近第 <span className="font-number">{comparison.planIndex + 1}</span> 班
           </h3>
         </div>
         <div className="text-right">

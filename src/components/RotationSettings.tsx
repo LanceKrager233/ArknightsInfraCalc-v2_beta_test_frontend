@@ -62,7 +62,7 @@ export function RotationSettings({ value, onChange }: RotationSettingsProps) {
       >
         <ComboboxInput
           id="rotation-profile"
-          className="h-11 w-full bg-background sm:max-w-md"
+          className="font-number h-11 w-full bg-background sm:max-w-md"
           aria-label="换班方式"
           placeholder="搜索换班方式"
         />
@@ -70,7 +70,7 @@ export function RotationSettings({ value, onChange }: RotationSettingsProps) {
           <ComboboxEmpty className="block empty:p-0">没有匹配的换班方式</ComboboxEmpty>
           <ComboboxList>
             {(option) => (
-              <ComboboxItem key={option.value} value={option}>
+              <ComboboxItem key={option.value} value={option} className="font-number">
                 {option.label}
               </ComboboxItem>
             )}

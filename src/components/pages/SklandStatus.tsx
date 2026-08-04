@@ -150,12 +150,12 @@ function OperatorFilterCombobox({
         }
       }}
     >
-      <ComboboxInput className="h-11 w-full" aria-label={label} placeholder={`搜索${label}`} />
+      <ComboboxInput className="font-number h-11 w-full" aria-label={label} placeholder={`搜索${label}`} />
       <ComboboxContent>
         <ComboboxEmpty>没有匹配的{label}</ComboboxEmpty>
         <ComboboxList>
           {(option) => (
-            <ComboboxItem key={option.value} value={option}>
+            <ComboboxItem key={option.value} value={option} className="font-number">
               {option.label}
             </ComboboxItem>
           )}
@@ -216,7 +216,7 @@ function SklandDataControls({
         <CardHeader>
           <CardTitle>数据与授权</CardTitle>
           <CardDescription>
-            登录凭证将在 {credentialExpiryLabel(account.credentialExpiresAt)} 固定过期，刷新页面不会延长保存期。
+            登录凭证将在 <span className="font-number">{credentialExpiryLabel(account.credentialExpiresAt)}</span> 固定过期，刷新页面不会延长保存期。
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
@@ -428,7 +428,7 @@ function OverviewTab({
                 <OverviewTechnicalHeading icon={<AlertTriangle className="size-4" aria-hidden="true" />}>
                   现在值得处理
                 </OverviewTechnicalHeading>
-                <p className="mt-3 text-lg font-semibold">
+                <p className="font-number mt-3 text-lg font-semibold">
                   {attentionItems.length ? `${attentionItems.length} 项状态提醒` : "基建运转平稳"}
                 </p>
               </div>
@@ -443,7 +443,7 @@ function OverviewTab({
                     className="mt-0.5 size-3.5 shrink-0 text-[var(--room-accent)]"
                     aria-hidden="true"
                   />
-                  <span>{item}</span>
+                  <span className="font-number">{item}</span>
                 </div>
               )) : (
                 <p className="border-t border-white/10 pt-2 text-sm text-white/58 sm:col-span-2">
@@ -464,7 +464,7 @@ function OverviewTab({
                 {snapshot.operators.length}
                 <span className="ml-1 text-sm font-normal text-white/60">名干员</span>
               </p>
-              <p className="mt-1 text-xs text-white/58">
+              <p className="font-number mt-1 text-xs text-white/58">
                 当前布局 · {infrastructure.layoutLabel ?? "未识别"}
               </p>
             </div>
@@ -503,7 +503,7 @@ function OverviewTab({
                 <span className="pb-1 text-sm tabular-nums text-white/52">/ {player.sanity.max}</span>
               ) : null}
             </div>
-            <p className="mt-auto pt-4 text-xs text-white/58">
+            <p className="font-number mt-auto pt-4 text-xs text-white/58">
               {!player.sanity
                 ? "森空岛暂未提供理智状态"
                 : player.sanity.current >= player.sanity.max
@@ -524,7 +524,7 @@ function OverviewTab({
                 / {infrastructure.labor.maxValue}
               </span>
             </p>
-            <p className="mt-auto pt-4 text-xs text-white/58">
+            <p className="font-number mt-auto pt-4 text-xs text-white/58">
               {dronesFull
                 ? "无人机已达当前上限"
                 : `下次恢复约 ${formatDuration(infrastructure.labor.remainSecs)}`}
@@ -563,11 +563,11 @@ function OverviewTab({
           <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 text-xs">
             <div className="border-t border-white/10 pt-2">
               <dt className="text-white/50">注册时间</dt>
-              <dd className="mt-1 font-medium text-white">{formatDate(player.registerTs)}</dd>
+              <dd className="font-number mt-1 font-medium text-white">{formatDate(player.registerTs)}</dd>
             </div>
             <div className="border-t border-white/10 pt-2">
               <dt className="text-white/50">主线进度</dt>
-              <dd className="mt-1 font-medium text-[var(--room-accent)]">
+              <dd className="font-number mt-1 font-medium text-[var(--room-accent)]">
                 {player.mainStageProgress ?? "未提供"}
               </dd>
             </div>
@@ -577,7 +577,7 @@ function OverviewTab({
             </div>
             <div className="border-t border-white/10 pt-2">
               <dt className="text-white/50">月卡到期</dt>
-              <dd className="mt-1 font-medium text-white">{formatDate(player.subscriptionEnd)}</dd>
+              <dd className="font-number mt-1 font-medium text-white">{formatDate(player.subscriptionEnd)}</dd>
             </div>
           </dl>
           {player.resume ? (
@@ -632,7 +632,7 @@ function OverviewTab({
                 return (
                   <div key={slot.index} className="border-t border-white/12 bg-black/12 px-3 py-3 text-sm">
                     <div className="flex items-center justify-between gap-3">
-                      <strong>槽位 {slot.index + 1}</strong>
+                      <strong className="font-number">槽位 {slot.index + 1}</strong>
                       <span className={finished ? "text-[var(--room-accent)]" : "text-white/58"}>
                         {label}
                       </span>
@@ -688,7 +688,7 @@ function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
         <div className="relative z-10 flex min-h-7 flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
             <span className="infra-room-accent h-5 w-1 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
-            <h4 className="truncate text-sm font-medium tracking-[-0.02em] text-white [text-shadow:0_2px_3px_rgba(0,0,0,0.75)]">
+            <h4 className="font-number truncate text-sm font-medium tracking-[-0.02em] text-white [text-shadow:0_2px_3px_rgba(0,0,0,0.75)]">
               {roomLabel(room)}
             </h4>
             <LevelDiamonds level={room.level} maxLevel={roomMaxLevel(room)} variant="compact" />
@@ -699,9 +699,9 @@ function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
                 {PRODUCT_LABELS[productionRoom.product] ?? productionRoom.product}
               </strong>
             ) : null}
-            {room.group === "manufacture" ? <span>生产力 {Math.round(room.speed * 100)}%</span> : null}
-            {room.group === "dormitory" ? <span>氛围 {room.comfort}</span> : null}
-            {room.group === "hire" ? <span>可刷新 {room.refreshCount} 次</span> : null}
+            {room.group === "manufacture" ? <span className="font-number">生产力 {Math.round(room.speed * 100)}%</span> : null}
+            {room.group === "dormitory" ? <span className="font-number">氛围 {room.comfort}</span> : null}
+            {room.group === "hire" ? <span className="font-number">可刷新 {room.refreshCount} 次</span> : null}
           </div>
         </div>
       </div>
@@ -761,12 +761,12 @@ function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
             </dl>
           ) : room.group === "meeting" ? (
             <div className="grid gap-1">
-              <p>线索板：{room.clue.board.join("、") || "暂无"}</p>
+              <p className="font-number">线索板：{room.clue.board.join("、") || "暂无"}</p>
               <p className="flex flex-wrap items-baseline gap-x-2">
-                <span>已有 {room.clue.own} · 待接收 {room.clue.needReceive} · 已接收 {room.clue.received}</span>
+                <span className="font-number">已有 {room.clue.own} · 待接收 {room.clue.needReceive} · 已接收 {room.clue.received}</span>
                 <span className="flex items-baseline gap-x-2 xl:ml-auto">
                   <span aria-hidden="true">·</span>
-                  <span className="whitespace-nowrap">
+                  <span className="font-number whitespace-nowrap">
                     {room.clue.sharing
                       ? `线索交流至 ${formatDateTime(room.clue.shareCompleteTime)}`
                       : "当前未进行线索交流"}
@@ -775,17 +775,17 @@ function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
               </p>
             </div>
           ) : room.group === "hire" ? (
-            <p>下次完成 {formatDateTime(room.completeWorkTime)}</p>
+            <p className="font-number">下次完成 {formatDateTime(room.completeWorkTime)}</p>
           ) : null}
 
           {room.group === "trading" && room.orders.length ? (
             <details className="mt-2">
-              <summary className="cursor-pointer font-medium text-[var(--room-accent)]">
+              <summary className="font-number cursor-pointer font-medium text-[var(--room-accent)]">
                 查看 {room.orders.length} 笔订单
               </summary>
               <div className="mt-2 grid gap-1">
                 {room.orders.map((order, index) => (
-                  <p key={`${room.key}-order-${index}`}>
+                  <p key={`${room.key}-order-${index}`} className="font-number">
                     订单 {index + 1}：交付 {order.delivery.reduce((total, item) => total + item.count, 0)}
                     ，获得 {order.reward.count} {order.reward.type === "orundum" ? "合成玉" : "龙门币"}
                   </p>
@@ -827,7 +827,7 @@ function BuildingMetricCard({ metric }: { metric: SklandStatusMetric }) {
               </span>
             ) : null}
           </div>
-          <p className="mt-auto pt-4 text-xs leading-5 text-white/58">{metric.hint}</p>
+          <p className="font-number mt-auto pt-4 text-xs leading-5 text-white/58">{metric.hint}</p>
         </div>
       </OverviewTechnicalCard>
     </div>
@@ -875,7 +875,7 @@ function LayoutSyncControl({
           {layoutMatches
             ? <Check className="size-3.5 shrink-0" aria-hidden="true" />
             : <AlertTriangle className="size-3.5 shrink-0" aria-hidden="true" />}
-          <span className="truncate">{status}</span>
+          <span className="font-number truncate">{status}</span>
         </span>
         <Button
           type="button"
@@ -951,8 +951,8 @@ function InfrastructureTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
             <div className="mt-auto pt-4 text-xs leading-5 text-white/58">
             {infrastructure.training ? (
               <>
-                <p>技能 {infrastructure.training.skillIndex} · 协助：{infrastructure.training.trainer ?? "无"}</p>
-                <p>剩余 {formatDuration(infrastructure.training.remainSecs)} · 加速 {Math.round(infrastructure.training.speed * 100)}%</p>
+                <p className="font-number">技能 {infrastructure.training.skillIndex} · 协助：{infrastructure.training.trainer ?? "无"}</p>
+                <p className="font-number">剩余 {formatDuration(infrastructure.training.remainSecs)} · 加速 {Math.round(infrastructure.training.speed * 100)}%</p>
               </>
             ) : "暂无训练任务"}
             </div>
@@ -974,8 +974,8 @@ function InfrastructureTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
               <span className="ml-1 text-sm font-normal text-white/58">件家具</span>
             </p>
             <div className="mt-auto flex flex-wrap gap-x-4 gap-y-1 pt-4 text-xs text-white/58">
-              <span>无人机 {infrastructure.labor.value}/{infrastructure.labor.maxValue}</span>
-              <span>低心情干员 {infrastructure.tiredOperators.length} 名</span>
+              <span className="font-number">无人机 {infrastructure.labor.value}/{infrastructure.labor.maxValue}</span>
+              <span className="font-number">低心情干员 {infrastructure.tiredOperators.length} 名</span>
             </div>
           </div>
         </OverviewTechnicalCard>
@@ -985,7 +985,7 @@ function InfrastructureTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
 
       {infrastructure.layoutWarning ? (
         <Alert>
-          <AlertDescription>{infrastructure.layoutWarning}</AlertDescription>
+          <AlertDescription className="font-number">{infrastructure.layoutWarning}</AlertDescription>
         </Alert>
       ) : null}
 
@@ -1042,32 +1042,32 @@ function OperatorCard({ operator }: { operator: SklandOperatorStatus }) {
             <h4 className="truncate font-medium">{operator.name}</h4>
             {operator.isAssist ? <Badge variant="secondary">助战</Badge> : null}
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="font-number mt-1 text-xs text-muted-foreground">
             {operator.rarity}★ · {professionLabel(operator.profession)} / {operator.subProfessionName}
           </p>
         </div>
-        <Badge variant="outline">精 {operator.elite} Lv.{operator.level}</Badge>
+        <Badge variant="outline" className="font-number">精 {operator.elite} Lv.{operator.level}</Badge>
       </div>
       <dl className="mt-3 grid grid-cols-3 gap-2 text-xs">
-        <div><dt className="text-muted-foreground">潜能</dt><dd className="mt-0.5 font-medium">{operator.potential}</dd></div>
-        <div><dt className="text-muted-foreground">信赖</dt><dd className="mt-0.5 font-medium">{operator.favorPercent}%</dd></div>
-        <div><dt className="text-muted-foreground">技能</dt><dd className="mt-0.5 font-medium">Lv.{operator.mainSkillLevel}</dd></div>
+        <div><dt className="text-muted-foreground">潜能</dt><dd className="font-number mt-0.5 font-medium">{operator.potential}</dd></div>
+        <div><dt className="text-muted-foreground">信赖</dt><dd className="font-number mt-0.5 font-medium">{operator.favorPercent}%</dd></div>
+        <div><dt className="text-muted-foreground">技能</dt><dd className="font-number mt-0.5 font-medium">Lv.{operator.mainSkillLevel}</dd></div>
       </dl>
       <details className="mt-3 text-xs">
         <summary className="cursor-pointer font-medium text-primary">专精、模组与皮肤</summary>
         <div className="mt-2 grid gap-1.5 leading-5 text-muted-foreground">
-          <p>
+          <p className="font-number">
             专精：{operator.skills.length
               ? operator.skills.map((skill) => `S${skill.index} M${skill.specializeLevel}`).join(" · ")
               : "森空岛暂未提供"}
           </p>
-          <p>
+          <p className="font-number">
             模组：{operator.modules.length
               ? operator.modules.map((module) => `${module.name} Lv.${module.level}${module.isDefault ? "（使用中）" : ""}`).join(" · ")
               : "无"}
           </p>
           <p>当前皮肤：{operator.currentSkinName ?? "默认服装"}</p>
-          <p>获得时间：{formatDate(operator.acquiredAt)}</p>
+          <p className="font-number">获得时间：{formatDate(operator.acquiredAt)}</p>
         </div>
       </details>
     </article>
@@ -1084,7 +1084,7 @@ function SkinCard({ skin }: { skin: SklandOwnedSkin }) {
         </div>
         {skin.isCurrent ? <Badge variant="secondary">使用中</Badge> : null}
       </div>
-      <p className="mt-3 text-xs text-muted-foreground">获得于 {formatDate(skin.obtainedAt)}</p>
+      <p className="font-number mt-3 text-xs text-muted-foreground">获得于 {formatDate(skin.obtainedAt)}</p>
     </article>
   );
 }
@@ -1174,10 +1174,10 @@ export function OperatorsTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
         <div className="overflow-x-auto pb-1">
           <TabsList variant="line" className="min-w-max">
             <TabsTrigger value="operators" className="h-10 px-4">
-              <UsersRound />干员 {filteredOperators.length}
+              <UsersRound />干员 <span className="font-number">{filteredOperators.length}</span>
             </TabsTrigger>
             <TabsTrigger value="skins" className="h-10 px-4">
-              <Shirt />皮肤 {filteredSkins.length}
+              <Shirt />皮肤 <span className="font-number">{filteredSkins.length}</span>
             </TabsTrigger>
           </TabsList>
         </div>
@@ -1259,10 +1259,10 @@ export function ProgressTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
           </CardHeader>
           <CardContent className="grid gap-3 text-sm">
             <dl className="grid grid-cols-2 gap-3 text-xs">
-              <div><dt className="text-muted-foreground">注册时间</dt><dd className="mt-1 font-medium">{formatDate(player.registerTs)}</dd></div>
-              <div><dt className="text-muted-foreground">主线进度</dt><dd className="mt-1 font-medium">{player.mainStageProgress ?? "未提供"}</dd></div>
+              <div><dt className="text-muted-foreground">注册时间</dt><dd className="font-number mt-1 font-medium">{formatDate(player.registerTs)}</dd></div>
+              <div><dt className="text-muted-foreground">主线进度</dt><dd className="font-number mt-1 font-medium">{player.mainStageProgress ?? "未提供"}</dd></div>
               <div><dt className="text-muted-foreground">助理</dt><dd className="mt-1 font-medium">{player.secretary?.name ?? "未提供"}</dd></div>
-              <div><dt className="text-muted-foreground">月卡到期</dt><dd className="mt-1 font-medium">{formatDate(player.subscriptionEnd)}</dd></div>
+              <div><dt className="text-muted-foreground">月卡到期</dt><dd className="font-number mt-1 font-medium">{formatDate(player.subscriptionEnd)}</dd></div>
             </dl>
             {player.resume ? <p className="border-t pt-3 leading-6 text-muted-foreground">{player.resume}</p> : null}
           </CardContent>
@@ -1270,13 +1270,13 @@ export function ProgressTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
         <Card className="surface-shadow ring-0">
           <CardHeader>
             <CardDescription>收藏概况</CardDescription>
-            <CardTitle>
+            <CardTitle className="font-number">
               {player.counts.operators === null ? "暂未提供" : `${player.counts.operators} 名干员`}
             </CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-3 text-xs">
-            <div><span className="text-muted-foreground">皮肤</span><strong className="mt-1 block text-lg">{player.counts.skins ?? "—"}</strong></div>
-            <div><span className="text-muted-foreground">家具</span><strong className="mt-1 block text-lg">{player.counts.furniture ?? "—"}</strong></div>
+            <div><span className="text-muted-foreground">皮肤</span><strong className="font-number mt-1 block text-lg">{player.counts.skins ?? "—"}</strong></div>
+            <div><span className="text-muted-foreground">家具</span><strong className="font-number mt-1 block text-lg">{player.counts.furniture ?? "—"}</strong></div>
           </CardContent>
         </Card>
       </section>
@@ -1297,10 +1297,10 @@ export function ProgressTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
               return (
                 <div key={slot.index} className="rounded-lg bg-muted/45 p-3 text-sm">
                   <div className="flex items-center justify-between">
-                    <strong>槽位 {slot.index + 1}</strong>
+                    <strong className="font-number">槽位 {slot.index + 1}</strong>
                     <Badge variant={finished ? "secondary" : "outline"}>{label}</Badge>
                   </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
+                  <p className="font-number mt-2 text-xs text-muted-foreground">
                     {slot.finishTs > 0 ? formatDateTime(slot.finishTs) : "暂无计时"}
                   </p>
                 </div>
@@ -1319,7 +1319,7 @@ export function ProgressTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
                 <ProgressMeter label="奖励进度" {...progress.campaign.reward} />
                 <div className="mt-3 grid gap-2 text-xs text-muted-foreground">
                   {progress.campaign.records.map((record) => (
-                    <p key={`${record.zoneName}-${record.name}`}>
+                    <p key={`${record.zoneName}-${record.name}`} className="font-number">
                       {record.zoneName ? `${record.zoneName} · ` : ""}{record.name}：{record.maxKills}
                     </p>
                   ))}
@@ -1332,7 +1332,7 @@ export function ProgressTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
                 <div className="flex items-center gap-2 text-sm font-medium"><Boxes className="size-4" />保全派驻</div>
                 <div className="mt-3 grid gap-2 text-xs text-muted-foreground">
                   {progress.tower.records.map((record) => (
-                    <p key={`${record.name}-${record.subName}`}>{record.name}{record.subName ? ` · ${record.subName}` : ""}：{record.best}</p>
+                    <p key={`${record.name}-${record.subName}`} className="font-number">{record.name}{record.subName ? ` · ${record.subName}` : ""}：{record.best}</p>
                   ))}
                   {!progress.tower.records.length ? <p>暂无记录</p> : null}
                 </div>
@@ -1343,7 +1343,7 @@ export function ProgressTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
                 <div className="flex items-center gap-2 text-sm font-medium"><DoorOpen className="size-4" />集成战略</div>
                 <div className="mt-3 grid gap-2 text-xs text-muted-foreground">
                   {progress.rogue.map((record) => (
-                    <p key={record.name}>{record.name}：藏品 {record.relicCount} · 银行 {record.bankCurrent}/{record.bankRecord}</p>
+                    <p key={record.name} className="font-number">{record.name}：藏品 {record.relicCount} · 银行 {record.bankCurrent}/{record.bankRecord}</p>
                   ))}
                   {!progress.rogue.length ? <p>暂无记录</p> : null}
                 </div>
@@ -1362,15 +1362,15 @@ export function ProgressTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
                   <strong>{activity.name}</strong>
                   {activity.isReplicate ? <Badge variant="outline">复刻</Badge> : null}
                 </div>
-                <p className="mt-2 text-xs text-muted-foreground">
+                <p className="font-number mt-2 text-xs text-muted-foreground">
                   关卡 {activity.clearedStages}/{activity.totalStages} · 至 {formatDate(activity.endTime)}
                 </p>
               </article>
             ))}
             {(progress.bossRush ?? []).map((record, index) => (
               <article key={`${record.stageCode}-${index}`} className="border-t border-border/70 pt-3">
-                <strong>{record.stageCode ?? "首领活动"} {record.stageName ?? ""}</strong>
-                <p className="mt-2 text-xs text-muted-foreground">
+                <strong className="font-number">{record.stageCode ?? "首领活动"} {record.stageName ?? ""}</strong>
+                <p className="font-number mt-2 text-xs text-muted-foreground">
                   {record.played ? "已有记录" : "尚未挑战"} · {record.difficulty}
                 </p>
               </article>
@@ -1434,7 +1434,7 @@ export function SklandStatus({
         </header>
         {error ? (
           <Alert variant="destructive">
-            <AlertDescription>{error.message}（{error.code}）</AlertDescription>
+            <AlertDescription className="font-number">{error.message}（{error.code}）</AlertDescription>
           </Alert>
         ) : null}
         <SklandLoginPanel
@@ -1460,7 +1460,7 @@ export function SklandStatus({
           </p>
         </header>
         {error ? (
-          <Alert variant="destructive"><AlertDescription>{error.message}（{error.code}）</AlertDescription></Alert>
+          <Alert variant="destructive"><AlertDescription className="font-number">{error.message}（{error.code}）</AlertDescription></Alert>
         ) : null}
         <Card>
           <CardHeader>
@@ -1534,19 +1534,19 @@ export function SklandStatus({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="truncate text-2xl font-semibold tracking-tight">{snapshot.player.nickname}</h2>
-              {snapshot.player.level !== null ? <Badge variant="secondary">Lv.{snapshot.player.level}</Badge> : null}
+              {snapshot.player.level !== null ? <Badge variant="secondary" className="font-number">Lv.{snapshot.player.level}</Badge> : null}
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span>{snapshot.player.channelName}</span>
               <button
                 type="button"
-                className="inline-flex items-center gap-1 rounded-sm hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="font-number inline-flex items-center gap-1 rounded-sm hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 onClick={() => onCopyUid(snapshot.player.uid)}
                 aria-label="复制完整 UID"
               >
                 UID {maskedUid(snapshot.player.uid)} <Clipboard className="size-3" />
               </button>
-              <span>同步于 {formatDateTime(snapshot.infrastructure.storeTs)}</span>
+              <span className="font-number">同步于 {formatDateTime(snapshot.infrastructure.storeTs)}</span>
             </div>
           </div>
         </div>
@@ -1577,7 +1577,7 @@ export function SklandStatus({
               }}
             >
               <ComboboxInput
-                className="h-full w-full"
+                className="font-number h-full w-full"
                 aria-label="选择账号与角色"
                 placeholder="搜索账号与角色"
               />
@@ -1587,10 +1587,10 @@ export function SklandStatus({
                   {(group, groupIndex) => (
                     <ComboboxGroup key={group.value} items={group.items}>
                       {groupIndex > 0 ? <ComboboxSeparator /> : null}
-                      <ComboboxLabel>{group.label}</ComboboxLabel>
+                      <ComboboxLabel className="font-number">{group.label}</ComboboxLabel>
                       <ComboboxCollection>
                         {(item) => (
-                          <ComboboxItem key={item.value} value={item}>
+                          <ComboboxItem key={item.value} value={item} className="font-number">
                             {item.label}
                           </ComboboxItem>
                         )}
@@ -1630,7 +1630,7 @@ export function SklandStatus({
           <DialogHeader>
             <DialogTitle>添加森空岛账号</DialogTitle>
             <DialogDescription>
-              扫码后会保留现有账号，并将新账号设为当前账号。最多同时登录 5 个账号。
+              扫码后会保留现有账号，并将新账号设为当前账号。最多同时登录 <span className="font-number">5</span> 个账号。
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="min-h-0 overflow-y-auto pb-5 pt-0 sm:pb-7">
@@ -1650,7 +1650,7 @@ export function SklandStatus({
 
       {error ? (
         <Alert variant="destructive">
-          <AlertDescription>
+          <AlertDescription className="font-number">
             {error.message}（{error.code}）。已保留上一次成功同步的数据。
           </AlertDescription>
         </Alert>
@@ -1658,7 +1658,7 @@ export function SklandStatus({
 
       {snapshot.warnings.length ? (
         <Alert>
-          <AlertDescription>
+          <AlertDescription className="font-number">
             {snapshot.warnings.join(" ")}
           </AlertDescription>
         </Alert>

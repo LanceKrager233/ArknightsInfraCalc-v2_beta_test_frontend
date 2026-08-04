@@ -1,4 +1,4 @@
-# Third-party game asset sources
+# Third-party asset sources
 
 ## arkntools
 
@@ -28,3 +28,14 @@ npm run assets:sync:arkntools -- --source .tmp/arkntools-data --source-sha $sour
 Scheduled updates fail closed when upstream removes a managed file or reduces the operator count. After reviewing a legitimate removal, rerun the manual workflow with `allow_removals` enabled. The generator stages and validates the complete result before replacing managed directories.
 
 No runtime page or API route fetches data from arkntools. Production builds always use the reviewed, Git-tracked snapshot in this repository.
+
+## Bender Bold
+
+Numeric UI text uses the Bender Bold font distributed in the public [1001 Fonts Bender package](https://www.1001fonts.com/bender-font.html). The downloaded package identifies the typeface as Bender Bold Version 1.000 (2009), designed by Oleg Zhuravlev and Gladkikh Ivan and distributed by Jovanny Lemonad.
+
+- Font file: `src/app/fonts/Bender-Bold.otf`
+- Font SHA-256: `36DE62CF8B651E3A05D2E93352992FCB684B02EE72109FD7E2A3C134D57AF4F2`
+- License: SIL Open Font License 1.1, preserved verbatim in `src/app/fonts/Bender-OFL.txt`
+- License SHA-256: `7F18EC1EBB6B50E3ED0F74B2C61F25B8D7CD69E43F4DE66E991BCFD3C419A8BB`
+
+The font is self-hosted by Next.js. Runtime pages do not request the font from 1001 Fonts, Hypergryph, or another third-party font CDN.
