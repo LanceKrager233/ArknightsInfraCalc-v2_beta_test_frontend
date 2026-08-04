@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/combobox";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -811,9 +812,10 @@ function LayoutSyncControl({
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setConfirmOpen(false)}>取消</Button>
+            <Button className="max-sm:min-w-16 sm:min-w-[88px]" type="button" size="dialog" variant="ghost" onClick={() => setConfirmOpen(false)}>取消</Button>
             <Button
               type="button"
+              size="dialog"
               onClick={() => {
                 onApplyLayout();
                 setConfirmOpen(false);
@@ -1485,24 +1487,25 @@ export function SklandStatus({
       </header>
 
       <Dialog open={addAccountOpen} onOpenChange={setAddAccountOpen}>
-        <DialogContent className="max-h-[calc(100dvh-1rem)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden rounded-[16px] p-0 sm:max-w-[min(1040px,calc(100vw-2rem))]">
-          <DialogHeader className="px-5 py-5 pr-16 sm:px-7">
-            <DialogTitle className="text-lg">添加森空岛账号</DialogTitle>
+        <DialogContent className="max-h-[calc(100dvh-1rem)] grid-rows-[auto_minmax(0,1fr)] sm:max-w-[min(880px,calc(100vw-2rem))]">
+          <DialogHeader>
+            <DialogTitle>添加森空岛账号</DialogTitle>
             <DialogDescription>
               扫码后会保留现有账号，并将新账号设为当前账号。最多同时登录 5 个账号。
             </DialogDescription>
           </DialogHeader>
-          <div className="min-h-0 overflow-y-auto px-5 pb-5 sm:px-7 sm:pb-7">
+          <DialogBody className="min-h-0 overflow-y-auto pb-5 pt-0 sm:pb-7">
             <SklandLoginPanel
               className="max-w-none"
               configured={configured}
               disabledReason={disabledReason}
+              dialogPresentation
               onAuthenticated={(session) => {
                 onAuthenticated(session);
                 setAddAccountOpen(false);
               }}
             />
-          </div>
+          </DialogBody>
         </DialogContent>
       </Dialog>
 

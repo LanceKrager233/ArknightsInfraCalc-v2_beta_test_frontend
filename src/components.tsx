@@ -17,12 +17,14 @@ import {
   Upload,
 } from "lucide-react";
 import { CSSProperties, ChangeEvent, ReactNode, useEffect, useRef, useState } from "react";
+import { ThinkingOrb } from "thinking-orbs";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Accordion, AccordionItem, AccordionPanel, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -573,7 +575,16 @@ export function StatusBar({
   const content = (() => {
     if (loading) {
       return {
-        icon: <Loader2 className="size-4 animate-spin" />,
+        icon: (
+          <ThinkingOrb
+            state="solving"
+            size={20}
+            theme="light"
+            aria-hidden="true"
+            className="shrink-0"
+            data-slot="solving-orb"
+          />
+        ),
         text: "正在生成排班",
         className: "border-blue-200 bg-blue-50 text-blue-700",
       };
@@ -603,6 +614,7 @@ export function StatusBar({
 
   return (
     <div
+      data-slot="plan-status"
       className={cn(
         "surface-shadow flex h-7 min-w-0 items-center gap-2 overflow-hidden rounded-lg px-3 py-0 text-sm max-sm:h-11 max-sm:px-2",
         content.className,
@@ -611,8 +623,19 @@ export function StatusBar({
       role={error ? "alert" : "status"}
       aria-live={error ? "assertive" : "polite"}
     >
-      {content.icon}
-      <span className="min-w-0 flex-1 truncate tabular-nums">{content.text}</span>
+      <span className="flex size-5 shrink-0 items-center justify-center" aria-hidden="true">
+        {content.icon}
+      </span>
+      <span
+        className={cn(
+          "min-w-0 flex-1 truncate tabular-nums",
+          loading && "plan-status-shimmer"
+        )}
+        data-slot="status-text"
+        data-text={loading ? content.text : undefined}
+      >
+        {content.text}
+      </span>
       {error ? (
         <span className="flex shrink-0 items-center gap-1">
           {error.retryable ? (
@@ -1592,34 +1615,36 @@ export function IssueNoteModal({
     >
       <DialogContent className="max-w-[min(620px,calc(100vw-2rem))] sm:max-w-xl">
         <DialogHeader>
-          <DialogDescription>反馈排班问题</DialogDescription>
           <DialogTitle>{row?.title ?? "反馈排班问题"}</DialogTitle>
+          <DialogDescription>反馈排班问题</DialogDescription>
         </DialogHeader>
-        <p className="text-sm text-muted-foreground">
-          将提交本次排班的诊断编号、房间名称、当前干员和你的说明；不会重复上传完整干员数据或调试包。
-        </p>
-        <Textarea
-          autoFocus
-          value={note}
-          onChange={(event) => onNoteChange(event.target.value)}
-          placeholder="例如：这组应该换成可露希尔 / 当前站位有误。"
-          className="min-h-36"
-          maxLength={1000}
-        />
-        <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm">
-          <input
-            type="checkbox"
-            checked={consented}
-            onChange={(event) => setConsented(event.target.checked)}
-            className="size-4"
+        <DialogBody>
+          <p className="text-[13px] leading-5 text-muted-foreground">
+            将提交本次排班的诊断编号、房间名称、当前干员和你的说明；不会重复上传完整干员数据或调试包。
+          </p>
+          <Textarea
+            autoFocus
+            value={note}
+            onChange={(event) => onNoteChange(event.target.value)}
+            placeholder="例如：这组应该换成可露希尔 / 当前站位有误。"
+            className="min-h-36 text-[13px]"
+            maxLength={1000}
           />
-          <span>我确认提交以上排班问题信息。</span>
-        </label>
+          <label className="flex min-h-11 cursor-pointer items-center gap-3 text-[13px]">
+            <input
+              type="checkbox"
+              checked={consented}
+              onChange={(event) => setConsented(event.target.checked)}
+              className="size-4"
+            />
+            <span>我确认提交以上排班问题信息。</span>
+          </label>
+        </DialogBody>
         <DialogFooter>
-          <Button className="max-sm:min-h-11" variant="outline" onClick={onCancel}>
+          <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" variant="ghost" onClick={onCancel}>
             取消
           </Button>
-          <Button className="max-sm:min-h-11" onClick={onSave} disabled={!note.trim() || note.trim().length > 1000 || !consented || saving}>
+          <Button size="dialog" onClick={onSave} disabled={!note.trim() || note.trim().length > 1000 || !consented || saving}>
             {saving ? <Loader2 className="animate-spin" /> : <Save />}
             {saving ? "提交中" : "提交反馈"}
           </Button>
@@ -1660,21 +1685,23 @@ export function ProductChangeConfirmModal({
         className="max-w-[min(520px,calc(100vw-2rem))] sm:max-w-lg"
         data-product-change-confirm
       >
-        <DialogHeader className="gap-3">
-          <AlertTriangle className="size-6 text-destructive" aria-hidden="true" />
-          <div>
-            <DialogTitle>更改配置并重新排班？</DialogTitle>
-            <DialogDescription className="mt-2 leading-6">
-              {roomLabel} 的{changeKind}将切换为「{nextValueLabel}」。当前排班结果会被替换，并立即使用新配置重新排班。
-            </DialogDescription>
-          </div>
+        <DialogHeader>
+          <DialogTitle>更改配置并重新排班？</DialogTitle>
+          <DialogDescription>
+            {roomLabel} 的{changeKind}将切换为「{nextValueLabel}」。当前排班结果会被替换，并立即使用新配置重新排班。
+          </DialogDescription>
         </DialogHeader>
-        <p className="text-sm text-muted-foreground">重新排班完成前，配置修改会暂时锁定。</p>
+        <DialogBody className="py-2">
+          <p className="flex items-start gap-2 text-[13px] leading-5 text-muted-foreground">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
+            重新排班完成前，配置修改会暂时锁定。
+          </p>
+        </DialogBody>
         <DialogFooter>
-          <Button type="button" variant="outline" disabled={busy} autoFocus onClick={onCancel}>
+          <Button className="max-sm:min-w-16 sm:min-w-[88px]" type="button" size="dialog" variant="ghost" disabled={busy} autoFocus onClick={onCancel}>
             取消
           </Button>
-          <Button type="button" variant="destructive" disabled={busy} onClick={onConfirm}>
+          <Button type="button" size="dialog" variant="destructive" disabled={busy} onClick={onConfirm}>
             {busy ? <Loader2 className="animate-spin" /> : <RotateCcw />}
             {busy ? "重新排班中" : "确认并重新排班"}
           </Button>

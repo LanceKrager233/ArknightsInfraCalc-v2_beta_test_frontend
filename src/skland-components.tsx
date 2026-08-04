@@ -22,6 +22,7 @@ interface SklandLoginPanelProps {
   disabledReason?: string | null;
   onAuthenticated: (session: SklandSessionData) => void;
   className?: string;
+  dialogPresentation?: boolean;
 }
 
 export function SklandLoginPanel({
@@ -29,6 +30,7 @@ export function SklandLoginPanel({
   disabledReason,
   onAuthenticated,
   className,
+  dialogPresentation = false,
 }: SklandLoginPanelProps) {
   const [scanId, setScanId] = useState<string | null>(null);
   const [scanUrl, setScanUrl] = useState<string | null>(null);
@@ -174,7 +176,12 @@ export function SklandLoginPanel({
 
   return (
     <Card
-      className={cn("surface-shadow w-full overflow-hidden rounded-none ring-0", className)}
+      className={cn(
+        dialogPresentation
+          ? "w-full overflow-hidden rounded-none border-0 bg-transparent shadow-none ring-0"
+          : "surface-shadow w-full overflow-hidden rounded-none ring-0",
+        className
+      )}
       data-skland-login-panel
     >
       <div className="grid md:grid-cols-[minmax(0,1fr)_22rem]">
@@ -182,7 +189,7 @@ export function SklandLoginPanel({
           <div className="mb-5 flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <ScanLine className="size-5" aria-hidden="true" />
           </div>
-          <CardTitle className="text-xl">登录森空岛账号</CardTitle>
+          <CardTitle className={dialogPresentation ? "text-lg" : "text-xl"}>登录森空岛账号</CardTitle>
           <CardDescription className="max-w-md text-pretty leading-6">
             <span className="md:hidden">打开森空岛 App 扫码登录，成功后自动同步排班所需数据。</span>
             <span className="hidden md:inline">
@@ -265,7 +272,8 @@ export function SklandLoginPanel({
                   <Button
                     nativeButton={false}
                     render={<a href={SKLAND_APP_OPEN_URL} target="_blank" rel="noreferrer" />}
-                    className="h-11 w-full"
+                    size={dialogPresentation ? "dialog" : "default"}
+                    className="w-full"
                   >
                     <ExternalLink />打开森空岛 App
                   </Button>
@@ -278,7 +286,8 @@ export function SklandLoginPanel({
               {!scanUrl || scanState === "expired" || scanError ? (
                 <Button
                   type="button"
-                  className="h-11 min-w-36"
+                  size={dialogPresentation ? "dialog" : "default"}
+                  className={dialogPresentation ? undefined : "h-11 min-w-36"}
                   variant={scanState === "idle" && !scanError ? "default" : "outline"}
                   disabled={scanState === "loading"}
                   onClick={() => void createQr()}

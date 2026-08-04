@@ -136,7 +136,7 @@ test("pins every compact room title to the shared top position", () => {
   );
 });
 
-test("renders the three highlighted products as text-only accents", () => {
+test("renders highlighted products as text-only accents", () => {
   assert.equal(
     compactTradeAccent("gold"),
     "infra-room-value border-transparent bg-transparent text-[#22BBFF]",
@@ -149,20 +149,20 @@ test("renders the three highlighted products as text-only accents", () => {
     compactFactoryAccent("battle_record"),
     "infra-room-value border-transparent bg-transparent text-[#4DB9FF]",
   );
+  assert.equal(
+    compactTradeAccent("originium"),
+    "infra-room-value border-transparent bg-transparent text-[#fb7e7e]",
+  );
+  assert.equal(
+    compactFactoryAccent("originium"),
+    "infra-room-value border-transparent bg-transparent text-[#fb7e7e]",
+  );
 });
 
 test("preserves every other compact product treatment", () => {
   assert.equal(
-    compactTradeAccent("originium"),
-    "border-transparent bg-[#8F1E26] text-white",
-  );
-  assert.equal(
     compactFactoryAccent("all"),
     "border-transparent bg-[#FFD800] text-[#313131]",
-  );
-  assert.equal(
-    compactFactoryAccent("originium"),
-    "border-transparent bg-[#8F1E26] text-white",
   );
   assert.equal(
     compactFactoryAccent("unknown"),

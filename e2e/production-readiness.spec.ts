@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const requestId = "11111111-1111-4111-8111-111111111111";
 const diagnosticId = "22222222-2222-4222-8222-222222222222";
@@ -9,6 +9,24 @@ const layout243 = {
   scenario: {},
   rooms: [{ id: "workshop", kind: "workshop", level: 3 }],
 };
+
+async function expectUnifiedDialogTypography(dialog: Locator, radius: "24px" | "32px" = "32px") {
+  await expect(dialog).toHaveClass(/dialog-acrylic/);
+  await expect(dialog).toHaveCSS("border-radius", radius);
+  await expect(dialog.locator('[data-slot="dialog-title"]')).toHaveCSS("font-size", "18px");
+  await expect(dialog.locator('[data-slot="dialog-title"]')).toHaveCSS("font-weight", "600");
+  await expect(dialog.locator('[data-slot="dialog-description"]')).toHaveCSS("font-size", "13px");
+}
+
+async function expectUnifiedDialogAction(
+  button: Locator,
+  { width, height }: { width?: "176px" | "196px"; height: "44px" | "46px" }
+) {
+  if (width) await expect(button).toHaveCSS("width", width);
+  await expect(button).toHaveCSS("height", height);
+  await expect(button).toHaveCSS("border-radius", "22px");
+  await expect(button).toHaveCSS("font-size", "13px");
+}
 
 const profile = {
   schema_version: 4,
@@ -735,6 +753,43 @@ test("the server flag plus ?beta enables the debug panels", async ({ page }) => 
   await expect(page.getByText("问题上下文")).toBeVisible();
 });
 
+test("shows the solving orb only while a plan request is running", async ({ page }) => {
+  await mockApis(page);
+  let releasePlan!: () => void;
+  const planGate = new Promise<void>((resolve) => {
+    releasePlan = resolve;
+  });
+  await page.route("**/api/plan", async (route) => {
+    await planGate;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true, data: planData, requestId }),
+    });
+  });
+  await seedPreferences(page);
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "全角色导入" }).click();
+  const status = page.getByRole("status");
+  const statusText = status.locator('[data-slot="status-text"]');
+  const readyTextX = await statusText.evaluate((element) => element.getBoundingClientRect().x);
+  await page.getByRole("button", { name: "生成排班" }).click();
+
+  const solvingOrb = status.locator('[data-slot="solving-orb"]');
+  await expect(status).toContainText("正在生成排班");
+  await expect(solvingOrb).toBeVisible();
+  await expect(solvingOrb).toHaveAttribute("aria-hidden", "true");
+  const solvingTextX = await statusText.evaluate((element) => element.getBoundingClientRect().x);
+  expect(solvingTextX).toBeCloseTo(readyTextX, 4);
+
+  releasePlan();
+  await expect(status).toContainText("排班已生成");
+  await expect(solvingOrb).toHaveCount(0);
+  const completeTextX = await statusText.evaluate((element) => element.getBoundingClientRect().x);
+  expect(completeTextX).toBeCloseTo(readyTextX, 4);
+});
+
 test("Full E2 stays in place and completes generation, shifts, MAA export, and feedback", async ({ page }) => {
   await mockApis(page);
   await seedPreferences(page);
@@ -779,11 +834,13 @@ test("Full E2 stays in place and completes generation, shifts, MAA export, and f
 
   await page.getByRole("button", { name: "加工站 反馈排班问题" }).click();
   const feedbackDialog = page.getByRole("dialog");
-  await expect(feedbackDialog).toHaveClass(/dialog-acrylic/);
+  await expectUnifiedDialogTypography(feedbackDialog);
   const feedbackFooter = feedbackDialog.locator('[data-slot="dialog-footer"]');
   await expect(feedbackFooter).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await expect(feedbackFooter).toHaveCSS("border-top-width", "0px");
   await expect(feedbackFooter).toHaveCSS("box-shadow", "none");
+  await expectUnifiedDialogAction(feedbackDialog.getByRole("button", { name: "取消" }), { height: "46px" });
+  await expectUnifiedDialogAction(feedbackDialog.getByRole("button", { name: "提交反馈" }), { width: "196px", height: "46px" });
   await page.getByPlaceholder(/这组应该换成/).fill("加工站排班与预期不一致");
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "提交反馈" }).click();
@@ -824,12 +881,15 @@ test("scheduled product changes require destructive confirmation and rerun with 
   await factoryControls.getByRole("button", { name: "作战记录" }).click();
   const confirmation = page.getByRole("alertdialog");
   await expect(confirmation).toBeVisible();
+  await expectUnifiedDialogTypography(confirmation);
   await expect(confirmation.getByRole("heading", { name: "更改配置并重新排班？" })).toBeVisible();
   await expect(confirmation).toContainText("制造站 1 的制造配方将切换为「作战记录」");
   const confirmationFooter = confirmation.locator('[data-slot="dialog-footer"]');
   await expect(confirmationFooter).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await expect(confirmationFooter).toHaveCSS("border-top-width", "0px");
   await expect(confirmationFooter).toHaveCSS("box-shadow", "none");
+  await expectUnifiedDialogAction(confirmation.getByRole("button", { name: "取消" }), { height: "46px" });
+  await expectUnifiedDialogAction(confirmation.getByRole("button", { name: "确认并重新排班" }), { width: "196px", height: "46px" });
   await expect(confirmation.getByRole("button", { name: "确认并重新排班" })).toHaveClass(/text-destructive/);
   await confirmation.getByRole("button", { name: "取消" }).click();
   await expect(confirmation).toBeHidden();
@@ -844,7 +904,7 @@ test("scheduled product changes require destructive confirmation and rerun with 
   await expect(confirmation).toHaveAttribute("aria-busy", "true");
   await expect(confirmation.getByRole("button", { name: "重新排班中" })).toBeDisabled();
 
-  const rerunLayout = rerunPayload?.layout as { rooms?: Array<{ id?: string; product?: { trade?: { order?: string } } }> } | undefined;
+  const rerunLayout = (rerunPayload as Record<string, unknown> | null)?.layout as { rooms?: Array<{ id?: string; product?: { trade?: { order?: string } } }> } | undefined;
   expect(rerunLayout?.rooms?.find((room) => room.id === "trade_1")?.product?.trade?.order).toBe("originium");
   releaseRerun?.();
   await expect(confirmation).toBeHidden();
@@ -1052,6 +1112,21 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   await expect(dialog.getByText("导入干员数据，再确认换班方式与基建设施。修改会立即应用，但不会自动生成排班。")).toHaveCount(0);
   await expect(dialog.locator("[data-setup-footer]")).toBeVisible();
   await expect(dialog.locator("[data-setup-footer]")).toHaveClass(/setup-dialog-footer/);
+  await expect(dialog).toHaveCSS("border-radius", "32px");
+  const dialogMaterial = await dialog.evaluate((element) => ({
+    shadow: getComputedStyle(element).boxShadow,
+    texture: getComputedStyle(element, "::before").backgroundImage,
+  }));
+  expect(dialogMaterial.texture).toContain("repeating-linear-gradient");
+  expect(dialogMaterial.texture).toContain("60px");
+  expect(dialogMaterial.shadow).toContain("0px 0px 44px");
+  await expect(dialog).toHaveCSS("width", "880px");
+  const setupPrimaryAction = dialog.getByRole("button", { name: "完成", exact: true });
+  await expect(setupPrimaryAction).toHaveCSS("width", "196px");
+  await expect(setupPrimaryAction).toHaveCSS("height", "46px");
+  await expect(setupPrimaryAction).toHaveCSS("border-radius", "22px");
+  await expect(setupPrimaryAction).toHaveCSS("font-size", "13px");
+  await expect(setupPrimaryAction.locator("svg")).toHaveCSS("width", "12px");
   await expect(dialog.getByRole("heading", { name: "排班设置" })).toBeVisible();
   const closeButton = dialog.getByRole("button", { name: "Close" });
   await expect(closeButton).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
@@ -1176,7 +1251,7 @@ test("layout level controls clamp edits and expose the power-safe 342 defaults",
 
   await page.setViewportSize({ width: 390, height: 844 });
   const footerBox = await dialog.locator("[data-setup-footer]").boundingBox();
-  expect(footerBox?.height ?? Infinity).toBeLessThanOrEqual(72);
+  expect(footerBox?.height ?? Infinity).toBeLessThanOrEqual(56);
   expect((footerBox?.y ?? Infinity) + (footerBox?.height ?? Infinity)).toBeLessThanOrEqual(844);
   expect(await activeTradeOrder.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
   const mobileTradeLevel = dialog.locator('input[aria-label="trade_2 等级"]:visible');
@@ -1707,7 +1782,9 @@ test("Skland layout sync stays beside the tabs and confirms replacement of dirty
 
   const dialog = page.getByRole("dialog", { name: "覆盖当前布局设置？" });
   await expect(dialog).toBeVisible();
-  await expect(dialog).toHaveClass(/dialog-acrylic/);
+  await expectUnifiedDialogTypography(dialog);
+  await expectUnifiedDialogAction(dialog.getByRole("button", { name: "取消" }), { height: "46px" });
+  await expectUnifiedDialogAction(dialog.getByRole("button", { name: "覆盖并应用" }), { width: "196px", height: "46px" });
   await dialog.getByRole("button", { name: "覆盖并应用" }).click();
   await expect(layoutSync.getByRole("button", { name: "已同步" })).toBeDisabled();
 });
@@ -1954,8 +2031,12 @@ test("Skland supports adding, switching, and individually logging out multiple a
   await addAccount.click();
   const addAccountDialog = page.getByRole("dialog", { name: "添加森空岛账号" });
   await expect(addAccountDialog).toBeVisible();
-  await expect(addAccountDialog).toHaveClass(/dialog-acrylic/);
-  await page.getByRole("button", { name: "生成登录二维码" }).click();
+  await expectUnifiedDialogTypography(addAccountDialog);
+  await expect(addAccountDialog).toHaveCSS("width", "880px");
+  await expect(addAccountDialog.locator("[data-skland-login-panel]")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  const generateLoginQr = addAccountDialog.getByRole("button", { name: "生成登录二维码" });
+  await expectUnifiedDialogAction(generateLoginQr, { width: "196px", height: "46px" });
+  await generateLoginQr.click();
   await expect(page.getByRole("heading", { name: "第二账号博士" }).first()).toBeVisible({ timeout: 12_000 });
 
   const accountCombobox = page.getByRole("combobox", { name: "选择账号与角色" });
@@ -2066,7 +2147,9 @@ test("settings clears local product data without logging out of Skland", async (
   await page.getByRole("button", { name: "清除本地数据" }).first().click();
   const clearDialog = page.getByRole("dialog", { name: "清除本地数据？" });
   await expect(clearDialog).toBeVisible();
-  await expect(clearDialog).toHaveClass(/dialog-acrylic/);
+  await expectUnifiedDialogTypography(clearDialog, "24px");
+  await expectUnifiedDialogAction(clearDialog.getByRole("button", { name: "保留数据" }), { height: "44px" });
+  await expectUnifiedDialogAction(clearDialog.getByRole("button", { name: "清除本地数据" }), { width: "176px", height: "44px" });
   await page.getByRole("button", { name: "清除本地数据" }).last().click();
 
   const stored = await page.evaluate(() => ({

@@ -262,3 +262,13 @@ persistent storage: /var/lib/arknights-infra
 - 是否创建 commit、push、PR；如有，给出分支、commit 或 PR。
 - 是否执行生产部署；如执行，说明 release、端口、健康检查和持久化状态。
 - 仍未验证或尚未解决的风险。
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

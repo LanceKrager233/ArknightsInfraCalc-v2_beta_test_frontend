@@ -5,7 +5,7 @@ import { Check, ChevronRight, Database, FileJson, ScanLine, Trash2, Upload } fro
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -209,7 +209,7 @@ export function SetupDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent data-setup-dialog className="max-h-[min(820px,calc(100dvh-1rem))] max-w-[calc(100vw-1rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-[16px] p-0 sm:max-w-[min(1040px,calc(100vw-2rem))]">
+      <DialogContent data-setup-dialog className="max-h-[min(820px,calc(100dvh-1rem))] max-w-[calc(100%-1rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-[24px] p-0 sm:max-w-[min(880px,calc(100%-2rem))] sm:rounded-[32px]">
         <Tabs
           value={step}
           onValueChange={(value) => {
@@ -221,11 +221,8 @@ export function SetupDialog({
           }}
           className="contents"
         >
-          <div data-setup-top className="border-b border-foreground/8 px-4 pb-3 pt-4 sm:px-7 sm:pb-4 sm:pt-6">
-            <DialogTitle className="flex min-h-9 items-center gap-3 pr-12 text-lg">
-              <span className="h-6 w-1 shrink-0 bg-primary" aria-hidden="true" />
-              排班设置
-            </DialogTitle>
+          <div data-setup-top className="px-4 pb-3 pt-4 sm:px-7 sm:pb-4 sm:pt-6">
+            <DialogTitle className="min-h-9 pr-12">排班设置</DialogTitle>
             <TabsList
               data-setup-step-list
               variant="line"
@@ -234,7 +231,7 @@ export function SetupDialog({
             >
               <TabsTrigger
                 value="box"
-                className={`setup-step-trigger h-9 min-h-0 flex-none justify-start rounded-none border-0 px-0.5 py-0 after:hidden sm:px-0.5 ${step === "layout" && hasBox ? "text-emerald-700 hover:text-emerald-700" : ""}`}
+                className={`setup-step-trigger h-9 min-h-0 flex-none justify-start rounded-none border-0 px-0.5 py-0 text-base font-semibold after:hidden sm:px-0.5 ${step === "layout" && hasBox ? "text-emerald-700 hover:text-emerald-700" : ""}`}
               >
                 干员数据
               </TabsTrigger>
@@ -242,7 +239,7 @@ export function SetupDialog({
               <TabsTrigger
                 value="layout"
                 disabled={!hasBox}
-                className="setup-step-trigger h-9 min-h-0 flex-none justify-start rounded-none border-0 px-0.5 py-0 after:hidden sm:px-0.5"
+                className="setup-step-trigger h-9 min-h-0 flex-none justify-start rounded-none border-0 px-0.5 py-0 text-base font-semibold after:hidden sm:px-0.5"
               >
                 基建与换班
               </TabsTrigger>
@@ -371,7 +368,7 @@ export function SetupDialog({
 
                 <details className="setup-quiet-details">
                   <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">数据管理</summary>
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/70 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3 py-3">
                     <span className="text-xs text-muted-foreground">数据在此浏览器保存 30 天。</span>
                     <Button type="button" variant="outline" className="min-h-11" onClick={() => setClearConfirmOpen(true)}>
                       <Trash2 />清除本地数据
@@ -388,10 +385,10 @@ export function SetupDialog({
               onValueChange={handleLayoutSectionChange}
               className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-0"
             >
-              <div className="border-b border-foreground/8 px-4 py-3 sm:px-7">
+              <div className="px-4 py-3 sm:px-7">
                 <TabsList variant="line" className="w-full justify-start gap-5 p-0 sm:w-fit" aria-label="基建设置内容">
-                  <TabsTrigger value="basics" className="min-h-10 flex-none px-0 sm:px-0">布局与换班</TabsTrigger>
-                  <TabsTrigger value="facilities" className="min-h-10 flex-none px-0 sm:px-0">设施设置</TabsTrigger>
+                  <TabsTrigger value="basics" className="min-h-10 flex-none px-0 text-[13px] sm:px-0">布局与换班</TabsTrigger>
+                  <TabsTrigger value="facilities" className="min-h-10 flex-none px-0 text-[13px] sm:px-0">设施设置</TabsTrigger>
                 </TabsList>
               </div>
 
@@ -410,13 +407,13 @@ export function SetupDialog({
                       <PresetSelector presets={presets} selected={preset} onSelect={handlePresetSelect} />
                     </section>
 
-                    <div className="border-t border-border/70 pt-5">
+                    <div className="pt-1">
                       <RotationSettings value={rotationProfile} onChange={onRotationProfileChange} />
                     </div>
 
-                    <details className="setup-quiet-details border-t border-border/70 pt-1">
+                    <details className="setup-quiet-details pt-1">
                       <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">高级工具</summary>
-                      <div className="grid gap-2 border-t border-border/70 py-3 sm:grid-cols-2">
+                      <div className="grid gap-2 py-3 sm:grid-cols-2">
                         <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-[4px] border border-dashed text-sm font-medium text-muted-foreground transition-[color,border-color,background-color,scale] duration-150 ease-out active:scale-[0.96] hover:border-primary hover:bg-muted/40 hover:text-primary motion-reduce:transform-none">
                           <Upload className="size-4" />导入布局
                           <input
@@ -469,52 +466,60 @@ export function SetupDialog({
           </TabsContent>
         </Tabs>
 
-        <footer data-setup-footer className="setup-dialog-footer flex min-h-16 flex-nowrap items-center justify-end gap-2 px-4 py-3 sm:px-7">
+        <footer data-setup-footer className="setup-dialog-footer flex min-h-14 w-full min-w-0 flex-nowrap items-center justify-end gap-1.5 px-2 py-1.5 sm:min-h-16 sm:gap-2 sm:px-7">
           {step === "box" ? (
             <>
-              <Button className="h-10" type="button" variant="ghost" onClick={onSkip}>稍后</Button>
-              <Button className="h-10" type="button" disabled={!hasBox} onClick={goToBasics}>继续</Button>
+              <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={onSkip}>稍后</Button>
+              <Button size="dialog" type="button" disabled={!hasBox} onClick={goToBasics}>继续</Button>
             </>
           ) : layoutSection === "basics" ? (
             <>
-              <Button className="h-10" type="button" variant="ghost" onClick={goToBox}>返回</Button>
+              <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={goToBox}>返回</Button>
               {mustReviewFacilities ? (
-                <Button className="h-10" type="button" onClick={reviewFacilities}>检查设施</Button>
+                <Button size="dialog" type="button" onClick={reviewFacilities}>检查设施</Button>
               ) : (
-                <Button className="h-10" type="button" onClick={onFinish}><Check />完成</Button>
+                <Button size="dialog" type="button" onClick={onFinish}><Check />完成</Button>
               )}
             </>
           ) : (
             <>
-              <Button className="h-10 shrink-0" type="button" variant="ghost" onClick={goToBasics}>返回布局</Button>
+              <Button className="shrink-0 px-4 max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={goToBasics}>
+                <span className="sm:hidden">返回</span>
+                <span className="max-sm:hidden">返回布局</span>
+              </Button>
               <span
                 className={`min-w-0 flex-1 truncate text-right text-xs tabular-nums sm:text-sm ${powerBudget.ok ? "text-emerald-700" : "text-red-600"}`}
                 role="status"
               >
-                {powerBudget.ok
-                  ? `电力正常 · ${powerBudget.generated}/${powerBudget.consumed}`
-                  : `电力不足 ${powerBudget.consumed - powerBudget.generated} · ${powerBudget.generated}/${powerBudget.consumed}`}
+                <span className={`sm:hidden ${powerBudget.ok ? "text-emerald-700" : "text-red-600"}`}>
+                  {powerBudget.ok ? "电力正常" : `缺 ${powerBudget.consumed - powerBudget.generated}`}
+                </span>
+                <span className={`max-sm:hidden ${powerBudget.ok ? "text-emerald-700" : "text-red-600"}`}>
+                  {powerBudget.ok
+                    ? `电力正常 · ${powerBudget.generated}/${powerBudget.consumed}`
+                    : `电力不足 ${powerBudget.consumed - powerBudget.generated} · ${powerBudget.generated}/${powerBudget.consumed}`}
+                </span>
               </span>
-              <Button className="h-10 shrink-0" type="button" disabled={!powerBudget.ok} onClick={onFinish}><Check />完成</Button>
+              <Button className="shrink-0" size="dialog" type="button" disabled={!powerBudget.ok} onClick={onFinish}><Check />完成</Button>
             </>
           )}
         </footer>
       </DialogContent>
 
       <Dialog open={clearConfirmOpen} onOpenChange={setClearConfirmOpen}>
-        <DialogContent className="max-w-[min(460px,calc(100vw-2rem))]">
+        <DialogContent layer="nested" className="max-w-[min(460px,calc(100vw-2rem))]">
           <DialogHeader>
             <DialogTitle>清除本地数据？</DialogTitle>
             <DialogDescription>
               将删除此浏览器中的布局、干员数据、最近排班和提示偏好。森空岛登录状态不会退出。
             </DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" className="min-h-11" onClick={() => setClearConfirmOpen(false)}>保留数据</Button>
+          <DialogFooter>
+            <Button className="max-sm:min-w-16 sm:min-w-[88px]" type="button" size="dialog" variant="ghost" onClick={() => setClearConfirmOpen(false)}>保留数据</Button>
             <Button
               type="button"
+              size="dialog"
               variant="destructive"
-              className="min-h-11"
               onClick={() => {
                 onClearLocalData();
                 setClearConfirmOpen(false);
@@ -522,7 +527,7 @@ export function SetupDialog({
             >
               清除本地数据
             </Button>
-          </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </Dialog>
