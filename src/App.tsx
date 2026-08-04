@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -10,11 +11,15 @@ import { SklandStatus } from "@/components/pages/SklandStatus";
 import { TrainingAdvice } from "@/components/pages/TrainingAdvice";
 
 import {
+  authorizeSklandStatus,
+  deleteAllSklandData,
   getHealth,
   getSampleOperbox,
   getSklandSession,
+  getSklandStatus,
   logoutSkland,
   runPlan,
+  revokeSklandStatus,
   saveFeedback,
   selectSklandRole,
   toDisplayError,
@@ -42,6 +47,7 @@ import { ONBOARDING_STORAGE_KEY, initialSetupStep, shouldAutoOpenSetup, type Set
 import { readOperboxFile, readOperboxText } from "./operbox";
 import { normalizeOperboxEntries } from "./operbox-normalization";
 import {
+  applyLocalLayoutPatch,
   clearLocalProductData,
   loadPersistedSession,
   persistSession,
@@ -64,7 +70,8 @@ import {
   RotationProfile,
   SklandAccountSummary,
   SklandSessionData,
-  SklandSnapshot,
+  SklandScheduleSnapshot,
+  SklandStatusSnapshot,
 } from "./types";
 
 type ProductChange =
@@ -190,10 +197,13 @@ function WorkbenchApp() {
   const [fileName, setFileName] = useState<string | null>(null);
   const [boxSource, setBoxSource] = useState<BoxSource>("sample");
   const [layoutDirty, setLayoutDirty] = useState(false);
+  const [layoutSource, setLayoutSource] = useState<"local" | "skland">("local");
+  const [localLayoutBackup, setLocalLayoutBackup] = useState<BaseBlueprint | null>(null);
   const [rotationProfile, setRotationProfile] = useState<RotationProfile>(DEFAULT_ROTATION_PROFILE);
   const [inputMode, setInputMode] = useState<"skland" | "maa">("skland");
   const [maaPaste, setMaaPaste] = useState("");
-  const [sklandSnapshot, setSklandSnapshot] = useState<SklandSnapshot | null>(null);
+  const [sklandScheduleSnapshot, setSklandScheduleSnapshot] = useState<SklandScheduleSnapshot | null>(null);
+  const [sklandStatusSnapshot, setSklandStatusSnapshot] = useState<SklandStatusSnapshot | null>(null);
   const [sklandAccounts, setSklandAccounts] = useState<SklandAccountSummary[]>([]);
   const [sklandActiveAccountId, setSklandActiveAccountId] = useState<string | null>(null);
   const [sklandConfigured, setSklandConfigured] = useState(false);
@@ -207,7 +217,10 @@ function WorkbenchApp() {
   const initialBoxSource = useRef(boxSource);
   const initialOperbox = useRef(operbox);
   const initialLayoutDirty = useRef(layoutDirty);
+  const initialLayoutSource = useRef<"local" | "skland">("local");
+  const initialLocalLayoutBackup = useRef<BaseBlueprint | null>(null);
   const skipNextPersistence = useRef(false);
+  const statusLoadingAccount = useRef<string | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
   const [inputErrorCode, setInputErrorCode] = useState<DisplayError["code"]>("AIC-BOX-1101");
   const [sampleLoading, setSampleLoading] = useState(false);
@@ -234,25 +247,29 @@ function WorkbenchApp() {
   const activeRotationShift = scheduleResult?.rotation.shifts?.[activeShift];
   const rows = useMemo(() => planToRows(activePlan, activeRotationShift, layout), [activePlan, activeRotationShift, layout]);
   const currentMoraleByOperator = useMemo(() => {
-    if (boxSource !== "skland" || !sklandSnapshot) return undefined;
+    if (boxSource !== "skland" || !sklandScheduleSnapshot) return undefined;
 
     return new Map(
-      sklandSnapshot.infrastructure.rooms.flatMap((room) =>
+      sklandScheduleSnapshot.infrastructure.rooms.flatMap((room) =>
         room.operators.map((operator) => [operator.name, operator.morale] as const)
       )
     );
-  }, [boxSource, sklandSnapshot]);
+  }, [boxSource, sklandScheduleSnapshot]);
   const shiftComparisons = useMemo(
-    () => compareShifts(scheduleResult?.maa, sklandSnapshot?.infrastructure),
-    [scheduleResult?.maa, sklandSnapshot?.infrastructure]
+    () => compareShifts(scheduleResult?.maa, sklandScheduleSnapshot?.infrastructure),
+    [scheduleResult?.maa, sklandScheduleSnapshot?.infrastructure]
   );
   const closestComparison = useMemo(() => closestShift(shiftComparisons), [shiftComparisons]);
   const sklandLayoutMatches = useMemo(() => {
-    const suggestion = sklandSnapshot?.infrastructure.layoutSuggestion;
+    const suggestion = sklandScheduleSnapshot?.infrastructure.layoutSuggestion;
     if (!suggestion) return false;
     const compact = (value: BaseBlueprint) => value.rooms.map((room) => [room.id, room.kind, room.level, room.product]);
     return JSON.stringify(compact(layout)) === JSON.stringify(compact(suggestion));
-  }, [layout, sklandSnapshot?.infrastructure.layoutSuggestion]);
+  }, [layout, sklandScheduleSnapshot?.infrastructure.layoutSuggestion]);
+  const activeSklandAccount = useMemo(
+    () => sklandAccounts.find((account) => account.accountId === sklandActiveAccountId) ?? null,
+    [sklandAccounts, sklandActiveAccountId]
+  );
   const canRun = Boolean(operbox && operbox.length > 0 && cliReady);
   const showBetaPanels = betaRequested && debugToolsEnabled;
 
@@ -280,6 +297,8 @@ function WorkbenchApp() {
         setFileName(restored.sourceName);
         setBoxSource(restored.boxSource);
         setLayoutDirty(restored.layoutDirty);
+        setLayoutSource(restored.layoutSource);
+        setLocalLayoutBackup(restored.localLayoutBackup);
         setRotationProfile(restored.rotationProfile);
         setResult(restored.result);
         setActiveShift(restored.activeShift);
@@ -287,6 +306,8 @@ function WorkbenchApp() {
         initialBoxSource.current = restored.boxSource;
         initialOperbox.current = restoredOperbox;
         initialLayoutDirty.current = restored.layoutDirty;
+        initialLayoutSource.current = restored.layoutSource;
+        initialLocalLayoutBackup.current = restored.localLayoutBackup;
       }
     } catch {
       setStorageNotice(displayError("AIC-LOCAL-7001", "浏览器无法读取本地数据，但仍可继续生成排班。"));
@@ -309,6 +330,8 @@ function WorkbenchApp() {
         sourceName: fileName,
         boxSource,
         layoutDirty,
+        layoutSource,
+        localLayoutBackup,
         rotationProfile,
         result,
         activeShift,
@@ -317,7 +340,7 @@ function WorkbenchApp() {
     } catch {
       setStorageNotice(displayError("AIC-LOCAL-7001", "浏览器无法保存本地数据，但仍可继续生成排班。"));
     }
-  }, [hasRestoredSession, preset, layout, operbox, fileName, boxSource, layoutDirty, rotationProfile, result, activeShift]);
+  }, [hasRestoredSession, preset, layout, operbox, fileName, boxSource, layoutDirty, layoutSource, localLayoutBackup, rotationProfile, result, activeShift]);
 
   useEffect(() => {
     if (!hasRestoredSession || typeof window === "undefined") return;
@@ -357,17 +380,27 @@ function WorkbenchApp() {
         setSklandDisabledReason(session.disabledReason ?? null);
         setSklandAccounts(session.accounts);
         setSklandActiveAccountId(session.activeAccountId);
-        if (session.authenticated && session.snapshot) {
-          setSklandSnapshot(session.snapshot);
+        if (session.authenticated && session.scheduleSnapshot) {
+          setSklandScheduleSnapshot(session.scheduleSnapshot);
           if (initialBoxSource.current === "skland" || !initialOperbox.current) {
-            setOperbox(normalizeOperboxEntries(session.snapshot.operbox));
-            setFileName(session.snapshot.sourceName);
+            setOperbox(normalizeOperboxEntries(session.scheduleSnapshot.operbox));
+            setFileName(session.scheduleSnapshot.sourceName);
             setBoxSource("skland");
           }
-          if (!initialLayoutDirty.current && session.snapshot.infrastructure.layoutSuggestion) {
-            const suggestion = session.snapshot.infrastructure.layoutSuggestion;
+          if (
+            !initialLayoutDirty.current
+            && (initialBoxSource.current === "skland" || !initialOperbox.current)
+            && session.scheduleSnapshot.infrastructure.layoutSuggestion
+          ) {
+            const suggestion = session.scheduleSnapshot.infrastructure.layoutSuggestion;
             setLayout(mergeSklandLayout(initialLayoutForRestore.current, suggestion));
-            setPreset(resolvePreset(PRESETS.find((item) => item.label === session.snapshot?.infrastructure.layoutLabel)));
+            setLocalLayoutBackup(
+              initialLayoutSource.current === "local"
+                ? structuredClone(initialLayoutForRestore.current)
+                : initialLocalLayoutBackup.current
+            );
+            setLayoutSource("skland");
+            setPreset(resolvePreset(PRESETS.find((item) => item.label === session.scheduleSnapshot?.infrastructure.layoutLabel)));
           }
         }
       } else {
@@ -379,6 +412,36 @@ function WorkbenchApp() {
       cancelled = true;
     };
   }, [hasRestoredSession]);
+
+  useEffect(() => {
+    if (
+      page !== "skland"
+      || !activeSklandAccount?.statusAuthorized
+      || sklandStatusSnapshot
+      || statusLoadingAccount.current === activeSklandAccount.accountId
+    ) return;
+    let cancelled = false;
+    statusLoadingAccount.current = activeSklandAccount.accountId;
+    setSklandBusy(true);
+    void getSklandStatus()
+      .then((status) => {
+        if (cancelled) return;
+        setSklandAccounts(status.accounts);
+        setSklandActiveAccountId(status.activeAccountId);
+        setSklandStatusSnapshot(status.snapshot ?? null);
+        setSklandError(null);
+      })
+      .catch((error) => {
+        if (!cancelled) setSklandError(toDisplayError(error, "状态中心加载失败，请稍后重试。"));
+      })
+      .finally(() => {
+        statusLoadingAccount.current = null;
+        if (!cancelled) setSklandBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSklandAccount, page, sklandStatusSnapshot]);
 
   async function handleFile(file: File): Promise<boolean> {
     setInputError(null);
@@ -397,15 +460,17 @@ function WorkbenchApp() {
     }
   }
 
-  function applySklandSnapshot(snapshot: SklandSnapshot, applyLayoutWhenClean = true) {
-    setSklandSnapshot(snapshot);
+  function applySklandSnapshot(snapshot: SklandScheduleSnapshot, applyLayoutWhenClean = true) {
+    setSklandScheduleSnapshot(snapshot);
     setOperbox(normalizeOperboxEntries(snapshot.operbox));
     setFileName(snapshot.sourceName);
     setBoxSource("skland");
     setInputMode("skland");
     clearPlanResult();
     if (applyLayoutWhenClean && !layoutDirty && snapshot.infrastructure.layoutSuggestion) {
+      if (layoutSource === "local") setLocalLayoutBackup(structuredClone(layout));
       setLayout((current) => mergeSklandLayout(current, snapshot.infrastructure.layoutSuggestion as BaseBlueprint));
+      setLayoutSource("skland");
       setPreset(resolvePreset(PRESETS.find((item) => item.label === snapshot.infrastructure.layoutLabel)));
       setLayoutDirty(false);
     }
@@ -414,11 +479,12 @@ function WorkbenchApp() {
   function applySklandSession(session: SklandSessionData, applyLayoutWhenClean = true) {
     setSklandAccounts(session.accounts);
     setSklandActiveAccountId(session.activeAccountId);
-    if (session.authenticated && session.snapshot) {
-      applySklandSnapshot(session.snapshot, applyLayoutWhenClean);
+    setSklandStatusSnapshot(null);
+    if (session.authenticated && session.scheduleSnapshot) {
+      applySklandSnapshot(session.scheduleSnapshot, applyLayoutWhenClean);
       return;
     }
-    setSklandSnapshot(null);
+    setSklandScheduleSnapshot(null);
     if (boxSource === "skland") {
       setOperbox(null);
       setFileName(null);
@@ -448,8 +514,25 @@ function WorkbenchApp() {
     setSklandError(null);
     try {
       const session = await selectSklandRole(accountId, uid);
-      if (!session.authenticated || !session.snapshot) throw new Error("角色切换失败。");
+      if (!session.authenticated || !session.scheduleSnapshot) throw new Error("角色切换失败。");
+      const selectedAccount = session.accounts.find((account) => account.accountId === session.activeAccountId);
+      let status: Awaited<ReturnType<typeof getSklandStatus>> | null = null;
+      let statusError: unknown = null;
+      if (selectedAccount?.statusAuthorized) {
+        try {
+          status = await getSklandStatus();
+        } catch (error) {
+          statusError = error;
+        }
+      }
       applySklandSession(session, false);
+      if (status) {
+        setSklandAccounts(status.accounts);
+        setSklandActiveAccountId(status.activeAccountId);
+        setSklandStatusSnapshot(status.snapshot ?? null);
+      } else if (statusError) {
+        setSklandError(toDisplayError(statusError, "角色已切换，但状态中心加载失败，请稍后重试。"));
+      }
     } catch (error) {
       const normalized = toDisplayError(error, "角色切换失败，请稍后重试。");
       setSklandError(normalized);
@@ -457,7 +540,7 @@ function WorkbenchApp() {
         const current = await getSklandSession();
         setSklandAccounts(current.accounts);
         setSklandActiveAccountId(current.activeAccountId);
-        if (current.authenticated && current.snapshot) applySklandSnapshot(current.snapshot, false);
+        if (current.authenticated && current.scheduleSnapshot) applySklandSnapshot(current.scheduleSnapshot, false);
       } catch {
         // 保留上一份成功快照，等待用户再次操作。
       }
@@ -482,10 +565,12 @@ function WorkbenchApp() {
   }
 
   function handleApplySklandLayout() {
-    const suggestion = sklandSnapshot?.infrastructure.layoutSuggestion;
+    const suggestion = sklandScheduleSnapshot?.infrastructure.layoutSuggestion;
     if (!suggestion) return;
+    if (layoutSource === "local") setLocalLayoutBackup(structuredClone(layout));
     setLayout((current) => mergeSklandLayout(current, suggestion));
-    setPreset(resolvePreset(PRESETS.find((item) => item.label === sklandSnapshot.infrastructure.layoutLabel)));
+    setLayoutSource("skland");
+    setPreset(resolvePreset(PRESETS.find((item) => item.label === sklandScheduleSnapshot.infrastructure.layoutLabel)));
     setLayoutDirty(false);
     clearPlanResult();
   }
@@ -514,6 +599,7 @@ function WorkbenchApp() {
         layout: planLayout,
         operbox: normalizeOperboxEntries(operbox),
         sourceName: fileName,
+        boxSource,
         rotation: rotationProfile,
       });
       setResult(response);
@@ -655,10 +741,18 @@ function WorkbenchApp() {
     clearPlanResult();
   }
 
-  function applyProductChange(change: ProductChange) {
-    setLayout((current) => layoutWithProductChange(current, change));
+  function applyPartialLocalLayoutEdit(patch: (layout: BaseBlueprint) => BaseBlueprint): BaseBlueprint {
+    const next = applyLocalLayoutPatch({ layout, layoutSource, localLayoutBackup }, patch, defaultLayout);
+    setLayout(next.layout);
+    setLayoutSource(next.layoutSource);
+    setLocalLayoutBackup(next.localLayoutBackup);
     setLayoutDirty(true);
     clearPlanResult();
+    return next.layout;
+  }
+
+  function applyProductChange(change: ProductChange) {
+    applyPartialLocalLayoutEdit((current) => layoutWithProductChange(current, change));
   }
 
   function productChangeLabel(change: ProductChange) {
@@ -690,10 +784,9 @@ function WorkbenchApp() {
 
   async function confirmScheduleProductChange() {
     if (!pendingProductChange || loading) return;
-    const nextLayout = layoutWithProductChange(layout, pendingProductChange);
-    setLayout(nextLayout);
-    setLayoutDirty(true);
-    clearPlanResult();
+    const nextLayout = applyPartialLocalLayoutEdit(
+      (current) => layoutWithProductChange(current, pendingProductChange)
+    );
     try {
       await runPlanForLayout(nextLayout);
     } finally {
@@ -725,6 +818,8 @@ function WorkbenchApp() {
     setPreset(nextPreset);
     setLayout(buildBlueprint(nextPreset));
     setLayoutDirty(true);
+    setLayoutSource("local");
+    setLocalLayoutBackup(null);
     clearPlanResult();
   }
 
@@ -745,9 +840,7 @@ function WorkbenchApp() {
   }
 
   function handleRoomLevelChange(roomId: string, level: number) {
-    setLayout((current) => updateRoomLevel(current, roomId, level));
-    setLayoutDirty(true);
-    clearPlanResult();
+    applyPartialLocalLayoutEdit((current) => updateRoomLevel(current, roomId, level));
   }
 
   async function handleLayoutFile(file: File) {
@@ -756,6 +849,8 @@ function WorkbenchApp() {
       if (!parsed) throw new Error("布局文件格式无效，请检查房间名称、类型和设施等级。");
       setLayout(parsed);
       setLayoutDirty(true);
+      setLayoutSource("local");
+      setLocalLayoutBackup(null);
       clearPlanResult();
       setInputError(null);
     } catch (error) {
@@ -798,12 +893,106 @@ function WorkbenchApp() {
   }
 
   function useSklandSnapshotFromSetup() {
-    if (sklandSnapshot) applySklandSnapshot(sklandSnapshot);
+    if (sklandScheduleSnapshot) applySklandSnapshot(sklandScheduleSnapshot);
   }
 
   function handleSklandAuthenticated(session: SklandSessionData) {
     setSklandError(null);
     applySklandSession(session);
+  }
+
+  async function handleAuthorizeSklandStatus() {
+    setSklandBusy(true);
+    setSklandError(null);
+    try {
+      const status = await authorizeSklandStatus();
+      setSklandAccounts(status.accounts);
+      setSklandActiveAccountId(status.activeAccountId);
+      setSklandStatusSnapshot(status.snapshot ?? null);
+    } catch (error) {
+      setSklandError(toDisplayError(error, "无法启用状态中心，请稍后重试。"));
+    } finally {
+      setSklandBusy(false);
+    }
+  }
+
+  async function handleRevokeSklandStatus() {
+    setSklandBusy(true);
+    setSklandError(null);
+    try {
+      const status = await revokeSklandStatus();
+      setSklandAccounts(status.accounts);
+      setSklandActiveAccountId(status.activeAccountId);
+      setSklandStatusSnapshot(null);
+    } catch (error) {
+      setSklandError(toDisplayError(error, "无法撤回状态中心授权，请稍后重试。"));
+    } finally {
+      setSklandBusy(false);
+    }
+  }
+
+  async function handleDeleteAllSklandData() {
+    setSklandBusy(true);
+    setSklandError(null);
+    try {
+      await deleteAllSklandData();
+      const clearsBox = boxSource === "skland";
+      const clearsLayout = layoutSource === "skland";
+      const retainedLayout = clearsLayout
+        ? localLayoutBackup ?? buildBlueprint(defaultPreset)
+        : layout;
+      const retainedPreset = clearsLayout
+        ? resolvePreset(PRESETS.find((item) => item.label === retainedLayout.template))
+        : preset;
+      const retainedResult = clearsBox || clearsLayout ? null : result;
+      try {
+        persistSession(window.localStorage, {
+          presetLabel: retainedPreset.label,
+          layout: retainedLayout,
+          operbox: clearsBox ? null : operbox,
+          sourceName: clearsBox ? null : fileName,
+          boxSource: clearsBox ? "sample" : boxSource,
+          layoutDirty: clearsLayout ? false : layoutDirty,
+          layoutSource: "local",
+          localLayoutBackup: null,
+          rotationProfile,
+          result: retainedResult,
+          activeShift: retainedResult ? activeShift : 0,
+        });
+      } catch {
+        clearLocalProductData(window.localStorage);
+        setStorageNotice(displayError(
+          "AIC-LOCAL-7001",
+          "浏览器无法保留独立导入数据，已改为清除整份本地会话以确保森空岛数据不再保留。"
+        ));
+      }
+      setSklandAccounts([]);
+      setSklandActiveAccountId(null);
+      setSklandScheduleSnapshot(null);
+      setSklandStatusSnapshot(null);
+      if (clearsBox) {
+        setOperbox(null);
+        setFileName(null);
+        setBoxSource("sample");
+        setResult(null);
+        setActiveShift(0);
+      }
+      if (clearsLayout) {
+        setPreset(retainedPreset);
+        setLayout(retainedLayout);
+        setLayoutSource("local");
+        setLocalLayoutBackup(null);
+        setLayoutDirty(false);
+        setResult(null);
+        setActiveShift(0);
+      }
+      clearIssueState();
+    } catch (error) {
+      setSklandError(toDisplayError(error, "森空岛数据删除失败，请稍后重试。"));
+      throw error;
+    } finally {
+      setSklandBusy(false);
+    }
   }
 
   function handleClearLocalData() {
@@ -816,6 +1005,8 @@ function WorkbenchApp() {
       setFileName(null);
       setBoxSource("sample");
       setLayoutDirty(false);
+      setLayoutSource("local");
+      setLocalLayoutBackup(null);
       setRotationProfile(DEFAULT_ROTATION_PROFILE);
       setResult(null);
       setActiveShift(0);
@@ -875,7 +1066,8 @@ function WorkbenchApp() {
       <AppSidebar page={page} onPageChange={setPage} />
       <SidebarInset>
         <AppTopBar
-          snapshot={sklandSnapshot}
+          account={activeSklandAccount}
+          statusSnapshot={sklandStatusSnapshot}
           sessionLoading={sklandSessionLoading}
           onOpenSkland={() => setPage("skland")}
         />
@@ -921,7 +1113,8 @@ function WorkbenchApp() {
         />
       ) : page === "skland" ? (
         <SklandStatus
-          snapshot={sklandSnapshot}
+          scheduleSnapshot={sklandScheduleSnapshot}
+          snapshot={sklandStatusSnapshot}
           accounts={sklandAccounts}
           activeAccountId={sklandActiveAccountId}
           sessionLoading={sklandSessionLoading}
@@ -934,6 +1127,9 @@ function WorkbenchApp() {
           onAuthenticated={handleSklandAuthenticated}
           onRoleChange={handleSklandRole}
           onLogout={handleSklandLogout}
+          onAuthorizeStatus={handleAuthorizeSklandStatus}
+          onRevokeStatus={handleRevokeSklandStatus}
+          onDeleteAllData={handleDeleteAllSklandData}
           onApplyLayout={handleApplySklandLayout}
           onContinueSetup={() => {
             setSetupInitialStep("layout");
@@ -946,6 +1142,12 @@ function WorkbenchApp() {
         <TrainingAdvice operbox={operbox} layout={layout} profile={result?.profile} onOpenCalculator={() => setPage("calculator")} />
       )}
       </div>
+
+      <footer className="app-content-track mt-auto flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border/70 py-5 text-xs text-muted-foreground">
+        <span>非官方、小范围测试中的排班辅助工具</span>
+        <Link className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/terms">本站服务条款</Link>
+        <Link className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/privacy">本站隐私政策</Link>
+      </footer>
 
       <SetupDialog
         open={setupOpen}
@@ -960,7 +1162,7 @@ function WorkbenchApp() {
         onMaaPasteChange={setMaaPaste}
         inputError={inputError}
         resultClearWarningDismissed={resultClearWarningDismissed}
-        sklandSnapshot={sklandSnapshot}
+        sklandSnapshot={sklandScheduleSnapshot}
         sklandConfigured={sklandConfigured}
         sklandDisabledReason={sklandDisabledReason}
         onOpenSkland={openSklandFromSetup}

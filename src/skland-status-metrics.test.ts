@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { deriveSklandBuildingMetrics } from "./skland-status-metrics.ts";
-import type { SklandSnapshot } from "./types.ts";
+import type { SklandStatusSnapshot } from "./types.ts";
 
-function snapshot(): SklandSnapshot {
+function snapshot(): SklandStatusSnapshot {
   const now = Date.parse("2026-08-02T00:00:00+08:00") / 1000;
   return {
     player: {

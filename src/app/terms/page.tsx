@@ -1,0 +1,62 @@
+import type { Metadata } from "next";
+
+import { LegalDocument } from "@/components/legal/LegalDocument";
+import { legalIdentity } from "@/legal";
+import { LEGAL_EFFECTIVE_DATE } from "@/legal-policy";
+
+export const metadata: Metadata = {
+  title: "服务条款 · 明日方舟基建排班助手",
+  description: "使用明日方舟基建排班助手及森空岛同步功能的约定。",
+};
+
+export default function TermsPage() {
+  const identity = legalIdentity();
+  return (
+    <LegalDocument eyebrow="明日方舟基建排班助手" title="服务条款" effectiveDate={LEGAL_EFFECTIVE_DATE}>
+      <section>
+        <h2>1. 服务说明</h2>
+        <p>本站由{identity.operatorName}维护，为《明日方舟》玩家提供基建排班、练卡建议、森空岛数据同步和 MAA 导出。本站处于小范围测试阶段，是非官方、非商业工具，与鹰角网络、森空岛和 MAA 项目不存在隶属、代理或背书关系。</p>
+      </section>
+
+      <section>
+        <h2>2. 条款接受</h2>
+        <p>你可以在不同意本条款时继续使用无需登录的本地导入功能。生成森空岛二维码前，你必须分别同意本条款和本站隐私政策；政策版本变化后需要重新确认。</p>
+      </section>
+
+      <section>
+        <h2>3. 账号与授权</h2>
+        <ul>
+          <li>你只能同步自己有权使用的森空岛账号和游戏角色。</li>
+          <li>二维码是本站唯一提供的森空岛登录方式。本站不会要求你输入账号密码或短信验证码。</li>
+          <li>你应妥善保护设备和浏览器会话，并在共享设备上及时退出或删除全部森空岛数据。</li>
+          <li>状态中心是独立可选功能；拒绝或撤回其授权不影响基础排班。</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>4. 使用规则</h2>
+        <p>你不得利用本站侵入他人账号、绕过官方授权、批量滥用接口、破坏服务稳定性、传播违法内容，或将本站用于任何侵犯他人合法权益的活动。出现明显滥用、安全风险或上游规则变化时，本站可以限制相关功能。</p>
+      </section>
+
+      <section>
+        <h2>5. 第三方服务</h2>
+        <p>森空岛登录与同步依赖第三方网络和接口，并同时受<a href="https://assets.skland.com/protocols/agreement.html">森空岛使用许可及服务协议</a>及<a href="https://assets.skland.com/protocols/privacy.html">森空岛个人信息保护政策</a>约束。上游接口、规则或可用性变化可能导致同步功能中断，本站无法承诺持续可用。</p>
+      </section>
+
+      <section>
+        <h2>6. 排班结果与责任限制</h2>
+        <p>排班、效率和练卡建议由输入数据及求解器生成，仅供游戏辅助参考。你应在导入 MAA 或调整游戏内设施前自行核对结果。对于测试功能中断、上游数据错误、设备故障或依据建议进行操作造成的间接损失，本站在法律允许范围内不承担超出合理范围的责任。</p>
+      </section>
+
+      <section>
+        <h2>7. 服务变更与终止</h2>
+        <p>本站可能为修复安全问题、适配上游变化或结束测试而调整功能。涉及个人信息处理目的或授权范围的实质变化，会通过更新政策版本并重新取得同意后生效。你可以随时停止使用并删除全部森空岛数据。</p>
+      </section>
+
+      <section>
+        <h2>8. 联系与争议</h2>
+        <p>如对本条款有疑问，请通过<a href={identity.contactUrl}>项目问题反馈渠道</a>{identity.contactEmail ? <>或邮箱 <a href={`mailto:${identity.contactEmail}`}>{identity.contactEmail}</a></> : null}联系我们。双方应先友好协商；协商不成的，按照适用法律处理。</p>
+      </section>
+    </LegalDocument>
+  );
+}

@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { chmod, mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
 
 import type {
@@ -23,6 +24,11 @@ import {
 import { normalizeRotationResult } from "@/rotation-result";
 import { parseShiftFile } from "./shift-parser";
 import { isRotationProfile } from "@/rotation-settings";
+import {
+  isLegacySklandRunDirectoryName,
+  isPrivateStorageChild,
+  isSafePrivateStorageRoot,
+} from "./private-storage";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -50,6 +56,7 @@ type PlanRequestBody = {
   operbox: OperBoxEntry[];
   sourceName?: string | null;
   rotation: RotationProfile;
+  dataOwnerTag?: string | null;
 };
 
 const repoRoot = path.resolve(/* turbopackIgnore: true */ process.cwd());
@@ -63,6 +70,9 @@ const cliRunRoot = path.resolve(process.env.BETA_CLI_RUN_DIR || path.join(storag
 const cliReleaseRoot = path.resolve(process.env.BETA_CLI_RELEASE_DIR || path.join(storageRoot, "cli-releases"));
 const activeCliPath = path.join(storageRoot, "active-cli.json");
 const timeoutMs = Number(process.env.BETA_CLI_TIMEOUT_MS || 120_000);
+const PRIVATE_RECORD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const PRIVATE_MAINTENANCE_INTERVAL_MS = 60 * 60 * 1000;
+const legacySklandPurgeMarker = path.join(storageRoot, ".skland-legacy-purge-v1.json");
 
 function cliCandidates() {
   const platformCliName = process.platform === "win32" ? "infra-cli.exe" : "infra-cli";
@@ -199,6 +209,9 @@ function assertPlanBody(body: unknown): asserts body is PlanRequestBody {
   if (!isRotationProfile(body.rotation)) {
     throw new Error("请求缺少受支持的 rotation 参数。");
   }
+  if (body.dataOwnerTag != null && (typeof body.dataOwnerTag !== "string" || !/^[a-f0-9]{64}$/.test(body.dataOwnerTag))) {
+    throw new Error("内部数据归属标识无效。");
+  }
 }
 
 function safePathSegment(value: unknown) {
@@ -226,6 +239,166 @@ async function readJsonIfExists(filePath: string) {
   } catch {
     return undefined;
   }
+}
+
+async function ensurePrivateStorageBoundaries(): Promise<void> {
+  const lexicalStorageRoot = path.resolve(storageRoot);
+  const lexicalRoots = [path.resolve(cliRunRoot), path.resolve(feedbackRoot)];
+  if (!isSafePrivateStorageRoot(lexicalStorageRoot, [repoRoot, homedir()])) {
+    throw new Error("整体存储目录配置过于宽泛。");
+  }
+  if (lexicalRoots.some((root) => !isPrivateStorageChild(lexicalStorageRoot, root))) {
+    throw new Error("运行记录与反馈目录必须位于整体存储根目录内。");
+  }
+  await Promise.all([
+    mkdir(lexicalStorageRoot, { recursive: true }),
+    ...lexicalRoots.map((root) => mkdir(root, { recursive: true })),
+  ]);
+  const [resolvedStorageRoot, ...resolvedRoots] = await Promise.all([
+    realpath(lexicalStorageRoot),
+    ...lexicalRoots.map((root) => realpath(root)),
+  ]);
+  if (
+    !isSafePrivateStorageRoot(resolvedStorageRoot, [repoRoot, homedir()])
+    || resolvedRoots.some((root) => !isPrivateStorageChild(resolvedStorageRoot, root))
+  ) {
+    throw new Error("存储目录的真实路径越过了整体存储边界。");
+  }
+}
+
+async function removePrivateDirectory(root: string, target: string): Promise<boolean> {
+  let resolvedStorageRoot: string;
+  let resolvedRoot: string;
+  let resolvedTarget: string;
+  try {
+    [resolvedStorageRoot, resolvedRoot, resolvedTarget] = await Promise.all([
+      realpath(storageRoot),
+      realpath(root),
+      realpath(target),
+    ]);
+  } catch (error) {
+    if (isObject(error) && error.code === "ENOENT") return false;
+    throw error;
+  }
+  if (!isSafePrivateStorageRoot(resolvedStorageRoot, [repoRoot, homedir()])) {
+    throw new Error("拒绝使用过于宽泛的整体存储根目录删除数据。");
+  }
+  if (!isPrivateStorageChild(resolvedStorageRoot, resolvedRoot)) {
+    throw new Error("运行记录与反馈目录必须位于整体存储根目录内。");
+  }
+  if (!isSafePrivateStorageRoot(resolvedRoot)) {
+    throw new Error("拒绝从过于宽泛的存储根目录删除数据。");
+  }
+  if (!isPrivateStorageChild(resolvedRoot, resolvedTarget)) throw new Error("拒绝删除存储根目录之外的数据。");
+  await rm(resolvedTarget, { recursive: true, force: true });
+  return true;
+}
+
+async function privateDirectories(root: string) {
+  try {
+    const entries = await readdir(root, { withFileTypes: true });
+    return entries.filter((entry) => entry.isDirectory()).map((entry) => path.join(root, entry.name));
+  } catch (error) {
+    if (isObject(error) && error.code === "ENOENT") return [];
+    throw error;
+  }
+}
+
+async function runDirectories() {
+  return privateDirectories(cliRunRoot);
+}
+
+async function feedbackDirectories() {
+  return privateDirectories(feedbackRoot);
+}
+
+async function ownerMetadata(directory: string): Promise<{ ownerTag?: unknown; diagnosticId?: unknown; sourceName?: unknown } | null> {
+  const value = await readJsonIfExists(path.join(directory, "owner.json"));
+  return isObject(value) ? value : null;
+}
+
+export async function maintainPrivateRecords(now = Date.now()): Promise<void> {
+  await ensurePrivateStorageBoundaries();
+  const legacyPurgeCompleted = existsSync(legacySklandPurgeMarker);
+  const legacyDiagnosticIds = new Set<string>();
+  for (const directory of await runDirectories()) {
+    const metadata = await ownerMetadata(directory);
+    const details = await stat(directory).catch(() => null);
+    const expired = Boolean(details && now - details.mtimeMs >= PRIVATE_RECORD_TTL_MS);
+    const legacySkland = !legacyPurgeCompleted
+      && !metadata?.ownerTag
+      && isLegacySklandRunDirectoryName(path.basename(directory));
+    if (!expired && !legacySkland) continue;
+    const result = await readJsonIfExists(path.join(directory, "result.json"));
+    if (legacySkland && isObject(result) && typeof result.runId === "string") legacyDiagnosticIds.add(result.runId);
+    await removePrivateDirectory(cliRunRoot, directory);
+  }
+  if (!legacyPurgeCompleted) {
+    for (const directory of await feedbackDirectories()) {
+      const meta = await readJsonIfExists(path.join(directory, "meta.json"));
+      if (isObject(meta) && typeof meta.diagnosticId === "string" && legacyDiagnosticIds.has(meta.diagnosticId)) {
+        await removePrivateDirectory(feedbackRoot, directory);
+      }
+    }
+    await writeJson(legacySklandPurgeMarker, { version: 1, completedAt: new Date(now).toISOString() });
+  }
+}
+
+async function maintainPrivateRecordsIfDue(now = Date.now()): Promise<void> {
+  const state = globalForInfra.__infraPrivateMaintenance ??= {
+    lastCompletedAt: 0,
+    promise: null,
+  };
+  if (state.promise) return state.promise;
+  if (now - state.lastCompletedAt < PRIVATE_MAINTENANCE_INTERVAL_MS) return;
+
+  const pending = maintainPrivateRecords(now).then(() => {
+    state.lastCompletedAt = Date.now();
+  });
+  state.promise = pending;
+  try {
+    await pending;
+  } finally {
+    if (state.promise === pending) state.promise = null;
+  }
+}
+
+export async function deleteSklandOwnedData(ownerTags: string[]): Promise<{ runs: number; feedback: number }> {
+  const allowed = new Set(ownerTags.filter((value) => /^[a-f0-9]{64}$/.test(value)));
+  if (allowed.size === 0) return { runs: 0, feedback: 0 };
+  await maintainPrivateRecords();
+  const diagnosticIds = new Set<string>();
+  let runs = 0;
+  for (const directory of await runDirectories()) {
+    const metadata = await ownerMetadata(directory);
+    if (typeof metadata?.ownerTag !== "string" || !allowed.has(metadata.ownerTag)) continue;
+    if (typeof metadata.diagnosticId === "string") diagnosticIds.add(metadata.diagnosticId);
+    await removePrivateDirectory(cliRunRoot, directory);
+    runs += 1;
+  }
+  let feedback = 0;
+  for (const directory of await feedbackDirectories()) {
+    const meta = await readJsonIfExists(path.join(directory, "meta.json"));
+    if (!isObject(meta)) continue;
+    const owned = typeof meta.dataOwnerTag === "string" && allowed.has(meta.dataOwnerTag);
+    const linked = typeof meta.diagnosticId === "string" && diagnosticIds.has(meta.diagnosticId);
+    if (!owned && !linked) continue;
+    await removePrivateDirectory(feedbackRoot, directory);
+    feedback += 1;
+  }
+  return { runs, feedback };
+}
+
+async function dataOwnerTagForDiagnostic(diagnosticId: string): Promise<string | null> {
+  if (!/^[a-f0-9-]{36}$/i.test(diagnosticId)) return null;
+  const suffix = `_${diagnosticId}`;
+  const directory = (await runDirectories())
+    .find((candidate) => path.basename(candidate).endsWith(suffix));
+  if (!directory) return null;
+  const metadata = await ownerMetadata(directory);
+  return metadata?.diagnosticId === diagnosticId && typeof metadata.ownerTag === "string"
+    ? metadata.ownerTag
+    : null;
 }
 
 async function readShiftFiles(outputDir: string) {
@@ -577,6 +750,10 @@ class InfraCliServeClient {
 const globalForInfra = globalThis as typeof globalThis & {
   __infraCliServeClient?: InfraCliServeClient;
   __infraCliCleanupRegistered?: boolean;
+  __infraPrivateMaintenance?: {
+    lastCompletedAt: number;
+    promise: Promise<void> | null;
+  };
 };
 
 function getServeClient() {
@@ -608,6 +785,7 @@ function registerServeClientCleanup() {
 registerServeClientCleanup();
 
 export async function getHealth(): Promise<HealthApiResponse> {
+  void maintainPrivateRecordsIfDue().catch(() => undefined);
   try {
     const candidates = cliCandidateRecords();
     const runnableCandidate = candidates.find((candidate) => candidate.exists && candidate.compatible);
@@ -691,11 +869,13 @@ export async function saveFeedback(body: FeedbackRequest): Promise<FeedbackData>
   const issuePath = path.join(feedbackDir, "issue.json");
   await mkdir(feedbackDir, { recursive: true });
 
+  const dataOwnerTag = await dataOwnerTagForDiagnostic(body.diagnosticId);
   const meta = {
     feedbackId,
     savedAt,
     diagnosticId: body.diagnosticId,
     consent: body.consent,
+    ...(dataOwnerTag ? { dataOwnerTag } : {}),
   };
 
   await writeJson(metaPath, meta);
@@ -720,12 +900,22 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
   const start = performance.now();
 
   try {
+    await maintainPrivateRecordsIfDue();
     assertPlanBody(body);
 
     const cliPath = resolveCliPath();
     const runId = randomUUID();
     runDir = path.join(cliRunRoot, makeStampedDirName(startedAt, body.sourceName, runId));
     await mkdir(runDir, { recursive: true });
+    if (body.dataOwnerTag) {
+      await writeJson(path.join(runDir, "owner.json"), {
+        version: 1,
+        ownerTag: body.dataOwnerTag,
+        diagnosticId: runId,
+        sourceName: body.sourceName ?? null,
+        createdAt: startedAt,
+      });
+    }
 
     const layoutPath = path.join(runDir, "layout.json");
     const operboxPath = path.join(runDir, "operbox.json");

@@ -54,7 +54,7 @@
 | `src/operbox.ts` | MAA JSON / xlsx 解析与 Box 校验 |
 | `src/skland*.ts(x)` | 森空岛前端映射、登录 UI 与授权 URL |
 | `src/schedule*.ts`、`src/efficiency.ts` | 排班展示、班次整理与服务端效率字段归一化 |
-| `src/persistence.ts` | 浏览器 v4 会话、旧版本迁移、30 天过期与安全清理 |
+| `src/persistence.ts` | 浏览器 v5 会话、来源标记、旧版本迁移、30 天过期与安全清理 |
 | `src/api.ts`、`src/types.ts` | 前端请求封装与共享类型 |
 | `src/app/api/*/route.ts` | 公共 API route handlers |
 | `src/server/api-contract.ts` | 统一响应、错误码、同源校验、大小限制与限流 |
@@ -85,6 +85,8 @@ UI 控件优先组合 `src/components/ui/*` 中的现有 primitive。不要另�
 - `POST /api/skland/auth/qr/status`
 - `POST /api/skland/sync`
 - `POST /api/skland/role`
+- `GET`、`POST`、`DELETE /api/skland/status`
+- `DELETE /api/skland/data`
 
 所有公共响应使用 `ApiSuccess<T> | ApiFailure` 信封并返回 `X-Request-Id`。健康检查的公开就绪字段是 `data.plannerReady`，不是内部 `HealthApiResponse` 的 `ok` / `cliReady`。
 
@@ -100,7 +102,8 @@ UI 控件优先组合 `src/components/ui/*` 中的现有 primitive。不要另�
 - 森空岛只提供二维码授权流程，不添加账号密码、短信验证码代填或绕过官方授权的登录方式。
 - `SKLAND_SESSION_SECRET` 必须至少 32 字节且长期稳定。森空岛会话使用 AES-256-GCM 封装在 HttpOnly Cookie 中；凭据不得进入 localStorage、CLI 运行记录、反馈包、console 或公开响应。
 - 非 localhost 的森空岛请求默认要求 HTTPS。`SKLAND_ALLOW_INSECURE_HTTP=1` 仅允许临时、可信的本地或内网测试，绝不能作为生产默认值。
-- 浏览器 v4 持久化可以保存布局、Box 和经过清理的最近排班，但必须继续剔除 debug、路径、stdout、stderr、请求/响应内部字段和森空岛凭据。
+- 森空岛凭证从扫码成功起固定 7 天到期，刷新 token、读取会话和切换角色都不得续期；完整状态必须按账号独立授权，基础响应只返回排班白名单。
+- 浏览器 v5 持久化可以保存布局、Box、来源标记和经过清理的最近排班，但必须继续剔除 debug、路径、stdout、stderr、请求/响应内部字段和森空岛凭据。
 
 ## 环境变量
 
@@ -113,8 +116,8 @@ UI 控件优先组合 `src/components/ui/*` 中的现有 primitive。不要另�
 | `ARKNIGHTS_INFRA_DATA_DIR` | 指定 CLI 运行数据目录 |
 | `BETA_CLI_TIMEOUT_MS` | CLI 请求超时，默认 `120000` |
 | `BETA_STORAGE_DIR` | 整体服务端持久化根目录 |
-| `BETA_CLI_RUN_DIR` | CLI 运行记录目录 |
-| `BETA_FEEDBACK_DIR` | 反馈目录 |
+| `BETA_CLI_RUN_DIR` | CLI 运行记录目录；必须是 `BETA_STORAGE_DIR` 的严格子目录 |
+| `BETA_FEEDBACK_DIR` | 反馈目录；必须是 `BETA_STORAGE_DIR` 的严格子目录 |
 | `BETA_CLI_RELEASE_DIR` | CLI release 存储目录 |
 
 默认持久化位置是：
@@ -137,6 +140,9 @@ CLI 查找以当前平台文件名为优先，覆盖仓库 `bin/`、仓库根目
 | `SKLAND_PUBLIC_ORIGIN` | 森空岛会话流的可信 Origin |
 | `BETA_TRUST_PROXY_HEADERS` | 为 `1` 时信任反向代理的来源/IP 头 |
 | `SKLAND_ALLOW_INSECURE_HTTP` | 仅可信临时测试允许非 HTTPS 森空岛请求 |
+| `LEGAL_OPERATOR_NAME` | 覆盖服务条款和隐私政策中的运营者署名 |
+| `LEGAL_CONTACT_EMAIL` | 可选的法律联系邮箱 |
+| `LEGAL_CONTACT_URL` | 覆盖法律页面中的联系链接 |
 | `BETA_DEBUG_TOOLS_ENABLED` | 为 `1` 时允许服务端生成公开调试字段 |
 | `BETA_RATE_LIMIT_ENABLED` | `0` 关闭、`1` 开启；生产默认开启 |
 | `PLAYWRIGHT_BASE_URL` | E2E 地址，默认 `http://127.0.0.1:5184` |
@@ -197,7 +203,7 @@ npm run dev
 - Full E2、配置流程、生成排班、三班切换和 MAA 下载。
 - 键盘焦点、Dialog 关闭后焦点恢复、`role="status"` / `role="alert"` 和移动端约 44px 触控目标。
 - “一图流布局”仍可见且保持当前禁用状态；加工站“暂不显示”和恢复交互不丢失。
-- v4 会话刷新后无 hydration 错误，持久化数据不含内部字段。
+- v5 会话及旧版本迁移刷新后无 hydration 错误，持久化数据不含内部字段。
 
 真实 CLI 冒烟还要确认：
 

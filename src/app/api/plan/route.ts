@@ -16,6 +16,8 @@ import {
 import { safeDisplayName, toPublicPlanData } from "@/server/public-plan";
 import { isRotationProfile } from "@/rotation-settings";
 import type { BaseBlueprint, OperBoxEntry, RotationProfile } from "@/types";
+import { activeSklandAccount, readSklandAccountStore } from "@/server/skland/http";
+import { sklandDataOwnerTag } from "@/server/skland/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,6 +37,7 @@ export async function POST(request: Request) {
       operbox?: OperBoxEntry[];
       sourceName?: unknown;
       rotation?: unknown;
+      boxSource?: unknown;
     };
     const layoutErrors = validateLayoutJson(body?.layout);
     if (layoutErrors.length || !body.layout) {
@@ -83,7 +86,15 @@ export async function POST(request: Request) {
       });
     }
     const sourceName = safeDisplayName(body.sourceName, "已导入的干员数据");
-    const result = await runPlan({ layout: body.layout, operbox, sourceName, rotation });
+    if (body.boxSource !== undefined && !["skland", "maa", "sample"].includes(String(body.boxSource))) {
+      throw new PublicApiError("AIC-REQ-1001");
+    }
+    let dataOwnerTag: string | null = null;
+    if (body.boxSource === "skland") {
+      const account = activeSklandAccount(await readSklandAccountStore());
+      if (account) dataOwnerTag = sklandDataOwnerTag(account.session.userId);
+    }
+    const result = await runPlan({ layout: body.layout, operbox, sourceName, rotation, dataOwnerTag });
     return successResponse(
       toPublicPlanData(result, { layoutLabel: body.layout.template, sourceName }, requestId),
       requestId

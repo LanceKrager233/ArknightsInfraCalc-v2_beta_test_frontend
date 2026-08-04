@@ -14,8 +14,10 @@ import {
   LogOut,
   PackageCheck,
   Search,
+  ShieldCheck,
   Shirt,
   Sparkles,
+  Trash2,
   UserPlus,
   UsersRound,
   Zap,
@@ -69,7 +71,8 @@ import type {
   SklandOperatorStatus,
   SklandOwnedSkin,
   SklandSessionData,
-  SklandSnapshot,
+  SklandScheduleSnapshot,
+  SklandStatusSnapshot,
 } from "@/types";
 
 const PRODUCT_LABELS: Record<string, string> = {
@@ -163,7 +166,8 @@ function OperatorFilterCombobox({
 }
 
 interface SklandStatusProps {
-  snapshot: SklandSnapshot | null;
+  scheduleSnapshot: SklandScheduleSnapshot | null;
+  snapshot: SklandStatusSnapshot | null;
   accounts: SklandAccountSummary[];
   activeAccountId: string | null;
   sessionLoading: boolean;
@@ -176,10 +180,93 @@ interface SklandStatusProps {
   onAuthenticated: (session: SklandSessionData) => void;
   onRoleChange: (accountId: string, uid: string) => Promise<void>;
   onLogout: () => Promise<void>;
+  onAuthorizeStatus: () => Promise<void>;
+  onRevokeStatus: () => Promise<void>;
+  onDeleteAllData: () => Promise<void>;
   onApplyLayout: () => void;
   onContinueSetup: () => void;
   onOpenCalculator: () => void;
   onCopyUid: (uid: string) => void;
+}
+
+function credentialExpiryLabel(timestamp: number): string {
+  return new Intl.DateTimeFormat("zh-CN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(timestamp));
+}
+
+function SklandDataControls({
+  account,
+  authorized,
+  busy,
+  onRevokeStatus,
+  onDeleteAllData,
+}: {
+  account: SklandAccountSummary;
+  authorized: boolean;
+  busy: boolean;
+  onRevokeStatus: () => Promise<void>;
+  onDeleteAllData: () => Promise<void>;
+}) {
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  return (
+    <>
+      <Card data-skland-data-controls>
+        <CardHeader>
+          <CardTitle>数据与授权</CardTitle>
+          <CardDescription>
+            登录凭证将在 {credentialExpiryLabel(account.credentialExpiresAt)} 固定过期，刷新页面不会延长保存期。
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          {authorized ? (
+            <Button type="button" variant="outline" disabled={busy} onClick={() => void onRevokeStatus()}>
+              撤回状态中心授权
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={busy}
+            onClick={() => setDeleteOpen(true)}
+            data-skland-delete-all
+          >
+            <Trash2 />删除全部森空岛数据
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="max-w-[min(500px,calc(100vw-2rem))]">
+          <DialogHeader>
+            <DialogTitle>删除全部森空岛数据？</DialogTitle>
+            <DialogDescription>
+              将永久删除此浏览器中的全部森空岛账号、登录凭证、状态授权、同步数据、森空岛排班结果，以及服务端可关联的运行记录和反馈。MAA 导入与手动布局会保留；森空岛官方账号不会被删除。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="ghost" disabled={busy} onClick={() => setDeleteOpen(false)}>保留数据</Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={busy}
+              onClick={() => void (async () => {
+                try {
+                  await onDeleteAllData();
+                  setDeleteOpen(false);
+                } catch {
+                  // 页面会保留确认框，并由上层展示统一错误信息。
+                }
+              })()}
+            >
+              <Trash2 />删除全部森空岛数据
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }
 
 function formatDateTime(timestamp: number | null): string {
@@ -298,7 +385,7 @@ function OverviewTab({
   onContinueSetup,
   onOpenCalculator,
 }: {
-  snapshot: SklandSnapshot;
+  snapshot: SklandStatusSnapshot;
   onContinueSetup: () => void;
   onOpenCalculator: () => void;
 }) {
@@ -753,7 +840,7 @@ function LayoutSyncControl({
   layoutDirty,
   onApplyLayout,
 }: {
-  snapshot: SklandSnapshot;
+  snapshot: SklandStatusSnapshot;
   layoutMatches: boolean;
   layoutDirty: boolean;
   onApplyLayout: () => void;
@@ -830,7 +917,7 @@ function LayoutSyncControl({
   );
 }
 
-function InfrastructureTab({ snapshot }: { snapshot: SklandSnapshot }) {
+function InfrastructureTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
   const { infrastructure } = snapshot;
   const now = useMinuteTimestamp(infrastructure.currentTs);
   const buildingMetrics = useMemo(() => deriveSklandBuildingMetrics(snapshot, now), [snapshot, now]);
@@ -1002,7 +1089,7 @@ function SkinCard({ skin }: { skin: SklandOwnedSkin }) {
   );
 }
 
-export function OperatorsTab({ snapshot }: { snapshot: SklandSnapshot }) {
+export function OperatorsTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
   const [query, setQuery] = useState("");
   const [rarity, setRarity] = useState("all");
   const [profession, setProfession] = useState("all");
@@ -1159,7 +1246,7 @@ function ProgressSection({
   );
 }
 
-export function ProgressTab({ snapshot }: { snapshot: SklandSnapshot }) {
+export function ProgressTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
   const { player, progress } = snapshot;
   const now = useMinuteTimestamp(snapshot.infrastructure.currentTs);
   return (
@@ -1309,6 +1396,7 @@ function LoadingState() {
 }
 
 export function SklandStatus({
+  scheduleSnapshot,
   snapshot,
   accounts,
   activeAccountId,
@@ -1322,6 +1410,9 @@ export function SklandStatus({
   onAuthenticated,
   onRoleChange,
   onLogout,
+  onAuthorizeStatus,
+  onRevokeStatus,
+  onDeleteAllData,
   onApplyLayout,
   onContinueSetup,
   onOpenCalculator,
@@ -1331,7 +1422,7 @@ export function SklandStatus({
   const [accountQuery, setAccountQuery] = useState<string | null>(null);
   if (sessionLoading) return <LoadingState />;
 
-  if (!snapshot) {
+  if (!scheduleSnapshot) {
     return (
       <div className="grid gap-6 py-2 sm:py-5">
         <header className="max-w-2xl">
@@ -1354,6 +1445,54 @@ export function SklandStatus({
       </div>
     );
   }
+
+  const activeAccount = accounts.find((account) => account.accountId === activeAccountId) ?? accounts[0] ?? null;
+  const activeRole = activeAccount?.roles.find((role) => role.uid === activeAccount.selectedUid) ?? activeAccount?.roles[0] ?? null;
+
+  if (!snapshot && activeAccount) {
+    return (
+      <div className="grid gap-6 py-2 sm:py-5" data-skland-status-consent>
+        <header className="max-w-2xl">
+          <p className="text-xs font-medium tracking-wide text-primary">森空岛状态中心</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight">单独启用完整状态</h2>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            当前已登录{activeRole ? `“${activeRole.nickname}”` : "森空岛"}，排班同步可以继续使用。状态中心是可选功能。
+          </p>
+        </header>
+        {error ? (
+          <Alert variant="destructive"><AlertDescription>{error.message}（{error.code}）</AlertDescription></Alert>
+        ) : null}
+        <Card>
+          <CardHeader>
+            <div className="mb-2 flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <ShieldCheck className="size-5" />
+            </div>
+            <CardTitle>允许读取状态中心附加数据？</CardTitle>
+            <CardDescription className="max-w-2xl leading-6">
+              启用后会读取并展示头像、UID、等级、理智、任务、公招、皮肤、训练、线索、活动和游戏进度。森空岛玩家接口会返回组合数据；未启用时，排班之外的字段会在服务端映射后立即丢弃。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            <Button type="button" disabled={busy} onClick={() => void onAuthorizeStatus()}>
+              <ShieldCheck />启用状态中心
+            </Button>
+            <Button type="button" variant="outline" disabled={busy} onClick={() => void onLogout()}>
+              <LogOut />退出当前账号
+            </Button>
+          </CardContent>
+        </Card>
+        <SklandDataControls
+          account={activeAccount}
+          authorized={false}
+          busy={busy}
+          onRevokeStatus={onRevokeStatus}
+          onDeleteAllData={onDeleteAllData}
+        />
+      </div>
+    );
+  }
+
+  if (!snapshot || !activeAccount) return <LoadingState />;
 
   const selectionGroups = accounts.map((account, accountIndex) => {
     const selectedRole = account.roles.find((role) => role.uid === account.selectedUid) ?? account.roles[0];
@@ -1524,6 +1663,14 @@ export function SklandStatus({
           </AlertDescription>
         </Alert>
       ) : null}
+
+      <SklandDataControls
+        account={activeAccount}
+        authorized
+        busy={busy}
+        onRevokeStatus={onRevokeStatus}
+        onDeleteAllData={onDeleteAllData}
+      />
 
       <Tabs defaultValue="overview">
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3" data-skland-view-header>

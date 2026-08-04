@@ -38,7 +38,7 @@ export async function POST(request: Request) {
       configured: true,
       accounts: sklandAccountSummaries(next),
       activeAccountId: next.activeAccountId,
-      snapshot: result.snapshot,
+      scheduleSnapshot: result.snapshot,
     }, requestId);
     setSklandAccountStoreCookies(response, request, next, previous);
     return response;

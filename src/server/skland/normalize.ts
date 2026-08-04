@@ -17,7 +17,8 @@ import type {
   SklandPowerRoom,
   SklandProgress,
   SklandRole,
-  SklandSnapshot,
+  SklandScheduleSnapshot,
+  SklandStatusSnapshot,
   SklandTradingRoom,
 } from "../../types.ts";
 
@@ -445,12 +446,47 @@ function progressFromPlayerInfo(info: PlayerInfo): SklandProgress {
   };
 }
 
+export function scheduleSnapshotFromPlayerInfo(
+  info: PlayerInfo,
+  roles: SklandRole[],
+  suggestion: Pick<SklandInfrastructure, "layoutLabel" | "layoutSuggestion" | "layoutWarning">
+): SklandScheduleSnapshot {
+  const { operbox, warnings } = operboxFromPlayerInfo(info);
+  const infrastructure = infrastructureFromPlayerInfo(info, suggestion);
+  if (infrastructure.layoutWarning) warnings.push(infrastructure.layoutWarning);
+  return {
+    roles,
+    operbox,
+    infrastructure: {
+      storeTs: infrastructure.storeTs,
+      layoutLabel: infrastructure.layoutLabel,
+      layoutSuggestion: infrastructure.layoutSuggestion,
+      layoutWarning: infrastructure.layoutWarning,
+      tiredOperators: [...infrastructure.tiredOperators],
+      rooms: infrastructure.rooms.map((room) => ({
+        key: room.key,
+        group: room.group,
+        index: room.index,
+        level: room.level,
+        operators: room.operators.map((operator) => ({
+          id: operator.id,
+          name: operator.name,
+          morale: operator.morale,
+        })),
+        ...("product" in room ? { product: room.product } : {}),
+      })),
+    },
+    sourceName: "森空岛同步",
+    warnings,
+  };
+}
+
 export function snapshotFromPlayerInfo(
   info: PlayerInfo,
   roles: SklandRole[],
   selectedUid: string,
   suggestion: Pick<SklandInfrastructure, "layoutLabel" | "layoutSuggestion" | "layoutWarning">
-): SklandSnapshot {
+): SklandStatusSnapshot {
   const role = roles.find((item) => item.uid === selectedUid) ?? roles[0];
   const { operbox, warnings } = operboxFromPlayerInfo(info);
   const infrastructure = infrastructureFromPlayerInfo(info, suggestion);

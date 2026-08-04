@@ -16,7 +16,7 @@ import type { FactoryRecipe, PowerBudget, TradeOrder } from "./blueprint";
 import { FileDrop, LayoutEditor, PresetSelector } from "./components";
 import { countOwned } from "./operbox";
 import type { SetupStep } from "./onboarding";
-import type { BaseBlueprint, BoxSource, DisplayError, OperBoxEntry, PresetDef, RotationProfile, SklandSnapshot } from "./types";
+import type { BaseBlueprint, BoxSource, DisplayError, OperBoxEntry, PresetDef, RotationProfile, SklandScheduleSnapshot } from "./types";
 
 type LayoutSection = "basics" | "facilities";
 
@@ -33,7 +33,7 @@ type SetupDialogProps = {
   onMaaPasteChange: (value: string) => void;
   inputError: string | null;
   resultClearWarningDismissed: boolean;
-  sklandSnapshot: SklandSnapshot | null;
+  sklandSnapshot: SklandScheduleSnapshot | null;
   sklandConfigured: boolean;
   sklandDisabledReason: string | null;
   onOpenSkland: () => void;
@@ -292,7 +292,11 @@ export function SetupDialog({
                         <div className="setup-import-action flex flex-wrap items-center justify-between gap-4 px-4 py-4">
                           <div className="min-w-0">
                             <strong className="block truncate text-sm">
-                              {sklandSnapshot ? sklandSnapshot.player.nickname : "森空岛同步"}
+                              {sklandSnapshot
+                                ? sklandSnapshot.roles.find((role) => role.isDefault)?.nickname
+                                  ?? sklandSnapshot.roles[0]?.nickname
+                                  ?? "森空岛同步"
+                                : "森空岛同步"}
                             </strong>
                             {sklandSnapshot ? (
                               <span className="mt-0.5 block text-xs text-muted-foreground">

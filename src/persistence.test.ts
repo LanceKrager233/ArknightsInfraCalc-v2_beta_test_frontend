@@ -4,12 +4,14 @@ import test from "node:test";
 import type { PublicPlanData, RotationProfile } from "./types.ts";
 import { DEFAULT_ROTATION_PROFILE } from "./rotation-settings.ts";
 import {
+  applyLocalLayoutPatch,
   clearLocalProductData,
   loadPersistedSession,
   persistSession,
   SESSION_KEY_V2,
   SESSION_KEY_V3,
   SESSION_KEY_V4,
+  SESSION_KEY_V5,
   SESSION_TTL_MS,
 } from "./persistence.ts";
 
@@ -97,7 +99,7 @@ function resultWithShifts(count: number, rotationProfile: RotationProfile = DEFA
   };
 }
 
-test("v4 persistence stores expiry metadata and strips debug fields", () => {
+test("v5 persistence stores source, expiry metadata, and strips debug fields", () => {
   const storage = new MemoryStorage();
   const now = Date.parse("2026-07-28T00:00:00.000Z");
   const saved = persistSession(storage, {
@@ -107,6 +109,8 @@ test("v4 persistence stores expiry metadata and strips debug fields", () => {
     sourceName: "示例",
     boxSource: "sample",
     layoutDirty: false,
+    layoutSource: "local",
+    localLayoutBackup: layout,
     rotationProfile: DEFAULT_ROTATION_PROFILE,
     result,
     activeShift: 1,
@@ -114,11 +118,41 @@ test("v4 persistence stores expiry metadata and strips debug fields", () => {
   assert.equal(Date.parse(saved.expiresAt) - now, SESSION_TTL_MS);
   assert.equal(saved.rotationProfile, DEFAULT_ROTATION_PROFILE);
   assert.equal(saved.result?.debug, undefined);
-  assert.equal((JSON.parse(storage.getItem(SESSION_KEY_V4) ?? "{}").result as Record<string, unknown>).debug, undefined);
+  assert.equal(saved.layoutSource, "local");
+  assert.deepEqual(saved.localLayoutBackup, layout);
+  assert.deepEqual(loadPersistedSession(storage, now)?.localLayoutBackup, layout);
+  assert.equal((JSON.parse(storage.getItem(SESSION_KEY_V5) ?? "{}").result as Record<string, unknown>).debug, undefined);
 });
 
-test("v2 and v3 migrate once to the v4 allowlist", () => {
-  for (const legacyKey of [SESSION_KEY_V2, SESSION_KEY_V3]) {
+test("local edits preserve a clean baseline beneath a Skland-derived layout", () => {
+  const manualLayout = {
+    ...layout,
+    rooms: [
+      ...layout.rooms,
+      { id: "factory_1", kind: "factory" as const, level: 2 },
+    ],
+  };
+  const sklandLayout = {
+    ...manualLayout,
+    rooms: manualLayout.rooms.map((room) => room.id === "factory_1" ? { ...room, level: 3 } : room),
+  };
+  const edited = applyLocalLayoutPatch({
+    layout: sklandLayout,
+    layoutSource: "skland",
+    localLayoutBackup: manualLayout,
+  }, (current) => ({
+    ...current,
+    rooms: current.rooms.map((room) => room.id === "control" ? { ...room, level: 4 } : room),
+  }), layout);
+
+  assert.equal(edited.layoutSource, "skland");
+  assert.equal(edited.layout.rooms.find((room) => room.id === "factory_1")?.level, 3);
+  assert.equal(edited.localLayoutBackup?.rooms.find((room) => room.id === "factory_1")?.level, 2);
+  assert.equal(edited.localLayoutBackup?.rooms.find((room) => room.id === "control")?.level, 4);
+});
+
+test("v2 through v4 migrate once to the v5 allowlist", () => {
+  for (const legacyKey of [SESSION_KEY_V2, SESSION_KEY_V3, SESSION_KEY_V4]) {
     const storage = new MemoryStorage();
     storage.setItem(legacyKey, JSON.stringify({
       preset: { label: "243" },
@@ -137,12 +171,12 @@ test("v2 and v3 migrate once to the v4 allowlist", () => {
       activeShift: 2,
     }));
     const migrated = loadPersistedSession(storage, Date.parse("2026-07-28T00:00:00.000Z"));
-    assert.equal(migrated?.version, 4);
+    assert.equal(migrated?.version, 5);
     assert.equal(migrated?.rotationProfile, DEFAULT_ROTATION_PROFILE);
     assert.equal(migrated?.result?.diagnosticId, "legacy-diag");
     assert.equal(migrated?.result?.debug, undefined);
     assert.equal(storage.getItem(legacyKey), null);
-    assert.ok(storage.getItem(SESSION_KEY_V4));
+    assert.ok(storage.getItem(SESSION_KEY_V5));
   }
 });
 
@@ -186,6 +220,7 @@ test("new Skland persistence always uses a non-identifying source label", () => 
     sourceName: "skland:123456789:1785196800",
     boxSource: "skland",
     layoutDirty: false,
+    layoutSource: "skland",
     rotationProfile: DEFAULT_ROTATION_PROFILE,
     result: {
       ...result,
@@ -202,23 +237,24 @@ test("new Skland persistence always uses a non-identifying source label", () => 
   assert.equal(JSON.stringify([...storage.values.values()]).includes("123456789"), false);
 });
 
-test("expired and corrupted sessions are removed", () => {
+test("expired and corrupted current sessions are removed", () => {
   const storage = new MemoryStorage();
-  storage.setItem(SESSION_KEY_V4, "{bad");
+  storage.setItem(SESSION_KEY_V5, "{bad");
   assert.equal(loadPersistedSession(storage), null);
-  assert.equal(storage.getItem(SESSION_KEY_V4), null);
+  assert.equal(storage.getItem(SESSION_KEY_V5), null);
 
-  storage.setItem(SESSION_KEY_V4, JSON.stringify({
-    version: 4,
+  storage.setItem(SESSION_KEY_V5, JSON.stringify({
+    version: 5,
     savedAt: "2026-01-01T00:00:00.000Z",
     expiresAt: "2026-01-02T00:00:00.000Z",
     presetLabel: "243",
     layout,
     operbox,
     boxSource: "sample",
+    layoutSource: "local",
   }));
   assert.equal(loadPersistedSession(storage, Date.parse("2026-07-28T00:00:00.000Z")), null);
-  assert.equal(storage.getItem(SESSION_KEY_V4), null);
+  assert.equal(storage.getItem(SESSION_KEY_V5), null);
 });
 
 test("quota failures surface without corrupting the previous session", () => {
@@ -231,6 +267,7 @@ test("quota failures surface without corrupting the previous session", () => {
     sourceName: "示例",
     boxSource: "sample",
     layoutDirty: false,
+    layoutSource: "local",
     rotationProfile: DEFAULT_ROTATION_PROFILE,
     result: null,
     activeShift: 0,
@@ -251,6 +288,7 @@ test("internal fields nested in persisted result data are stripped", () => {
     sourceName: "示例",
     boxSource: "sample",
     layoutDirty: false,
+    layoutSource: "local",
     rotationProfile: DEFAULT_ROTATION_PROFILE,
     result: unsafeResult,
     activeShift: 0,
@@ -259,7 +297,7 @@ test("internal fields nested in persisted result data are stripped", () => {
   assert.equal("cliPath" in saved.result!.profile, false);
 });
 
-test("v4 persistence restores the fourth shift when the result has four plans", () => {
+test("v5 persistence restores the fourth shift when the result has four plans", () => {
   const storage = new MemoryStorage();
   persistSession(storage, {
     presetLabel: "243",
@@ -268,6 +306,7 @@ test("v4 persistence restores the fourth shift when the result has four plans", 
     sourceName: "示例",
     boxSource: "sample",
     layoutDirty: false,
+    layoutSource: "local",
     rotationProfile: "fiammetta_8_8_4_4",
     result: resultWithShifts(4, "fiammetta_8_8_4_4"),
     activeShift: 3,
@@ -276,7 +315,7 @@ test("v4 persistence restores the fourth shift when the result has four plans", 
   assert.equal(loadPersistedSession(storage)?.activeShift, 3);
 });
 
-test("v4 persistence clamps a stale shift index to the available result", () => {
+test("v5 persistence clamps a stale shift index to the available result", () => {
   const storage = new MemoryStorage();
   const saved = persistSession(storage, {
     presetLabel: "243",
@@ -285,6 +324,7 @@ test("v4 persistence clamps a stale shift index to the available result", () => 
     sourceName: "示例",
     boxSource: "sample",
     layoutDirty: false,
+    layoutSource: "local",
     rotationProfile: "main_backup_12_12",
     result: resultWithShifts(2, "main_backup_12_12"),
     activeShift: 3,
@@ -322,7 +362,7 @@ test("old v4 results migrate a missing rotation profile from the saved setting",
 
 test("clear removes all session generations and product preferences", () => {
   const storage = new MemoryStorage();
-  [SESSION_KEY_V2, SESSION_KEY_V3, SESSION_KEY_V4, "onboarding"].forEach((key) => storage.setItem(key, "1"));
+  [SESSION_KEY_V2, SESSION_KEY_V3, SESSION_KEY_V4, SESSION_KEY_V5, "onboarding"].forEach((key) => storage.setItem(key, "1"));
   clearLocalProductData(storage, ["onboarding"]);
   assert.equal(storage.values.size, 0);
 });

@@ -1,7 +1,7 @@
 import type {
   SklandInfrastructureRoom,
   SklandManufactureRoom,
-  SklandSnapshot,
+  SklandStatusSnapshot,
   SklandTradingRoom,
 } from "./types.ts";
 
@@ -69,7 +69,7 @@ function fractionMetric(
   return { id, label, value: String(current), total: total === null ? "—" : String(total), hint, tone, visual };
 }
 
-export function deriveSklandBuildingMetrics(snapshot: SklandSnapshot, now: number): SklandStatusMetric[] {
+export function deriveSklandBuildingMetrics(snapshot: SklandStatusSnapshot, now: number): SklandStatusMetric[] {
   const { infrastructure } = snapshot;
   const trading = sumProduction(infrastructure.rooms, "trading");
   const manufacture = sumProduction(infrastructure.rooms, "manufacture");

@@ -1,4 +1,4 @@
-import type { MaaJson, MaaOperatorSlot, MaaRoom, MaaRooms, SklandInfrastructure, SklandInfrastructureGroup, ShiftComparison } from "./types";
+import type { MaaJson, MaaOperatorSlot, MaaRoom, MaaRooms, SklandInfrastructureGroup, SklandScheduleInfrastructure, ShiftComparison } from "./types";
 
 const SKLAND_TO_MAA: Partial<Record<SklandInfrastructureGroup, string>> = {
   control: "control",
@@ -26,7 +26,7 @@ function locationKey(group: string, index: number): string {
   return `${group}:${index}`;
 }
 
-export function compareShifts(maaJson: MaaJson | undefined, infrastructure: SklandInfrastructure | undefined): ShiftComparison[] {
+export function compareShifts(maaJson: MaaJson | undefined, infrastructure: SklandScheduleInfrastructure | undefined): ShiftComparison[] {
   if (!maaJson?.plans?.length || !infrastructure) return [];
   const tired = new Set(infrastructure.tiredOperators);
   const actualLocationByOperator = new Map<string, string>();

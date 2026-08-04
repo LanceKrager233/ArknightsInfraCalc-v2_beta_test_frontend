@@ -448,6 +448,8 @@ const primarySklandAccount = {
   accountId: "account_primary",
   selectedUid: authenticatedSklandSnapshot.player.uid,
   roles: authenticatedSklandSnapshot.roles,
+  credentialExpiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+  statusAuthorized: true,
 };
 
 async function mockApis(
@@ -515,12 +517,39 @@ async function mockApis(
               disabledReason: options.sklandConfigured
                 ? null
                 : "当前未开放森空岛登录，可使用 MAA 导入。",
-              ...(options.sklandSnapshot ? { snapshot: options.sklandSnapshot } : {}),
+              ...(options.sklandSnapshot ? { scheduleSnapshot: options.sklandSnapshot } : {}),
             },
         requestId,
       }),
     });
   });
+  await page.route("**/api/skland/status", (route) => {
+    const revoked = route.request().method() === "DELETE";
+    const accounts = (options.sklandAccounts
+      ?? (options.sklandSnapshot ? [primarySklandAccount] : []))
+      .map((account) => ({ ...account, statusAuthorized: !revoked }));
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "X-Request-Id": requestId },
+      body: JSON.stringify({
+        success: true,
+        data: {
+          authorized: !revoked,
+          accounts,
+          activeAccountId: options.activeAccountId ?? accounts[0]?.accountId ?? null,
+          ...(!revoked && options.sklandSnapshot ? { snapshot: options.sklandSnapshot } : {}),
+        },
+        requestId,
+      }),
+    });
+  });
+  await page.route("**/api/skland/data", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    headers: { "X-Request-Id": requestId },
+    body: JSON.stringify({ success: true, data: { deleted: true, runs: 1, feedback: 0 }, requestId }),
+  }));
   await page.route("**/api/sample-operbox", (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
@@ -627,7 +656,7 @@ test("restores a v4 schedule without hydration errors and keeps only safe data",
   expect(consoleErrors.filter((message) => /hydration|did not match/i.test(message))).toEqual([]);
 
   const persisted = await page.evaluate(() => JSON.parse(
-    window.localStorage.getItem("arknights-infra-calc-session-v4") ?? "{}"
+    window.localStorage.getItem("arknights-infra-calc-session-v5") ?? "{}"
   ));
   expect(persisted.savedAt).toBeTruthy();
   expect(persisted.expiresAt).toBeTruthy();
@@ -678,7 +707,7 @@ test("old sessions normalize duplicate operator names before training advice ren
   await page.getByRole("button", { name: "练卡建议" }).click();
   await expect(page.getByText(/干员名称重复：阿米娅/)).toHaveCount(0);
   await expect.poll(async () => page.evaluate(() => JSON.parse(
-    window.localStorage.getItem("arknights-infra-calc-session-v4") ?? "{}"
+    window.localStorage.getItem("arknights-infra-calc-session-v5") ?? "{}"
   ).operbox)).toEqual([
     { id: "char_002_amiya", name: "阿米娅", elite: 2, level: 80, own: true, potential: 6, rarity: 5 },
   ]);
@@ -702,13 +731,13 @@ test("four-shift output persists the fourth tab and migrates an old v4 profile",
   await fourthShift.click();
   await expect(fourthShift).toHaveAttribute("aria-selected", "true");
   await expect.poll(async () => page.evaluate(() => JSON.parse(
-    window.localStorage.getItem("arknights-infra-calc-session-v4") ?? "{}"
+    window.localStorage.getItem("arknights-infra-calc-session-v5") ?? "{}"
   ).activeShift)).toBe(3);
 
   await page.reload();
   await expect(page.getByRole("tab", { name: /第 4 班 · 4h/ })).toHaveAttribute("aria-selected", "true");
   const persisted = await page.evaluate(() => JSON.parse(
-    window.localStorage.getItem("arknights-infra-calc-session-v4") ?? "{}"
+    window.localStorage.getItem("arknights-infra-calc-session-v5") ?? "{}"
   ));
   expect(persisted.activeShift).toBe(3);
   expect(persisted.result.rotation.profile).toBe("fiammetta_8_8_4_4");
@@ -1193,7 +1222,7 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   await expect.poll(() => planRequests).toBe(1);
   expect(requestedRotation).toBe("fiammetta_8_8_4_4");
   const persisted = await page.evaluate(() => JSON.parse(
-    window.localStorage.getItem("arknights-infra-calc-session-v4") ?? "{}"
+    window.localStorage.getItem("arknights-infra-calc-session-v5") ?? "{}"
   ));
   expect(persisted.rotationProfile).toBe("fiammetta_8_8_4_4");
 });
@@ -1450,11 +1479,40 @@ test("schedule visuals use a stable technical canvas and responsive level marker
   expect(mobileSkillBox?.height).toBeGreaterThanOrEqual(44);
 });
 
+test("publishes the site terms and privacy policy with upstream policy links", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/privacy");
+  await expect(page.getByRole("heading", { name: "隐私政策", level: 1 })).toBeVisible();
+  await expect(page.getByText("版本与生效日期：2026-08-05")).toBeVisible();
+  await expect(page.getByText("明日方舟基建排班助手项目维护者", { exact: false })).toBeVisible();
+  await expect(page.getByRole("link", { name: "森空岛使用许可及服务协议" })).toHaveAttribute(
+    "href",
+    "https://assets.skland.com/protocols/agreement.html"
+  );
+  await expect(page.getByRole("link", { name: "森空岛个人信息保护政策" })).toHaveAttribute(
+    "href",
+    "https://assets.skland.com/protocols/privacy.html"
+  );
+
+  await page.goto("/terms");
+  await expect(page.getByRole("heading", { name: "服务条款", level: 1 })).toBeVisible();
+  await expect(page.getByText("版本与生效日期：2026-08-05")).toBeVisible();
+  await expect(page.getByText(/非官方、非商业工具/)).toBeVisible();
+});
+
 test("Skland login shows QR on every viewport and offers a separate mobile app shortcut", async ({ page }) => {
   await mockApis(page, { sklandConfigured: true });
   let qrStartRequests = 0;
   await page.route("**/api/skland/auth/qr", (route) => {
     qrStartRequests += 1;
+    expect(route.request().postDataJSON()).toEqual({
+      consent: {
+        termsAccepted: true,
+        privacyAccepted: true,
+        termsVersion: "2026-08-05",
+        privacyVersion: "2026-08-05",
+      },
+    });
     return route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -1500,6 +1558,12 @@ test("Skland login shows QR on every viewport and offers a separate mobile app s
   ]);
   expect(mobileQrBox?.y).toBeLessThan(mobileCopyBox?.y ?? 0);
 
+  const consentCheckboxes = page.getByRole("checkbox");
+  await expect(consentCheckboxes).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "生成二维码" })).toBeDisabled();
+  await consentCheckboxes.nth(0).check();
+  await expect(page.getByRole("button", { name: "生成二维码" })).toBeDisabled();
+  await consentCheckboxes.nth(1).check();
   await page.getByRole("button", { name: "生成二维码" }).click();
   await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
   await expect(page.getByRole("button", { name: "打开森空岛 App" })).toHaveAttribute(
@@ -1513,10 +1577,9 @@ test("Skland login shows QR on every viewport and offers a separate mobile app s
   await expect(page.getByRole("button", { name: "打开森空岛 App" })).toBeHidden();
   await expect(page.locator("[data-skland-login-panel]")).toHaveCSS("border-radius", "0px");
   await expect(page.locator("[data-skland-login-copy]")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-  await expect(page.getByRole("link", { name: "skland-kit" })).toHaveAttribute(
-    "href",
-    "https://github.com/AEtherside/skland-kit"
-  );
+  await expect(page.getByRole("link", { name: "本站服务条款" }).first()).toHaveAttribute("href", "/terms");
+  await expect(page.getByRole("link", { name: "本站隐私政策" }).first()).toHaveAttribute("href", "/privacy");
+  await expect(page.getByText(/skland-kit/i)).toHaveCount(0);
   const [contentTrackBox, loginPanelBox] = await Promise.all([
     page.locator(".app-content-track").last().evaluate((element) => {
       const rect = element.getBoundingClientRect();
@@ -1576,6 +1639,8 @@ test("Skland login waits for an explicit click and explains slow preparation", a
   await page.getByRole("button", { name: "森空岛状态", exact: true }).click();
   expect(qrStartRequests).toBe(0);
   const generateButton = page.getByRole("button", { name: "生成二维码" });
+  await page.getByRole("checkbox").nth(0).check();
+  await page.getByRole("checkbox").nth(1).check();
   await generateButton.click();
   await expect(page.locator("[data-skland-login-qr]").getByRole("status")).toContainText("正在生成二维码…");
   await expect(page.getByText("正在连接登录服务…")).toBeVisible({ timeout: 3_000 });
@@ -1584,6 +1649,36 @@ test("Skland login waits for an explicit click and explains slow preparation", a
   releaseQr?.();
   await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
   expect(qrStartRequests).toBe(1);
+});
+
+test("Skland status uses separate authorization and deletion preserves non-Skland data", async ({ page }) => {
+  await mockApis(page, {
+    sklandConfigured: true,
+    sklandSnapshot: authenticatedSklandSnapshot,
+    sklandAccounts: [{ ...primarySklandAccount, statusAuthorized: false }],
+  });
+  await seedV4Session(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+  await page.getByRole("button", { name: "森空岛状态", exact: true }).click();
+
+  await expect(page.getByRole("heading", { name: "单独启用完整状态" })).toBeVisible();
+  await expect(page.getByText("UID 123••••789")).toHaveCount(0);
+  await page.getByRole("button", { name: "启用状态中心" }).click();
+  await expect(page.getByText("UID 123••••789")).toBeVisible();
+
+  await page.getByRole("button", { name: "撤回状态中心授权" }).click();
+  await expect(page.getByRole("heading", { name: "单独启用完整状态" })).toBeVisible();
+  await page.getByRole("button", { name: "删除全部森空岛数据" }).click();
+  const deleteDialog = page.getByRole("dialog", { name: "删除全部森空岛数据？" });
+  await expect(deleteDialog).toContainText("MAA 导入与手动布局会保留");
+  await deleteDialog.getByRole("button", { name: "删除全部森空岛数据" }).click();
+  await expect(page.getByRole("heading", { name: "把当前罗德岛带进排班助手" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+  await page.getByRole("button", { name: "基建计算器", exact: true }).click();
+  await expect(page.getByText("排班已生成")).toBeVisible();
 });
 
 test("Skland status center keeps profile and recruitment in overview and supports role switching", async ({ page }) => {
@@ -1601,6 +1696,7 @@ test("Skland status center keeps profile and recruitment in overview and support
     sourceName: "森空岛同步",
   };
   let attendanceRequests = 0;
+  let currentStatusSnapshot: typeof authenticatedSklandSnapshot | typeof switchedSnapshot = authenticatedSklandSnapshot;
   page.on("request", (request) => {
     if (/attendance|sign/i.test(request.url())) attendanceRequests += 1;
   });
@@ -1608,27 +1704,51 @@ test("Skland status center keeps profile and recruitment in overview and support
     sklandConfigured: true,
     sklandSnapshot: authenticatedSklandSnapshot,
   });
-  await page.route("**/api/skland/role", (route) => route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    headers: { "X-Request-Id": requestId },
-    body: JSON.stringify({
-      success: true,
-      data: {
-        authenticated: true,
-        configured: true,
-        authMethods: { qr: true },
-        accounts: [{
-          ...primarySklandAccount,
-          selectedUid: switchedSnapshot.player.uid,
-          roles: switchedSnapshot.roles,
-        }],
-        activeAccountId: primarySklandAccount.accountId,
-        snapshot: switchedSnapshot,
-      },
-      requestId,
-    }),
-  }));
+  await page.route("**/api/skland/role", (route) => {
+    currentStatusSnapshot = switchedSnapshot;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "X-Request-Id": requestId },
+      body: JSON.stringify({
+        success: true,
+        data: {
+          authenticated: true,
+          configured: true,
+          authMethods: { qr: true },
+          accounts: [{
+            ...primarySklandAccount,
+            selectedUid: switchedSnapshot.player.uid,
+            roles: switchedSnapshot.roles,
+          }],
+          activeAccountId: primarySklandAccount.accountId,
+          scheduleSnapshot: switchedSnapshot,
+        },
+        requestId,
+      }),
+    });
+  });
+  await page.route("**/api/skland/status", (route) => {
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "X-Request-Id": requestId },
+      body: JSON.stringify({
+        success: true,
+        data: {
+          authorized: true,
+          accounts: [{
+            ...primarySklandAccount,
+            selectedUid: currentStatusSnapshot.player.uid,
+            roles: currentStatusSnapshot.roles,
+          }],
+          activeAccountId: primarySklandAccount.accountId,
+          snapshot: currentStatusSnapshot,
+        },
+        requestId,
+      }),
+    });
+  });
   await seedPreferences(page);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
@@ -1881,6 +2001,8 @@ test("Skland supports adding, switching, and individually logging out multiple a
     accountId: "account_secondary",
     selectedUid: secondarySnapshot.player.uid,
     roles: secondarySnapshot.roles,
+    credentialExpiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+    statusAuthorized: true,
   };
   let currentSnapshot = authenticatedSklandSnapshot;
   let currentAccounts = [primarySklandAccount];
@@ -1916,7 +2038,7 @@ test("Skland supports adding, switching, and individually logging out multiple a
           authMethods: { qr: true },
           accounts: currentAccounts,
           activeAccountId: currentAccountId,
-          ...(currentAccounts.length ? { snapshot: currentSnapshot } : {}),
+          ...(currentAccounts.length ? { scheduleSnapshot: currentSnapshot } : {}),
         },
         requestId,
       }),
@@ -1950,7 +2072,7 @@ test("Skland supports adding, switching, and individually logging out multiple a
           status: "authenticated",
           accounts: currentAccounts,
           activeAccountId: currentAccountId,
-          snapshot: currentSnapshot,
+          scheduleSnapshot: currentSnapshot,
         },
         requestId,
       }),
@@ -1984,12 +2106,27 @@ test("Skland supports adding, switching, and individually logging out multiple a
           configured: true,
           accounts: currentAccounts,
           activeAccountId: currentAccountId,
-          snapshot: currentSnapshot,
+          scheduleSnapshot: currentSnapshot,
         },
         requestId,
       }),
     });
   });
+  await page.route("**/api/skland/status", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    headers: { "X-Request-Id": requestId },
+    body: JSON.stringify({
+      success: true,
+      data: {
+        authorized: true,
+        accounts: currentAccounts,
+        activeAccountId: currentAccountId,
+        snapshot: currentSnapshot,
+      },
+      requestId,
+    }),
+  }));
 
   await seedPreferences(page);
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -2036,6 +2173,8 @@ test("Skland supports adding, switching, and individually logging out multiple a
   await expect(addAccountDialog.locator("[data-skland-login-panel]")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   const generateLoginQr = addAccountDialog.getByRole("button", { name: "生成登录二维码" });
   await expectUnifiedDialogAction(generateLoginQr, { width: "196px", height: "46px" });
+  await addAccountDialog.getByRole("checkbox").nth(0).check();
+  await addAccountDialog.getByRole("checkbox").nth(1).check();
   await generateLoginQr.click();
   await expect(page.getByRole("heading", { name: "第二账号博士" }).first()).toBeVisible({ timeout: 12_000 });
 
@@ -2156,8 +2295,9 @@ test("settings clears local product data without logging out of Skland", async (
     v2: window.localStorage.getItem("arknights-infra-calc-beta-session-v2"),
     v3: window.localStorage.getItem("arknights-infra-calc-beta-session-v3"),
     v4: window.localStorage.getItem("arknights-infra-calc-session-v4"),
+    v5: window.localStorage.getItem("arknights-infra-calc-session-v5"),
     onboarding: window.localStorage.getItem("arknights-infra-calc-beta-onboarding-v1"),
   }));
-  expect(stored).toEqual({ v2: null, v3: null, v4: null, onboarding: null });
+  expect(stored).toEqual({ v2: null, v3: null, v4: null, v5: null, onboarding: null });
   expect(logoutRequests).toBe(0);
 });

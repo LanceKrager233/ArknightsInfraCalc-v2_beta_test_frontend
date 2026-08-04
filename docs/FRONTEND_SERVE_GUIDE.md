@@ -70,7 +70,7 @@ The request contains the complete layout and operbox inline:
 }
 ```
 
-The actual request must contain 1–64 rooms and 1–1000 operators. Room IDs, operator IDs, and operator names must be non-empty and unique. Browser imports, Skland snapshots, and restored v4 sessions are normalized to one planner-facing record per operator name before the request is built. The public `/api/plan` boundary still rejects any remaining duplicate IDs or names instead of rewriting an arbitrary API payload.
+The actual request must contain 1–64 rooms and 1–1000 operators. Room IDs, operator IDs, and operator names must be non-empty and unique. Browser imports, Skland schedule snapshots, and restored v5 or migrated legacy sessions are normalized to one planner-facing record per operator name before the request is built. The public `/api/plan` boundary still rejects any remaining duplicate IDs or names instead of rewriting an arbitrary API payload.
 
 Successful responses contain all outputs inline:
 
@@ -124,7 +124,7 @@ The CLI response is an internal transport object. It must never be returned dire
 
 `src/server/infra.ts` may retain CLI paths, commands, stdout, stderr, serve requests/responses and run-directory metadata for local diagnostics. `src/server/public-plan.ts` is the required boundary before `/api/plan`: it constructs a new allowlisted DTO containing only profile, MAA, rotation, duration and an opaque diagnostic ID. Rotation is rebuilt through `src/rotation-result.ts`; only the selected profile, daily summary, normalized shifts, team state, weighted efficiency and normalized room efficiency are public. Raw `efficiencies`, assignments and future unknown Worker fields are not forwarded.
 
-When `BETA_DEBUG_TOOLS_ENABLED=1`, the server may append diagnostic values under `data.debug`. That switch is server-owned; a query parameter cannot enable it. Public contract tests recursively reject internal field names in production responses, and the v4 browser persistence layer strips `data.debug` even in a debug session.
+When `BETA_DEBUG_TOOLS_ENABLED=1`, the server may append diagnostic values under `data.debug`. That switch is server-owned; a query parameter cannot enable it. Public contract tests recursively reject internal field names in production responses, and the v5 browser persistence layer strips `data.debug` even in a debug session.
 
 Do not extend the public DTO by spreading an internal result:
 

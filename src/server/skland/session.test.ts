@@ -8,7 +8,11 @@ import {
   sealSklandAccount,
   sealSklandAccountIndex,
   sealSklandSession,
+  sklandDataOwnerTag,
+  SKLAND_ACCOUNT_COOKIE_PREFIX,
+  SKLAND_ACCOUNT_INDEX_COOKIE,
   SKLAND_ACCOUNT_LIMIT,
+  SKLAND_SESSION_TTL_SECONDS,
   type SklandSessionPayload,
   type SklandStoredAccount,
   toPublicSklandAccount,
@@ -16,14 +20,22 @@ import {
   unsealSklandAccountIndex,
   unsealSklandSession,
   upsertSklandAccount,
+  withSklandStatusConsent,
 } from "./session.ts";
+import { isCurrentPolicyConsent, PRIVACY_VERSION, TERMS_VERSION } from "../../legal-policy.ts";
 
 const secret = "test-secret-that-is-at-least-thirty-two-bytes";
 const now = 1_700_000_000_000;
 
+test("credential retention is fixed at seven days", () => {
+  assert.equal(SKLAND_SESSION_TTL_SECONDS, 7 * 24 * 60 * 60);
+  assert.match(SKLAND_ACCOUNT_INDEX_COOKIE, /_v3$/);
+  assert.match(SKLAND_ACCOUNT_COOKIE_PREFIX, /_v3_$/);
+});
+
 function sessionFor(userId: string, selectedUid = `${userId}-uid`): SklandSessionPayload {
   return {
-    version: 1,
+    version: 2,
     cred: `cred-${userId}`,
     token: `token-${userId}`,
     dId: `did-${userId}`,
@@ -31,6 +43,12 @@ function sessionFor(userId: string, selectedUid = `${userId}-uid`): SklandSessio
     selectedUid,
     refreshedAt: now,
     expiresAt: now + 60_000,
+    policyConsent: {
+      termsVersion: TERMS_VERSION,
+      privacyVersion: PRIVACY_VERSION,
+      acceptedAt: now,
+    },
+    statusConsent: null,
   };
 }
 
@@ -51,7 +69,7 @@ test("round-trips legacy, account, and account-index encrypted payloads", () => 
   assert.deepEqual(unsealSklandAccount(sealSklandAccount(account, secret), secret, now), account);
 
   const index = {
-    version: 2 as const,
+    version: 3 as const,
     accountIds: [account.accountId],
     activeAccountId: account.accountId,
     expiresAt: now + 60_000,
@@ -86,7 +104,41 @@ test("public account summaries recursively exclude every credential and upstream
   for (const sensitive of ["cred-", "token-", "did-", "upstream-secret"]) {
     assert.equal(serialized.includes(sensitive), false);
   }
-  assert.deepEqual(Object.keys(toPublicSklandAccount(account)).sort(), ["accountId", "roles", "selectedUid"]);
+  assert.deepEqual(Object.keys(toPublicSklandAccount(account)).sort(), [
+    "accountId",
+    "credentialExpiresAt",
+    "roles",
+    "selectedUid",
+    "statusAuthorized",
+  ]);
+});
+
+test("status authorization is independent and does not extend credential expiry", () => {
+  const session = sessionFor("consent");
+  const granted = withSklandStatusConsent(session, true, now + 5_000);
+  assert.equal(granted.expiresAt, session.expiresAt);
+  assert.equal(granted.statusConsent?.privacyVersion, PRIVACY_VERSION);
+  assert.equal(withSklandStatusConsent(granted, false).statusConsent, null);
+});
+
+test("data owner tags are deterministic, account-specific, and do not reveal the upstream id", () => {
+  const first = sklandDataOwnerTag("upstream-user-one", secret);
+  assert.match(first, /^[a-f0-9]{64}$/);
+  assert.equal(first, sklandDataOwnerTag("upstream-user-one", secret));
+  assert.notEqual(first, sklandDataOwnerTag("upstream-user-two", secret));
+  assert.equal(first.includes("upstream-user-one"), false);
+});
+
+test("QR consent requires both current policy versions", () => {
+  const valid = {
+    termsAccepted: true as const,
+    privacyAccepted: true as const,
+    termsVersion: TERMS_VERSION,
+    privacyVersion: PRIVACY_VERSION,
+  };
+  assert.equal(isCurrentPolicyConsent(valid), true);
+  assert.equal(isCurrentPolicyConsent({ ...valid, privacyAccepted: false }), false);
+  assert.equal(isCurrentPolicyConsent({ ...valid, termsVersion: "old" }), false);
 });
 
 test("enforces the five-account limit while still allowing an existing account to refresh", () => {

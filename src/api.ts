@@ -14,7 +14,9 @@ import type {
   SklandQrStartData,
   SklandQrStatusData,
   SklandSessionData,
+  SklandStatusData,
 } from "./types";
+import type { SklandPolicyConsentRequest } from "./legal-policy";
 
 export class ApiClientError extends Error implements DisplayError {
   readonly code: AppErrorCode;
@@ -81,6 +83,7 @@ export function runPlan(payload: {
   layout: BaseBlueprint;
   operbox: OperBoxEntry[];
   sourceName: string | null;
+  boxSource: "skland" | "maa" | "sample";
   rotation: RotationProfile;
 }): Promise<PublicPlanData> {
   return requestData("/api/plan", {
@@ -98,8 +101,24 @@ export function getSklandSession(): Promise<SklandSessionData> {
   return requestData("/api/skland/session");
 }
 
-export function startSklandQr(): Promise<SklandQrStartData> {
-  return requestData("/api/skland/auth/qr", { method: "POST" });
+export function startSklandQr(consent: SklandPolicyConsentRequest): Promise<SklandQrStartData> {
+  return requestData("/api/skland/auth/qr", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ consent }),
+  });
+}
+
+export function getSklandStatus(): Promise<SklandStatusData> {
+  return requestData("/api/skland/status");
+}
+
+export function authorizeSklandStatus(): Promise<SklandStatusData> {
+  return requestData("/api/skland/status", { method: "POST" });
+}
+
+export function revokeSklandStatus(): Promise<SklandStatusData> {
+  return requestData("/api/skland/status", { method: "DELETE" });
 }
 
 export function pollSklandQr(scanId: string): Promise<SklandQrStatusData> {
@@ -130,6 +149,10 @@ export function logoutSkland(accountId?: string): Promise<SklandSessionData> {
       body: JSON.stringify({ accountId }),
     } : {}),
   });
+}
+
+export function deleteAllSklandData(): Promise<{ deleted: true; runs: number; feedback: number }> {
+  return requestData("/api/skland/data", { method: "DELETE" });
 }
 
 export function getSampleOperbox(): Promise<SampleOperboxData> {

@@ -210,6 +210,8 @@ export interface SklandAccountSummary {
   accountId: string;
   selectedUid: string;
   roles: SklandRole[];
+  credentialExpiresAt: number;
+  statusAuthorized: boolean;
 }
 
 export interface SklandPlayer {
@@ -365,6 +367,38 @@ export interface SklandInfrastructure {
   } | null;
 }
 
+export interface SklandScheduleOperator {
+  id: string;
+  name: string;
+  morale: number;
+}
+
+export interface SklandScheduleRoom {
+  key: string;
+  group: Exclude<SklandInfrastructureGroup, "training">;
+  index: number;
+  level: number;
+  operators: SklandScheduleOperator[];
+  product?: "gold" | "battle_record" | "originium" | "unknown";
+}
+
+export interface SklandScheduleInfrastructure {
+  storeTs: number | null;
+  layoutLabel: PresetDef["label"] | null;
+  layoutSuggestion: BaseBlueprint | null;
+  layoutWarning: string | null;
+  rooms: SklandScheduleRoom[];
+  tiredOperators: string[];
+}
+
+export interface SklandScheduleSnapshot {
+  roles: SklandRole[];
+  operbox: OperBoxEntry[];
+  infrastructure: SklandScheduleInfrastructure;
+  sourceName: string;
+  warnings: string[];
+}
+
 export interface SklandOperatorModule {
   id: string;
   name: string;
@@ -458,7 +492,7 @@ export interface SklandProgress {
   }> | null;
 }
 
-export interface SklandSnapshot {
+export interface SklandStatusSnapshot {
   player: SklandPlayer;
   roles: SklandRole[];
   operbox: OperBoxEntry[];
@@ -481,7 +515,7 @@ export interface SklandSessionResponse {
   disabledReason?: string | null;
   accounts: SklandAccountSummary[];
   activeAccountId: string | null;
-  snapshot?: SklandSnapshot;
+  scheduleSnapshot?: SklandScheduleSnapshot;
   error?: string;
   code?: string;
 }
@@ -497,7 +531,7 @@ export interface SklandQrStartResponse {
 export interface SklandQrStatusResponse {
   success: boolean;
   status: "waiting" | "scanned" | "expired" | "authenticated";
-  snapshot?: SklandSnapshot;
+  scheduleSnapshot?: SklandScheduleSnapshot;
   error?: string;
   code?: string;
 }
@@ -707,6 +741,8 @@ export type AppErrorCode =
   | "AIC-AUTH-2002"
   | "AIC-AUTH-2003"
   | "AIC-AUTH-2004"
+  | "AIC-AUTH-2005"
+  | "AIC-AUTH-2006"
   | "AIC-PLAN-3001"
   | "AIC-PLAN-3002"
   | "AIC-PLAN-3003"
@@ -804,7 +840,14 @@ export interface SklandSessionData {
   disabledReason?: string | null;
   accounts: SklandAccountSummary[];
   activeAccountId: string | null;
-  snapshot?: SklandSnapshot;
+  scheduleSnapshot?: SklandScheduleSnapshot;
+}
+
+export interface SklandStatusData {
+  authorized: boolean;
+  accounts: SklandAccountSummary[];
+  activeAccountId: string | null;
+  snapshot?: SklandStatusSnapshot;
 }
 
 export interface SklandQrStartData {
@@ -817,7 +860,7 @@ export interface SklandQrStatusData {
   status: "waiting" | "scanned" | "expired" | "authenticated";
   accounts?: SklandAccountSummary[];
   activeAccountId?: string | null;
-  snapshot?: SklandSnapshot;
+  scheduleSnapshot?: SklandScheduleSnapshot;
 }
 
 export interface DisplayError {

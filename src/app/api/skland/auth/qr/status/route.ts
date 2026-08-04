@@ -31,11 +31,11 @@ export async function POST(request: Request) {
       throw new PublicApiError("AIC-REQ-1001");
     }
     const result = await pollScan(body.scanId.trim());
-    if (result.session && result.response.snapshot) {
+    if (result.session && result.response.scheduleSnapshot) {
       const previous = await readSklandAccountStore();
       let upserted;
       try {
-        upserted = upsertSklandAccount(previous.accounts, result.session, result.response.snapshot.roles);
+        upserted = upsertSklandAccount(previous.accounts, result.session, result.response.scheduleSnapshot.roles);
       } catch (error) {
         if (error instanceof SklandAccountLimitError) throw new PublicApiError("AIC-AUTH-2004");
         throw error;
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
       };
       const response = successResponse({
         status: result.response.status,
-        snapshot: result.response.snapshot,
+        scheduleSnapshot: result.response.scheduleSnapshot,
         accounts: sklandAccountSummaries(next),
         activeAccountId: next.activeAccountId,
       }, requestId);
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
     }
     const response = successResponse({
       status: result.response.status,
-      snapshot: result.response.snapshot,
+      scheduleSnapshot: result.response.scheduleSnapshot,
     }, requestId);
     return response;
   } catch (error) {

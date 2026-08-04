@@ -41,7 +41,7 @@ npm run test:e2e:webkit
 | `src/components/layout/AppTopBar.tsx` | 全局粘性账号入口与移动端侧栏触发器 |
 | `src/api.ts` | 统一解析公开 API envelope，抛出带错误码的 `ApiClientError` |
 | `src/types.ts` | 内部类型、公开 DTO、错误码 |
-| `src/persistence.ts` | v4 本地保存、迁移、过期清理和白名单 |
+| `src/persistence.ts` | v5 本地保存、来源标记、迁移、过期清理和白名单 |
 | `src/operbox-normalization.ts` | 导入、森空岛快照和旧会话的求解器名称归一化；同名保留更高练度记录 |
 | `src/rotation-settings.ts` | Worker 支持的固定换班 profile 与时长元数据 |
 | `src/rotation-result.ts` | Worker rotation 输出到公共 DTO 的严格白名单映射 |
@@ -127,8 +127,8 @@ POST 和 DELETE 路由执行同源检查。生产部署在 Nginx 后时启用受
 | `INFRA_CORE_ROOT` | 指定核心仓库 |
 | `ARKNIGHTS_INFRA_DATA_DIR` | 指定 CLI 数据目录 |
 | `BETA_STORAGE_DIR` | 服务端持久化根目录 |
-| `BETA_CLI_RUN_DIR` | CLI 运行记录目录 |
-| `BETA_FEEDBACK_DIR` | 反馈目录 |
+| `BETA_CLI_RUN_DIR` | CLI 运行记录目录；必须是整体存储根目录的严格子目录 |
+| `BETA_FEEDBACK_DIR` | 反馈目录；必须是整体存储根目录的严格子目录 |
 | `BETA_CLI_TIMEOUT_MS` | CLI 超时，默认 120000ms |
 | `BETA_PUBLIC_ORIGIN` | 公开 HTTP(S) Origin，用于同源检查 |
 | `BETA_DEBUG_TOOLS_ENABLED` | `1`时允许服务端返回调试字段 |
@@ -164,26 +164,27 @@ npm run dev
 http://127.0.0.1:5174/?beta
 ```
 
-调试 UI 只有在服务端 feature flag 为 true 且 URL 同时带 `?beta` 时出现。单独添加 `?beta`不能开启调试工具。调试字段也不得写入 v4 本地数据。
+调试 UI 只有在服务端 feature flag 为 true 且 URL 同时带 `?beta` 时出现。单独添加 `?beta`不能开启调试工具。调试字段也不得写入 v5 本地数据。
 
 详细的 DevTools 排查顺序、接口泄露检查和错误模拟方法见[上线产品化报告的开发调试环境使用指南](./FRONTEND_PRODUCTION_READINESS_REPORT.md#开发调试环境使用指南)。
 
-## v4 本地保存
+## v5 本地保存
 
 客户端首次渲染使用确定性默认值；组件挂载后再恢复 `localStorage`，恢复期间展示稳定骨架。持久化 effect 必须等待 `hasRestoredSession`，避免用默认空状态覆盖旧数据。
 
-v4 只保存：
+v5 只保存：
 
 - 当前布局和预设；
 - 干员数据及安全来源名；
+- Box 与布局的来源标记，用于只删除森空岛派生数据；
 - 当前换班 profile；
 - 当前班次；
 - 白名单化后的最近排班；
 - `savedAt`与`expiresAt`。
 
-有效期为 30 天。损坏、过期或类型校验失败的数据会自动删除；恢复时还会按求解器使用的干员名称归一化旧 Box，同名记录保留练度更高的一条。v2/v3 仅进行一次白名单迁移，迁移后删除旧 key。严禁保存 debug bundle、路径、CLI 输出、原始异常、反馈草稿或反馈响应。
+有效期为 30 天。损坏、过期或类型校验失败的数据会自动删除；恢复时还会按求解器使用的干员名称归一化旧 Box，同名记录保留练度更高的一条。v2/v3/v4 仅进行一次白名单迁移，迁移后删除旧 key。严禁保存 debug bundle、路径、CLI 输出、原始异常、反馈草稿、反馈响应、森空岛凭据或完整状态快照。
 
-“清除本地数据”会删除 v2/v3/v4、onboarding 和提示偏好并重置页面；森空岛 HttpOnly cookie 不受影响。
+“清除本地数据”会删除 v2/v3/v4/v5、onboarding 和提示偏好并重置页面；森空岛 HttpOnly cookie 不受影响。状态中心的“删除全部森空岛数据”是另一条流程，只清除森空岛派生的本地字段、全部森空岛 Cookie 及可关联的服务端记录。
 
 ## 测试与合并门禁
 
@@ -214,4 +215,4 @@ npm run test:e2e
 npm run test:e2e:webkit
 ```
 
-随后在真实浏览器检查 `/api/health`、Full E2、2/3/4 班切换、MAA 导出、反馈提交和 v4 恢复。生产部署、回滚和存储目录规则继续以仓库 `AGENTS.md` 为准。
+随后在真实浏览器检查 `/api/health`、Full E2、2/3/4 班切换、MAA 导出、反馈提交和 v5/旧版本迁移恢复。生产部署、回滚和存储目录规则继续以仓库 `AGENTS.md` 为准。

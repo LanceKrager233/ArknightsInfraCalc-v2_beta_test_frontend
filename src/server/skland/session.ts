@@ -1,15 +1,29 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from "node:crypto";
 
 import type { SklandAccountSummary, SklandRole } from "../../types.ts";
+import { PRIVACY_VERSION, TERMS_VERSION } from "../../legal-policy.ts";
 
 export const SKLAND_SESSION_COOKIE = "skland_session_v1";
-export const SKLAND_ACCOUNT_INDEX_COOKIE = "skland_accounts_v2";
-export const SKLAND_ACCOUNT_COOKIE_PREFIX = "skland_account_v2_";
+export const SKLAND_ACCOUNT_INDEX_COOKIE = "skland_accounts_v3";
+export const SKLAND_ACCOUNT_COOKIE_PREFIX = "skland_account_v3_";
+export const LEGACY_SKLAND_ACCOUNT_INDEX_COOKIE = "skland_accounts_v2";
+export const LEGACY_SKLAND_ACCOUNT_COOKIE_PREFIX = "skland_account_v2_";
 export const SKLAND_ACCOUNT_LIMIT = 5;
-export const SKLAND_SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
+export const SKLAND_SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+
+export interface SklandPolicyConsent {
+  termsVersion: typeof TERMS_VERSION;
+  privacyVersion: typeof PRIVACY_VERSION;
+  acceptedAt: number;
+}
+
+export interface SklandStatusConsent {
+  privacyVersion: typeof PRIVACY_VERSION;
+  grantedAt: number;
+}
 
 export interface SklandSessionPayload {
-  version: 1;
+  version: 2;
   cred: string;
   token: string;
   dId: string;
@@ -17,17 +31,19 @@ export interface SklandSessionPayload {
   selectedUid: string;
   refreshedAt: number;
   expiresAt: number;
+  policyConsent: SklandPolicyConsent;
+  statusConsent: SklandStatusConsent | null;
 }
 
 export interface SklandStoredAccount {
-  version: 2;
+  version: 3;
   accountId: string;
   session: SklandSessionPayload;
   roles: SklandRole[];
 }
 
 export interface SklandAccountIndexPayload {
-  version: 2;
+  version: 3;
   accountIds: string[];
   activeAccountId: string | null;
   expiresAt: number;
@@ -79,7 +95,7 @@ function parsedSessionPayload(value: unknown, now: number): SklandSessionPayload
   if (!value || typeof value !== "object") return null;
   const decoded = value as Partial<SklandSessionPayload>;
   if (
-    decoded.version !== 1 ||
+    decoded.version !== 2 ||
     typeof decoded.cred !== "string" ||
     typeof decoded.token !== "string" ||
     typeof decoded.dId !== "string" ||
@@ -87,6 +103,15 @@ function parsedSessionPayload(value: unknown, now: number): SklandSessionPayload
     typeof decoded.selectedUid !== "string" ||
     typeof decoded.refreshedAt !== "number" ||
     typeof decoded.expiresAt !== "number" ||
+    !decoded.policyConsent ||
+    decoded.policyConsent.termsVersion !== TERMS_VERSION ||
+    decoded.policyConsent.privacyVersion !== PRIVACY_VERSION ||
+    typeof decoded.policyConsent.acceptedAt !== "number" ||
+    (decoded.statusConsent !== null && (
+      !decoded.statusConsent ||
+      decoded.statusConsent.privacyVersion !== PRIVACY_VERSION ||
+      typeof decoded.statusConsent.grantedAt !== "number"
+    )) ||
     decoded.expiresAt <= now
   ) {
     return null;
@@ -149,7 +174,7 @@ export function unsealSklandAccount(value: string, secret?: string, now = Date.n
   const session = parsedSessionPayload(account.session, now);
   const roles = Array.isArray(account.roles) ? account.roles.map(parsedRole) : [];
   if (
-    account.version !== 2 ||
+    account.version !== 3 ||
     !validAccountId(account.accountId) ||
     !session ||
     roles.some((role) => role === null) ||
@@ -158,7 +183,7 @@ export function unsealSklandAccount(value: string, secret?: string, now = Date.n
     return null;
   }
   return {
-    version: 2,
+    version: 3,
     accountId: account.accountId,
     session,
     roles: roles as SklandRole[],
@@ -174,7 +199,7 @@ export function unsealSklandAccountIndex(value: string, secret?: string, now = D
   if (!decoded || typeof decoded !== "object") return null;
   const index = decoded as Partial<SklandAccountIndexPayload>;
   if (
-    index.version !== 2 ||
+    index.version !== 3 ||
     !Array.isArray(index.accountIds) ||
     index.accountIds.some((accountId) => !validAccountId(accountId)) ||
     new Set(index.accountIds).size !== index.accountIds.length ||
@@ -187,7 +212,7 @@ export function unsealSklandAccountIndex(value: string, secret?: string, now = D
     return null;
   }
   return {
-    version: 2,
+    version: 3,
     accountIds: index.accountIds,
     activeAccountId: index.activeAccountId ?? null,
     expiresAt: index.expiresAt,
@@ -200,7 +225,7 @@ export function createSklandStoredAccount(
   accountId = randomBytes(12).toString("base64url")
 ): SklandStoredAccount {
   return {
-    version: 2,
+    version: 3,
     accountId,
     session,
     roles: roles.map((role) => ({ ...role })),
@@ -212,7 +237,24 @@ export function toPublicSklandAccount(account: SklandStoredAccount): SklandAccou
     accountId: account.accountId,
     selectedUid: account.session.selectedUid,
     roles: account.roles.map((role) => ({ ...role })),
+    credentialExpiresAt: account.session.expiresAt,
+    statusAuthorized: account.session.statusConsent?.privacyVersion === PRIVACY_VERSION,
   };
+}
+
+export function withSklandStatusConsent(
+  session: SklandSessionPayload,
+  granted: boolean,
+  now = Date.now()
+): SklandSessionPayload {
+  return {
+    ...session,
+    statusConsent: granted ? { privacyVersion: PRIVACY_VERSION, grantedAt: now } : null,
+  };
+}
+
+export function sklandDataOwnerTag(userId: string, secret?: string): string {
+  return createHmac("sha256", keyFor(secret)).update(`skland:${userId}`).digest("hex");
 }
 
 export function upsertSklandAccount(

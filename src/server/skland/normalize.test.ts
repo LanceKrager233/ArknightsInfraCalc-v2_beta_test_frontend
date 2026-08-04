@@ -4,7 +4,7 @@ import test from "node:test";
 import type { AppBindingList, PlayerInfo } from "skland-kit";
 
 import { successResponse } from "../api-contract.ts";
-import { rolesFromBinding, snapshotFromPlayerInfo } from "./normalize.ts";
+import { rolesFromBinding, scheduleSnapshotFromPlayerInfo, snapshotFromPlayerInfo } from "./normalize.ts";
 
 const RESIDENT = {
   charId: "char_1",
@@ -305,6 +305,16 @@ test("normalizes the complete public Skland dashboard without leaking raw respon
     "token",
   ]) {
     assert.equal(serialized.includes(forbidden), false, forbidden);
+  }
+});
+
+test("schedule synchronization strips status-center-only fields", () => {
+  const snapshot = scheduleSnapshotFromPlayerInfo(playerInfo(), roles, noLayoutSuggestion);
+  const serialized = JSON.stringify(snapshot);
+  assert.equal(snapshot.operbox[0]?.name, "测试干员");
+  assert.equal(snapshot.infrastructure.rooms[0]?.operators[0]?.morale, 20);
+  for (const forbidden of ["avatarUrl", "sanity", "progress", "skins", "routine", "recruit", "training", "labor"]) {
+    assert.equal(serialized.includes(`"${forbidden}"`), false);
   }
 });
 

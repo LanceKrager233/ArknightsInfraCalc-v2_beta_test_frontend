@@ -12,14 +12,15 @@ import { normalizeRotationProfile } from "./rotation-settings.ts";
 import { normalizeRotationResult } from "./rotation-result.ts";
 
 export const SESSION_KEY_V4 = "arknights-infra-calc-session-v4";
+export const SESSION_KEY_V5 = "arknights-infra-calc-session-v5";
 export const SESSION_KEY_V3 = "arknights-infra-calc-beta-session-v3";
 export const SESSION_KEY_V2 = "arknights-infra-calc-beta-session-v2";
 export const RESULT_CLEAR_WARNING_DISMISSED_KEY = "arknights-infra-calc-result-clear-warning-dismissed";
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const SKLAND_SOURCE_NAME = "森空岛同步";
 
-export interface PersistedSessionV4 {
-  version: 4;
+export interface PersistedSessionV5 {
+  version: 5;
   savedAt: string;
   expiresAt: string;
   presetLabel: string;
@@ -28,9 +29,36 @@ export interface PersistedSessionV4 {
   sourceName: string | null;
   boxSource: BoxSource;
   layoutDirty: boolean;
+  layoutSource: "local" | "skland";
+  localLayoutBackup: BaseBlueprint | null;
   rotationProfile: RotationProfile;
   result: PublicPlanData | null;
   activeShift: number;
+}
+
+export interface SourceAwareLayoutState {
+  layout: BaseBlueprint;
+  layoutSource: "local" | "skland";
+  localLayoutBackup: BaseBlueprint | null;
+}
+
+export function applyLocalLayoutPatch(
+  state: SourceAwareLayoutState,
+  patch: (layout: BaseBlueprint) => BaseBlueprint,
+  fallbackLocalLayout: BaseBlueprint
+): SourceAwareLayoutState {
+  if (state.layoutSource === "skland") {
+    return {
+      layout: patch(state.layout),
+      layoutSource: "skland",
+      localLayoutBackup: patch(state.localLayoutBackup ?? fallbackLocalLayout),
+    };
+  }
+  return {
+    layout: patch(state.layout),
+    layoutSource: "local",
+    localLayoutBackup: null,
+  };
 }
 
 type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
@@ -109,11 +137,16 @@ function clampActiveShift(value: unknown, result: PublicPlanData | null): number
   return Math.max(0, Math.min(Math.max(0, shiftCount - 1), Number(value)));
 }
 
-function normalizeSession(value: unknown, now: number): PersistedSessionV4 | null {
+function normalizeSession(value: unknown, now: number): PersistedSessionV5 | null {
   if (!isObject(value)) return null;
   const layout = value.layout;
   const operbox = value.operbox;
-  if (!validLayout(layout) || (operbox !== null && operbox !== undefined && !validOperbox(operbox))) return null;
+  const localLayoutBackup = value.localLayoutBackup;
+  if (
+    !validLayout(layout)
+    || (operbox !== null && operbox !== undefined && !validOperbox(operbox))
+    || (localLayoutBackup !== null && localLayoutBackup !== undefined && !validLayout(localLayoutBackup))
+  ) return null;
 
   const savedAt = typeof value.savedAt === "string" ? Date.parse(value.savedAt) : now;
   const expiresAt = typeof value.expiresAt === "string" ? Date.parse(value.expiresAt) : savedAt + SESSION_TTL_MS;
@@ -131,8 +164,9 @@ function normalizeSession(value: unknown, now: number): PersistedSessionV4 | nul
   const hasLegacySklandIdentity = boxSource === "skland" && rawSourceName?.startsWith("skland:");
   const rotationProfile = normalizeRotationProfile(value.rotationProfile);
   const result = hasLegacySklandIdentity ? null : safeResult(value.result, rotationProfile);
+  const layoutDirty = Boolean(value.layoutDirty);
   return {
-    version: 4,
+    version: 5,
     savedAt: new Date(savedAt).toISOString(),
     expiresAt: new Date(expiresAt).toISOString(),
     presetLabel:
@@ -145,31 +179,37 @@ function normalizeSession(value: unknown, now: number): PersistedSessionV4 | nul
     operbox: operbox ? structuredClone(operbox) : null,
     sourceName: boxSource === "skland" ? SKLAND_SOURCE_NAME : rawSourceName,
     boxSource,
-    layoutDirty: Boolean(value.layoutDirty),
+    layoutDirty,
+    layoutSource: value.layoutSource === "skland" || value.layoutSource === "local"
+      ? value.layoutSource
+      : boxSource === "skland" && !layoutDirty
+        ? "skland"
+        : "local",
+    localLayoutBackup: localLayoutBackup ? structuredClone(localLayoutBackup) : null,
     rotationProfile,
     result,
     activeShift: clampActiveShift(value.activeShift, result),
   };
 }
 
-export function loadPersistedSession(storage: StorageLike, now = Date.now()): PersistedSessionV4 | null {
-  const currentRaw = storage.getItem(SESSION_KEY_V4);
+export function loadPersistedSession(storage: StorageLike, now = Date.now()): PersistedSessionV5 | null {
+  const currentRaw = storage.getItem(SESSION_KEY_V5);
   const current = normalizeSession(parseJson(currentRaw), now);
   if (current) {
     if (currentRaw && currentRaw !== JSON.stringify(current)) {
-      storage.setItem(SESSION_KEY_V4, JSON.stringify(current));
+      storage.setItem(SESSION_KEY_V5, JSON.stringify(current));
     }
     return current;
   }
-  if (currentRaw) storage.removeItem(SESSION_KEY_V4);
+  if (currentRaw) storage.removeItem(SESSION_KEY_V5);
 
-  for (const legacyKey of [SESSION_KEY_V3, SESSION_KEY_V2]) {
+  for (const legacyKey of [SESSION_KEY_V4, SESSION_KEY_V3, SESSION_KEY_V2]) {
     const legacyRaw = storage.getItem(legacyKey);
     if (!legacyRaw) continue;
     const migrated = normalizeSession(parseJson(legacyRaw), now);
     storage.removeItem(legacyKey);
     if (!migrated) continue;
-    storage.setItem(SESSION_KEY_V4, JSON.stringify(migrated));
+    storage.setItem(SESSION_KEY_V5, JSON.stringify(migrated));
     return migrated;
   }
   return null;
@@ -177,22 +217,26 @@ export function loadPersistedSession(storage: StorageLike, now = Date.now()): Pe
 
 export function persistSession(
   storage: StorageLike,
-  input: Omit<PersistedSessionV4, "version" | "savedAt" | "expiresAt">,
+  input: Omit<PersistedSessionV5, "version" | "savedAt" | "expiresAt" | "localLayoutBackup"> & {
+    localLayoutBackup?: BaseBlueprint | null;
+  },
   now = Date.now()
-): PersistedSessionV4 {
+): PersistedSessionV5 {
   const hasLegacySklandIdentity =
     input.boxSource === "skland" && input.sourceName?.startsWith("skland:");
   const result = hasLegacySklandIdentity ? null : safeResult(input.result, input.rotationProfile);
-  const value: PersistedSessionV4 = {
+  const value: PersistedSessionV5 = {
     ...input,
+    localLayoutBackup: input.localLayoutBackup ? structuredClone(input.localLayoutBackup) : null,
     sourceName: input.boxSource === "skland" ? SKLAND_SOURCE_NAME : input.sourceName,
-    version: 4,
+    version: 5,
     savedAt: new Date(now).toISOString(),
     expiresAt: new Date(now + SESSION_TTL_MS).toISOString(),
     result,
     activeShift: clampActiveShift(input.activeShift, result),
   };
-  storage.setItem(SESSION_KEY_V4, JSON.stringify(value));
+  storage.setItem(SESSION_KEY_V5, JSON.stringify(value));
+  storage.removeItem(SESSION_KEY_V4);
   storage.removeItem(SESSION_KEY_V3);
   storage.removeItem(SESSION_KEY_V2);
   return value;
@@ -203,6 +247,7 @@ export function clearLocalProductData(storage: StorageLike, extraKeys: string[] 
     SESSION_KEY_V2,
     SESSION_KEY_V3,
     SESSION_KEY_V4,
+    SESSION_KEY_V5,
     RESULT_CLEAR_WARNING_DISMISSED_KEY,
     ...extraKeys,
   ].forEach((key) => storage.removeItem(key));
