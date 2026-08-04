@@ -78,14 +78,14 @@ const PRODUCT_FALLBACK =
 
 const TRADE_ACCENT: Record<string, string> = {
   gold: "infra-room-value border-transparent bg-transparent text-[#22BBFF]",
-  originium: "border-transparent bg-[#8F1E26] text-white",
+  originium: "infra-room-value border-transparent bg-transparent text-[#fb7e7e]",
 };
 
 const FACTORY_ACCENT: Record<string, string> = {
   all: "border-transparent bg-[#FFD800] text-[#313131]",
   gold: "infra-room-value border-transparent bg-transparent text-[#FFD800]",
   battle_record: "infra-room-value border-transparent bg-transparent text-[#4DB9FF]",
-  originium: "border-transparent bg-[#8F1E26] text-white",
+  originium: "infra-room-value border-transparent bg-transparent text-[#fb7e7e]",
 };
 
 export function compactTradeAccent(order: string) {
