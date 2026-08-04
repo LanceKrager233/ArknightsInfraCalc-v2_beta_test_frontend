@@ -1,9 +1,9 @@
 import {
+  assertEmptyBody,
   assertSameOrigin,
   createRequestId,
   enforceRateLimit,
   PublicApiError,
-  readJsonBody,
   requestClientIp,
   successResponse,
 } from "@/server/api-contract";
@@ -28,10 +28,7 @@ async function statusResponse(request: Request, grant: boolean) {
   try {
     assertSameOrigin(request);
     assertSklandAvailable(request);
-    if (grant && request.body) {
-      await readJsonBody(request, 1024);
-      throw new PublicApiError("AIC-REQ-1001");
-    }
+    if (grant) await assertEmptyBody(request, 1024);
     enforceRateLimit("skland-action", requestClientIp(request), 30, 60 * 60_000);
     const previous = await readSklandAccountStore();
     const account = activeSklandAccount(previous);
@@ -67,10 +64,7 @@ export async function DELETE(request: Request) {
   try {
     assertSameOrigin(request);
     assertSklandAvailable(request);
-    if (request.body) {
-      await readJsonBody(request, 1024);
-      throw new PublicApiError("AIC-REQ-1001");
-    }
+    await assertEmptyBody(request, 1024);
     enforceRateLimit("skland-action", requestClientIp(request), 30, 60 * 60_000);
     const previous = await readSklandAccountStore();
     const account = activeSklandAccount(previous);

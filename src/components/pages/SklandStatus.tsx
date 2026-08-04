@@ -1434,7 +1434,7 @@ export function SklandStatus({
         </header>
         {error ? (
           <Alert variant="destructive">
-            <AlertDescription className="font-number">{error.message}（{error.code}）</AlertDescription>
+            <AlertDescription>{error.message}（{error.code}）</AlertDescription>
           </Alert>
         ) : null}
         <SklandLoginPanel
@@ -1460,7 +1460,7 @@ export function SklandStatus({
           </p>
         </header>
         {error ? (
-          <Alert variant="destructive"><AlertDescription className="font-number">{error.message}（{error.code}）</AlertDescription></Alert>
+          <Alert variant="destructive"><AlertDescription>{error.message}（{error.code}）</AlertDescription></Alert>
         ) : null}
         <Card>
           <CardHeader>
@@ -1650,7 +1650,7 @@ export function SklandStatus({
 
       {error ? (
         <Alert variant="destructive">
-          <AlertDescription className="font-number">
+          <AlertDescription>
             {error.message}（{error.code}）。已保留上一次成功同步的数据。
           </AlertDescription>
         </Alert>

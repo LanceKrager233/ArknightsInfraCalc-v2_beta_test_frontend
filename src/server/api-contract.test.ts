@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   __resetRequestGuardsForTests,
   acquirePlanSlot,
+  assertEmptyBody,
   assertPlanCollectionLimits,
   assertSameOrigin,
   enforceRateLimit,
@@ -84,6 +85,20 @@ test("readJsonBody rejects malformed and oversized requests", async () => {
       method: "POST",
       body: "x".repeat(129),
     }), 128),
+    (error: unknown) => error instanceof PublicApiError && error.code === "AIC-REQ-1002"
+  );
+});
+
+test("empty-body actions accept an empty stream while preserving request size limits", async () => {
+  await assert.doesNotReject(
+    assertEmptyBody(new Request("http://localhost/api", { method: "POST" }), 128)
+  );
+  await assert.rejects(
+    assertEmptyBody(new Request("http://localhost/api", { method: "POST", body: "{}" }), 128),
+    (error: unknown) => error instanceof PublicApiError && error.code === "AIC-REQ-1001"
+  );
+  await assert.rejects(
+    assertEmptyBody(new Request("http://localhost/api", { method: "POST", body: "x".repeat(129) }), 128),
     (error: unknown) => error instanceof PublicApiError && error.code === "AIC-REQ-1002"
   );
 });

@@ -900,7 +900,8 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
   const start = performance.now();
 
   try {
-    await maintainPrivateRecordsIfDue();
+    // Record retention is housekeeping. A corrupt legacy record must not block planning.
+    void maintainPrivateRecordsIfDue().catch(() => undefined);
     assertPlanBody(body);
 
     const cliPath = resolveCliPath();

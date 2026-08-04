@@ -628,7 +628,8 @@ export function StatusBar({
       </span>
       <span
         className={cn(
-          "min-w-0 flex-1 truncate tabular-nums",
+          "min-w-0 flex-1 truncate",
+          !error && "tabular-nums",
           loading && "plan-status-shimmer"
         )}
         data-slot="status-text"

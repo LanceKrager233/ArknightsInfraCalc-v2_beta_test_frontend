@@ -129,13 +129,13 @@ export function failureResponse(
   );
 }
 
-export async function readJsonBody(request: Request, maxBytes: number): Promise<unknown> {
+async function readRequestBody(request: Request, maxBytes: number): Promise<Uint8Array> {
   const declaredLength = Number(request.headers.get("content-length") ?? 0);
   if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
     throw new PublicApiError("AIC-REQ-1002");
   }
 
-  if (!request.body) throw new PublicApiError("AIC-REQ-1001");
+  if (!request.body) return new Uint8Array();
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
   let byteLength = 0;
@@ -149,13 +149,24 @@ export async function readJsonBody(request: Request, maxBytes: number): Promise<
     }
     chunks.push(value);
   }
-  if (byteLength === 0) throw new PublicApiError("AIC-REQ-1001");
   const bytes = new Uint8Array(byteLength);
   let offset = 0;
   for (const chunk of chunks) {
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
+  return bytes;
+}
+
+export async function assertEmptyBody(request: Request, maxBytes: number): Promise<void> {
+  if ((await readRequestBody(request, maxBytes)).byteLength > 0) {
+    throw new PublicApiError("AIC-REQ-1001");
+  }
+}
+
+export async function readJsonBody(request: Request, maxBytes: number): Promise<unknown> {
+  const bytes = await readRequestBody(request, maxBytes);
+  if (bytes.byteLength === 0) throw new PublicApiError("AIC-REQ-1001");
 
   try {
     return JSON.parse(new TextDecoder().decode(bytes)) as unknown;

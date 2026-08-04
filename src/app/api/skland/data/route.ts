@@ -1,9 +1,8 @@
 import {
+  assertEmptyBody,
   assertSameOrigin,
   createRequestId,
   enforceRateLimit,
-  PublicApiError,
-  readJsonBody,
   requestClientIp,
   successResponse,
 } from "@/server/api-contract";
@@ -24,10 +23,7 @@ export async function DELETE(request: Request) {
   try {
     assertSameOrigin(request);
     assertSklandAvailable(request);
-    if (request.body) {
-      await readJsonBody(request, 1024);
-      throw new PublicApiError("AIC-REQ-1001");
-    }
+    await assertEmptyBody(request, 1024);
     enforceRateLimit("skland-delete", requestClientIp(request), 5, 60 * 60_000);
     const previous = await readSklandAccountStore();
     const deleted = await deleteSklandOwnedData(
