@@ -575,14 +575,14 @@ function WorkbenchApp() {
     clearPlanResult();
   }
 
-  async function runPlanForLayout(planLayout: BaseBlueprint) {
+  async function runPlanForLayout(planLayout: BaseBlueprint, retryUnavailable = false) {
     if (!operbox) return;
     const layoutError = layoutValidationError(planLayout);
     if (layoutError) {
       setApiError(displayError("AIC-LAYOUT-1201", layoutError));
       return;
     }
-    if (!cliReady) {
+    if (!cliReady && !retryUnavailable) {
       setApiError(displayError("AIC-PLAN-3001", "排班服务暂不可用，请稍后重试。", true));
       return;
     }
@@ -602,6 +602,7 @@ function WorkbenchApp() {
         boxSource,
         rotation: rotationProfile,
       });
+      setCliReady(true);
       setResult(response);
       if (response.maa.plans[0]) {
         const plan = response.maa.plans[0];
@@ -1019,7 +1020,11 @@ function WorkbenchApp() {
   }
 
   async function handleRetry() {
-    if (apiError?.code !== "AIC-PLAN-3001" && canRun) {
+    if (apiError?.code === "AIC-PLAN-3001") {
+      await runPlanForLayout(layout, true);
+      return;
+    }
+    if (canRun) {
       await handleRun();
       return;
     }

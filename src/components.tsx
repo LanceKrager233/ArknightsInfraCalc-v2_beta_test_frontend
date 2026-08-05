@@ -703,8 +703,9 @@ export function ShiftTabs({
   return (
     <Tabs value={String(active)} onValueChange={(value) => onChange(Number(value))} className="max-w-full">
       <TabsList
-        className="font-number max-w-full justify-start overflow-x-auto overflow-y-hidden tracking-[0.01em] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="max-w-full justify-start overflow-x-auto overflow-y-hidden tracking-[0.01em] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         data-shift-tabs
+        data-ui-number-font
       >
         {plans.map((plan, index) => {
           const shift = rotation?.shifts[index];

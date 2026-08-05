@@ -5,17 +5,17 @@ import { legalIdentity } from "@/legal";
 import { LEGAL_EFFECTIVE_DATE } from "@/legal-policy";
 
 export const metadata: Metadata = {
-  title: "隐私政策 · 明日方舟基建排班助手",
-  description: "明日方舟基建排班助手如何处理森空岛凭证、排班数据与状态中心数据。",
+  title: "隐私政策 · 可露希尔基建终端",
+  description: "可露希尔基建终端如何处理森空岛凭证、排班数据与状态中心数据。",
 };
 
 export default function PrivacyPage() {
   const identity = legalIdentity();
   return (
-    <LegalDocument eyebrow="明日方舟基建排班助手" title="隐私政策" effectiveDate={LEGAL_EFFECTIVE_DATE}>
+    <LegalDocument eyebrow="可露希尔基建终端" title="隐私政策" effectiveDate={LEGAL_EFFECTIVE_DATE}>
       <section>
         <h2 className="font-number">1. 适用范围与运营者</h2>
-        <p>本政策适用于“明日方舟基建排班助手”（以下简称“本站”）。本站是非官方、非商业的排班辅助工具，与鹰角网络、森空岛及《明日方舟》官方不存在隶属、代理或背书关系。</p>
+        <p>本政策适用于“可露希尔基建终端”（以下简称“本站”）。本站是非官方、非商业的排班辅助工具，与鹰角网络、森空岛及《明日方舟》官方不存在隶属、代理或背书关系。</p>
         <p>运营者：{identity.operatorName}。你可以通过<a href={identity.contactUrl}>项目问题反馈渠道</a>{identity.contactEmail ? <>或邮箱 <a href={`mailto:${identity.contactEmail}`}>{identity.contactEmail}</a></> : null}联系我们。</p>
       </section>
 

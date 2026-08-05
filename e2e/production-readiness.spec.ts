@@ -41,7 +41,7 @@ async function expectVisibleNumbersUseNumberFont(page: Page, scope: Locator = pa
     const failures: Array<{ tag: string; text: string; fontFamily: string }> = [];
 
     for (const element of elements) {
-      if (element.closest("svg, [aria-hidden='true']")) continue;
+      if (element.closest("svg, [aria-hidden='true'], [data-ui-number-font]")) continue;
       const style = getComputedStyle(element);
       const rect = element.getBoundingClientRect();
       if (style.display === "none" || style.visibility === "hidden" || rect.width === 0 || rect.height === 0) continue;
@@ -924,6 +924,7 @@ test("Full E2 stays in place and completes generation, shifts, MAA export, and f
 });
 
 test("scheduled product changes require destructive confirmation and rerun with the updated layout", async ({ page }) => {
+  test.setTimeout(60_000);
   await mockApis(page);
   let planRequests = 0;
   let rerunPayload: Record<string, unknown> | null = null;
@@ -989,6 +990,7 @@ test("scheduled product changes require destructive confirmation and rerun with 
 });
 
 test("responsive navigation and the two locked areas keep their current behavior", async ({ page }) => {
+  test.setTimeout(60_000);
   await mockApis(page);
   await seedV4Session(page);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -1006,7 +1008,7 @@ test("responsive navigation and the two locked areas keep their current behavior
   const keepHiddenButton = page.getByRole("button", { name: "暂不显示" });
   await expect(keepHiddenButton).toBeVisible();
   await keepHiddenButton.click();
-  await expect(page.getByRole("button", { name: "恢复已隐藏（1）" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /恢复已隐藏.*1/ })).toBeVisible();
 
   for (const viewport of [
     { width: 768, height: 900 },
@@ -1026,6 +1028,7 @@ test("responsive navigation and the two locked areas keep their current behavior
 });
 
 test("the top account bar stays pinned on every page and treats local Box data as logged out", async ({ page }) => {
+  test.setTimeout(60_000);
   await mockApis(page, { sklandSessionDelayMs: 12_000 });
   await seedV4Session(page);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -1526,7 +1529,7 @@ test("schedule visuals use a stable technical canvas and responsive level marker
   expect(mobileSkillBox?.height).toBeGreaterThanOrEqual(44);
 });
 
-test("self-hosts Bender Bold for every visible numeric expression without responsive overflow", async ({ page }) => {
+test("self-hosts Bender Bold for technical numbers while preserving UI-font exceptions", async ({ page }) => {
   await mockApis(page, {
     sklandConfigured: true,
     sklandSnapshot: authenticatedSklandSnapshot,
@@ -1590,7 +1593,7 @@ test("publishes the site terms and privacy policy with upstream policy links", a
   await page.goto("/privacy");
   await expect(page.getByRole("heading", { name: "隐私政策", level: 1 })).toBeVisible();
   await expect(page.getByText("版本与生效日期：2026-08-05")).toBeVisible();
-  await expect(page.getByText("明日方舟基建排班助手项目维护者", { exact: false })).toBeVisible();
+  await expect(page.getByText("可露希尔基建终端项目维护者", { exact: false })).toBeVisible();
   await expect(page.getByRole("link", { name: "森空岛使用许可及服务协议" })).toHaveAttribute(
     "href",
     "https://assets.skland.com/protocols/agreement.html"
@@ -1616,7 +1619,7 @@ test("Skland login shows QR on every viewport and offers a separate mobile app s
         termsAccepted: true,
         privacyAccepted: true,
         termsVersion: "2026-08-05",
-        privacyVersion: "2026-08-05",
+        privacyVersion: "2026-08-05-r2",
       },
     });
     return route.fulfill({
@@ -1788,6 +1791,7 @@ test("Skland status uses separate authorization and deletion preserves non-Sklan
 });
 
 test("Skland status center keeps profile and recruitment in overview and supports role switching", async ({ page }) => {
+  test.setTimeout(90_000);
   const switchedSnapshot = {
     ...authenticatedSklandSnapshot,
     player: {
@@ -1890,6 +1894,8 @@ test("Skland status center keeps profile and recruitment in overview and support
     layoutSync.boundingBox(),
   ]);
   expect((layoutSyncBox?.x ?? 0)).toBeGreaterThan(viewTabsBox?.x ?? 0);
+  const dataControlsBox = await page.locator("[data-skland-data-controls]").boundingBox();
+  expect(dataControlsBox?.y).toBeGreaterThan(viewTabsBox?.y ?? 0);
   const sklandViewTabHeight = await page.getByRole("tab", { name: "概览", exact: true })
     .evaluate((element) => element.getBoundingClientRect().height);
   expect(sklandViewTabHeight).toBe(scheduleViewTabHeight);

@@ -25,7 +25,7 @@ export function AppTopBar({ account, statusSnapshot, sessionLoading, onOpenSklan
       className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur-sm md:border-b-0 md:bg-transparent md:backdrop-blur-none [padding-top:env(safe-area-inset-top)]"
       data-app-topbar
     >
-      <h1 className="sr-only">明日方舟基建排班助手</h1>
+      <h1 className="sr-only">可露希尔基建终端</h1>
       <div className="app-content-track flex h-[65px] items-center">
         <SidebarTrigger className="size-11 shrink-0 md:hidden" />
         <div className="ms-auto flex h-11 min-w-11 items-center justify-end">

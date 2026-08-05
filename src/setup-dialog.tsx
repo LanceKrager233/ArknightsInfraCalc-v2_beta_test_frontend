@@ -389,7 +389,7 @@ export function SetupDialog({
               onValueChange={handleLayoutSectionChange}
               className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-0"
             >
-              <div className="px-4 py-3 sm:px-7">
+              <div className="px-4 pb-3 pt-1 sm:px-7">
                 <TabsList variant="line" className="w-full justify-start gap-5 p-0 sm:w-fit" aria-label="基建设置内容">
                   <TabsTrigger value="basics" className="min-h-10 flex-none px-0 text-[13px] sm:px-0">布局与换班</TabsTrigger>
                   <TabsTrigger value="facilities" className="min-h-10 flex-none px-0 text-[13px] sm:px-0">设施设置</TabsTrigger>

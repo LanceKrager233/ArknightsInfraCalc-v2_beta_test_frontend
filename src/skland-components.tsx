@@ -201,20 +201,20 @@ export function SklandLoginPanel({
             <ScanLine className="size-5" aria-hidden="true" />
           </div>
           <CardTitle className={dialogPresentation ? "text-lg" : "text-xl"}>登录森空岛账号</CardTitle>
-          <CardDescription className="max-w-md text-pretty leading-6">
-            <span className="md:hidden">打开森空岛 App 扫码登录，成功后同步排班所需数据。</span>
-            <span className="hidden md:inline">
-              打开森空岛 App，扫描页面中的二维码完成登录。登录成功后会同步当前角色的干员、基建布局和当前进驻。
-            </span>
-          </CardDescription>
-          <div className="mt-6 grid gap-3 text-sm text-muted-foreground">
+          <div className="mt-7 grid gap-4 text-sm text-muted-foreground" data-ui-number-font>
             <p className="flex items-start gap-2">
               <ShieldCheck className="mt-0.5 size-4 shrink-0 text-emerald-600" aria-hidden="true" />
-              <span className="md:hidden">登录凭证加密存入 HttpOnly Cookie，最长保留 <span className="font-number">7</span> 天。</span>
+              <span className="md:hidden">登录凭证加密存入 HttpOnly Cookie，最长保留 7 天。</span>
               <span className="hidden md:inline">
-                登录凭证会加密存入此浏览器的 HttpOnly Cookie，请求期间由服务端解密使用，最长保留 <span className="font-number">7</span> 天，不写入业务数据库。
+                登录凭证会加密存入此浏览器的 HttpOnly Cookie，请求期间由服务端解密使用，最长保留 7 天，不写入业务数据库。
               </span>
             </p>
+            <CardDescription className="w-full text-pretty leading-6">
+              <span className="md:hidden">打开森空岛 App 扫码登录，成功后同步排班所需数据。</span>
+              <span className="hidden md:inline">
+                打开森空岛 App，扫描页面中的二维码完成登录。登录成功后会同步当前角色的干员、基建布局和当前进驻。
+              </span>
+            </CardDescription>
             <p>
               <span className="md:hidden">排班同步不会自动签到；状态中心需要另行授权。</span>
               <span className="hidden md:inline">排班同步不会自动签到或读取社区内容；头像、理智、任务和游戏进度仅在你单独授权状态中心后展示。</span>
@@ -234,36 +234,6 @@ export function SklandLoginPanel({
             </Alert>
           ) : (
             <div className="grid w-full place-items-center gap-4">
-              <div className="grid w-full gap-3 rounded-lg border border-border/70 bg-background/70 p-3 text-xs leading-5 text-muted-foreground">
-                <div className="flex items-start gap-2">
-                  <input
-                    id={termsId}
-                    type="checkbox"
-                    checked={termsAccepted}
-                    onChange={(event) => setTermsAccepted(event.target.checked)}
-                    className="mt-1 size-4 shrink-0 accent-primary"
-                  />
-                  <label htmlFor={termsId}>
-                    我已阅读并同意
-                    <Link className="mx-1 font-medium text-foreground underline underline-offset-4" href="/terms" target="_blank">本站服务条款</Link>
-                    。
-                  </label>
-                </div>
-                <div className="flex items-start gap-2">
-                  <input
-                    id={privacyId}
-                    type="checkbox"
-                    checked={privacyAccepted}
-                    onChange={(event) => setPrivacyAccepted(event.target.checked)}
-                    className="mt-1 size-4 shrink-0 accent-primary"
-                  />
-                  <label htmlFor={privacyId}>
-                    我已阅读
-                    <Link className="mx-1 font-medium text-foreground underline underline-offset-4" href="/privacy" target="_blank">本站隐私政策</Link>
-                    ，并同意本站为登录和生成排班处理我的森空岛凭证、角色、干员与基建数据。
-                  </label>
-                </div>
-              </div>
               {scanUrl || scanState === "loading" ? (
                 <div className="grid size-52 place-items-center rounded-xl bg-white p-3 ring-1 ring-black/10 sm:size-56">
                   {scanUrl ? (
@@ -295,6 +265,37 @@ export function SklandLoginPanel({
                   <AlertDescription>{scanError}</AlertDescription>
                 </Alert>
               ) : null}
+
+              <div className="grid w-full gap-3 text-xs leading-5 text-muted-foreground">
+                <div className="flex items-start gap-2">
+                  <input
+                    id={termsId}
+                    type="checkbox"
+                    checked={termsAccepted}
+                    onChange={(event) => setTermsAccepted(event.target.checked)}
+                    className="mt-1 size-4 shrink-0 accent-primary"
+                  />
+                  <label htmlFor={termsId}>
+                    我已阅读并同意
+                    <Link className="mx-1 font-medium text-foreground underline underline-offset-4" href="/terms" target="_blank">本站服务条款</Link>
+                    。
+                  </label>
+                </div>
+                <div className="flex items-start gap-2">
+                  <input
+                    id={privacyId}
+                    type="checkbox"
+                    checked={privacyAccepted}
+                    onChange={(event) => setPrivacyAccepted(event.target.checked)}
+                    className="mt-1 size-4 shrink-0 accent-primary"
+                  />
+                  <label htmlFor={privacyId}>
+                    我已阅读
+                    <Link className="mx-1 font-medium text-foreground underline underline-offset-4" href="/privacy" target="_blank">本站隐私政策</Link>
+                    ，并同意本站为登录和生成排班处理我的森空岛凭证、角色、干员与基建数据。
+                  </label>
+                </div>
+              </div>
 
               {scanUrl ? (
                 <div className="grid w-full gap-2 sm:hidden">

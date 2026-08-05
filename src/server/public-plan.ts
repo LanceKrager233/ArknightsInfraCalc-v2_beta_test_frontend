@@ -48,7 +48,7 @@ function sanitizeProfile(profile: UserProfile, layoutLabel: string, sourceName: 
 function sanitizeMaa(maa: MaaJson, layoutLabel: string): MaaJson {
   return {
     ...stripInternalFields(structuredClone(maa)),
-    title: `明日方舟基建排班助手 · ${safeDisplayName(layoutLabel, "当前布局")}`,
+    title: `可露希尔基建终端 · ${safeDisplayName(layoutLabel, "当前布局")}`,
   };
 }
 

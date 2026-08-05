@@ -215,8 +215,8 @@ function SklandDataControls({
       <Card data-skland-data-controls>
         <CardHeader>
           <CardTitle>数据与授权</CardTitle>
-          <CardDescription>
-            登录凭证将在 <span className="font-number">{credentialExpiryLabel(account.credentialExpiresAt)}</span> 固定过期，刷新页面不会延长保存期。
+          <CardDescription data-ui-number-font>
+            登录凭证将在 {credentialExpiryLabel(account.credentialExpiresAt)} 固定过期，刷新页面不会延长保存期。
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
@@ -1428,9 +1428,6 @@ export function SklandStatus({
         <header className="max-w-2xl">
           <p className="text-xs font-medium tracking-wide text-primary">森空岛状态中心</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight">把当前罗德岛带进排班助手</h2>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            登录、角色切换和退出都集中在这里。二维码只会在你点击后生成。
-          </p>
         </header>
         {error ? (
           <Alert variant="destructive">
@@ -1513,7 +1510,10 @@ export function SklandStatus({
 
   return (
     <div className="grid gap-6">
-      <header className="grid gap-5 border-b border-border/70 pb-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+      <header
+        className="grid gap-5 border-b border-border/70 pb-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end"
+        data-ui-number-font
+      >
         <div className="flex min-w-0 items-center gap-4">
           {snapshot.player.avatarUrl ? (
             <img
@@ -1534,19 +1534,19 @@ export function SklandStatus({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="truncate text-2xl font-semibold tracking-tight">{snapshot.player.nickname}</h2>
-              {snapshot.player.level !== null ? <Badge variant="secondary" className="font-number">Lv.{snapshot.player.level}</Badge> : null}
+              {snapshot.player.level !== null ? <Badge variant="secondary">Lv.{snapshot.player.level}</Badge> : null}
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span>{snapshot.player.channelName}</span>
               <button
                 type="button"
-                className="font-number inline-flex items-center gap-1 rounded-sm hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="inline-flex items-center gap-1 rounded-sm hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 onClick={() => onCopyUid(snapshot.player.uid)}
                 aria-label="复制完整 UID"
               >
                 UID {maskedUid(snapshot.player.uid)} <Clipboard className="size-3" />
               </button>
-              <span className="font-number">同步于 {formatDateTime(snapshot.infrastructure.storeTs)}</span>
+              <span>同步于 {formatDateTime(snapshot.infrastructure.storeTs)}</span>
             </div>
           </div>
         </div>
@@ -1577,7 +1577,7 @@ export function SklandStatus({
               }}
             >
               <ComboboxInput
-                className="font-number h-full w-full"
+                className="h-full w-full"
                 aria-label="选择账号与角色"
                 placeholder="搜索账号与角色"
               />
@@ -1587,10 +1587,10 @@ export function SklandStatus({
                   {(group, groupIndex) => (
                     <ComboboxGroup key={group.value} items={group.items}>
                       {groupIndex > 0 ? <ComboboxSeparator /> : null}
-                      <ComboboxLabel className="font-number">{group.label}</ComboboxLabel>
+                      <ComboboxLabel>{group.label}</ComboboxLabel>
                       <ComboboxCollection>
                         {(item) => (
-                          <ComboboxItem key={item.value} value={item} className="font-number">
+                          <ComboboxItem key={item.value} value={item}>
                             {item.label}
                           </ComboboxItem>
                         )}
@@ -1664,14 +1664,6 @@ export function SklandStatus({
         </Alert>
       ) : null}
 
-      <SklandDataControls
-        account={activeAccount}
-        authorized
-        busy={busy}
-        onRevokeStatus={onRevokeStatus}
-        onDeleteAllData={onDeleteAllData}
-      />
-
       <Tabs defaultValue="overview">
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3" data-skland-view-header>
           <div className="-mx-3 min-w-0 overflow-x-auto overflow-y-hidden px-3 pb-1">
@@ -1694,6 +1686,14 @@ export function SklandStatus({
           <InfrastructureTab snapshot={snapshot} />
         </TabsContent>
       </Tabs>
+
+      <SklandDataControls
+        account={activeAccount}
+        authorized
+        busy={busy}
+        onRevokeStatus={onRevokeStatus}
+        onDeleteAllData={onDeleteAllData}
+      />
     </div>
   );
 }

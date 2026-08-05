@@ -16,7 +16,7 @@ export function LegalDocument({
     <main className="min-h-dvh bg-background px-5 py-10 text-foreground sm:px-8 sm:py-14">
       <article className="mx-auto max-w-3xl">
         <Link className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground" href="/">
-          返回基建排班助手
+          返回可露希尔基建终端
         </Link>
         <header className="mt-8 border-b border-border pb-7">
           <p className="text-xs font-medium tracking-wide text-primary">{eyebrow}</p>

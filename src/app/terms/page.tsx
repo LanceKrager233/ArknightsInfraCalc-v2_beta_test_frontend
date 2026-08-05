@@ -5,14 +5,14 @@ import { legalIdentity } from "@/legal";
 import { LEGAL_EFFECTIVE_DATE } from "@/legal-policy";
 
 export const metadata: Metadata = {
-  title: "服务条款 · 明日方舟基建排班助手",
-  description: "使用明日方舟基建排班助手及森空岛同步功能的约定。",
+  title: "服务条款 · 可露希尔基建终端",
+  description: "使用可露希尔基建终端及森空岛同步功能的约定。",
 };
 
 export default function TermsPage() {
   const identity = legalIdentity();
   return (
-    <LegalDocument eyebrow="明日方舟基建排班助手" title="服务条款" effectiveDate={LEGAL_EFFECTIVE_DATE}>
+    <LegalDocument eyebrow="可露希尔基建终端" title="服务条款" effectiveDate={LEGAL_EFFECTIVE_DATE}>
       <section>
         <h2 className="font-number">1. 服务说明</h2>
         <p>本站由{identity.operatorName}维护，为《明日方舟》玩家提供基建排班、练卡建议、森空岛数据同步和 MAA 导出。本站处于小范围测试阶段，是非官方、非商业工具，与鹰角网络、森空岛和 MAA 项目不存在隶属、代理或背书关系。</p>

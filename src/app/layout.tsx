@@ -38,7 +38,7 @@ const numberFont = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "明日方舟基建排班助手",
+  title: "可露希尔基建终端",
   description: "导入干员数据，生成三班排班并导出到 MAA。",
 };
 
