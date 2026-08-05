@@ -47,10 +47,21 @@ jobs:
             /assets/data/building.json
             /assets/locales/cn/character.json
             /assets/locales/cn/building.json
-            /assets/img/avatar
             /assets/img/building_skill
             /LICENSE
             /package.json
+
+      - name: Checkout game resource avatars
+        uses: actions/checkout@v6
+        with:
+          repository: yuanyan3060/ArknightsGameResource
+          path: .tmp/arknights-game-resource
+          fetch-depth: 1
+          filter: blob:none
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /avatar/char_*.png
 
       - name: Use Node.js 22
         uses: actions/setup-node@v6
@@ -70,12 +81,15 @@ jobs:
       - name: Read upstream commit
         id: upstream
         shell: bash
-        run: echo "sha=$(git -C .tmp/arkntools-data rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "sha=$(git -C .tmp/arkntools-data rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "avatars_sha=$(git -C .tmp/arknights-game-resource rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Generate and validate assets
         shell: bash
         run: |
           arguments=(--source .tmp/arkntools-data --source-sha "${{ steps.upstream.outputs.sha }}")
+          arguments+=(--portraits-source .tmp/arknights-game-resource --portraits-source-sha "${{ steps.upstream.outputs.avatars_sha }}")
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.allow_removals }}" == "true" ]]; then
             arguments+=(--allow-removals)
           fi

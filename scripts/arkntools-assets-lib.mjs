@@ -1,9 +1,12 @@
 import { lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile, copyFile } from "node:fs/promises";
+import { setTimeout as delay } from "node:timers/promises";
+
 import path from "node:path";
 
 import sharp from "sharp";
 
 export const ARKNTOOLS_REPOSITORY = "https://github.com/arkntools/arknights-toolbox-data";
+export const ARKNIGHTS_GAME_RESOURCE_REPOSITORY = "https://github.com/yuanyan3060/ArknightsGameResource";
 export const GENERATED_VERSION = 1;
 
 const MANAGED_PATHS = [
@@ -12,12 +15,15 @@ const MANAGED_PATHS = [
   "src/generated/arkntools",
 ];
 
+// 干员头像来自 ArknightsGameResource 仓库的 avatar 目录，文件名形如 char_<shortId>.png；
+// 按上游原尺寸直接拷贝，不做缩放。
+const PORTRAITS_DIRECTORY = "avatar";
+
 const SOURCE_PATHS = {
   characterData: "assets/data/character.json",
   buildingData: "assets/data/building.json",
   characterLocale: "assets/locales/cn/character.json",
   buildingLocale: "assets/locales/cn/building.json",
-  portraits: "assets/img/avatar",
   buildingSkills: "assets/img/building_skill",
 };
 
@@ -107,6 +113,14 @@ async function validatePng(filePath, width, height, label) {
   assert(metadata.width === width && metadata.height === height, `${label} 尺寸应为 ${width}×${height}。`);
 }
 
+// 头像按上游原尺寸使用，只校验文件是 PNG，不强制具体尺寸。
+async function validatePngFormat(filePath, label) {
+  const stat = await lstat(filePath);
+  assert(stat.isFile() && !stat.isSymbolicLink(), `${label} 必须是普通 PNG 文件。`);
+  const metadata = await sharp(filePath).metadata();
+  assert(metadata.format === "png", `${label} 不是 PNG。`);
+}
+
 async function inspectSourceIcon(filePath, label) {
   const stat = await lstat(filePath);
   assert(stat.isFile() && !stat.isSymbolicLink(), `${label} 必须是普通 PNG 文件。`);
@@ -127,8 +141,11 @@ function relativeAssetPath(directory, name) {
   return `/images/${directory}/${name}.png`;
 }
 
-async function loadSource(sourceRoot, sourceSha) {
+async function loadSource(sourceRoot, sourceSha, portraitsRoot, portraitsSha) {
+  assert(typeof portraitsRoot === "string" && portraitsRoot, "必须提供头像来源目录。");
+  assert(typeof portraitsSha === "string" && portraitsSha, "必须提供头像来源 commit。");
   const resolvedSource = path.resolve(sourceRoot);
+  const resolvedPortraits = path.resolve(portraitsRoot);
   const [characterData, buildingData, characterLocale, buildingLocale] = await Promise.all([
     readJson(path.join(resolvedSource, SOURCE_PATHS.characterData), "干员数据"),
     readJson(path.join(resolvedSource, SOURCE_PATHS.buildingData), "基建数据"),
@@ -212,7 +229,7 @@ async function loadSource(sourceRoot, sourceSha) {
     const shortId = operator.id.slice("char_".length);
     return {
       name: `${shortId}.png`,
-      source: path.join(resolvedSource, SOURCE_PATHS.portraits, `${shortId}.png`),
+      source: path.join(resolvedPortraits, PORTRAITS_DIRECTORY, `char_${shortId}.png`),
     };
   });
   const iconFiles = [...referencedIcons].sort((left, right) => left.localeCompare(right, "en")).map((icon) => ({
@@ -220,7 +237,7 @@ async function loadSource(sourceRoot, sourceSha) {
     source: path.join(resolvedSource, SOURCE_PATHS.buildingSkills, `${icon}.png`),
   }));
 
-  await mapLimit(portraitFiles, 16, ({ source, name }) => validatePng(source, 80, 80, `干员头像 ${name}`));
+  await mapLimit(portraitFiles, 16, ({ source, name }) => validatePngFormat(source, `干员头像 ${name}`));
   await mapLimit(iconFiles, 16, async (file) => {
     Object.assign(file, await inspectSourceIcon(file.source, `基建技能图标 ${file.name}`));
   });
@@ -231,6 +248,10 @@ async function loadSource(sourceRoot, sourceSha) {
     source: {
       repository: ARKNTOOLS_REPOSITORY,
       commit: normalizeCommit(sourceSha),
+    },
+    portraitsSource: {
+      repository: ARKNIGHTS_GAME_RESOURCE_REPOSITORY,
+      commit: normalizeCommit(portraitsSha),
     },
     counts: {
       operators: operators.length,
@@ -291,6 +312,9 @@ export async function checkGeneratedAssets(root) {
   assert(isObject(manifest) && manifest.version === GENERATED_VERSION, "已生成来源清单版本无效。");
   normalizeCommit(manifest.source?.commit);
   assert(manifest.source?.repository === ARKNTOOLS_REPOSITORY, "已生成来源仓库无效。");
+  assert(isObject(manifest.portraitsSource), "已生成头像来源清单无效。");
+  normalizeCommit(manifest.portraitsSource?.commit);
+  assert(manifest.portraitsSource?.repository === ARKNIGHTS_GAME_RESOURCE_REPOSITORY, "已生成头像来源仓库无效。");
 
   const ids = new Set();
   const names = new Set();
@@ -343,7 +367,7 @@ export async function checkGeneratedAssets(root) {
   assert(manifest.counts?.portraits === actualPortraits.length, "来源清单的头像数量不一致。");
   assert(manifest.counts?.buildingSkillIcons === actualIcons.length, "来源清单的技能图标数量不一致。");
 
-  await mapLimit(actualPortraits, 16, (name) => validatePng(path.join(portraitDirectory, name), 80, 80, `干员头像 ${name}`));
+  await mapLimit(actualPortraits, 16, (name) => validatePngFormat(path.join(portraitDirectory, name), `干员头像 ${name}`));
   await mapLimit(actualIcons, 16, (name) => validatePng(path.join(iconDirectory, name), 36, 36, `基建技能图标 ${name}`));
   return manifest;
 }
@@ -377,6 +401,22 @@ async function desiredManagedFiles(stageRoot) {
   return existingManagedFiles(stageRoot);
 }
 
+// Windows 上文件监视器、索引服务或杀毒软件可能在目录换名瞬间短暂持有句柄，
+// 导致 rename 偶发 EPERM/EACCES/EBUSY；间隔重试几次即可越过瞬时锁。
+async function renameWithRetry(source, target) {
+  const retriableCodes = new Set(["EPERM", "EACCES", "EBUSY", "ENOTEMPTY"]);
+  for (let attempt = 1; attempt <= 8; attempt += 1) {
+    try {
+      await rename(source, target);
+      return;
+    } catch (error) {
+      if (!(error && typeof error === "object" && "code" in error && retriableCodes.has(error.code))) throw error;
+      if (attempt === 8) throw error;
+      await delay(150 * attempt);
+    }
+  }
+}
+
 async function installStage(root, stageRoot) {
   const backupRoot = await mkdtemp(path.join(root, ".tmp", "arkntools-assets-backup-"));
   const installed = [];
@@ -391,26 +431,26 @@ async function installStage(root, stageRoot) {
       try {
         await lstat(target);
         await mkdir(path.dirname(backup), { recursive: true });
-        await rename(target, backup);
+        await renameWithRetry(target, backup);
         backedUp.push({ target, backup });
       } catch (error) {
         if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT")) throw error;
       }
-      await rename(staged, target);
+      await renameWithRetry(staged, target);
       installed.push(target);
     }
   } catch (error) {
     for (const target of installed.reverse()) await rm(target, { recursive: true, force: true });
-    for (const { target, backup } of backedUp.reverse()) await rename(backup, target);
+    for (const { target, backup } of backedUp.reverse()) await renameWithRetry(backup, target);
     throw error;
   } finally {
     await rm(backupRoot, { recursive: true, force: true });
   }
 }
 
-export async function generateAssets({ sourceRoot, sourceSha, outputRoot, allowRemovals = false }) {
+export async function generateAssets({ sourceRoot, sourceSha, portraitsRoot, portraitsSha, outputRoot, allowRemovals = false }) {
   const root = path.resolve(outputRoot);
-  const generated = await loadSource(sourceRoot, sourceSha);
+  const generated = await loadSource(sourceRoot, sourceSha, portraitsRoot, portraitsSha);
   const currentManifest = await existingManifest(root);
   if (currentManifest && generated.manifest.counts.operators < currentManifest.counts?.operators && !allowRemovals) {
     throw new Error(`上游干员数量从 ${currentManifest.counts.operators} 降至 ${generated.manifest.counts.operators}；请人工确认后使用 --allow-removals。`);

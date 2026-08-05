@@ -1,33 +1,41 @@
 # Third-party asset sources
 
-## arkntools
+## arkntools data and building-skill assets
 
-Operator portraits, building-skill icons, and the generated presentation catalogs under the following paths come from the public [`arkntools/arknights-toolbox-data`](https://github.com/arkntools/arknights-toolbox-data) repository:
+Operator metadata, building-skill icons, and the generated presentation catalogs under the following paths come from the public [`arkntools/arknights-toolbox-data`](https://github.com/arkntools/arknights-toolbox-data) repository:
 
-- `public/images/operator-portraits`
 - `public/images/building-skills`
 - `src/generated/arkntools`
 
-`src/generated/arkntools/source.json` records the exact upstream commit and resource counts used by the current checkout. The repository's updater code is published under the MIT License; Arknights game data, names, descriptions, and images remain the property of their respective rights holders. This project does not claim ownership of those game assets.
+The repository's updater code is published under the MIT License. Arknights game data, names, and descriptions remain the property of their respective rights holders.
 
-The frontend consumes only public JSON and PNG artifacts. It does not execute arkntools' private downloader or unpacking workflows, does not require access to private arkntools repositories, and never opens pull requests or writes to arkntools repositories.
+## ArknightsGameResource portraits
+
+Operator portraits under `public/images/operator-portraits` come from the public [`yuanyan3060/ArknightsGameResource`](https://github.com/yuanyan3060/ArknightsGameResource) repository. Its README identifies the images as Arknights game assets owned by Hypergryph and limits the repository's purpose to learning and exchange. The resource repository carries an [AGPL-3.0 license](https://github.com/yuanyan3060/ArknightsGameResource/blob/main/LICENSE); this frontend copies only the public PNG artifacts and does not execute code from that repository.
+
+`src/generated/arkntools/source.json` records the exact data and portrait commits and resource counts used by the current checkout. This project does not claim ownership of the game assets.
+
+The frontend consumes only public JSON and PNG artifacts. It does not execute private downloader or unpacking workflows, does not require access to private repositories, and never opens pull requests or writes to either upstream repository.
 
 ## Updating
 
-The `Sync arkntools assets` GitHub Actions workflow performs a shallow sparse checkout of the public source once per day at 10:17 Asia/Shanghai and opens or refreshes a pull request in this frontend repository when generated content changes. It uses the repository-scoped `GITHUB_TOKEN`; maintainers must enable **Allow GitHub Actions to create and approve pull requests** in the repository Actions settings. The workflow creates pull requests but never approves or merges them.
+The `Sync arkntools assets` GitHub Actions workflow performs shallow sparse checkouts of both public sources once per day at 10:17 Asia/Shanghai and opens or refreshes a pull request in this frontend repository when generated content changes. It uses the repository-scoped `GITHUB_TOKEN`; maintainers must enable **Allow GitHub Actions to create and approve pull requests** in the repository Actions settings. The workflow creates pull requests but never approves or merges them.
 
 For a local, explicitly reviewed update:
 
 ```powershell
 git clone --depth 1 --filter=blob:none --sparse https://github.com/arkntools/arknights-toolbox-data.git .tmp/arkntools-data
-git -C .tmp/arkntools-data sparse-checkout set --no-cone /assets/data/character.json /assets/data/building.json /assets/locales/cn/character.json /assets/locales/cn/building.json /assets/img/avatar /assets/img/building_skill /LICENSE /package.json
+git -C .tmp/arkntools-data sparse-checkout set --no-cone /assets/data/character.json /assets/data/building.json /assets/locales/cn/character.json /assets/locales/cn/building.json /assets/img/building_skill /LICENSE /package.json
+git clone --depth 1 --filter=blob:none --sparse https://github.com/yuanyan3060/ArknightsGameResource.git .tmp/arknights-game-resource
+git -C .tmp/arknights-game-resource sparse-checkout set --no-cone /avatar/char_*.png
 $sourceSha = git -C .tmp/arkntools-data rev-parse HEAD
-npm run assets:sync:arkntools -- --source .tmp/arkntools-data --source-sha $sourceSha
+$portraitsSha = git -C .tmp/arknights-game-resource rev-parse HEAD
+npm run assets:sync:arkntools -- --source .tmp/arkntools-data --source-sha $sourceSha --portraits-source .tmp/arknights-game-resource --portraits-source-sha $portraitsSha
 ```
 
 Scheduled updates fail closed when upstream removes a managed file or reduces the operator count. After reviewing a legitimate removal, rerun the manual workflow with `allow_removals` enabled. The generator stages and validates the complete result before replacing managed directories.
 
-No runtime page or API route fetches data from arkntools. Production builds always use the reviewed, Git-tracked snapshot in this repository.
+No runtime page or API route fetches data from either upstream. Production builds always use the reviewed, Git-tracked snapshot in this repository.
 
 ## Bender Bold
 

@@ -4,6 +4,10 @@
     "repository": "https://github.com/arkntools/arknights-toolbox-data",
     "commit": "46f811944319354238a8ef3cc71966038d124355"
   },
+  "portraitsSource": {
+    "repository": "https://github.com/yuanyan3060/ArknightsGameResource",
+    "commit": "44d7474aec681cb71d74f97d19c384e0a966adc2"
+  },
   "counts": {
     "operators": 425,
     "buildingSkills": 747,

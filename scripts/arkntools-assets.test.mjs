@@ -6,9 +6,16 @@ import test from "node:test";
 
 import sharp from "sharp";
 
-import { checkGeneratedAssets, generateAssets, parseUnlock, stripGameMarkup } from "./arkntools-assets-lib.mjs";
+import {
+  ARKNIGHTS_GAME_RESOURCE_REPOSITORY,
+  checkGeneratedAssets,
+  generateAssets,
+  parseUnlock,
+  stripGameMarkup,
+} from "./arkntools-assets-lib.mjs";
 
 const SOURCE_SHA = "0123456789abcdef0123456789abcdef01234567";
+const PORTRAITS_SHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
 async function makeTemp(t) {
   const root = await mkdtemp(path.join(os.tmpdir(), "arkntools-assets-test-"));
@@ -24,10 +31,14 @@ async function createSource(root, operatorIds = ["001_alpha", "002_beta"]) {
   const directories = [
     "assets/data",
     "assets/locales/cn",
-    "assets/img/avatar",
     "assets/img/building_skill",
   ];
-  await Promise.all(directories.map((directory) => mkdir(path.join(root, directory), { recursive: true })));
+  // 干员头像来自独立的 ArknightsGameResource 风格来源目录（avatar/char_<shortId>.png，180×180）
+  const portraitsRoot = path.join(root, "portraits");
+  await Promise.all([
+    ...directories.map((directory) => mkdir(path.join(root, directory), { recursive: true })),
+    mkdir(path.join(portraitsRoot, "avatar"), { recursive: true }),
+  ]);
 
   const characters = Object.fromEntries(operatorIds.map((id, index) => [id, {
     star: index === 0 ? 6 : 5,
@@ -57,7 +68,7 @@ async function createSource(root, operatorIds = ["001_alpha", "002_beta"]) {
     writeFile(path.join(root, "assets/locales/cn/character.json"), JSON.stringify(names), "utf8"),
     writeFile(path.join(root, "assets/data/building.json"), JSON.stringify({ char: charSkills, buff: { data: buffData } }), "utf8"),
     writeFile(path.join(root, "assets/locales/cn/building.json"), JSON.stringify({ buff: { name: buffNames, description: descriptions } }), "utf8"),
-    ...operatorIds.map((id, index) => png(path.join(root, `assets/img/avatar/${id}.png`), 80, 80, { r: index * 40, g: 20, b: 30, alpha: 1 })),
+    ...operatorIds.map((id, index) => png(path.join(portraitsRoot, `avatar/char_${id}.png`), 180, 180, { r: index * 40, g: 20, b: 30, alpha: 1 })),
     png(path.join(root, "assets/img/building_skill/icon_shared.png"), 35, 36, { r: 10, g: 20, b: 30, alpha: 1 }),
     ...(operatorIds.length > 1
       ? [png(path.join(root, "assets/img/building_skill/icon_beta.png"), 36, 36, { r: 30, g: 20, b: 10, alpha: 1 })]
@@ -78,23 +89,29 @@ test("generates deterministic catalogs and normalizes the known 35px icon input"
   const first = path.join(root, "first");
   const second = path.join(root, "second");
   await createSource(source);
+  const portraitsSource = path.join(source, "portraits");
 
-  await generateAssets({ sourceRoot: source, sourceSha: SOURCE_SHA, outputRoot: first, allowRemovals: true });
-  await generateAssets({ sourceRoot: source, sourceSha: SOURCE_SHA, outputRoot: second, allowRemovals: true });
+  await generateAssets({ sourceRoot: source, sourceSha: SOURCE_SHA, portraitsRoot: portraitsSource, portraitsSha: PORTRAITS_SHA, outputRoot: first, allowRemovals: true });
+  await generateAssets({ sourceRoot: source, sourceSha: SOURCE_SHA, portraitsRoot: portraitsSource, portraitsSha: PORTRAITS_SHA, outputRoot: second, allowRemovals: true });
   const manifest = await checkGeneratedAssets(first);
   assert.deepEqual(manifest.counts, { operators: 2, buildingSkills: 2, portraits: 2, buildingSkillIcons: 2 });
+  assert.equal(manifest.portraitsSource.repository, ARKNIGHTS_GAME_RESOURCE_REPOSITORY);
+  assert.equal(manifest.portraitsSource.commit, PORTRAITS_SHA);
 
   const relativeFiles = [
     "src/generated/arkntools/operator-catalog.json",
     "src/generated/arkntools/building-skill-catalog.json",
     "src/generated/arkntools/source.json",
     "public/images/building-skills/icon_shared.png",
+    "public/images/operator-portraits/001_alpha.png",
   ];
   for (const relative of relativeFiles) {
     assert.deepEqual(await readFile(path.join(first, relative)), await readFile(path.join(second, relative)));
   }
   const normalized = await sharp(path.join(first, "public/images/building-skills/icon_shared.png")).metadata();
   assert.deepEqual([normalized.width, normalized.height], [36, 36]);
+  const portrait = await sharp(path.join(first, "public/images/operator-portraits/001_alpha.png")).metadata();
+  assert.deepEqual([portrait.width, portrait.height], [180, 180]);
 });
 
 test("rejects duplicate names and missing referenced images before installing output", async (t) => {
@@ -107,13 +124,13 @@ test("rejects duplicate names and missing referenced images before installing ou
   const duplicateLocalePath = path.join(duplicateSource, "assets/locales/cn/character.json");
   await writeFile(duplicateLocalePath, JSON.stringify({ "001_alpha": "重名", "002_beta": "重名" }), "utf8");
   await assert.rejects(
-    generateAssets({ sourceRoot: duplicateSource, sourceSha: SOURCE_SHA, outputRoot: path.join(root, "duplicate-output"), allowRemovals: true }),
+    generateAssets({ sourceRoot: duplicateSource, sourceSha: SOURCE_SHA, portraitsRoot: path.join(duplicateSource, "portraits"), portraitsSha: PORTRAITS_SHA, outputRoot: path.join(root, "duplicate-output"), allowRemovals: true }),
     /干员名称重复/
   );
 
   await unlink(path.join(missingImageSource, "assets/img/building_skill/icon_beta.png"));
   await assert.rejects(
-    generateAssets({ sourceRoot: missingImageSource, sourceSha: SOURCE_SHA, outputRoot: path.join(root, "missing-output"), allowRemovals: true }),
+    generateAssets({ sourceRoot: missingImageSource, sourceSha: SOURCE_SHA, portraitsRoot: path.join(missingImageSource, "portraits"), portraitsSha: PORTRAITS_SHA, outputRoot: path.join(root, "missing-output"), allowRemovals: true }),
     /ENOENT/
   );
 });
@@ -125,10 +142,10 @@ test("blocks managed file removals unless explicitly confirmed", async (t) => {
   const output = path.join(root, "output");
   await createSource(fullSource);
   await createSource(reducedSource, ["001_alpha"]);
-  await generateAssets({ sourceRoot: fullSource, sourceSha: SOURCE_SHA, outputRoot: output, allowRemovals: true });
+  await generateAssets({ sourceRoot: fullSource, sourceSha: SOURCE_SHA, portraitsRoot: path.join(fullSource, "portraits"), portraitsSha: PORTRAITS_SHA, outputRoot: output, allowRemovals: true });
 
   await assert.rejects(
-    generateAssets({ sourceRoot: reducedSource, sourceSha: SOURCE_SHA, outputRoot: output }),
+    generateAssets({ sourceRoot: reducedSource, sourceSha: SOURCE_SHA, portraitsRoot: path.join(reducedSource, "portraits"), portraitsSha: PORTRAITS_SHA, outputRoot: output }),
     /上游干员数量从 2 降至 1/
   );
   assert.equal((await checkGeneratedAssets(output)).counts.operators, 2);

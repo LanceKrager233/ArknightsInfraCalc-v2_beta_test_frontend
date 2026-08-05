@@ -57,8 +57,10 @@ const afterSkillIds = new Set(Object.keys(skills));
 
 console.log(`## arkntools 自动资源同步
 
-- 上游：${source.source.repository}
-- Commit：\`${source.source.commit}\`
+- 数据上游：${source.source.repository}
+- 数据 Commit：\`${source.source.commit}\`
+- 头像来源：${source.portraitsSource?.repository}
+- 头像 Commit：\`${source.portraitsSource?.commit}\`
 - 干员：${source.counts.operators}（${delta(source.counts.operators, beforeOperators.length)}）
 - 基建技能：${source.counts.buildingSkills}（${delta(source.counts.buildingSkills, beforeSkillIds.size)}）
 - 干员头像：${source.counts.portraits}
