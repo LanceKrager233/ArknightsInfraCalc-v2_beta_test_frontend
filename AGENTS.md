@@ -261,7 +261,7 @@ development loopback nginx: 127.0.0.1:4274 (SSH tunnel only until a dev domain i
 development persistent storage: /var/lib/arknights-infra-dev
 ```
 
-`main`和`develop` push 必须先通过`Frontend quality`，随后由`Deploy verified branch`从已验证 SHA 自动发布到各自 GitHub Environment。发布包只包含 Git 跟踪内容；新 release 从应用根目录的`shared/.env.local`和`shared/bin-data`继承环境配置，以`arkinfra`用户执行`npm ci`/`npm run build`，再原子切换`current`并重启对应 systemd。不得把服务器密码写入文件或命令；只使用受保护的 SSH key 与 known_hosts。手动发布仍必须基于对应已合并、已验证的远端分支。
+`main`和`develop` push 必须先通过`Frontend quality`，随后由`Deploy verified branch`从已验证 SHA 自动发布到各自 GitHub Environment。发布包只包含 Git 跟踪内容；服务器优先通过`/usr/local/sbin/arknights-infra-prepare-release`和`/var/cache/arknights-infra-deploy/repository.git`增量准备准确 SHA，仅在 helper 返回临时故障码`75`时回退完整 SCP。SHA、tree、路径或脚本哈希错误必须直接失败。新 release 从应用根目录的`shared/.env.local`和`shared/bin-data`继承环境配置，以`arkinfra`用户执行`npm ci`/`npm run build`，再原子切换`current`并重启对应 systemd。不得把服务器密码写入文件或命令；只使用受保护的 SSH key 与 known_hosts。手动发布仍必须基于对应已合并、已验证的远端分支。
 
 发布后至少验证：
 

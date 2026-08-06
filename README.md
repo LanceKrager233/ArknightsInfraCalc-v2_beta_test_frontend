@@ -112,7 +112,7 @@ chmod +x bin/infra-cli
 | `main` | `production` | 线上站点 | 强制关闭 |
 | `develop` | `development` | dev 站点 | 开启，可由环境变量主动关闭 |
 
-推送到两个分支都会先执行`Frontend quality`。只有 push 门禁成功后，`Deploy verified branch`才会打包该次通过验证的 SHA，并调用`scripts/deploy-release.sh`发布；PR 检查不会触发部署。发布脚本使用独立 release 目录、原子切换`current`软链、内部/公网健康检查和失败回滚。
+推送到两个分支都会先执行`Frontend quality`。只有 push 门禁成功后，`Deploy verified branch`才会发布该次通过验证的 SHA；PR 检查不会触发部署。工作流优先调用服务器上固定的`scripts/prepare-release.sh`副本，从共享 Git 缓存增量取得对象并在服务器本地生成只包含 Git 跟踪内容的发布包。只有 helper 以状态码`75`报告临时 GitHub 网络、缓存或锁故障时，才退回原有的完整 SCP 上传；SHA、tree、路径或脚本哈希错误会直接终止。`scripts/deploy-release.sh`继续负责独立 release 目录、原子切换`current`软链、内部/公网健康检查和失败回滚。
 
 需要在 GitHub 仓库创建`production`与`development`两个 Environment，并在每个 Environment 中配置同名、不同值的项目：
 
@@ -135,9 +135,11 @@ Variables：
 
 服务器需要预先创建两套 systemd 服务、Nginx 站点和独立持久化目录。每套应用根目录的`shared/.env.local`保存该环境的非仓库配置；dev 在其中配置森空岛密钥和 Origin，production 不需要森空岛密钥。SSH 部署账号只应获得运行发布脚本所需的最小免密 sudo 权限。`develop`首次启用前应从已验证的`main`创建，并为两个分支启用必须通过`Frontend quality`的保护规则。
 
+增量发布还需要一次性以 root 将已评审提交中的`scripts/prepare-release.sh`按`root:root 0755`安装为`/usr/local/sbin/arknights-infra-prepare-release`，并创建`arkdeploy:arkdeploy 0750`的`/var/cache/arknights-infra-deploy`。首次启用时以当前 production release 和准确的 commit/tree/script digest 运行 helper，并设置`ARKNIGHTS_INFRA_SEED_RELEASE_DIR=/opt/arknights-infra/current`；helper 会逐个核对并导入未变化的本地 blob，只从 GitHub 补取元数据及被构建改写的少量文件。演练生成的`/tmp`发布包验证后删除，不调用 root 部署 runner，也不重启服务。
+
 当前没有 dev 域名时，dev Nginx 仅监听服务器回环地址`127.0.0.1:4274`，`DEPLOY_PUBLIC_HEALTH_URL`留空，部署仍会通过 SSH 检查内部`4275`健康状态。使用`ssh -L 4274:127.0.0.1:4274 root@114.66.55.78`建立加密隧道后访问`http://127.0.0.1:4274`。`SKLAND_ALLOW_INSECURE_HTTP=1`只允许用于这条回环隧道，不得把 dev 端口改成公网 HTTP 监听。
 
-Actions 使用独立`arkdeploy`密钥，并且 sudo 仅允许调用服务器上 root 所有的`/usr/local/sbin/arknights-infra-deploy`。工作流会校验该固定 runner 与仓库中已评审脚本的 SHA-256；不匹配时拒绝发布，现有 root SSH 私钥不会进入 GitHub。
+Actions 使用独立`arkdeploy`密钥，并且 sudo 仅允许调用服务器上 root 所有的`/usr/local/sbin/arknights-infra-deploy`。增量 helper 不使用 sudo；两个固定脚本都会校验自身与已验证提交中脚本的 SHA-256，不匹配时拒绝发布，现有 root SSH 私钥不会进入 GitHub。Git 缓存只保存公开仓库对象和两个环境 ref，不保存 Environment Secrets、应用配置或用户数据。
 
 ## 手动运行
 

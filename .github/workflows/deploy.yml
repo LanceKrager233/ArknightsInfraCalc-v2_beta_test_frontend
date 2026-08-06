@@ -67,10 +67,6 @@ jobs:
             [[ "$DEPLOY_PUBLIC_HEALTH_URL" =~ $public_health_url_pattern ]]
           fi
 
-      - name: Create tracked release archive
-        shell: bash
-        run: git archive --format=tar.gz --output="release-${DEPLOY_SHA}.tar.gz" HEAD
-
       - name: Configure SSH
         shell: bash
         run: |
@@ -80,14 +76,51 @@ jobs:
           printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
 
-      - name: Upload release archive
+      - name: Prepare or upload release archive
         shell: bash
-        run: >-
-          scp -o BatchMode=yes
-          -o ServerAliveInterval=30
-          -o ServerAliveCountMax=6
-          "release-${DEPLOY_SHA}.tar.gz"
-          "${DEPLOY_SSH_USER}@${DEPLOY_HOST}:/tmp/arknights-infra-${DEPLOYMENT_ENV}-${DEPLOY_SHA}.tar.gz"
+        run: |
+          set -euo pipefail
+          prepare_started_at="$(date +%s)"
+          prepare_script_sha256="$(sha256sum scripts/prepare-release.sh | cut -d ' ' -f 1)"
+          deploy_tree_sha="$(git rev-parse 'HEAD^{tree}')"
+          remote_archive="/tmp/arknights-infra-${DEPLOYMENT_ENV}-${DEPLOY_SHA}.tar.gz"
+
+          set +e
+          ssh -o BatchMode=yes "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
+            "/usr/local/sbin/arknights-infra-prepare-release \
+            '$DEPLOYMENT_ENV' \
+            '$DEPLOY_SHA' \
+            '$deploy_tree_sha' \
+            '$remote_archive' \
+            '$prepare_script_sha256'"
+          prepare_status=$?
+          set -e
+
+          transport_mode="git-cache"
+          fallback_reason="none"
+          if [[ "$prepare_status" -eq 75 ]]; then
+            transport_mode="scp-fallback"
+            fallback_reason="temporary-cache-or-github-failure"
+            git archive --format=tar.gz --output="release-${DEPLOY_SHA}.tar.gz" HEAD
+            scp -o BatchMode=yes \
+              -o ServerAliveInterval=30 \
+              -o ServerAliveCountMax=6 \
+              "release-${DEPLOY_SHA}.tar.gz" \
+              "${DEPLOY_SSH_USER}@${DEPLOY_HOST}:$remote_archive"
+          elif [[ "$prepare_status" -ne 0 ]]; then
+            echo "Release preparation failed with non-recoverable status $prepare_status." >&2
+            exit "$prepare_status"
+          fi
+
+          archive_bytes="$(ssh -o BatchMode=yes "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" "stat -c '%s' '$remote_archive'")"
+          prepare_elapsed_seconds="$(( $(date +%s) - prepare_started_at ))"
+          {
+            echo "### Release transport"
+            echo
+            echo "| Environment | SHA | Mode | Seconds | Archive bytes | Fallback reason |"
+            echo "| --- | --- | --- | ---: | ---: | --- |"
+            echo "| $DEPLOYMENT_ENV | \`${DEPLOY_SHA:0:12}\` | $transport_mode | $prepare_elapsed_seconds | $archive_bytes | $fallback_reason |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Deploy and verify
         shell: bash
