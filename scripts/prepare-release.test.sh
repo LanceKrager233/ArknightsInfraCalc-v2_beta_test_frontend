@@ -79,6 +79,7 @@ run_helper production "$seed_sha" "$seed_tree" "$seed_archive" \
 expected_tar_sha="$(git -C "$source_repository" archive --format=tar "$seed_sha" | sha256sum | cut -d ' ' -f 1)"
 actual_tar_sha="$(gzip -dc "$seed_archive" | sha256sum | cut -d ' ' -f 1)"
 test "$actual_tar_sha" = "$expected_tar_sha"
+test "$(stat -c '%a' "$seed_archive")" = "644"
 if git --git-dir="$cache_root/repository.git" cat-file -e "$removed_parent_blob" 2>/dev/null; then
   echo "Seed metadata unexpectedly included a blob reachable only from the parent commit." >&2
   exit 1
@@ -98,6 +99,7 @@ run_helper development "$incremental_sha" "$incremental_tree" "$incremental_arch
 expected_tar_sha="$(git -C "$source_repository" archive --format=tar "$incremental_sha" | sha256sum | cut -d ' ' -f 1)"
 actual_tar_sha="$(gzip -dc "$incremental_archive" | sha256sum | cut -d ' ' -f 1)"
 test "$actual_tar_sha" = "$expected_tar_sha"
+test "$(stat -c '%a' "$incremental_archive")" = "644"
 test "$(git --git-dir="$cache_root/repository.git" rev-parse refs/arknights-infra/environments/development)" = "$incremental_sha"
 test "$(git --git-dir="$cache_root/repository.git" cat-file -p "$incremental_sha:public/images/unchanged.bin" | sha256sum | cut -d ' ' -f 1)" = \
   "$(sha256sum "$source_repository/public/images/unchanged.bin" | cut -d ' ' -f 1)"

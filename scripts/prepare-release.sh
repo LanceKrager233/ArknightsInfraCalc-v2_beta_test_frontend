@@ -280,7 +280,7 @@ fi
 if ! gzip -t "$temporary_archive"; then
   fail_temporarily "Generated release archive failed gzip validation."
 fi
-chmod 0600 "$temporary_archive"
+chmod 0644 "$temporary_archive"
 archive_bytes="$(stat -c '%s' "$temporary_archive")"
 if ! mv -f -- "$temporary_archive" "$archive_path"; then
   fail_temporarily "Unable to activate the generated release archive."
