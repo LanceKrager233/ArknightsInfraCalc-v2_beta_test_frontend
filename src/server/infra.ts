@@ -17,6 +17,7 @@ import type {
   RotationProfile,
 } from "@/types";
 import { isSklandConfigured, sklandDisabledReason } from "@/server/skland/session";
+import { PublicApiError } from "./api-contract";
 import {
   inspectPlanComputeCapability,
   parsePlanComputePayload,
@@ -932,15 +933,26 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
     const serveResponsePath = path.join(runDir, "serve-response.json");
     resultPath = path.join(runDir, "result.json");
 
+    // 只把已拥有的干员交给求解器：未拥有干员 level=0 会违反 plan.compute schema，且排班用不到它们
     // 去重：同名保留第一个；阿米娅变体直接删除
     const seenNames = new Set<string>();
     const skipNames = new Set(["阿米娅（近卫）", "阿米娅（医疗）"]);
     body.operbox = body.operbox.filter((entry) => {
+      if (!entry.own) return false;
       const name = entry.name.trim();
       if (skipNames.has(name) || seenNames.has(name)) return false;
       seenNames.add(name);
       return true;
     });
+    if (body.operbox.length === 0) {
+      throw new PublicApiError("AIC-BOX-1101", {
+        fieldErrors: [{
+          path: "operbox",
+          code: "invalid_operbox",
+          message: "干员数据中没有已拥有的干员，无法生成排班。",
+        }],
+      });
+    }
 
     await writeJson(layoutPath, body.layout);
     await writeJson(operboxPath, body.operbox);
@@ -1102,6 +1114,8 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
 
     return resultPayload;
   } catch (error) {
+    // 显式的 API 校验错误（如空 box）直接透传，由路由映射为对应 HTTP 状态码
+    if (error instanceof PublicApiError) throw error;
     const errorPayload: PlanApiResponse = {
       success: false,
       startedAt,
