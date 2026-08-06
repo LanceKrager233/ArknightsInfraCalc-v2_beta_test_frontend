@@ -421,7 +421,7 @@ export function SetupDialog({
                     <details className="setup-quiet-details pt-1">
                       <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">高级工具</summary>
                       <div className="grid gap-2 py-3 sm:grid-cols-2">
-                        <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-[4px] border border-dashed text-sm font-medium text-muted-foreground transition-[color,border-color,background-color,scale] duration-150 ease-out active:scale-[0.96] hover:border-primary hover:bg-muted/40 hover:text-primary motion-reduce:transform-none">
+                        <label className="motion-press flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-[4px] border border-dashed text-sm font-medium text-muted-foreground transition-[color,border-color,background-color,scale] duration-[var(--motion-duration-press)] ease-[var(--motion-ease-out)] active:scale-[0.97] hover:border-primary hover:bg-muted/40 hover:text-primary">
                           <Upload className="size-4" />导入布局
                           <input
                             className="sr-only"

@@ -133,6 +133,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
             )}
           >
             <PlanTelemetry
+              key={scheduleResult?.diagnosticId ?? "no-plan"}
               profile={scheduleResult?.profile}
               rotation={scheduleResult?.rotation}
               layout={layout}
@@ -142,6 +143,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
             <ScheduleBoard
               rows={rows}
               layout={layout}
+              planRevision={result?.diagnosticId}
               currentMoraleByOperator={currentMoraleByOperator}
               activeShift={activeShift}
               activePlan={activePlan}

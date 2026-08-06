@@ -40,7 +40,7 @@ export function AppTopBar({ account, statusSnapshot, sessionLoading, onOpenSklan
           ) : account ? (
             <button
               type="button"
-              className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-primary text-sm font-semibold text-primary-foreground shadow-sm ring-1 ring-black/10 transition-[box-shadow,scale] duration-150 ease-out hover:shadow-md active:scale-[0.96] motion-reduce:transform-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="motion-press grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-primary text-sm font-semibold text-primary-foreground shadow-sm ring-1 ring-black/10 transition-[box-shadow,scale] duration-[var(--motion-duration-press)] ease-[var(--motion-ease-out)] hover:shadow-md active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               onClick={onOpenSkland}
               aria-label={accountLabel}
               title={nickname ?? "已登录森空岛"}

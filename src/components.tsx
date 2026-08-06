@@ -241,7 +241,7 @@ export function FileDrop({
   }
 
   return (
-    <Label className="flex min-h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-[4px] border border-dashed bg-background px-4 py-5 text-center transition-[color,background-color,border-color,scale] duration-150 ease-out active:scale-[0.96] hover:border-primary/40 hover:bg-muted/40 motion-reduce:transform-none">
+    <Label className="motion-press flex min-h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-[4px] border border-dashed bg-background px-4 py-5 text-center transition-[color,background-color,border-color,scale] duration-[var(--motion-duration-press)] ease-[var(--motion-ease-out)] active:scale-[0.97] hover:border-primary/40 hover:bg-muted/40">
       <Upload className="size-5 text-primary" />
       <span className="font-medium text-foreground">{fileName ?? "上传练度 JSON / XLSX"}</span>
       <span className="text-xs text-muted-foreground">
@@ -278,7 +278,7 @@ export function PresetSelector({
           value={preset.label}
           variant="outline"
           className={cn(
-            "infra-preset-surface group/preset relative isolate h-auto min-h-18 justify-between overflow-hidden rounded-none border border-white/10 bg-[#272A2B] px-3 py-3 text-left text-white transition-[background-color,border-color,scale] duration-150 ease-out hover:border-white/22 hover:bg-[#303435] hover:text-white active:scale-[0.96] motion-reduce:transform-none",
+            "infra-preset-surface motion-press group/preset relative isolate h-auto min-h-18 justify-between overflow-hidden rounded-none border border-white/10 bg-[#272A2B] px-3 py-3 text-left text-white transition-[background-color,border-color,scale] duration-[var(--motion-duration-press)] ease-[var(--motion-ease-out)] hover:border-white/22 hover:bg-[#303435] hover:text-white active:scale-[0.97]",
             selected.label === preset.label && "border-[#FFD800]/72 bg-[#303027] text-white hover:border-[#FFD800]/82 hover:bg-[#343329] hover:text-white"
           )}
         >
@@ -576,6 +576,7 @@ export function StatusBar({
   const content = (() => {
     if (loading) {
       return {
+        state: "loading" as const,
         icon: (
           <ThinkingOrb
             state="solving"
@@ -592,6 +593,7 @@ export function StatusBar({
     }
     if (error) {
       return {
+        state: "error" as const,
         icon: <AlertTriangle className="size-4" />,
         text: `${error.message}（${error.code}）`,
         className: "border-destructive/30 bg-destructive/10 text-destructive",
@@ -599,12 +601,14 @@ export function StatusBar({
     }
     if (result) {
       return {
+        state: "success" as const,
         icon: <CheckCircle2 className="size-4" />,
         text: "排班已生成",
         className: "border-emerald-200 bg-emerald-50 text-emerald-700",
       };
     }
     return {
+      state: "ready" as const,
       icon: <CircleHelp className="size-4" />,
       text: ready ? "排班服务已就绪" : "排班暂不可用",
       className: ready
@@ -616,27 +620,34 @@ export function StatusBar({
   return (
     <div
       data-slot="plan-status"
+      data-status-state={content.state}
       className={cn(
-        "surface-shadow flex h-7 min-w-0 items-center gap-2 overflow-hidden rounded-lg px-3 py-0 text-sm max-sm:h-11 max-sm:px-2",
+        "plan-status-bar surface-shadow flex h-7 min-w-0 items-center gap-2 overflow-hidden rounded-lg px-3 py-0 text-sm max-sm:h-11 max-sm:px-2",
         content.className,
         className
       )}
       role={error ? "alert" : "status"}
       aria-live={error ? "assertive" : "polite"}
     >
-      <span className="flex size-5 shrink-0 items-center justify-center" aria-hidden="true">
-        {content.icon}
-      </span>
       <span
-        className={cn(
-          "min-w-0 flex-1 truncate",
-          !error && "tabular-nums",
-          loading && "plan-status-shimmer"
-        )}
-        data-slot="status-text"
-        data-text={loading ? content.text : undefined}
+        key={content.state}
+        className="plan-status-content flex min-w-0 flex-1 items-center gap-2"
+        data-slot="status-content"
       >
-        {content.text}
+        <span className="flex size-5 shrink-0 items-center justify-center" aria-hidden="true">
+          {content.icon}
+        </span>
+        <span
+          className={cn(
+            "min-w-0 flex-1 truncate",
+            !error && "tabular-nums",
+            loading && "plan-status-shimmer"
+          )}
+          data-slot="status-text"
+          data-text={loading ? content.text : undefined}
+        >
+          {content.text}
+        </span>
       </span>
       {error ? (
         <span className="flex shrink-0 items-center gap-1">
@@ -792,7 +803,7 @@ export function PlanTelemetry({
   const domains = profile?.domains ?? [];
 
   return (
-    <section className="mb-4 overflow-hidden border-y border-[#313131]/15 bg-[#F3F1EA]" aria-label="效率概览">
+    <section className="plan-result-summary mb-4 overflow-hidden border-y border-[#313131]/15 bg-[#F3F1EA]" aria-label="效率概览" data-plan-summary>
       <div className="grid grid-cols-[auto_1fr] items-stretch max-md:grid-cols-1">
         <div className="flex min-w-36 flex-col justify-center bg-[#313131] px-4 py-3 text-white">
           <span className="text-xs font-semibold uppercase tracking-[0.12em] text-white/55">效率概览</span>
@@ -805,7 +816,7 @@ export function PlanTelemetry({
           </span>
         </div>
         <div className="grid grid-cols-[repeat(auto-fit,minmax(112px,1fr))] divide-x divide-[#313131]/10 max-sm:divide-x-0 max-sm:grid-cols-2">
-          {dailyMetrics.map((metric) => {
+          {dailyMetrics.map((metric, metricIndex) => {
             const value = rotationMetricValue(metric.kind, metric.value);
             const displayDigits = metric.kind === "trade" ? 3 : 1;
             const baseline = typeof metric.baseline === "number"
@@ -815,7 +826,12 @@ export function PlanTelemetry({
               ? relativeMetricDelta(metric.value, metric.baseline)
               : undefined;
             return (
-              <div key={metric.label} className="px-4 py-3">
+              <div
+                key={metric.label}
+                className="px-4 py-3"
+                data-plan-metric
+                style={{ "--motion-index": metricIndex } as CSSProperties}
+              >
                 <span className="font-number block text-xs text-[#313131]/58">{metric.label}</span>
                 <strong className="font-technical mt-0.5 block text-lg font-semibold tabular-nums tracking-[0.01em] text-[#313131]">
                   {compactNumber(value, displayDigits)}{metric.suffix}
@@ -832,7 +848,11 @@ export function PlanTelemetry({
             );
           })}
           {active ? (
-            <div className="px-4 py-3">
+            <div
+              className="px-4 py-3"
+              data-plan-metric
+              style={{ "--motion-index": dailyMetrics.length } as CSSProperties}
+            >
               <span className="block text-xs text-[#313131]/58">当前班次</span>
               <strong className="font-technical mt-0.5 block text-lg font-semibold tabular-nums tracking-[0.01em] text-[#313131]">
                 {compactNumber(active.duration_hours)}h
@@ -914,6 +934,10 @@ export function PlanTelemetry({
 
 const ROOM_SLOT_COUNT = 5;
 const AUXILIARY_ROOM_GROUPS = new Set(["dormitory", "hire", "meeting", "processing"]);
+
+function scheduleIssueTriggerId(row: RoomRow) {
+  return `schedule-issue-${row.key}`;
+}
 
 function roomSlotCountFor(group: string) {
   if (group === "trading" || group === "manufacture") return 3;
@@ -1268,6 +1292,7 @@ export function OperatorSlot({
 export function ScheduleBoard({
   rows,
   layout,
+  planRevision,
   currentMoraleByOperator,
   shiftInfoSlot,
   activeShift,
@@ -1279,6 +1304,7 @@ export function ScheduleBoard({
 }: {
   rows: RoomRow[];
   layout: BaseBlueprint;
+  planRevision?: string;
   currentMoraleByOperator?: ReadonlyMap<string, number>;
   shiftInfoSlot?: ReactNode;
   activeShift: number;
@@ -1399,8 +1425,13 @@ export function ScheduleBoard({
         </div>
         {shiftInfoSlot ? <div className="min-w-0 max-sm:w-full">{shiftInfoSlot}</div> : null}
       </div>
-      {viewMode === "list" ? (
-        <>
+      <div
+        key={planRevision ?? "empty-plan"}
+        className="plan-result-reveal"
+        data-plan-revision={planRevision || undefined}
+      >
+        {viewMode === "list" ? (
+          <>
           {rowGroups.map((group) => {
         const visual = roomVisualFor(group.rows[0]?.group ?? "default");
         const groupStyle = {
@@ -1562,6 +1593,7 @@ export function ScheduleBoard({
                       <TooltipTrigger
                         render={
                           <Button
+                            id={scheduleIssueTriggerId(row)}
                             type="button"
                             variant="ghost"
                             size="icon-sm"
@@ -1582,17 +1614,18 @@ export function ScheduleBoard({
           </section>
         );
       })}
-        </>
-      ) : (
-        <CompactScheduleView
-          rows={rows}
-          layout={layout}
-          currentMoraleByOperator={currentMoraleByOperator}
-          activeShift={activeShift}
-          activePlan={activePlan}
-          onIssue={onIssue}
-        />
-      )}
+          </>
+        ) : (
+          <CompactScheduleView
+            rows={rows}
+            layout={layout}
+            currentMoraleByOperator={currentMoraleByOperator}
+            activeShift={activeShift}
+            activePlan={activePlan}
+            onIssue={onIssue}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -1615,19 +1648,28 @@ export function IssueNoteModal({
   onCancel: () => void;
 }) {
   const [consented, setConsented] = useState(false);
+  const returnFocusId = useRef<string | null>(null);
 
   useEffect(() => {
     if (open) setConsented(false);
   }, [open, row?.key]);
 
+  useEffect(() => {
+    if (row) returnFocusId.current = scheduleIssueTriggerId(row);
+  }, [row]);
+
   return (
     <Dialog
       open={open && Boolean(row)}
+      triggerId={row ? scheduleIssueTriggerId(row) : null}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) onCancel();
       }}
     >
-      <DialogContent className="max-w-[min(620px,calc(100vw-2rem))] sm:max-w-xl">
+      <DialogContent
+        className="max-w-[min(620px,calc(100vw-2rem))] sm:max-w-xl"
+        finalFocus={() => returnFocusId.current ? document.getElementById(returnFocusId.current) : true}
+      >
         <DialogHeader>
           <DialogTitle>{row?.title ?? "反馈排班问题"}</DialogTitle>
           <DialogDescription>反馈排班问题</DialogDescription>

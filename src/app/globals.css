@@ -105,7 +105,20 @@
     --infra-room-shadow-soft: oklch(0.12 0.012 220 / 0.12);
     --infra-room-text: oklch(0.97 0.006 220);
     --infra-room-text-muted: oklch(0.82 0.01 220);
-    --infra-ease-out: cubic-bezier(0.25, 1, 0.5, 1);
+    --motion-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --motion-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+    --motion-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+    --motion-duration-press: 160ms;
+    --motion-duration-feedback: 140ms;
+    --motion-duration-state: 160ms;
+    --motion-duration-popover: 160ms;
+    --motion-duration-dialog-enter: 200ms;
+    --motion-duration-dialog-exit: 140ms;
+    --motion-duration-sheet-enter: 220ms;
+    --motion-duration-sheet-exit: 160ms;
+    --motion-duration-result-summary: 200ms;
+    --motion-duration-result-reveal: 220ms;
+    --infra-ease-out: var(--motion-ease-out);
 }
 
 .dark {
@@ -164,6 +177,158 @@
   p, li, figcaption {
     text-wrap: pretty;
     }
+}
+
+.motion-dialog-overlay,
+.motion-sheet-overlay {
+  opacity: 1;
+  transition: opacity var(--motion-duration-feedback) var(--motion-ease-out);
+}
+
+.motion-dialog-overlay[data-starting-style],
+.motion-dialog-overlay[data-ending-style],
+.motion-sheet-overlay[data-starting-style],
+.motion-sheet-overlay[data-ending-style] {
+  opacity: 0;
+}
+
+.motion-dialog-content {
+  opacity: 1;
+  scale: 1;
+  transform-origin: center;
+  transition:
+    opacity var(--motion-duration-dialog-enter) var(--motion-ease-out),
+    scale var(--motion-duration-dialog-enter) var(--motion-ease-out);
+}
+
+.motion-dialog-content[data-starting-style] {
+  opacity: 0;
+  scale: 0.97;
+}
+
+.motion-dialog-content[data-ending-style] {
+  opacity: 0;
+  scale: 0.97;
+  transition-duration: var(--motion-duration-dialog-exit);
+}
+
+.motion-sheet-content {
+  opacity: 1;
+  translate: 0 0;
+  transition:
+    opacity var(--motion-duration-sheet-enter) var(--motion-ease-drawer),
+    translate var(--motion-duration-sheet-enter) var(--motion-ease-drawer);
+}
+
+.motion-sheet-content[data-side="right"][data-starting-style],
+.motion-sheet-content[data-side="right"][data-ending-style] {
+  translate: 100% 0;
+}
+
+.motion-sheet-content[data-side="left"][data-starting-style],
+.motion-sheet-content[data-side="left"][data-ending-style] {
+  translate: -100% 0;
+}
+
+.motion-sheet-content[data-side="top"][data-starting-style],
+.motion-sheet-content[data-side="top"][data-ending-style] {
+  translate: 0 -100%;
+}
+
+.motion-sheet-content[data-side="bottom"][data-starting-style],
+.motion-sheet-content[data-side="bottom"][data-ending-style] {
+  translate: 0 100%;
+}
+
+.motion-sheet-content[data-ending-style] {
+  opacity: 0;
+  transition-duration: var(--motion-duration-sheet-exit);
+  transition-timing-function: var(--motion-ease-in-out);
+}
+
+.motion-popover {
+  opacity: 1;
+  scale: 1;
+  transform-origin: var(--transform-origin);
+  transition:
+    opacity var(--motion-duration-popover) var(--motion-ease-out),
+    scale var(--motion-duration-popover) var(--motion-ease-out);
+}
+
+.motion-popover[data-starting-style],
+.motion-popover[data-ending-style] {
+  opacity: 0;
+  scale: 0.97;
+}
+
+.motion-popover[data-instant] {
+  transition-duration: 0ms;
+}
+
+.plan-status-bar {
+  transition:
+    background-color var(--motion-duration-state) var(--motion-ease-out),
+    border-color var(--motion-duration-state) var(--motion-ease-out),
+    color var(--motion-duration-state) var(--motion-ease-out);
+}
+
+.plan-status-content {
+  opacity: 1;
+  scale: 1;
+  transform-origin: left center;
+  transition:
+    opacity var(--motion-duration-feedback) var(--motion-ease-out),
+    scale var(--motion-duration-feedback) var(--motion-ease-out);
+}
+
+@starting-style {
+  .plan-status-content {
+    opacity: 0;
+    scale: 0.97;
+  }
+}
+
+.plan-result-summary {
+  opacity: 1;
+  transition: opacity var(--motion-duration-result-summary) var(--motion-ease-out);
+}
+
+.plan-result-summary [data-plan-metric] {
+  opacity: 1;
+  translate: 0 0;
+  transition:
+    opacity var(--motion-duration-result-summary) var(--motion-ease-out),
+    translate var(--motion-duration-result-summary) var(--motion-ease-out);
+  transition-delay: calc(var(--motion-index, 0) * 40ms);
+}
+
+@starting-style {
+  .plan-result-summary,
+  .plan-result-summary [data-plan-metric] {
+    opacity: 0;
+  }
+
+  .plan-result-summary [data-plan-metric] {
+    translate: 0 4px;
+  }
+}
+
+.plan-result-reveal[data-plan-revision] {
+  opacity: 1;
+  translate: 0 0;
+  clip-path: inset(0 0 0 0);
+  transition:
+    opacity var(--motion-duration-result-reveal) var(--motion-ease-out) 80ms,
+    translate var(--motion-duration-result-reveal) var(--motion-ease-out) 80ms,
+    clip-path var(--motion-duration-result-reveal) var(--motion-ease-out) 80ms;
+}
+
+@starting-style {
+  .plan-result-reveal[data-plan-revision] {
+    opacity: 0;
+    translate: 0 8px;
+    clip-path: inset(0 0 4% 0);
+  }
 }
 
 .surface-shadow {
@@ -620,10 +785,45 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  html:focus-within {
     scroll-behavior: auto !important;
-    transition-duration: 0.01ms !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
+  }
+
+  [data-slot="button"],
+  [data-slot="toggle"],
+  .motion-press,
+  .motion-dialog-content,
+  .motion-popover,
+  .plan-status-content {
+    scale: 1 !important;
+  }
+
+  .motion-sheet-content,
+  .plan-result-summary [data-plan-metric],
+  .plan-result-reveal[data-plan-revision] {
+    translate: 0 0 !important;
+  }
+
+  .motion-dialog-content,
+  .motion-sheet-content,
+  .motion-popover,
+  .plan-status-content,
+  .plan-result-summary,
+  .plan-result-summary [data-plan-metric],
+  .plan-result-reveal[data-plan-revision] {
+    transition-delay: 0ms !important;
+    transition-duration: var(--motion-duration-feedback) !important;
+  }
+
+  .plan-result-reveal[data-plan-revision] {
+    clip-path: none !important;
+  }
+
+  .animate-pulse {
+    animation: none !important;
+  }
+
+  .animate-spin {
+    animation-duration: 1600ms !important;
   }
 }

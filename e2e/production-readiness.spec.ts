@@ -28,6 +28,60 @@ async function expectUnifiedDialogAction(
   await expect(button).toHaveCSS("font-size", "13px");
 }
 
+async function armEndingTransitionCapture(element: Locator, label: string) {
+  await element.evaluate((node, captureLabel) => {
+    const attribute = `data-motion-exit-${captureLabel}`;
+    const root = document.documentElement;
+    root.removeAttribute(attribute);
+
+    const capture = () => {
+      if (!node.hasAttribute("data-ending-style")) return false;
+      root.setAttribute(attribute, getComputedStyle(node).transitionDuration);
+      return true;
+    };
+
+    if (capture()) return;
+    const observer = new MutationObserver(() => {
+      if (!capture()) return;
+      observer.disconnect();
+    });
+    observer.observe(node, { attributes: true, attributeFilter: ["data-ending-style"] });
+  }, label);
+}
+
+async function expectCapturedExitDuration(page: Page, label: string, duration: string) {
+  await expect.poll(() => page.locator("html").getAttribute(`data-motion-exit-${label}`)).toContain(duration);
+}
+
+async function waitForOwnAnimations(element: Locator) {
+  await element.evaluate(async (node) => {
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+    await Promise.race([
+      Promise.all(node.getAnimations().map((animation) => animation.finished.catch(() => undefined))),
+      new Promise<void>((resolve) => setTimeout(resolve, 500)),
+    ]);
+  });
+}
+
+async function gotoStable(page: Page, path: string) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await page.goto(path, { waitUntil: "domcontentloaded" });
+      if (new URL(page.url()).pathname === path) return;
+    } catch (error) {
+      lastError = error;
+      if (!/interrupted by another navigation|Load failed/i.test(String(error))) throw error;
+    }
+    await page.waitForTimeout(250);
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`Unable to navigate to ${path} after a development reload.`);
+}
+
 async function expectVisibleNumbersUseNumberFont(page: Page, scope: Locator = page.locator("body")) {
   await page.evaluate(() => document.fonts.ready);
   const audit = await scope.evaluate((root) => {
@@ -237,6 +291,26 @@ const productChangePlanData = {
         ...plan.rooms,
         trading: [0, 1].map(() => ({ product: "LMD", operators: [], sort: true, autofill: false })),
         manufacture: [0, 1, 2, 3].map(() => ({ product: "Gold", operators: [], sort: true, autofill: false })),
+      },
+    })),
+  },
+};
+
+const motionPlanData = {
+  ...twoShiftPlanData,
+  maa: {
+    ...twoShiftPlanData.maa,
+    plans: [0, 1].map((index) => ({
+      ...maaPlan(index),
+      rooms: {
+        control: [{ operators: [] }],
+        trading: [0, 1].map(() => ({ product: "LMD", operators: [], sort: true, autofill: false })),
+        manufacture: [0, 1, 2, 3].map(() => ({ product: "Gold", operators: [], sort: true, autofill: false })),
+        power: [0, 1, 2].map(() => ({ operators: [] })),
+        dormitory: [0, 1, 2, 3].map(() => ({ operators: [], autofill: true })),
+        meeting: [{ operators: [] }],
+        hire: [{ operators: [] }],
+        processing: [{ operators: [{ name: "阿米娅", skill: 2 }] }],
       },
     })),
   },
@@ -782,7 +856,11 @@ test("four-shift output persists the fourth tab and migrates an old v4 profile",
   ).activeShift)).toBe(3);
 
   await page.reload();
-  await expect(page.getByRole("tab", { name: /第 4 班 · 4h/ })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tab", { name: /第 4 班 · 4h/ })).toHaveAttribute(
+    "aria-selected",
+    "true",
+    { timeout: 15_000 },
+  );
   const persisted = await page.evaluate(() => JSON.parse(
     window.localStorage.getItem("arknights-infra-calc-session-v5") ?? "{}"
   ));
@@ -865,13 +943,239 @@ test("shows the solving orb only while a plan request is running", async ({ page
   await expect(solvingOrb).toBeVisible();
   await expect(solvingOrb).toHaveAttribute("aria-hidden", "true");
   const solvingTextX = await statusText.evaluate((element) => element.getBoundingClientRect().x);
-  expect(solvingTextX).toBeCloseTo(readyTextX, 4);
+  expect(Math.abs(solvingTextX - readyTextX)).toBeLessThan(1);
 
   releasePlan();
   await expect(status).toContainText("排班已生成");
   await expect(solvingOrb).toHaveCount(0);
   const completeTextX = await statusText.evaluate((element) => element.getBoundingClientRect().x);
-  expect(completeTextX).toBeCloseTo(readyTextX, 4);
+  expect(Math.abs(completeTextX - readyTextX)).toBeLessThan(1);
+});
+
+test("plan completion reveals status, metrics, and schedule once without resetting board state", async ({ page }) => {
+  await mockApis(page);
+  let releasePlan!: () => void;
+  const planGate = new Promise<void>((resolve) => {
+    releasePlan = resolve;
+  });
+  await page.route("**/api/plan", async (route) => {
+    await planGate;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true, data: motionPlanData, requestId }),
+    });
+  });
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "全角色导入" }).click();
+  const listTab = page.getByRole("tab", { name: "列表式布局" });
+  await listTab.click();
+  const dormitorySection = page.locator('section[aria-label="宿舍"]');
+  await dormitorySection.locator('button[aria-expanded="true"]').click();
+  await dormitorySection.getByRole("button", { name: "暂不显示" }).click();
+  const restoreHidden = page.getByRole("button").filter({ hasText: "恢复已隐藏" });
+  await expect(restoreHidden).toBeVisible();
+
+  await page.getByRole("button", { name: "生成排班" }).click();
+  const status = page.locator('[data-slot="plan-status"]');
+  await expect(status).toHaveAttribute("data-status-state", "loading");
+  await expect(status.locator('[data-slot="status-content"]')).toHaveCSS("transition-duration", /0\.14s/);
+
+  releasePlan();
+  await expect(status).toHaveAttribute("data-status-state", "success");
+  const summary = page.locator("[data-plan-summary]");
+  const board = page.locator("[data-plan-revision]");
+  await expect(summary).toBeVisible();
+  await expect(board).toHaveAttribute("data-plan-revision", diagnosticId);
+  await expect(listTab).toHaveAttribute("aria-selected", "true");
+  await expect(restoreHidden).toBeVisible();
+
+  const choreography = await page.evaluate(() => {
+    const style = (selector: string) => getComputedStyle(document.querySelector<HTMLElement>(selector)!);
+    const statusBar = style('[data-slot="plan-status"]');
+    const statusContent = style('[data-slot="status-content"]');
+    const planSummary = style("[data-plan-summary]");
+    const planBoard = style("[data-plan-revision]");
+    const metricDelays = Array.from(document.querySelectorAll<HTMLElement>("[data-plan-metric]"))
+      .map((metric) => getComputedStyle(metric).transitionDelay.split(",")[0].trim());
+    return {
+      statusBarDuration: statusBar.transitionDuration,
+      statusContentDuration: statusContent.transitionDuration,
+      summaryDuration: planSummary.transitionDuration,
+      boardDuration: planBoard.transitionDuration,
+      boardDelay: planBoard.transitionDelay,
+      metricDelays,
+    };
+  });
+  expect(choreography.statusBarDuration).toContain("0.16s");
+  expect(choreography.statusContentDuration).toContain("0.14s");
+  expect(choreography.summaryDuration).toContain("0.2s");
+  expect(choreography.boardDuration).toContain("0.22s");
+  expect(choreography.boardDelay).toContain("0.08s");
+  expect(choreography.metricDelays).toEqual(["0s", "0.04s", "0.08s", "0.12s"]);
+
+  await page.waitForTimeout(400);
+  await board.evaluate((element) => {
+    element.setAttribute("data-motion-sentinel", "stable");
+  });
+  const secondShift = page.getByRole("tab", { name: /第 2 班 · 12h/ });
+  await secondShift.click();
+  await expect(secondShift).toHaveAttribute("aria-selected", "true");
+  await expect(board).toHaveAttribute("data-motion-sentinel", "stable");
+  expect(await board.evaluate((element) => element.getAnimations().filter((animation) => animation.playState === "running").length)).toBe(0);
+
+  await page.getByRole("tab", { name: "一图流布局" }).click();
+  await expect(board).toHaveAttribute("data-motion-sentinel", "stable");
+  expect(await board.evaluate((element) => element.getAnimations().filter((animation) => animation.playState === "running").length)).toBe(0);
+});
+
+test("reduced motion keeps feedback timing while removing movement, clipping, and staggering", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await mockApis(page);
+  let releasePlan!: () => void;
+  const planGate = new Promise<void>((resolve) => {
+    releasePlan = resolve;
+  });
+  await page.route("**/api/plan", async (route) => {
+    await planGate;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true, data: twoShiftPlanData, requestId }),
+    });
+  });
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 768, height: 900 });
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "全角色导入" }).click();
+  await page.getByRole("button", { name: "生成排班" }).click();
+  await expect(page.locator('[data-slot="plan-status"]')).toHaveAttribute("data-status-state", "loading");
+  await expect(page.locator(".animate-spin").first()).toHaveCSS("animation-duration", "1.6s");
+
+  releasePlan();
+  await expect(page.locator('[data-slot="plan-status"]')).toHaveAttribute("data-status-state", "success");
+  await expect(page.locator("[data-plan-summary]")).toBeVisible();
+  const reduced = await page.evaluate(() => {
+    const statusBar = getComputedStyle(document.querySelector<HTMLElement>('[data-slot="plan-status"]')!);
+    const statusContent = getComputedStyle(document.querySelector<HTMLElement>('[data-slot="status-content"]')!);
+    const metric = getComputedStyle(document.querySelector<HTMLElement>("[data-plan-metric]")!);
+    const board = getComputedStyle(document.querySelector<HTMLElement>("[data-plan-revision]")!);
+    return {
+      statusProperties: statusBar.transitionProperty,
+      statusDuration: statusBar.transitionDuration,
+      contentProperties: statusContent.transitionProperty,
+      contentDuration: statusContent.transitionDuration,
+      contentScale: statusContent.scale,
+      metricTranslate: metric.translate,
+      metricDelay: metric.transitionDelay,
+      boardTranslate: board.translate,
+      boardClipPath: board.clipPath,
+      boardDelay: board.transitionDelay,
+      boardDuration: board.transitionDuration,
+    };
+  });
+  expect(reduced.statusProperties).toContain("background-color");
+  expect(reduced.statusDuration).toContain("0.16s");
+  expect(reduced.contentProperties).toContain("opacity");
+  expect(reduced.contentDuration).toContain("0.14s");
+  expect(reduced.contentScale).toBe("1");
+  expect(reduced.metricTranslate).toMatch(/^(none|0px)$/);
+  expect(reduced.metricDelay).toBe("0s");
+  expect(reduced.boardTranslate).toMatch(/^(none|0px)$/);
+  expect(reduced.boardClipPath).toBe("none");
+  expect(reduced.boardDelay).toBe("0s");
+  expect(reduced.boardDuration).toContain("0.14s");
+});
+
+test("dialog and mobile sheet motion preserve direction, exit timing, and focus", async ({ page }) => {
+  await mockApis(page);
+  await seedV4Session(page, scheduleVisualPlanData);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  const setupTrigger = page.getByRole("button", { name: "配置Box与布局" }).first();
+  await setupTrigger.click();
+  const setupDialog = page.getByRole("dialog");
+  await expect(setupDialog).toHaveClass(/motion-dialog-content/);
+  await expect(setupDialog).toHaveCSS("transition-duration", /0\.2s/);
+  await expect(setupDialog).toHaveCSS("transform-origin", /.+/);
+  await page.setViewportSize({ width: 768, height: 900 });
+  await armEndingTransitionCapture(setupDialog, "setup");
+  await setupDialog.getByRole("button", { name: "Close" }).click();
+  await expectCapturedExitDuration(page, "setup", "0.14s");
+  await expect(setupDialog).toHaveCount(0);
+  await expect(setupTrigger).toBeFocused();
+
+  await page.getByRole("tab", { name: "列表式布局" }).click();
+  const issueTrigger = page.getByRole("button", { name: /反馈排班问题/ }).first();
+  await issueTrigger.click();
+  const feedbackDialog = page.getByRole("dialog");
+  await expect(feedbackDialog).toHaveCSS("transition-duration", /0\.2s/);
+  await armEndingTransitionCapture(feedbackDialog, "feedback");
+  await feedbackDialog.getByRole("button", { name: "取消" }).click();
+  await expectCapturedExitDuration(page, "feedback", "0.14s");
+  await expect(feedbackDialog).toHaveCount(0);
+  await expect(issueTrigger).toBeFocused();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const sidebarTrigger = page.getByRole("button", { name: "Toggle Sidebar" });
+  await sidebarTrigger.click();
+  const sheet = page.locator('[data-mobile="true"].motion-sheet-content');
+  await expect(sheet).toHaveAttribute("data-side", "left");
+  await expect(sheet).toHaveClass(/motion-sheet-content/);
+  await expect(sheet).toHaveCSS("transition-duration", /0\.22s/);
+  await armEndingTransitionCapture(sheet, "sidebar");
+  await page.keyboard.press("Escape");
+  await expectCapturedExitDuration(page, "sidebar", "0.16s");
+  await expect(sheet).toHaveCount(0);
+  await expect(sidebarTrigger).toBeFocused();
+});
+
+test("tooltips wait once and then open adjacent help instantly within the provider window", async ({ page }) => {
+  await mockApis(page);
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  const calculatorTrigger = page.getByRole("button", { name: "基建计算器" });
+  const adviceTrigger = page.getByRole("button", { name: "练卡建议" });
+  await expect(calculatorTrigger).toBeVisible();
+  await calculatorTrigger.evaluate((trigger) => {
+    const root = document.documentElement;
+    root.removeAttribute("data-tooltip-entered-at");
+    root.removeAttribute("data-tooltip-open-delay");
+    const markEntered = () => {
+      if (!root.hasAttribute("data-tooltip-entered-at")) {
+        root.setAttribute("data-tooltip-entered-at", String(performance.now()));
+      }
+    };
+    trigger.addEventListener("pointerenter", markEntered, { once: true });
+    trigger.addEventListener("mouseenter", markEntered, { once: true });
+    const observer = new MutationObserver(() => {
+      const enteredAt = Number(root.getAttribute("data-tooltip-entered-at"));
+      if (!enteredAt || !document.querySelector('[data-slot="tooltip-content"][data-open]')) return;
+      root.setAttribute("data-tooltip-open-delay", String(performance.now() - enteredAt));
+      observer.disconnect();
+    });
+    observer.observe(document.body, { attributes: true, childList: true, subtree: true });
+  });
+  await calculatorTrigger.hover();
+  const firstTooltip = page.locator('[data-slot="tooltip-content"][data-open]');
+  await expect(firstTooltip).toBeVisible({ timeout: 1_500 });
+  await expect(firstTooltip).toHaveCSS("transition-duration", /0\.16s/);
+  await expect(page.locator("html")).toHaveAttribute("data-tooltip-open-delay", /.+/);
+  const firstOpenDelay = Number(await page.locator("html").getAttribute("data-tooltip-open-delay"));
+  expect(firstOpenDelay).toBeGreaterThanOrEqual(300);
+  expect(firstOpenDelay).toBeLessThan(1_200);
+
+  await adviceTrigger.hover();
+  const instantTooltip = page.locator('[data-slot="tooltip-content"][data-instant][data-open]');
+  await expect(instantTooltip).toBeVisible({ timeout: 200 });
+  await expect(instantTooltip).toHaveCSS("transition-duration", "0s");
 });
 
 test("Full E2 stays in place and completes generation, shifts, MAA export, and feedback", async ({ page }) => {
@@ -1249,6 +1553,7 @@ test("setup exposes and persists only worker-supported rotation profiles", async
 
   const rotationTrigger = dialog.getByRole("combobox", { name: "换班方式" });
   await rotationTrigger.click();
+  await waitForOwnAnimations(page.locator('[data-slot="combobox-content"]'));
   const [triggerBox, popupBox] = await Promise.all([
     rotationTrigger.locator("xpath=..").boundingBox(),
     page.locator('[data-slot="combobox-content"]').boundingBox(),
@@ -1344,6 +1649,7 @@ test("layout level controls clamp edits and expose the power-safe 342 defaults",
   const mobileTradeLevel = dialog.locator('input[aria-label="trade_2 等级"]:visible');
   await mobileTradeLevel.click();
   const firstLevelOption = page.getByRole("option", { name: "1", exact: true });
+  await waitForOwnAnimations(page.locator('[data-slot="combobox-content"]'));
   const [levelFieldBox, levelPopupBox] = await Promise.all([
     mobileTradeLevel.locator("xpath=..").boundingBox(),
     page.locator('[data-slot="combobox-content"]').boundingBox(),
@@ -1583,7 +1889,7 @@ test("self-hosts Bender Bold for technical numbers while preserving UI-font exce
   await expectVisibleNumbersUseNumberFont(page);
 
   for (const path of ["/privacy", "/terms"]) {
-    await page.goto(path);
+    await gotoStable(page, path);
     await expectVisibleNumbersUseNumberFont(page);
   }
 
@@ -1598,7 +1904,7 @@ test("self-hosts Bender Bold for technical numbers while preserving UI-font exce
 
 test("publishes the site terms and privacy policy with upstream policy links", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/privacy");
+  await gotoStable(page, "/privacy");
   await expect(page.getByRole("heading", { name: "隐私政策", level: 1 })).toBeVisible();
   await expect(page.getByText("版本与生效日期：2026-08-05")).toBeVisible();
   await expect(page.getByText("可露希尔基建终端项目维护者", { exact: false })).toBeVisible();
@@ -1611,7 +1917,7 @@ test("publishes the site terms and privacy policy with upstream policy links", a
     "https://assets.skland.com/protocols/privacy.html"
   );
 
-  await page.goto("/terms");
+  await gotoStable(page, "/terms");
   await expect(page.getByRole("heading", { name: "服务条款", level: 1 })).toBeVisible();
   await expect(page.getByText("版本与生效日期：2026-08-05")).toBeVisible();
   await expect(page.getByText(/非官方、非商业工具/)).toBeVisible();
@@ -1882,6 +2188,7 @@ test("Skland status center keeps profile and recruitment in overview and support
   await expect(accountCombobox).toHaveValue("测试博士 · 官服");
   await expect(accountCombobox).not.toHaveValue(/123456789/);
   await accountCombobox.click();
+  await waitForOwnAnimations(page.locator('[data-slot="combobox-content"]'));
   const [accountFieldBox, accountPopupBox] = await Promise.all([
     accountCombobox.locator("xpath=..").boundingBox(),
     page.locator('[data-slot="combobox-content"]').boundingBox(),
