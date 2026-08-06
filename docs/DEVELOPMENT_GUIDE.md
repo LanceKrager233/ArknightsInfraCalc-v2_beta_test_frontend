@@ -153,7 +153,7 @@ APP_DEPLOYMENT_ENV=production
 SKLAND_FEATURE_ENABLED=0
 ```
 
-dev 站点使用`APP_DEPLOYMENT_ENV=development`与`SKLAND_FEATURE_ENABLED=1`，并额外配置`SKLAND_SESSION_SECRET`、`SKLAND_PUBLIC_ORIGIN`。两个站点必须使用不同的应用根目录、systemd 服务、内部端口、公开 Origin 和持久化目录。
+dev 站点使用`APP_DEPLOYMENT_ENV=development`与`SKLAND_FEATURE_ENABLED=1`，并额外配置`SKLAND_SESSION_SECRET`、`SKLAND_PUBLIC_ORIGIN`。两个站点必须使用不同的应用根目录、systemd 服务、内部端口、公开 Origin 和持久化目录。当前 production 公开 Origin 是`https://instance-pi2ohhfj.tail2dca9.ts.net:8443`，dev 公开 Origin 是`https://instance-pi2ohhfj.tail2dca9.ts.net`；两者均由 Tailscale Funnel 转发到各自回环 Nginx，并保持`SKLAND_ALLOW_INSECURE_HTTP=0`。
 
 ## 调试模式
 
@@ -211,7 +211,7 @@ GitHub Actions 在面向`main`或`develop`的 PR 和 push 上使用 Node 22，�
 `main`和`develop`都执行相同质量门禁。通过 push 门禁后，部署工作流分别使用 GitHub Environments `production`和`development`中的 SSH Secrets 与部署 Variables 发布对应站点；PR 不部署。服务器 helper 从`/var/cache/arknights-infra-deploy/repository.git`增量准备准确 SHA 的发布包，production/development 使用独立 refs 和共享`flock`。helper 只有在 GitHub 网络、缓存或锁的临时故障时返回`75`并允许完整 SCP 回退，所有完整性错误都直接失败。`DEPLOY_DEBUG_TOOLS_ENABLED`和`DEPLOY_RATE_LIMIT_ENABLED`集中管理 dev 的调试入口与限流，production 则固定为调试关闭、限流开启。production-profile 门禁会故意反向设置森空岛、调试和限流变量，确认 production 的强制策略不可被误配置绕过。
 Production client isolation scans static JavaScript and public HTML/RSC; production-profile separately verifies hidden UI, absent requests and health fields, and the API 404 boundary. Both gates are required.
 
-没有 dev 域名时，dev Nginx 只监听`127.0.0.1:4274`，通过 SSH 本地转发访问；不要为了扫码登录把未加密的 dev 端口暴露到公网。Actions 部署用户使用独立密钥，sudo 只允许固定的`/usr/local/sbin/arknights-infra-deploy`。root 所有的 deploy runner 和`/usr/local/sbin/arknights-infra-prepare-release`都必须来自准确的已评审提交并保持 LF 行尾；工作流传入脚本 SHA-256，不匹配时拒绝发布。prepare helper 以`arkdeploy`运行，不新增 sudo 权限；缓存根必须由该用户拥有且不能被 group/other 写入。
+production 和 dev Nginx 分别只监听`127.0.0.1:4174`与`127.0.0.1:4274`。公网访问由 Tailscale Funnel 的 8443 与 443 HTTPS 入口提供；用`tailscale funnel status`核对持久化配置和公开地址。服务器 80 端口只重定向到 production HTTPS，不要把两个回环应用端口重新暴露到公网。Actions 部署用户使用独立密钥，sudo 只允许固定的`/usr/local/sbin/arknights-infra-deploy`。root 所有的 deploy runner 和`/usr/local/sbin/arknights-infra-prepare-release`都必须来自准确的已评审提交并保持 LF 行尾；工作流传入脚本 SHA-256，不匹配时拒绝发布。prepare helper 以`arkdeploy`运行，不新增 sudo 权限；缓存根必须由该用户拥有且不能被 group/other 写入。
 
 E2E 使用固定数据和接口拦截，不要求 CI 中存在真实 CLI。每次 UI 修改至少检查 390px、768px、1440px、三个一级导航和两处锁定区域。错误码新增或修改必须同步更新：
 

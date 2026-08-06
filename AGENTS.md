@@ -250,14 +250,17 @@ production branch: main
 production app root: /opt/arknights-infra
 production systemd: arknights-infra
 production internal Next: 127.0.0.1:4175
-production public nginx: 4174
+production loopback nginx: 127.0.0.1:4174
+production public HTTPS: https://instance-pi2ohhfj.tail2dca9.ts.net:8443 (Tailscale Funnel to loopback nginx)
+production HTTP redirect: port 80 redirects to public HTTPS
 production persistent storage: /var/lib/arknights-infra
 
 development branch: develop
 development app root: /opt/arknights-infra-dev
 development systemd: arknights-infra-dev
 development internal Next: 127.0.0.1:4275
-development loopback nginx: 127.0.0.1:4274 (SSH tunnel only until a dev domain is available)
+development loopback nginx: 127.0.0.1:4274
+development public HTTPS: https://instance-pi2ohhfj.tail2dca9.ts.net (Tailscale Funnel to loopback nginx)
 development persistent storage: /var/lib/arknights-infra-dev
 ```
 
