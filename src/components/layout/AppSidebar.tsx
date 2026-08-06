@@ -2,6 +2,7 @@
 
 import { Calculator, Cloud, GraduationCap } from "lucide-react";
 
+import { CLIENT_SKLAND_ENABLED } from "@/client-features";
 import {
   Sidebar,
   SidebarContent,
@@ -56,16 +57,18 @@ export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
                 <span>练卡建议</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                isActive={page === "skland"}
-                onClick={() => handlePageChange("skland")}
-                tooltip="森空岛状态"
-              >
-                <Cloud className="size-5" />
-                <span>森空岛状态</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+            {CLIENT_SKLAND_ENABLED ? (
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  isActive={page === "skland"}
+                  onClick={() => handlePageChange("skland")}
+                  tooltip="森空岛状态"
+                >
+                  <Cloud className="size-5" />
+                  <span>森空岛状态</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ) : null}
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>

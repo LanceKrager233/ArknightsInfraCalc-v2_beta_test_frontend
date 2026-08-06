@@ -3,14 +3,15 @@
 import { LogIn } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { CLIENT_SKLAND_ENABLED } from "@/client-features";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import type { SklandAccountSummary, SklandStatusSnapshot } from "@/types";
 
 interface AppTopBarProps {
-  account: SklandAccountSummary | null;
-  statusSnapshot: SklandStatusSnapshot | null;
-  sessionLoading: boolean;
-  onOpenSkland: () => void;
+  account?: SklandAccountSummary | null;
+  statusSnapshot?: SklandStatusSnapshot | null;
+  sessionLoading?: boolean;
+  onOpenSkland?: () => void;
 }
 
 export function AppTopBar({ account, statusSnapshot, sessionLoading, onOpenSkland }: AppTopBarProps) {
@@ -28,7 +29,7 @@ export function AppTopBar({ account, statusSnapshot, sessionLoading, onOpenSklan
       <h1 className="sr-only">可露希尔基建终端</h1>
       <div className="app-content-track flex h-[65px] items-center">
         <SidebarTrigger className="size-11 shrink-0 md:hidden" />
-        <div className="ms-auto flex h-11 min-w-11 items-center justify-end">
+        {CLIENT_SKLAND_ENABLED ? <div className="ms-auto flex h-11 min-w-11 items-center justify-end">
           {sessionLoading && !account ? (
             <div
               className="h-11 w-28 animate-pulse rounded-xl bg-muted motion-reduce:animate-none sm:w-32"
@@ -75,7 +76,7 @@ export function AppTopBar({ account, statusSnapshot, sessionLoading, onOpenSklan
               登录森空岛
             </Button>
           )}
-        </div>
+        </div> : null}
       </div>
     </header>
   );

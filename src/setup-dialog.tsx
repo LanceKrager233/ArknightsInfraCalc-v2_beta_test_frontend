@@ -11,6 +11,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { RotationSettings } from "@/components/RotationSettings";
+import { CLIENT_SKLAND_ENABLED } from "@/client-features";
 
 import type { FactoryRecipe, PowerBudget, TradeOrder } from "./blueprint";
 import { FileDrop, LayoutEditor, PresetSelector } from "./components";
@@ -33,11 +34,11 @@ type SetupDialogProps = {
   onMaaPasteChange: (value: string) => void;
   inputError: string | null;
   resultClearWarningDismissed: boolean;
-  sklandSnapshot: SklandScheduleSnapshot | null;
-  sklandConfigured: boolean;
-  sklandDisabledReason: string | null;
-  onOpenSkland: () => void;
-  onUseSklandSnapshot: () => void;
+  sklandSnapshot?: SklandScheduleSnapshot | null;
+  sklandConfigured?: boolean;
+  sklandDisabledReason?: string | null;
+  onOpenSkland?: () => void;
+  onUseSklandSnapshot?: () => void;
   onMaaFile: (file: File) => Promise<boolean>;
   onMaaPaste: () => boolean;
   presets: PresetDef[];
@@ -60,7 +61,7 @@ type SetupDialogProps = {
 };
 
 function sourceLabel(source: BoxSource): string {
-  if (source === "skland") return "森空岛";
+  if (CLIENT_SKLAND_ENABLED && source === "skland") return "森空岛";
   if (source === "maa") return "MAA 导入";
   return "243 全精二示例";
 }
@@ -190,12 +191,12 @@ export function SetupDialog({
 
   function handleOpenSkland() {
     pendingExternalReviewRef.current = true;
-    onOpenSkland();
+    onOpenSkland?.();
   }
 
   function handleUseSklandSnapshot() {
     if (!sklandSnapshot) return;
-    onUseSklandSnapshot();
+    onUseSklandSnapshot?.();
     setNeedsFacilityReview(true);
     setShowImportOptions(false);
     goToBasics();
@@ -283,12 +284,14 @@ export function SetupDialog({
                 {showImportOptions ? (
                   <section id="setup-import-options" className="setup-config-panel p-4 sm:p-5" aria-labelledby="setup-import-title">
                     <h3 id="setup-import-title" className="sr-only">选择干员数据来源</h3>
-                    <Tabs value={inputMode} onValueChange={(value) => onInputModeChange(value as "skland" | "maa")}>
-                      <TabsList className="h-auto w-full rounded-[4px] sm:w-auto" aria-label="干员数据来源">
-                        <TabsTrigger value="skland" className="rounded-[4px]"><Database />森空岛</TabsTrigger>
-                        <TabsTrigger value="maa" className="rounded-[4px]"><FileJson />MAA</TabsTrigger>
-                      </TabsList>
-                      <TabsContent value="skland" className="pt-4">
+                    <Tabs value={CLIENT_SKLAND_ENABLED ? inputMode : "maa"} onValueChange={(value) => onInputModeChange(value as "skland" | "maa")}>
+                      {CLIENT_SKLAND_ENABLED ? (
+                        <TabsList className="h-auto w-full rounded-[4px] sm:w-auto" aria-label="干员数据来源">
+                          <TabsTrigger value="skland" className="rounded-[4px]"><Database />森空岛</TabsTrigger>
+                          <TabsTrigger value="maa" className="rounded-[4px]"><FileJson />MAA</TabsTrigger>
+                        </TabsList>
+                      ) : null}
+                      {CLIENT_SKLAND_ENABLED ? <TabsContent value="skland" className="pt-4">
                         <div className="setup-import-action flex flex-wrap items-center justify-between gap-4 px-4 py-4">
                           <div className="min-w-0">
                             <strong className="block truncate text-sm">
@@ -326,7 +329,7 @@ export function SetupDialog({
                             {sklandSnapshot.warnings.map((warning) => <li key={warning}>· {warning}</li>)}
                           </ul>
                         ) : null}
-                      </TabsContent>
+                      </TabsContent> : null}
                       <TabsContent value="maa" className="grid gap-3 pt-4">
                         <FileDrop fileName={boxSource === "maa" ? fileName : null} onFile={(file) => void importMaaFile(file)} />
                         <Button
@@ -515,7 +518,9 @@ export function SetupDialog({
           <DialogHeader>
             <DialogTitle>清除本地数据？</DialogTitle>
             <DialogDescription>
-              将删除此浏览器中的布局、干员数据、最近排班和提示偏好。森空岛登录状态不会退出。
+              {CLIENT_SKLAND_ENABLED
+                ? "将删除此浏览器中的布局、干员数据、最近排班和提示偏好。森空岛登录状态不会退出。"
+                : "将删除此浏览器中的布局、干员数据、最近排班和提示偏好。"}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
