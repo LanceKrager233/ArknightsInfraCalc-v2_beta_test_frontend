@@ -45,6 +45,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
+import { operatorProfessionPresentation } from "@/operatorPortraits";
 import { roomVisualFor } from "@/room-visuals";
 
 export { roomVisualFor } from "@/room-visuals";
@@ -1208,6 +1209,7 @@ export function OperatorSlot({
     );
   }
 
+  const profession = operatorProfessionPresentation(slot.name);
   return (
     <OperatorSlotShell
       centerFrameInList={centerFrameInList}
@@ -1217,7 +1219,17 @@ export function OperatorSlot({
       frameContent={
         <>
           {slot.portrait ? (
-            <img src={slot.portrait} alt={slot.name} className="absolute inset-0 h-full w-full object-cover outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10" />
+            <>
+              <img src={slot.portrait} alt={slot.name} className="absolute inset-0 h-full w-full object-cover outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10" />
+              {profession ? (
+                <img
+                  src={profession.icon}
+                  alt={`职业：${profession.label}`}
+                  title={`职业：${profession.label}`}
+                  className="absolute left-0 top-0 z-10 h-[25%] w-auto"
+                />
+              ) : null}
+            </>
           ) : (
             <div className="flex h-full items-center justify-center bg-[#4B4B4B] px-2 text-center text-xs font-semibold text-white">
               {slot.name}

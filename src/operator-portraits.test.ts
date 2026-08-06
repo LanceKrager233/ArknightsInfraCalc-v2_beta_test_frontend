@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { OPERATOR_CATALOG, operatorPortraitFor, operatorPresentationFor } from "./operatorPortraits.ts";
+import {
+  OPERATOR_CATALOG,
+  PROFESSION_LABELS,
+  operatorPortraitFor,
+  operatorPresentationFor,
+  operatorProfessionFor,
+  operatorProfessionPresentation,
+} from "./operatorPortraits.ts";
 
 test("resolves portraits by stable id before display name and keeps planner aliases", () => {
   const amiyaPortrait = "/images/operator-portraits/002_amiya.png";
@@ -20,6 +27,19 @@ test("maps the one-based planner skill index to presentation-only building skill
   assert.match(presentation.buildingSkill?.description ?? "", /所有贸易站订单效率\+7%/);
   assert.doesNotMatch(presentation.buildingSkill?.description ?? "", /<[^>]*>/);
   assert.equal(operatorPresentationFor({ name: "阿米娅", skill: 99 }).buildingSkill, undefined);
+});
+
+test("resolves numeric profession codes to labeled icons for every cataloged operator", () => {
+  assert.deepEqual(operatorProfessionFor("阿米娅"), 6);
+  assert.deepEqual(operatorProfessionPresentation("阿米娅"), { label: "术师", icon: "/images/profession/术师.png" });
+  for (const operator of OPERATOR_CATALOG) {
+    const profession = operatorProfessionFor(operator.name);
+    assert.equal(profession, operator.profession);
+    assert.ok(PROFESSION_LABELS[profession as number]);
+    assert.equal(operatorProfessionPresentation(operator.name)?.icon, `/images/profession/${PROFESSION_LABELS[profession as number]}.png`);
+  }
+  assert.equal(operatorProfessionFor("不存在的干员"), undefined);
+  assert.equal(operatorProfessionPresentation("不存在的干员"), undefined);
 });
 
 test("generated catalog has unique ids, names, and matching stable portrait paths", () => {

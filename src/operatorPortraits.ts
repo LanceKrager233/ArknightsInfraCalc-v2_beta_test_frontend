@@ -95,3 +95,26 @@ export function operatorPresentationFor({
 export function operatorPortraitFor(name: string, id?: string): string | undefined {
   return operatorPresentationFor({ name, id }).portrait;
 }
+
+export const PROFESSION_LABELS: Readonly<Record<number, string>> = {
+  1: "近卫",
+  2: "狙击",
+  3: "重装",
+  4: "医疗",
+  5: "辅助",
+  6: "术师",
+  7: "特种",
+  8: "先锋",
+};
+
+export function operatorProfessionFor(name: string): number | undefined {
+  return operatorFor(name.trim())?.profession;
+}
+
+export function operatorProfessionPresentation(
+  name: string,
+): { label: string; icon: string } | undefined {
+  const profession = operatorProfessionFor(name);
+  const label = profession !== undefined ? PROFESSION_LABELS[profession] : undefined;
+  return label ? { label, icon: `/images/profession/${label}.png` } : undefined;
+}
