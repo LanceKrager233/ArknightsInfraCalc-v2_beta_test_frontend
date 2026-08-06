@@ -157,9 +157,11 @@ fi
 fetch_release() {
   local fetch_mode="$1"
   local attempt
+  local fetch_depth=2
   local -a filter_args
   filter_args=(--no-filter)
   if [[ "$fetch_mode" == "metadata" ]]; then
+    fetch_depth=1
     filter_args=(--filter=blob:none)
   elif [[ "$fetch_mode" == "refetch" ]]; then
     filter_args=(--refetch --no-filter)
@@ -169,7 +171,7 @@ fetch_release() {
     if timeout 90 git --git-dir="$repository_path" -c protocol.version=2 fetch \
       --no-tags \
       --force \
-      --depth=2 \
+      --depth="$fetch_depth" \
       "${filter_args[@]}" \
       origin \
       "$release_sha:$incoming_ref"; then
@@ -213,9 +215,7 @@ else
     fi
     [[ -d "$seed_release_dir" && ! -L "$seed_release_dir" ]] || fail_validation "Seed release must resolve to a real directory."
 
-    if ! git --git-dir="$repository_path" cat-file -e "${release_sha}^{commit}" 2>/dev/null; then
-      fetch_release metadata || fail_temporarily "Unable to fetch release metadata for cache seeding."
-    fi
+    fetch_release metadata || fail_temporarily "Unable to fetch release metadata for cache seeding."
     validate_tree
 
     imported_blob_count=0

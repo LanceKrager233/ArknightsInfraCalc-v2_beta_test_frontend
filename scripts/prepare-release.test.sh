@@ -16,6 +16,11 @@ git init -b main "$source_repository" >/dev/null
 git -C "$source_repository" config user.name "Deploy Test"
 git -C "$source_repository" config user.email "deploy-test@example.invalid"
 mkdir -p "$source_repository/public/images" "$source_repository/src"
+dd if=/dev/zero of="$source_repository/public/images/removed-before-seed.bin" bs=1024 count=256 status=none
+git -C "$source_repository" add .
+git -C "$source_repository" commit -m "seed parent" >/dev/null
+removed_parent_blob="$(git -C "$source_repository" rev-parse 'HEAD:public/images/removed-before-seed.bin')"
+rm "$source_repository/public/images/removed-before-seed.bin"
 dd if=/dev/zero of="$source_repository/public/images/unchanged.bin" bs=1024 count=512 status=none
 printf 'first\n' > "$source_repository/src/current.txt"
 printf 'remove me\n' > "$source_repository/src/remove.txt"
@@ -74,6 +79,10 @@ run_helper production "$seed_sha" "$seed_tree" "$seed_archive" \
 expected_tar_sha="$(git -C "$source_repository" archive --format=tar "$seed_sha" | sha256sum | cut -d ' ' -f 1)"
 actual_tar_sha="$(gzip -dc "$seed_archive" | sha256sum | cut -d ' ' -f 1)"
 test "$actual_tar_sha" = "$expected_tar_sha"
+if git --git-dir="$cache_root/repository.git" cat-file -e "$removed_parent_blob" 2>/dev/null; then
+  echo "Seed metadata unexpectedly included a blob reachable only from the parent commit." >&2
+  exit 1
+fi
 
 printf 'second\n' > "$source_repository/src/current.txt"
 rm "$source_repository/src/remove.txt"
