@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import sourceManifest from "./generated/arkntools/source.json" with { type: "json" };
 import {
   OPERATOR_CATALOG,
   PROFESSION_LABELS,
@@ -10,12 +11,15 @@ import {
   operatorProfessionPresentation,
 } from "./operatorPortraits.ts";
 
+const PORTRAIT_VERSION = `${sourceManifest.version}-${sourceManifest.portraitsSource.commit.slice(0, 12)}`;
+const portraitPath = (shortId: string) => `/images/operator-portraits/${shortId}.webp?v=${PORTRAIT_VERSION}`;
+
 test("resolves portraits by stable id before display name and keeps planner aliases", () => {
-  const amiyaPortrait = "/images/operator-portraits/002_amiya.webp";
+  const amiyaPortrait = portraitPath("002_amiya");
   assert.equal(operatorPortraitFor("名称可以不同", "char_002_amiya"), amiyaPortrait);
   assert.equal(operatorPortraitFor("阿米娅(近卫)"), amiyaPortrait);
   assert.equal(operatorPortraitFor("阿米娅(医疗)"), amiyaPortrait);
-  assert.equal(operatorPortraitFor("嘉辛塔"), "/images/operator-portraits/4237_jcinta.webp");
+  assert.equal(operatorPortraitFor("嘉辛塔"), portraitPath("4237_jcinta"));
   assert.equal(operatorPortraitFor("不存在的干员"), undefined);
 });
 
@@ -48,6 +52,6 @@ test("generated catalog has unique ids, names, and matching stable portrait path
   assert.equal(new Set(OPERATOR_CATALOG.map((operator) => operator.name)).size, OPERATOR_CATALOG.length);
   for (const operator of OPERATOR_CATALOG) {
     assert.match(operator.id, /^char_[A-Za-z0-9_&]+$/);
-    assert.equal(operator.portrait, `/images/operator-portraits/${operator.id.slice(5)}.webp`);
+    assert.equal(operator.portrait, portraitPath(operator.id.slice(5)));
   }
 });

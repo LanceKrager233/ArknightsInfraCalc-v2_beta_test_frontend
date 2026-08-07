@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile, copyFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -7,7 +8,7 @@ import sharp from "sharp";
 
 export const ARKNTOOLS_REPOSITORY = "https://github.com/arkntools/arknights-toolbox-data";
 export const ARKNIGHTS_GAME_RESOURCE_REPOSITORY = "https://github.com/yuanyan3060/ArknightsGameResource";
-export const GENERATED_VERSION = 1;
+export const GENERATED_VERSION = 2;
 
 const MANAGED_PATHS = [
   "public/images/operator-portraits",
@@ -16,7 +17,7 @@ const MANAGED_PATHS = [
 ];
 
 // 干员头像来自 ArknightsGameResource 仓库的 avatar 目录，文件名形如 char_<shortId>.png；
-// 按上游原尺寸使用：只校验是 PNG，然后有损转成 WebP（透明背景保留，q85 + 智能色度抽样避免边缘色晕）。
+// 按上游原尺寸使用：透明内容在画布内居中后有损转成 WebP（透明背景保留，q85 + 智能色度抽样避免边缘色晕）。
 const PORTRAITS_DIRECTORY = "avatar";
 const WEBP_PORTRAIT_OPTIONS = { quality: 85, effort: 6, smartSubsample: true };
 
@@ -147,8 +148,63 @@ function normalizeCommit(value) {
   return value.toLowerCase();
 }
 
-function relativeAssetPath(directory, name, extension = "png") {
-  return `/images/${directory}/${name}.${extension}`;
+function relativeAssetPath(directory, name, extension = "png", version) {
+  const pathname = `/images/${directory}/${name}.${extension}`;
+  return version ? `${pathname}?v=${version}` : pathname;
+}
+
+function portraitAssetVersion(portraitsSha) {
+  return `${GENERATED_VERSION}-${normalizeCommit(portraitsSha).slice(0, 12)}`;
+}
+
+async function portraitWebpInput(filePath, label) {
+  const input = await readFile(filePath);
+  const { data, info } = await sharp(input).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const alphaChannel = info.channels - 1;
+  let left = info.width;
+  let top = info.height;
+  let right = -1;
+  let bottom = -1;
+
+  for (let y = 0; y < info.height; y += 1) {
+    for (let x = 0; x < info.width; x += 1) {
+      if (data[(y * info.width + x) * info.channels + alphaChannel] === 0) continue;
+      left = Math.min(left, x);
+      top = Math.min(top, y);
+      right = Math.max(right, x);
+      bottom = Math.max(bottom, y);
+    }
+  }
+
+  assert(right >= left && bottom >= top, `${label} 不得是全透明图片。`);
+  const visibleWidth = right - left + 1;
+  const visibleHeight = bottom - top + 1;
+  const targetLeft = Math.floor((info.width - visibleWidth) / 2);
+  const targetTop = Math.floor((info.height - visibleHeight) / 2);
+  const raw = {
+    width: info.width,
+    height: info.height,
+    channels: info.channels,
+  };
+  if (left === targetLeft && top === targetTop) return { input: data, raw };
+
+  const centered = Buffer.alloc(data.length);
+  const rowBytes = visibleWidth * info.channels;
+  for (let y = 0; y < visibleHeight; y += 1) {
+    const sourceOffset = ((top + y) * info.width + left) * info.channels;
+    const targetOffset = ((targetTop + y) * info.width + targetLeft) * info.channels;
+    data.copy(centered, targetOffset, sourceOffset, sourceOffset + rowBytes);
+  }
+  return {
+    input: centered,
+    raw,
+  };
+}
+
+async function writePortraitWebp(source, target, label) {
+  const { input, raw } = await portraitWebpInput(source, label);
+  const output = await sharp(input, { raw }).webp(WEBP_PORTRAIT_OPTIONS).toBuffer();
+  await writeFile(target, output);
 }
 
 async function loadSource(sourceRoot, sourceSha, portraitsRoot, portraitsSha) {
@@ -156,6 +212,9 @@ async function loadSource(sourceRoot, sourceSha, portraitsRoot, portraitsSha) {
   assert(typeof portraitsSha === "string" && portraitsSha, "必须提供头像来源 commit。");
   const resolvedSource = path.resolve(sourceRoot);
   const resolvedPortraits = path.resolve(portraitsRoot);
+  const normalizedSourceSha = normalizeCommit(sourceSha);
+  const normalizedPortraitsSha = normalizeCommit(portraitsSha);
+  const portraitVersion = portraitAssetVersion(normalizedPortraitsSha);
   const [characterData, buildingData, characterLocale, buildingLocale] = await Promise.all([
     readJson(path.join(resolvedSource, SOURCE_PATHS.characterData), "干员数据"),
     readJson(path.join(resolvedSource, SOURCE_PATHS.buildingData), "基建数据"),
@@ -207,7 +266,7 @@ async function loadSource(sourceRoot, sourceSha, portraitsRoot, portraitsSha) {
       rarity: metadata.star,
       profession: metadata.profession,
       position: metadata.position,
-      portrait: relativeAssetPath("operator-portraits", shortId, "webp"),
+      portrait: relativeAssetPath("operator-portraits", shortId, "webp", portraitVersion),
       buildingSkills,
     });
   }
@@ -257,11 +316,11 @@ async function loadSource(sourceRoot, sourceSha, portraitsRoot, portraitsSha) {
     version: GENERATED_VERSION,
     source: {
       repository: ARKNTOOLS_REPOSITORY,
-      commit: normalizeCommit(sourceSha),
+      commit: normalizedSourceSha,
     },
     portraitsSource: {
       repository: ARKNIGHTS_GAME_RESOURCE_REPOSITORY,
-      commit: normalizeCommit(portraitsSha),
+      commit: normalizedPortraitsSha,
     },
     counts: {
       operators: operators.length,
@@ -286,7 +345,7 @@ async function writeStage(stageRoot, generated) {
 
   await Promise.all([
     mapLimit(generated.portraitFiles, 16, ({ source, name }) =>
-      sharp(source).webp(WEBP_PORTRAIT_OPTIONS).toFile(path.join(portraitTarget, name))),
+      writePortraitWebp(source, path.join(portraitTarget, name), `干员头像 ${name}`)),
     mapLimit(generated.iconFiles, 16, ({ source, name, normalizeWidth }) => normalizeWidth
       ? sharp(source)
           .extend({ right: 1, background: { r: 0, g: 0, b: 0, alpha: 0 } })
@@ -326,6 +385,7 @@ export async function checkGeneratedAssets(root) {
   assert(isObject(manifest.portraitsSource), "已生成头像来源清单无效。");
   normalizeCommit(manifest.portraitsSource?.commit);
   assert(manifest.portraitsSource?.repository === ARKNIGHTS_GAME_RESOURCE_REPOSITORY, "已生成头像来源仓库无效。");
+  const portraitVersion = portraitAssetVersion(manifest.portraitsSource.commit);
 
   const ids = new Set();
   const names = new Set();
@@ -340,7 +400,7 @@ export async function checkGeneratedAssets(root) {
     ids.add(operator.id);
     names.add(operator.name);
     const shortId = operator.id.slice(5);
-    assert(operator.portrait === relativeAssetPath("operator-portraits", shortId, "webp"), `干员 ${operator.id} 的头像路径无效。`);
+    assert(operator.portrait === relativeAssetPath("operator-portraits", shortId, "webp", portraitVersion), `干员 ${operator.id} 的头像路径无效。`);
     portraitNames.push(`${shortId}.webp`);
     assert(Array.isArray(operator.buildingSkills), `干员 ${operator.id} 的基建技能无效。`);
     operator.buildingSkills.forEach((skill, offset) => {

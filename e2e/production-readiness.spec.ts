@@ -1,5 +1,10 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
+import operatorCatalog from "../src/generated/arkntools/operator-catalog.json" with { type: "json" };
+
+const amiyaPortrait = operatorCatalog.find((operator) => operator.id === "char_002_amiya")?.portrait;
+if (!amiyaPortrait) throw new Error("Generated operator catalog is missing Amiya's portrait.");
+
 const requestId = "11111111-1111-4111-8111-111111111111";
 const diagnosticId = "22222222-2222-4222-8222-222222222222";
 const now = Date.now();
@@ -400,6 +405,20 @@ const scheduleVisualPlanData = {
           autofill: false,
         }],
         processing: [{ operators: [{ name: "阿米娅", skill: 2 }] }],
+      },
+    })),
+  },
+};
+
+const lazyPortraitPlanData = {
+  ...scheduleVisualPlanData,
+  maa: {
+    ...scheduleVisualPlanData.maa,
+    plans: scheduleVisualPlanData.maa.plans.map((plan) => ({
+      ...plan,
+      rooms: {
+        ...plan.rooms,
+        processing: [{ operators: [{ name: "嘉辛塔", skill: 1 }] }],
       },
     })),
   },
@@ -891,6 +910,54 @@ async function seedV4Session(
     operbox: options.operbox,
   });
 }
+
+test("serves versioned WebP portraits with immutable caching only when versioned", async ({ request }) => {
+  expect(amiyaPortrait).toMatch(/^\/images\/operator-portraits\/002_amiya\.webp\?v=\d+-[0-9a-f]{12}$/);
+  const versioned = await request.get(amiyaPortrait);
+  expect(versioned.ok()).toBe(true);
+  expect(versioned.headers()["content-type"]).toContain("image/webp");
+  expect(versioned.headers()["cache-control"]).toContain("max-age=31536000");
+  expect(versioned.headers()["cache-control"]).toContain("immutable");
+
+  const unversioned = await request.get(amiyaPortrait.split("?")[0]);
+  expect(unversioned.ok()).toBe(true);
+  expect(unversioned.headers()["cache-control"]).toBe("public, max-age=0");
+});
+
+test("defers a portrait far below the mobile viewport until it approaches view", async ({ page, browserName }) => {
+  test.skip(browserName !== "chromium", "Chromium owns the deterministic native lazy-loading threshold assertion.");
+  await mockApis(page);
+  await seedV4Session(page, lazyPortraitPlanData);
+  await page.addInitScript(() => {
+    document.addEventListener("DOMContentLoaded", () => {
+      const style = document.createElement("style");
+      style.textContent = '[data-room-group="processing"] { margin-top: 3000px !important; }';
+      document.head.append(style);
+    });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const requestedPortraits: string[] = [];
+  page.on("request", (request) => {
+    if (request.resourceType() === "image" && request.url().includes("/images/operator-portraits/")) {
+      requestedPortraits.push(request.url());
+    }
+  });
+  await page.goto("/");
+
+  const deferredPortrait = page.locator('img[alt="嘉辛塔"]');
+  await expect(deferredPortrait).toHaveAttribute("loading", "lazy");
+  const position = await deferredPortrait.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return { top: box.top, viewportHeight: window.innerHeight };
+  });
+  expect(position.top).toBeGreaterThan(position.viewportHeight * 2);
+  await page.waitForTimeout(300);
+  expect(requestedPortraits).toHaveLength(3);
+  expect(requestedPortraits.some((url) => url.includes("/4237_jcinta.webp?"))).toBe(false);
+
+  await deferredPortrait.scrollIntoViewIfNeeded();
+  await expect.poll(() => requestedPortraits.some((url) => url.includes("/4237_jcinta.webp?"))).toBe(true);
+});
 
 test("restores a v4 schedule without hydration errors and keeps only safe data", async ({ page }) => {
   await mockApis(page);
@@ -1965,6 +2032,11 @@ test("calculator owns scheduling controls and training advice uses a single tech
   const adviceCards = page.locator('[data-slot="training-advice-card"]');
   await expect(adviceCards).toHaveCount(2);
   await expect(adviceCards.locator("svg")).toHaveCount(0);
+  const advicePortrait = adviceCards.locator('img[src^="/images/operator-portraits/"]').first();
+  await expect(advicePortrait).toHaveAttribute("width", "80");
+  await expect(advicePortrait).toHaveAttribute("height", "80");
+  await expect(advicePortrait).toHaveAttribute("loading", "lazy");
+  await expect(advicePortrait).toHaveAttribute("decoding", "async");
   const cardBoxes = await adviceCards.evaluateAll((elements) => elements.map((element) => {
     const box = element.getBoundingClientRect();
     return { left: box.left, top: box.top, width: box.width };
@@ -2010,6 +2082,12 @@ test("schedule visuals use a stable technical canvas and responsive level marker
   await expect.poll(() => page.locator('img[src^="/images/building-skills/"]').first().evaluate(
     (image) => (image as HTMLImageElement).naturalWidth
   )).toBe(36);
+  const operatorPortrait = page.locator('img[src^="/images/operator-portraits/"]').first();
+  await expect(operatorPortrait).toHaveAttribute("src", /\.webp\?v=\d+-[0-9a-f]{12}$/);
+  await expect(operatorPortrait).toHaveAttribute("width", "180");
+  await expect(operatorPortrait).toHaveAttribute("height", "180");
+  await expect(operatorPortrait).toHaveAttribute("loading", "lazy");
+  await expect(operatorPortrait).toHaveAttribute("decoding", "async");
 
   const visualStyles = await page.evaluate(() => {
     const room = document.querySelector<HTMLElement>(".infra-room-surface");

@@ -1327,7 +1327,15 @@ export function OperatorSlot({
               <>
                 {slot.portrait ? (
                   <>
-                    <img src={slot.portrait} alt={slot.name} className="absolute inset-0 h-full w-full object-cover outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10" />
+                    <img
+                      src={slot.portrait}
+                      alt={slot.name}
+                      width={180}
+                      height={180}
+                      loading="lazy"
+                      decoding="async"
+                      className="absolute inset-0 h-full w-full object-cover outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10"
+                    />
                     {profession ? (
                       <img
                         src={profession.icon}

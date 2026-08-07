@@ -133,6 +133,7 @@ function ActionCard({
               width={80}
               height={80}
               loading="lazy"
+              decoding="async"
               className="h-full w-full object-cover"
             />
           ) : (
