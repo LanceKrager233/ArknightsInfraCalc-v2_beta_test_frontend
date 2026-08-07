@@ -21,7 +21,7 @@ export default defineConfig({
     use: { ...devices["Desktop Chrome"] },
   }],
   webServer: {
-    command: `npx next dev --webpack -H 127.0.0.1 -p ${webServerPort}`,
+    command: `npx next dev -H 127.0.0.1 -p ${webServerPort}`,
     url: baseURL,
     reuseExistingServer: false,
     timeout: 120_000,

@@ -47,6 +47,9 @@ jobs:
       - name: Production build
         run: npm run build
 
+      - name: Production output tracing
+        run: npm run test:build-traces
+
       - name: Production client isolation
         run: npm run test:production-client
 
