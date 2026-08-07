@@ -132,6 +132,7 @@ export function SklandLoginPanel({
             accounts: result.accounts,
             activeAccountId: result.activeAccountId,
             scheduleSnapshot: result.scheduleSnapshot,
+            statusSnapshot: result.statusSnapshot,
           });
           setScanId(null);
           setScanUrl(null);

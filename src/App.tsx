@@ -393,6 +393,7 @@ function WorkbenchApp() {
         setSklandDisabledReason(session.disabledReason ?? null);
         setSklandAccounts(session.accounts);
         setSklandActiveAccountId(session.activeAccountId);
+        setSklandStatusSnapshot(session.statusSnapshot ?? null);
         if (session.authenticated && session.scheduleSnapshot) {
           setSklandScheduleSnapshot(session.scheduleSnapshot);
           if (initialBoxSource.current === "skland" || !initialOperbox.current) {
@@ -493,7 +494,7 @@ function WorkbenchApp() {
   function applySklandSession(session: SklandSessionData, applyLayoutWhenClean = true) {
     setSklandAccounts(session.accounts);
     setSklandActiveAccountId(session.activeAccountId);
-    setSklandStatusSnapshot(null);
+    setSklandStatusSnapshot(session.statusSnapshot ?? null);
     if (session.authenticated && session.scheduleSnapshot) {
       applySklandSnapshot(session.scheduleSnapshot, applyLayoutWhenClean);
       return;
@@ -529,21 +530,7 @@ function WorkbenchApp() {
     try {
       const session = await selectSklandRole(accountId, uid);
       if (!session.authenticated || !session.scheduleSnapshot) throw new Error("角色切换失败。");
-      let status: Awaited<ReturnType<typeof getSklandStatus>> | null = null;
-      let statusError: unknown = null;
-      try {
-        status = await getSklandStatus();
-      } catch (error) {
-        statusError = error;
-      }
       applySklandSession(session, false);
-      if (status) {
-        setSklandAccounts(status.accounts);
-        setSklandActiveAccountId(status.activeAccountId);
-        setSklandStatusSnapshot(status.snapshot ?? null);
-      } else if (statusError) {
-        setSklandError(toDisplayError(statusError, "角色已切换，但状态中心加载失败，请稍后重试。"));
-      }
     } catch (error) {
       const normalized = toDisplayError(error, "角色切换失败，请稍后重试。");
       setSklandError(normalized);
@@ -551,6 +538,7 @@ function WorkbenchApp() {
         const current = await getSklandSession();
         setSklandAccounts(current.accounts);
         setSklandActiveAccountId(current.activeAccountId);
+        setSklandStatusSnapshot(current.statusSnapshot ?? null);
         if (current.authenticated && current.scheduleSnapshot) applySklandSnapshot(current.scheduleSnapshot, false);
       } catch {
         // 保留上一份成功快照，等待用户再次操作。

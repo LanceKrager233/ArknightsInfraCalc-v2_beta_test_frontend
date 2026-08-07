@@ -515,6 +515,7 @@ export interface SklandSessionResponse {
   accounts: SklandAccountSummary[];
   activeAccountId: string | null;
   scheduleSnapshot?: SklandScheduleSnapshot;
+  statusSnapshot?: SklandStatusSnapshot;
   error?: string;
   code?: string;
 }
@@ -531,6 +532,7 @@ export interface SklandQrStatusResponse {
   success: boolean;
   status: "waiting" | "scanned" | "expired" | "authenticated";
   scheduleSnapshot?: SklandScheduleSnapshot;
+  statusSnapshot?: SklandStatusSnapshot;
   error?: string;
   code?: string;
 }
@@ -840,6 +842,7 @@ export interface SklandSessionData {
   accounts: SklandAccountSummary[];
   activeAccountId: string | null;
   scheduleSnapshot?: SklandScheduleSnapshot;
+  statusSnapshot?: SklandStatusSnapshot;
 }
 
 export interface SklandStatusData {
@@ -859,6 +862,7 @@ export interface SklandQrStatusData {
   accounts?: SklandAccountSummary[];
   activeAccountId?: string | null;
   scheduleSnapshot?: SklandScheduleSnapshot;
+  statusSnapshot?: SklandStatusSnapshot;
 }
 
 export interface DisplayError {

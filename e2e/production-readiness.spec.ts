@@ -725,7 +725,10 @@ const primarySklandAccount = {
   credentialExpiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
 };
 
-type MockSklandSnapshot = Omit<typeof authenticatedSklandSnapshot, "infrastructure"> & {
+type MockSklandSnapshot = Omit<typeof authenticatedSklandSnapshot, "infrastructure" | "player"> & {
+  player: Omit<typeof authenticatedSklandSnapshot.player, "avatarUrl"> & {
+    avatarUrl: string | null;
+  };
   infrastructure: Omit<typeof authenticatedSklandSnapshot.infrastructure, "layoutSuggestion"> & {
     layoutSuggestion: typeof layout243 | null;
   };
@@ -797,6 +800,7 @@ async function mockApis(
                 ? null
                 : "当前未开放森空岛登录，可使用 MAA 导入。",
               ...(options.sklandSnapshot ? { scheduleSnapshot: options.sklandSnapshot } : {}),
+              ...(options.sklandSnapshot ? { statusSnapshot: options.sklandSnapshot } : {}),
             },
         requestId,
       }),
@@ -2464,23 +2468,34 @@ test("Skland login waits for an explicit click and explains slow preparation", a
 
 test("Skland login loads full status by default and deletion preserves non-Skland data", async ({ page }) => {
   const statusMethods: string[] = [];
+  const snapshotWithAvatar = {
+    ...authenticatedSklandSnapshot,
+    player: {
+      ...authenticatedSklandSnapshot.player,
+      avatarUrl: "https://example.com/skland-avatar.png",
+    },
+  };
   page.on("request", (request) => {
     if (new URL(request.url()).pathname === "/api/skland/status") statusMethods.push(request.method());
   });
   await mockApis(page, {
     sklandConfigured: true,
-    sklandSnapshot: authenticatedSklandSnapshot,
+    sklandSnapshot: snapshotWithAvatar,
   });
   await seedV4Session(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
+  await expect(page.locator("[data-skland-topbar-avatar] img")).toHaveAttribute(
+    "src",
+    snapshotWithAvatar.player.avatarUrl
+  );
   await page.getByRole("button", { name: "Toggle Sidebar" }).click();
   await page.getByRole("button", { name: "森空岛状态", exact: true }).click();
 
   await expect(page.getByText("UID 123••••789")).toBeVisible();
   await expect(page.getByRole("button", { name: "启用状态中心" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "撤回状态中心授权" })).toHaveCount(0);
-  await expect.poll(() => statusMethods).toEqual(["GET"]);
+  await expect.poll(() => statusMethods).toEqual([]);
   const [postStatus, deleteStatus] = await Promise.all([
     page.request.post("/api/skland/status"),
     page.request.delete("/api/skland/status"),
@@ -2514,9 +2529,11 @@ test("Skland status center keeps profile and recruitment in overview and support
     sourceName: "森空岛同步",
   };
   let attendanceRequests = 0;
+  let statusRequests = 0;
   let currentStatusSnapshot: typeof authenticatedSklandSnapshot | typeof switchedSnapshot = authenticatedSklandSnapshot;
   page.on("request", (request) => {
     if (/attendance|sign/i.test(request.url())) attendanceRequests += 1;
+    if (new URL(request.url()).pathname === "/api/skland/status") statusRequests += 1;
   });
   await mockApis(page, {
     sklandConfigured: true,
@@ -2541,6 +2558,7 @@ test("Skland status center keeps profile and recruitment in overview and support
           }],
           activeAccountId: primarySklandAccount.accountId,
           scheduleSnapshot: switchedSnapshot,
+          statusSnapshot: switchedSnapshot,
         },
         requestId,
       }),
@@ -2702,6 +2720,7 @@ test("Skland status center keeps profile and recruitment in overview and support
   await page.getByRole("button", { name: "退出" }).click();
   await expect(page.getByRole("heading", { name: "把当前罗德岛带进排班助手" })).toBeVisible();
   expect(attendanceRequests).toBe(0);
+  expect(statusRequests).toBe(0);
 });
 
 test("Skland layout sync stays beside the tabs and confirms replacement of dirty settings", async ({ page }) => {
@@ -2858,6 +2877,7 @@ test("Skland supports adding, switching, and individually logging out multiple a
           accounts: currentAccounts,
           activeAccountId: currentAccountId,
           ...(currentAccounts.length ? { scheduleSnapshot: currentSnapshot } : {}),
+          ...(currentAccounts.length ? { statusSnapshot: currentSnapshot } : {}),
         },
         requestId,
       }),
@@ -2892,6 +2912,7 @@ test("Skland supports adding, switching, and individually logging out multiple a
           accounts: currentAccounts,
           activeAccountId: currentAccountId,
           scheduleSnapshot: currentSnapshot,
+          statusSnapshot: currentSnapshot,
         },
         requestId,
       }),
@@ -2926,6 +2947,7 @@ test("Skland supports adding, switching, and individually logging out multiple a
           accounts: currentAccounts,
           activeAccountId: currentAccountId,
           scheduleSnapshot: currentSnapshot,
+          statusSnapshot: currentSnapshot,
         },
         requestId,
       }),
