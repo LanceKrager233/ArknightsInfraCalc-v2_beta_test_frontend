@@ -46,7 +46,7 @@ function AccordionTrigger({ className, children, ...props }: AccordionPrimitive.
             {children}
             <motion.span
               className="flex size-4 shrink-0 items-center justify-center text-muted-foreground"
-              animate={{ transform: state.open ? "rotate(180deg)" : "rotate(0deg)" }}
+              animate={{ rotate: state.open ? 180 : 0 }}
               transition={{ duration: MOTION_DURATION.fast, ease: MOTION_EASE_IN_OUT }}
               aria-hidden="true"
             >

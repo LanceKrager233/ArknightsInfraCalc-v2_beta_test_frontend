@@ -1083,6 +1083,12 @@ test("shows the solving orb only while a plan request is running", async ({ page
 });
 
 test("plan completion reveals status, metrics, and schedule once without resetting board state", async ({ page, browserName }) => {
+  const invalidTransformWarnings: string[] = [];
+  page.on("console", (message) => {
+    if (/Invalid keyframe value for property transform|translate0d/i.test(message.text())) {
+      invalidTransformWarnings.push(message.text());
+    }
+  });
   await mockApis(page);
   let releasePlan!: () => void;
   const planGate = new Promise<void>((resolve) => {
@@ -1155,6 +1161,41 @@ test("plan completion reveals status, metrics, and schedule once without resetti
   });
   expect(choreography.statusBarDuration).toContain("0.16s");
 
+  const renderingBudget = await page.evaluate(() => {
+    const summaryElement = document.querySelector<HTMLElement>("[data-plan-summary]")!;
+    const boardElement = document.querySelector<HTMLElement>("[data-plan-board]")!;
+    const summaryCalligraphCount = summaryElement.querySelectorAll("[data-calligraph]").length;
+    const boardCalligraphCount = boardElement.querySelectorAll("[data-calligraph]").length;
+    const roomPrimaryCount = boardElement.querySelectorAll("[data-room-primary-efficiency]").length;
+    const animatedTextCalligraphCount = document.querySelectorAll('[data-animated-value="text"] [data-calligraph]').length;
+    const clipPathAnimationCount = [summaryElement, boardElement]
+      .flatMap((element) => element.getAnimations({ subtree: true }))
+      .filter((animation) => {
+        const effect = animation.effect;
+        return effect instanceof KeyframeEffect && effect.getKeyframes().some((frame) => (
+          typeof frame.clipPath === "string" && frame.clipPath !== "none"
+        ));
+      }).length;
+    return {
+      animatedTextCalligraphCount,
+      boardCalligraphCount,
+      clipPathAnimationCount,
+      roomPrimaryCount,
+      summaryCalligraphCount,
+      totalCalligraphCount: document.querySelectorAll("[data-calligraph]").length,
+      totalElementCount: document.querySelectorAll("*").length,
+    };
+  });
+  expect(renderingBudget.summaryCalligraphCount).toBe(4);
+  expect(renderingBudget.boardCalligraphCount).toBe(renderingBudget.roomPrimaryCount);
+  expect(renderingBudget.totalCalligraphCount).toBe(
+    renderingBudget.summaryCalligraphCount + renderingBudget.boardCalligraphCount
+  );
+  expect(renderingBudget.totalCalligraphCount).toBeLessThanOrEqual(20);
+  expect(renderingBudget.animatedTextCalligraphCount).toBe(0);
+  expect(renderingBudget.clipPathAnimationCount).toBe(0);
+  expect(renderingBudget.totalElementCount).toBeLessThan(1_500);
+
   await page.waitForTimeout(650);
   await board.evaluate((element) => {
     element.setAttribute("data-motion-sentinel", "stable");
@@ -1198,9 +1239,10 @@ test("plan completion reveals status, metrics, and schedule once without resetti
   } else {
     await expectCapturedMotion(page, "compact-view", 280);
   }
+  expect(invalidTransformWarnings).toEqual([]);
 });
 
-test("reduced motion keeps feedback timing while removing movement, clipping, and staggering", async ({ page }) => {
+test("reduced motion keeps feedback timing while removing movement, clipping, and staggering", async ({ page, browserName }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await mockApis(page);
   let releasePlan!: () => void;
@@ -1224,16 +1266,28 @@ test("reduced motion keeps feedback timing while removing movement, clipping, an
   await expect(page.locator('[data-slot="plan-status"]')).toHaveAttribute("data-status-state", "loading");
   await expect(page.locator(".animate-spin").first()).toHaveCSS("animation-duration", "1.6s");
 
-  await armMotionCapture(page, "[data-plan-summary]", "reduced-summary", 140);
-  await armMotionCapture(page, "[data-plan-board]", "reduced-board", 140);
-  await armMotionCapture(page, "[data-plan-metric]", "reduced-metric", 140);
+  if (browserName === "webkit") {
+    await armTransientStyleCapture(page, "[data-plan-summary]", "reduced-summary");
+    await armTransientStyleCapture(page, "[data-plan-board]", "reduced-board");
+    await armTransientStyleCapture(page, "[data-plan-metric]", "reduced-metric");
+  } else {
+    await armMotionCapture(page, "[data-plan-summary]", "reduced-summary", 140);
+    await armMotionCapture(page, "[data-plan-board]", "reduced-board", 140);
+    await armMotionCapture(page, "[data-plan-metric]", "reduced-metric", 140);
+  }
   releasePlan();
   await expect(page.locator('[data-slot="plan-status"]')).toHaveAttribute("data-status-state", "success");
   const summary = page.locator("[data-plan-summary]");
   await expect(summary).toBeVisible();
-  await expectCapturedMotion(page, "reduced-summary", 140);
-  await expectCapturedMotion(page, "reduced-board", 140);
-  await expectCapturedMotion(page, "reduced-metric", 140);
+  if (browserName === "webkit") {
+    await expectCapturedStyleMotion(page, "reduced-summary");
+    await expectCapturedStyleMotion(page, "reduced-board");
+    await expectCapturedStyleMotion(page, "reduced-metric");
+  } else {
+    await expectCapturedMotion(page, "reduced-summary", 140);
+    await expectCapturedMotion(page, "reduced-board", 140);
+    await expectCapturedMotion(page, "reduced-metric", 140);
+  }
   const reduced = await page.evaluate(() => {
     const statusBar = getComputedStyle(document.querySelector<HTMLElement>('[data-slot="plan-status"]')!);
     const boardElement = document.querySelector<HTMLElement>("[data-plan-board]")!;
@@ -1325,7 +1379,7 @@ test("shared action buttons keep their geometry after WebKit interactions", asyn
   await expectButtonGeometryStable(planButton);
 });
 
-test("tooltips wait once and then open adjacent help instantly within the provider window", async ({ page }) => {
+test("tooltips wait once and then open adjacent help instantly within the provider window", async ({ page, browserName }) => {
   await mockApis(page);
   await seedPreferences(page);
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -1353,10 +1407,17 @@ test("tooltips wait once and then open adjacent help instantly within the provid
     });
     observer.observe(document.body, { attributes: true, childList: true, subtree: true });
   });
+  if (browserName === "webkit") {
+    await armTransientStyleCapture(page, '[data-slot="tooltip-content"][data-open]', "tooltip");
+  }
   await calculatorTrigger.hover();
   const firstTooltip = page.locator('[data-slot="tooltip-content"][data-open]');
   await expect(firstTooltip).toBeVisible({ timeout: 1_500 });
-  await expectMotionDuration(firstTooltip, 240);
+  if (browserName === "webkit") {
+    await expectCapturedStyleMotion(page, "tooltip");
+  } else {
+    await expectMotionDuration(firstTooltip, 240);
+  }
   await expect(page.locator("html")).toHaveAttribute("data-tooltip-open-delay", /.+/);
   const firstOpenDelay = Number(await page.locator("html").getAttribute("data-tooltip-open-delay"));
   expect(firstOpenDelay).toBeGreaterThanOrEqual(300);

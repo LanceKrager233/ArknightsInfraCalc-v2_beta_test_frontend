@@ -19,6 +19,7 @@ import {
   StatusBar,
 } from "@/components";
 import { ShiftComparisonCard } from "@/components/ShiftComparisonCard";
+import type { ShiftDirection } from "@/motion";
 import type { RoomRow } from "@/schedule";
 import type {
   BaseBlueprint,
@@ -81,7 +82,12 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     onClearResultNotice, onDismissResultClearWarning,
   } = props;
   const [scheduleViewMode, setScheduleViewMode] = useState<"list" | "compact">("list");
+  const [shiftDirection, setShiftDirection] = useState<ShiftDirection>(0);
   const showBetaSidebar = showBetaPanels && scheduleViewMode === "list";
+  const handleSetActiveShift = (nextShift: number) => {
+    setShiftDirection(nextShift === activeShift ? 0 : nextShift > activeShift ? 1 : -1);
+    onSetActiveShift(nextShift);
+  };
 
   return (
     <>
@@ -160,6 +166,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               planRevision={result?.diagnosticId}
               currentMoraleByOperator={currentMoraleByOperator}
               activeShift={activeShift}
+              shiftDirection={shiftDirection}
               activePlan={activePlan}
               shiftInfoSlot={(
                 <div className="flex flex-wrap items-center justify-end gap-2 max-sm:w-full max-sm:justify-between">
@@ -168,7 +175,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                     rotation={result?.rotation}
                     active={activeShift}
                     closest={closestComparison?.planIndex}
-                    onChange={onSetActiveShift}
+                    onChange={handleSetActiveShift}
                   />
                   <Button type="button" size="sm" variant="outline" disabled={!result?.maa} onClick={onDownloadMaa}>
                     <Download />导出到 MAA

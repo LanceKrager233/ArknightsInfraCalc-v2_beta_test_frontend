@@ -134,10 +134,10 @@ function ComboboxContent({
           render={(renderProps, state) => (
             <motion.div
               {...(renderProps as unknown as HTMLMotionProps<"div">)}
-              initial={{ opacity: 0, transform: "scale(0.98)" }}
+              initial={{ opacity: 0, scale: 0.98 }}
               animate={{
                 opacity: state.open ? 1 : 0,
-                transform: state.open ? "scale(1)" : "scale(0.98)",
+                scale: state.open ? 1 : 0.98,
               }}
               transition={{
                 duration: state.open ? 0.24 : 0.16,

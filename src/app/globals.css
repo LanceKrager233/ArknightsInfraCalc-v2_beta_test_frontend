@@ -109,6 +109,7 @@
     --motion-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
     --motion-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
     --motion-duration-press: 160ms;
+    --motion-duration-fast: 180ms;
     --motion-duration-state: 160ms;
     --infra-ease-out: var(--motion-ease-out);
 }
@@ -178,7 +179,7 @@
     color var(--motion-duration-state) var(--motion-ease-out);
 }
 
-[data-slot="button"][data-motion-pressable] {
+[data-motion-pressable] {
   transition:
     color var(--motion-duration-state) var(--motion-ease-out),
     background-color var(--motion-duration-state) var(--motion-ease-out),
@@ -188,13 +189,35 @@
     transform var(--motion-duration-press) var(--motion-ease-out);
 }
 
-[data-slot="button"][data-motion-pressable]:not([aria-haspopup]):active {
+[data-motion-pressable]:not([aria-haspopup]):active {
   transform: scale(0.97);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-slot="button"][data-motion-pressable]:not([aria-haspopup]):active {
+  [data-motion-pressable]:not([aria-haspopup]):active {
     transform: none;
+  }
+}
+
+@keyframes animated-field-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(var(--animated-field-x, 0), var(--animated-field-y, 0), 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animated-field-value {
+  display: inline-block;
+  animation: animated-field-enter var(--motion-duration-fast) var(--motion-ease-out) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animated-field-value {
+    animation: none;
   }
 }
 

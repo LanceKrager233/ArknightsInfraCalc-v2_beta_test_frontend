@@ -16,7 +16,7 @@ import {
   Smile,
   Upload,
 } from "lucide-react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useAnimate, useReducedMotion } from "motion/react";
 import { CSSProperties, ChangeEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { ThinkingOrb } from "thinking-orbs";
 
@@ -642,9 +642,9 @@ export function StatusBar({
           key={content.state}
           className="flex min-w-0 flex-1 items-center gap-2"
           data-slot="status-content"
-          initial={{ opacity: 0, transform: "scale(0.98)" }}
-          animate={{ opacity: 1, transform: "scale(1)" }}
-          exit={{ opacity: 0, transform: "scale(0.98)" }}
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.98 }}
           transition={{ duration: MOTION_DURATION.feedback, ease: MOTION_EASE_OUT }}
           style={{ transformOrigin: "left center" }}
         >
@@ -828,18 +828,15 @@ export function PlanTelemetry({
       data-plan-revision={planRevision}
       initial={{
         opacity: 0,
-        transform: shouldReduceMotion ? "none" : "translate3d(0, 10px, 0)",
-        clipPath: shouldReduceMotion ? "none" : "inset(0 0 5% 0)",
+        y: shouldReduceMotion ? 0 : 8,
       }}
       animate={{
         opacity: 1,
-        transform: "none",
-        clipPath: shouldReduceMotion ? "none" : "inset(0 0 0 0)",
+        y: 0,
       }}
       exit={{
         opacity: 0,
-        transform: shouldReduceMotion ? "none" : "translate3d(0, -4px, 0)",
-        clipPath: "none",
+        y: shouldReduceMotion ? 0 : -4,
       }}
       transition={{
         duration: shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.emphasis,
@@ -875,9 +872,9 @@ export function PlanTelemetry({
                 data-plan-metric
                 initial={{
                   opacity: 0,
-                  transform: shouldReduceMotion ? "none" : "translate3d(0, 4px, 0)",
+                  y: shouldReduceMotion ? 0 : 4,
                 }}
-                animate={{ opacity: 1, transform: "none" }}
+                animate={{ opacity: 1, y: 0 }}
                 transition={{
                   duration: shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.content,
                   delay: shouldReduceMotion ? 0 : 0.06 + metricIndex * 0.045,
@@ -905,9 +902,9 @@ export function PlanTelemetry({
               data-plan-metric
               initial={{
                 opacity: 0,
-                transform: shouldReduceMotion ? "none" : "translate3d(0, 4px, 0)",
+                y: shouldReduceMotion ? 0 : 4,
               }}
-              animate={{ opacity: 1, transform: "none" }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{
                 duration: shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.content,
                 delay: shouldReduceMotion ? 0 : 0.06 + dailyMetrics.length * 0.045,
@@ -1039,15 +1036,26 @@ export function LevelDiamonds({
   );
 }
 
-export function RoomEfficiencyReadout({ value, details = true }: { value: RoomEfficiencyPresentation; details?: boolean }) {
+export function RoomEfficiencyReadout({
+  value,
+  details = true,
+  trend = 0,
+}: {
+  value: RoomEfficiencyPresentation;
+  details?: boolean;
+  trend?: ShiftDirection;
+}) {
   return (
     <div className="min-w-0" title={value.details.map((detail) => `${detail.label} ${detail.value}`).join(" · ")}>
       <div className="flex min-w-0 items-center gap-1.5">
-        <strong className="infra-room-value font-technical shrink-0 text-base font-semibold tabular-nums tracking-[0.01em] text-[var(--room-accent)] max-sm:text-xs">
-          <AnimatedText value={value.primaryValue} />
+        <strong
+          className="infra-room-value font-technical shrink-0 text-base font-semibold tabular-nums tracking-[0.01em] text-[var(--room-accent)] max-sm:text-xs"
+          data-room-primary-efficiency
+        >
+          <AnimatedNumber value={value.primaryValue} trend={trend} />
         </strong>
         <span className="truncate text-xs font-medium text-white/68">
-          <AnimatedText value={value.primaryLabel} />
+          <AnimatedText value={value.primaryLabel} trend={trend} />
         </span>
         {value.includesCrossStation ? <span className="shrink-0 bg-white/12 px-1 text-xs font-normal text-white/82">含跨设施</span> : null}
       </div>
@@ -1055,7 +1063,7 @@ export function RoomEfficiencyReadout({ value, details = true }: { value: RoomEf
         <div className="font-technical mt-1 flex max-h-9 flex-wrap gap-x-2 gap-y-0.5 overflow-hidden text-xs leading-4 tracking-[0.01em] text-white/60 max-sm:max-h-none">
           {value.details.map((detail) => (
             <span key={`${detail.kind}-${detail.label}`} className={detail.kind === "cross-station" ? "font-semibold text-[#C8F75A]" : undefined}>
-              {detail.label} <span className="font-number"><AnimatedText value={detail.value} /></span>
+              {detail.label} <span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>
             </span>
           ))}
         </div>
@@ -1067,9 +1075,11 @@ export function RoomEfficiencyReadout({ value, details = true }: { value: RoomEf
 function RoomEfficiencyDetails({
   value,
   compactFactory = false,
+  trend = 0,
 }: {
   value: RoomEfficiencyPresentation | null;
   compactFactory?: boolean;
+  trend?: ShiftDirection;
 }) {
   if (!value?.details.length) return null;
 
@@ -1089,7 +1099,7 @@ function RoomEfficiencyDetails({
             detail.kind === "cross-station" && "font-semibold text-[#C8F75A]"
           )}
         >
-          {detail.label} <span className="font-number"><AnimatedText value={detail.value} /></span>
+          {detail.label} <span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>
         </span>
       ))}
     </div>
@@ -1274,12 +1284,8 @@ export function OperatorSlot({
   const shouldReduceMotion = useReducedMotion();
   const identity = slot?.name ?? (autofill ? "autofill" : "empty");
   const profession = slot ? operatorProfessionPresentation(slot.name) : null;
-  const enterTransform = shouldReduceMotion || shiftDirection === 0
-    ? "none"
-    : `translate3d(${shiftDirection * 6}px, 0, 0)`;
-  const exitTransform = shouldReduceMotion || shiftDirection === 0
-    ? "none"
-    : `translate3d(${shiftDirection * -4}px, 0, 0)`;
+  const enterX = shouldReduceMotion ? 0 : shiftDirection * 6;
+  const exitX = shouldReduceMotion ? 0 : shiftDirection * -4;
   const ariaLabel = slot?.name ?? (autofill ? "自动补位" : "空置");
   const frameClassName = slot
     ? "border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)]"
@@ -1300,11 +1306,11 @@ export function OperatorSlot({
             key={identity}
             className="absolute inset-0"
             data-operator-identity={identity}
-            initial={{ opacity: 0, transform: enterTransform }}
-            animate={{ opacity: 1, transform: "none" }}
+            initial={{ opacity: 0, x: enterX }}
+            animate={{ opacity: 1, x: 0 }}
             exit={{
               opacity: 0,
-              transform: exitTransform,
+              x: exitX,
               pointerEvents: "none",
               transition: {
                 duration: MOTION_DURATION.fast,
@@ -1334,7 +1340,7 @@ export function OperatorSlot({
                   </>
                 ) : (
                   <div className="flex h-full items-center justify-center bg-[#4B4B4B] px-2 text-center text-xs font-semibold text-white">
-                    <AnimatedText value={slot.name} />
+                    <AnimatedText value={slot.name} trend={shiftDirection} />
                   </div>
                 )}
                 {slot.buildingSkill ? (
@@ -1355,7 +1361,7 @@ export function OperatorSlot({
                   >
                     <Smile className="text-[#FFD501]" />
                     <span className="max-sm:hidden">当前</span>
-                    <span className="font-number"><AnimatedNumber value={currentMorale} /></span>
+                    <span className="font-number"><AnimatedText value={currentMorale} trend={shiftDirection} /></span>
                   </span>
                 ) : null}
               </>
@@ -1369,7 +1375,7 @@ export function OperatorSlot({
           </motion.div>
         </AnimatePresence>
       }
-      label={slot ? <AnimatedText value={slot.name} /> : autofill ? "自动补位" : "占"}
+      label={slot ? <AnimatedText value={slot.name} trend={shiftDirection} /> : autofill ? "自动补位" : "占"}
       labelClassName={slot ? "text-white" : autofill ? "text-white/55" : "text-transparent select-none"}
       title={slot?.label}
     />
@@ -1383,6 +1389,7 @@ export function ScheduleBoard({
   currentMoraleByOperator,
   shiftInfoSlot,
   activeShift,
+  shiftDirection = 0,
   activePlan,
   onIssue,
   onFactoryRecipeChange,
@@ -1395,6 +1402,7 @@ export function ScheduleBoard({
   currentMoraleByOperator?: ReadonlyMap<string, number>;
   shiftInfoSlot?: ReactNode;
   activeShift: number;
+  shiftDirection?: ShiftDirection;
   activePlan?: MaaPlan;
   onIssue: (row: RoomRow) => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
@@ -1406,17 +1414,28 @@ export function ScheduleBoard({
   const [viewMode, setViewMode] = useState<"list" | "compact">("list");
   const [supportsCompactLayout, setSupportsCompactLayout] = useState(false);
   const preferredViewMode = useRef<"list" | "compact" | null>(null);
-  const [shiftTransition, setShiftTransition] = useState<{
-    activeShift: number;
-    direction: ShiftDirection;
-  }>({ activeShift, direction: 0 });
   const shouldReduceMotion = useReducedMotion();
-  let shiftDirection = shiftTransition.direction;
+  const animatedPlanRevision = useRef<string | undefined>(undefined);
+  const [boardScope, animateBoard] = useAnimate();
 
-  if (shiftTransition.activeShift !== activeShift) {
-    shiftDirection = activeShift > shiftTransition.activeShift ? 1 : -1;
-    setShiftTransition({ activeShift, direction: shiftDirection });
-  }
+  useEffect(() => {
+    const previousRevision = animatedPlanRevision.current;
+    if (!planRevision || previousRevision === planRevision || !boardScope.current) return;
+    animatedPlanRevision.current = planRevision;
+
+    const controls = animateBoard(
+      boardScope.current,
+      shouldReduceMotion
+        ? { opacity: [0, 1] }
+        : { opacity: [0, 1], y: [8, 0] },
+      {
+        duration: shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.emphasis,
+        delay: shouldReduceMotion ? 0 : 0.15,
+        ease: MOTION_EASE_OUT,
+      },
+    );
+    return () => controls.stop();
+  }, [animateBoard, boardScope, planRevision, shouldReduceMotion]);
 
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 768px)");
@@ -1518,7 +1537,7 @@ export function ScheduleBoard({
               <Button type="button" variant="outline" size="sm" onClick={toggleAuxiliaryGroups}>
                 <motion.span
                   className="flex size-4 items-center justify-center"
-                  animate={{ transform: allAuxiliaryCollapsed ? "rotate(-90deg)" : "rotate(0deg)" }}
+                  animate={{ rotate: allAuxiliaryCollapsed ? -90 : 0 }}
                   transition={{ duration: MOTION_DURATION.fast, ease: MOTION_EASE_IN_OUT }}
                   aria-hidden="true"
                 >
@@ -1531,44 +1550,27 @@ export function ScheduleBoard({
         </div>
         {shiftInfoSlot ? <div className="min-w-0 max-sm:w-full">{shiftInfoSlot}</div> : null}
       </div>
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={planRevision ?? "empty-plan"}
-          data-plan-board
-          data-plan-revision={planRevision || undefined}
-          initial={{
-            opacity: 0,
-            transform: shouldReduceMotion ? "none" : "translate3d(0, 8px, 0)",
-            clipPath: shouldReduceMotion ? "none" : "inset(0 0 4% 0)",
-          }}
-          animate={{
-            opacity: 1,
-            transform: "none",
-            clipPath: shouldReduceMotion ? "none" : "inset(0 0 0 0)",
-          }}
-          exit={{
-            opacity: 0,
-            transform: shouldReduceMotion ? "none" : "translate3d(0, -4px, 0)",
-            clipPath: "none",
-          }}
-          transition={{
-            duration: shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.emphasis,
-            delay: shouldReduceMotion ? 0 : 0.15,
-            ease: MOTION_EASE_OUT,
-          }}
-        >
+      <motion.div
+        ref={boardScope}
+        data-plan-board
+        data-plan-revision={planRevision || undefined}
+        initial={{
+          opacity: 0,
+          y: shouldReduceMotion ? 0 : 8,
+        }}
+      >
           <AnimatePresence initial={false} mode="wait">
             <motion.div
               key={viewMode}
               data-schedule-view={viewMode}
               initial={{
                 opacity: 0,
-                transform: shouldReduceMotion ? "none" : "translate3d(0, 8px, 0)",
+                y: shouldReduceMotion ? 0 : 8,
               }}
-              animate={{ opacity: 1, transform: "none", pointerEvents: "auto" }}
+              animate={{ opacity: 1, y: 0, pointerEvents: "auto" }}
               exit={{
                 opacity: 0,
-                transform: shouldReduceMotion ? "none" : "translate3d(0, -6px, 0)",
+                y: shouldReduceMotion ? 0 : -6,
                 pointerEvents: "none",
                 transition: {
                   duration: shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.fast,
@@ -1605,7 +1607,7 @@ export function ScheduleBoard({
                 <span className="font-number text-xs text-[#313131]/56">{group.rows.length}</span>
                 <motion.span
                   className="flex size-4 shrink-0 items-center justify-center text-[#313131]/45"
-                  animate={{ transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)" }}
+                  animate={{ rotate: collapsed ? -90 : 0 }}
                   transition={{ duration: MOTION_DURATION.fast, ease: MOTION_EASE_IN_OUT }}
                   aria-hidden="true"
                 >
@@ -1677,7 +1679,7 @@ export function ScheduleBoard({
                         aria-hidden="true"
                       />
                       <div className="relative z-10 flex h-full flex-col justify-center gap-2 px-3 py-3 max-sm:justify-start max-sm:gap-2 max-sm:px-3 max-sm:py-3">
-                        <div className="max-sm:flex max-sm:items-center max-sm:gap-2">
+                        <div className="flex flex-col gap-2 max-sm:flex-row max-sm:items-center">
                           <div>
                             <div className="flex items-center gap-2.5 max-sm:gap-1.5">
                               <div className={cn("font-number min-w-0 truncate font-medium tracking-[-0.02em] text-white [text-shadow:0_2px_3px_rgba(0,0,0,0.75)]", listRoomTitleSizeClass())}>
@@ -1687,16 +1689,11 @@ export function ScheduleBoard({
                             </div>
                           </div>
                           {efficiency ? (
-                            <div className="hidden max-sm:block shrink-0">
-                              <RoomEfficiencyReadout value={efficiency} details={false} />
+                            <div className="shrink-0">
+                              <RoomEfficiencyReadout value={efficiency} details={false} trend={shiftDirection} />
                             </div>
                           ) : null}
                         </div>
-                        {efficiency ? (
-                          <div className="max-sm:hidden">
-                            <RoomEfficiencyReadout value={efficiency} details={false} />
-                          </div>
-                        ) : null}
                         <RoomProductControls
                           row={row}
                           layoutRoom={layoutRoom}
@@ -1744,7 +1741,7 @@ export function ScheduleBoard({
                         ))}
                       </div>
                       {compactInlineRoom ? null : (
-                        <RoomEfficiencyDetails value={efficiency} compactFactory={compactFactoryRoom} />
+                        <RoomEfficiencyDetails value={efficiency} compactFactory={compactFactoryRoom} trend={shiftDirection} />
                       )}
                     </div>
 
@@ -1787,8 +1784,7 @@ export function ScheduleBoard({
         )}
             </motion.div>
           </AnimatePresence>
-        </motion.div>
-      </AnimatePresence>
+      </motion.div>
     </div>
   );
 }

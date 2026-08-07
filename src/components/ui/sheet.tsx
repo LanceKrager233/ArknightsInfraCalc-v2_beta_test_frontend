@@ -59,13 +59,8 @@ function SheetContent({
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
 }) {
-  const closedTransform = side === "right"
-    ? "translate3d(100%, 0, 0)"
-    : side === "left"
-      ? "translate3d(-100%, 0, 0)"
-      : side === "top"
-        ? "translate3d(0, -100%, 0)"
-        : "translate3d(0, 100%, 0)"
+  const closedX = side === "right" ? "100%" : side === "left" ? "-100%" : 0
+  const closedY = side === "top" ? "-100%" : side === "bottom" ? "100%" : 0
 
   return (
     <SheetPortal>
@@ -76,10 +71,11 @@ function SheetContent({
         render={(renderProps, state) => (
           <motion.div
             {...(renderProps as unknown as HTMLMotionProps<"div">)}
-            initial={{ opacity: 0, transform: closedTransform }}
+            initial={{ opacity: 0, x: closedX, y: closedY }}
             animate={{
               opacity: state.open ? 1 : 0,
-              transform: state.open ? "translate3d(0, 0, 0)" : closedTransform,
+              x: state.open ? 0 : closedX,
+              y: state.open ? 0 : closedY,
             }}
             transition={{
               duration: state.open ? MOTION_DURATION.emphasis : 0.22,

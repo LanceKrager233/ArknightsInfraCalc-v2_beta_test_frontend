@@ -7,7 +7,7 @@ import {
   maxRoomLevel,
   tradeOrderFor,
 } from "@/blueprint";
-import { AnimatedText } from "@/components/AnimatedText";
+import { AnimatedNumber, AnimatedText } from "@/components/AnimatedText";
 import { LevelDiamonds, OperatorSlot, roomVisualFor } from "@/components";
 import { presentRoomEfficiency } from "@/efficiency";
 import {
@@ -124,18 +124,24 @@ function CompactRoomCard({
   const efficiencyBlock = efficiency ? (
     <div>
       {isPower ? (
-        <span className="infra-room-value font-technical text-sm font-semibold tabular-nums text-[var(--room-accent)]"><AnimatedText value={efficiency.primaryValue} /></span>
+        <span className="infra-room-value font-technical text-sm font-semibold tabular-nums text-[var(--room-accent)]" data-room-primary-efficiency>
+          <AnimatedNumber value={efficiency.primaryValue} trend={shiftDirection} />
+        </span>
       ) : row.group === "trading" || row.group === "manufacture" ? (
         <div className="font-technical flex flex-wrap items-center gap-x-1.5 text-xs tracking-[0.01em] text-white/76">
-          <span className="infra-room-value font-semibold tabular-nums text-[var(--room-accent)]"><AnimatedText value={efficiency.primaryValue} /></span>
+          <span className="infra-room-value font-semibold tabular-nums text-[var(--room-accent)]" data-room-primary-efficiency>
+            <AnimatedNumber value={efficiency.primaryValue} trend={shiftDirection} />
+          </span>
           {efficiency.details.map((detail) => (
             <span key={detail.label} className={`font-number ${detail.kind === "cross-station" ? "text-[#C8F75A]" : ""}`}>
-              / {detail.label} <AnimatedText value={detail.value} />
+              / {detail.label} <AnimatedText value={detail.value} trend={shiftDirection} />
             </span>
           ))}
         </div>
       ) : (
-        <span className="font-technical text-sm tabular-nums text-white/66"><AnimatedText value={efficiency.primaryValue} /></span>
+        <span className="font-technical text-sm tabular-nums text-white/66" data-room-primary-efficiency>
+          <AnimatedNumber value={efficiency.primaryValue} trend={shiftDirection} />
+        </span>
       )}
     </div>
   ) : null;

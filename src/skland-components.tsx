@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { ExternalLink, LoaderCircle, RefreshCw, ScanLine, ShieldCheck } from "lucide-react";
-import { motion } from "motion/react";
 import { QRCodeSVG } from "qrcode.react";
 
 import { pollSklandQr, startSklandQr, toDisplayError } from "@/api";
@@ -14,7 +13,6 @@ import { cn } from "@/lib/utils";
 import { buildSklandAppOpenUrl } from "@/skland-auth-url";
 import type { SklandSessionData } from "@/types";
 import { PRIVACY_VERSION, TERMS_VERSION } from "@/legal-policy";
-import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
 
 const SKLAND_QR_POLL_INTERVAL_MS = 6_000;
 
@@ -304,12 +302,11 @@ export function SklandLoginPanel({
                   <Button
                     nativeButton={false}
                     render={(
-                      <motion.a
+                      <a
+                        data-motion-pressable
                         href={sklandAppOpenUrl}
                         target="_blank"
                         rel="noreferrer"
-                        whileTap={{ transform: "scale(0.97)" }}
-                        transition={{ duration: MOTION_DURATION.press, ease: MOTION_EASE_OUT }}
                       />
                     )}
                     size={dialogPresentation ? "dialog" : "default"}

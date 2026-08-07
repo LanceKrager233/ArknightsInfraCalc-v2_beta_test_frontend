@@ -2,7 +2,7 @@
 
 import { motion, useReducedMotion } from "motion/react";
 
-import { AnimatedNumber } from "@/components/AnimatedText";
+import { AnimatedText } from "@/components/AnimatedText";
 import { cn } from "@/lib/utils";
 import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
 import type { ShiftComparison } from "@/types";
@@ -30,12 +30,12 @@ export function ShiftComparisonCard({
       data-plan-revision={planRevision}
       initial={{
         opacity: 0,
-        transform: shouldReduceMotion ? "none" : "translate3d(0, 8px, 0)",
+        y: shouldReduceMotion ? 0 : 8,
       }}
-      animate={{ opacity: 1, transform: "none" }}
+      animate={{ opacity: 1, y: 0 }}
       exit={{
         opacity: 0,
-        transform: shouldReduceMotion ? "none" : "translate3d(0, -4px, 0)",
+        y: shouldReduceMotion ? 0 : -4,
       }}
       transition={{
         duration: shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.content,
@@ -47,12 +47,12 @@ export function ShiftComparisonCard({
         <div>
           <span className="text-xs font-medium text-muted-foreground">当前状态匹配</span>
           <h3 id="closest-shift-title" className="mt-0.5 text-base font-semibold">
-            当前最接近第 <span className="font-number"><AnimatedNumber value={comparison.planIndex + 1} /></span> 班
+            当前最接近第 <span className="font-number"><AnimatedText value={comparison.planIndex + 1} /></span> 班
           </h3>
         </div>
         <div className="text-right">
           <span className="text-xs text-muted-foreground">房间匹配</span>
-          <strong className="ml-2 text-lg tabular-nums"><AnimatedNumber value={`${comparison.score}%`} /></strong>
+          <strong className="ml-2 text-lg tabular-nums"><AnimatedText value={`${comparison.score}%`} /></strong>
         </div>
       </div>
       <div
@@ -65,8 +65,8 @@ export function ShiftComparisonCard({
       >
         <motion.div
           className="h-full bg-primary"
-          initial={{ transform: "scaleX(0)" }}
-          animate={{ transform: `scaleX(${Math.max(0, Math.min(100, comparison.score)) / 100})` }}
+          initial={{ scaleX: 0 }}
+          animate={{ scaleX: Math.max(0, Math.min(100, comparison.score)) / 100 }}
           transition={{
             duration: shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.emphasis,
             delay: shouldReduceMotion ? 0 : 0.11,
@@ -80,7 +80,7 @@ export function ShiftComparisonCard({
           <div key={group.label} className="px-3 py-2 first:pl-0 sm:first:pl-0">
             <dt className="text-xs text-muted-foreground">{group.label}</dt>
             <dd className={cn("mt-0.5 text-base font-semibold tabular-nums", group.tone)}>
-              <AnimatedNumber value={group.names.length} />
+              <AnimatedText value={group.names.length} />
             </dd>
           </div>
         ))}
@@ -94,7 +94,7 @@ export function ShiftComparisonCard({
             <div key={group.label} className="min-w-0 border-t border-border/70 pt-3">
               <div className="flex items-center justify-between gap-3">
                 <strong className={cn("text-xs", group.tone)}>{group.label}</strong>
-                <span className="text-xs tabular-nums text-muted-foreground"><AnimatedNumber value={group.names.length} /></span>
+                <span className="text-xs tabular-nums text-muted-foreground"><AnimatedText value={group.names.length} /></span>
               </div>
               <p className="mt-1.5 break-words text-sm leading-6 text-muted-foreground">
                 {group.names.join("、") || "无"}

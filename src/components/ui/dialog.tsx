@@ -78,10 +78,10 @@ function DialogContent({
         render={(renderProps, state) => (
           <motion.div
             {...(renderProps as unknown as HTMLMotionProps<"div">)}
-            initial={{ opacity: 0, transform: "scale(0.97)" }}
+            initial={{ opacity: 0, scale: 0.97 }}
             animate={{
               opacity: state.open ? 1 : 0,
-              transform: state.open ? "scale(1)" : "scale(0.97)",
+              scale: state.open ? 1 : 0.97,
             }}
             transition={{
               duration: state.open ? 0.3 : MOTION_DURATION.fast,
