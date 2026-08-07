@@ -64,11 +64,11 @@ const repoRoot = path.resolve(/* turbopackIgnore: true */ process.cwd());
 const bundledCliRoot = path.join(repoRoot, "bin");
 const bundledDataRoot = path.join(bundledCliRoot, "data");
 const bundledFixtureRoot = path.join(repoRoot, "fixtures");
-const coreRoot = path.resolve(process.env.INFRA_CORE_ROOT || path.join(repoRoot, "..", "ArknightsInfraCalc-v2"));
-const storageRoot = path.resolve(process.env.BETA_STORAGE_DIR || path.join(repoRoot, "server", "storage"));
-const feedbackRoot = path.resolve(process.env.BETA_FEEDBACK_DIR || path.join(storageRoot, "feedback"));
-const cliRunRoot = path.resolve(process.env.BETA_CLI_RUN_DIR || path.join(storageRoot, "cli-runs"));
-const cliReleaseRoot = path.resolve(process.env.BETA_CLI_RELEASE_DIR || path.join(storageRoot, "cli-releases"));
+const coreRoot = path.resolve(/* turbopackIgnore: true */ process.env.INFRA_CORE_ROOT || path.join(repoRoot, "..", "ArknightsInfraCalc-v2"));
+const storageRoot = path.resolve(/* turbopackIgnore: true */ process.env.BETA_STORAGE_DIR || path.join(repoRoot, "server", "storage"));
+const feedbackRoot = path.resolve(/* turbopackIgnore: true */ process.env.BETA_FEEDBACK_DIR || path.join(storageRoot, "feedback"));
+const cliRunRoot = path.resolve(/* turbopackIgnore: true */ process.env.BETA_CLI_RUN_DIR || path.join(storageRoot, "cli-runs"));
+const cliReleaseRoot = path.resolve(/* turbopackIgnore: true */ process.env.BETA_CLI_RELEASE_DIR || path.join(storageRoot, "cli-releases"));
 const activeCliPath = path.join(storageRoot, "active-cli.json");
 const timeoutMs = Number(process.env.BETA_CLI_TIMEOUT_MS || 120_000);
 const PRIVATE_RECORD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -187,7 +187,7 @@ function resolveSampleOperboxPath() {
     path.join(bundledFixtureRoot, "operbox_full_e2.json"),
     path.join(bundledFixtureRoot, "243", "operbox_full_e2.json"),
     path.join(coreRoot, "data", "fixtures", "243", "operbox_full_e2.json"),
-  ].map((candidate) => path.resolve(candidate));
+  ].map((candidate) => path.resolve(/* turbopackIgnore: true */ candidate));
 
   const found = candidates.find((candidate) => existsSync(candidate));
   if (!found) {
@@ -243,8 +243,11 @@ async function readJsonIfExists(filePath: string) {
 }
 
 async function ensurePrivateStorageBoundaries(): Promise<void> {
-  const lexicalStorageRoot = path.resolve(storageRoot);
-  const lexicalRoots = [path.resolve(cliRunRoot), path.resolve(feedbackRoot)];
+  const lexicalStorageRoot = path.resolve(/* turbopackIgnore: true */ storageRoot);
+  const lexicalRoots = [
+    path.resolve(/* turbopackIgnore: true */ cliRunRoot),
+    path.resolve(/* turbopackIgnore: true */ feedbackRoot),
+  ];
   if (!isSafePrivateStorageRoot(lexicalStorageRoot, [repoRoot, homedir()])) {
     throw new Error("整体存储目录配置过于宽泛。");
   }
@@ -256,8 +259,8 @@ async function ensurePrivateStorageBoundaries(): Promise<void> {
     ...lexicalRoots.map((root) => mkdir(root, { recursive: true })),
   ]);
   const [resolvedStorageRoot, ...resolvedRoots] = await Promise.all([
-    realpath(lexicalStorageRoot),
-    ...lexicalRoots.map((root) => realpath(root)),
+    realpath(/* turbopackIgnore: true */ lexicalStorageRoot),
+    ...lexicalRoots.map((root) => realpath(/* turbopackIgnore: true */ root)),
   ]);
   if (
     !isSafePrivateStorageRoot(resolvedStorageRoot, [repoRoot, homedir()])
@@ -273,9 +276,9 @@ async function removePrivateDirectory(root: string, target: string): Promise<boo
   let resolvedTarget: string;
   try {
     [resolvedStorageRoot, resolvedRoot, resolvedTarget] = await Promise.all([
-      realpath(storageRoot),
-      realpath(root),
-      realpath(target),
+      realpath(/* turbopackIgnore: true */ storageRoot),
+      realpath(/* turbopackIgnore: true */ root),
+      realpath(/* turbopackIgnore: true */ target),
     ]);
   } catch (error) {
     if (isObject(error) && error.code === "ENOENT") return false;
@@ -513,7 +516,7 @@ class InfraCliServeClient {
         env.ARKNIGHTS_INFRA_DATA_DIR = dataDir;
       }
       const cwd = path.dirname(cliPath);
-      const child = spawn(cliPath, ["serve"], { cwd, env, windowsHide: true, shell: false });
+      const child = spawn(/* turbopackIgnore: true */ cliPath, ["serve"], { cwd, env, windowsHide: true, shell: false });
       let settled = false;
 
       this.child = child;
@@ -1196,7 +1199,7 @@ export async function readOpsRecord(kind: "feedback" | "runs", id: string) {
 }
 
 async function listCliReleases() {
-  const entries = await readdir(cliReleaseRoot, { withFileTypes: true }).catch(() => []);
+  const entries = await readdir(/* turbopackIgnore: true */ cliReleaseRoot, { withFileTypes: true }).catch(() => []);
   return Promise.all(entries.filter((entry) => entry.isDirectory()).map(async (entry) => {
     const metadata = await readJsonIfExists(path.join(cliReleaseRoot, entry.name, "metadata.json"));
     return { id: entry.name, metadata };
