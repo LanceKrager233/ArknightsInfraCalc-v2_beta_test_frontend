@@ -725,12 +725,18 @@ const primarySklandAccount = {
   credentialExpiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
 };
 
+type MockSklandSnapshot = Omit<typeof authenticatedSklandSnapshot, "infrastructure"> & {
+  infrastructure: Omit<typeof authenticatedSklandSnapshot.infrastructure, "layoutSuggestion"> & {
+    layoutSuggestion: typeof layout243 | null;
+  };
+};
+
 async function mockApis(
   page: Page,
   options: {
     debugTools?: boolean;
     sklandConfigured?: boolean;
-    sklandSnapshot?: typeof authenticatedSklandSnapshot;
+    sklandSnapshot?: MockSklandSnapshot;
     sklandAccounts?: typeof primarySklandAccount[];
     activeAccountId?: string | null;
     sklandSessionDelayMs?: number;
@@ -1147,6 +1153,57 @@ test("shows the solving orb only while a plan request is running", async ({ page
   await expect(solvingOrb).toHaveCount(0);
   const completeTextX = await statusText.evaluate((element) => element.getBoundingClientRect().x);
   expect(Math.abs(completeTextX - readyTextX)).toBeLessThan(1);
+});
+
+test("Skland calculator keeps the schedule visible before and after sidebar navigation", async ({ page }) => {
+  await mockApis(page, {
+    sklandConfigured: true,
+    sklandSnapshot: {
+      ...authenticatedSklandSnapshot,
+      infrastructure: {
+        ...authenticatedSklandSnapshot.infrastructure,
+        layoutSuggestion: null,
+      },
+    },
+  });
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  await expect(page.locator("[data-skland-topbar-account]")).toBeVisible();
+  const runButton = page.getByRole("button", { name: "生成排班" });
+  await expect(runButton).toBeEnabled();
+
+  const waitingBoard = page.locator("[data-plan-board]");
+  await expect(waitingBoard).toBeVisible();
+  await expect(waitingBoard).toHaveCSS("opacity", "1");
+  await expect(waitingBoard).not.toHaveAttribute("data-plan-revision");
+  await expect(waitingBoard).toContainText("控制中枢");
+
+  await runButton.click();
+  await expect(page.getByText("排班已生成")).toBeVisible();
+  await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
+  await expect(page.getByRole("button", { name: "导出到 MAA" })).toBeEnabled();
+
+  const returnToCalculator = async (destination: "练卡建议" | "森空岛状态", marker: string, label: string) => {
+    await page.getByRole("button", { name: destination, exact: true }).click();
+    await expect(page.locator(marker)).toBeVisible();
+    await armMotionCapture(page, "[data-plan-board]", label, 320);
+    await page.getByRole("button", { name: "基建计算器", exact: true }).click();
+
+    const returnedBoard = page.locator("[data-plan-board]");
+    await expect(page.getByText("排班已生成")).toBeVisible();
+    await expect(returnedBoard).toBeVisible();
+    await expect(returnedBoard).toHaveCSS("opacity", "1");
+    await expect(returnedBoard).toHaveAttribute("data-plan-revision", diagnosticId);
+    await expect(page.getByRole("button", { name: "导出到 MAA" })).toBeEnabled();
+    await page.waitForTimeout(650);
+    expect(await page.locator("html").getAttribute(`data-motion-enter-${label}`)).toBeNull();
+  };
+
+  await returnToCalculator("练卡建议", '[data-slot="training-summary"]', "calculator-return-training");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await returnToCalculator("森空岛状态", "[data-skland-view-tabs]", "calculator-return-skland-reduced");
 });
 
 test("plan completion reveals status, metrics, and schedule once without resetting board state", async ({ page, browserName }) => {

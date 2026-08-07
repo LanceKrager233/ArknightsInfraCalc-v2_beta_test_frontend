@@ -17,7 +17,7 @@ import {
   Upload,
 } from "lucide-react";
 import { AnimatePresence, motion, useAnimate, useReducedMotion } from "motion/react";
-import { CSSProperties, ChangeEvent, ReactNode, useEffect, useRef, useState } from "react";
+import { CSSProperties, ChangeEvent, ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ThinkingOrb } from "thinking-orbs";
 
 import { AnimatedNumber, AnimatedText } from "@/components/AnimatedText";
@@ -1423,13 +1423,13 @@ export function ScheduleBoard({
   const [supportsCompactLayout, setSupportsCompactLayout] = useState(false);
   const preferredViewMode = useRef<"list" | "compact" | null>(null);
   const shouldReduceMotion = useReducedMotion();
-  const animatedPlanRevision = useRef<string | undefined>(undefined);
+  const animatedPlanRevision = useRef(planRevision);
   const [boardScope, animateBoard] = useAnimate();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const previousRevision = animatedPlanRevision.current;
-    if (!planRevision || previousRevision === planRevision || !boardScope.current) return;
     animatedPlanRevision.current = planRevision;
+    if (!planRevision || previousRevision === planRevision || !boardScope.current) return;
 
     const controls = animateBoard(
       boardScope.current,
@@ -1562,10 +1562,6 @@ export function ScheduleBoard({
         ref={boardScope}
         data-plan-board
         data-plan-revision={planRevision || undefined}
-        initial={{
-          opacity: 0,
-          y: shouldReduceMotion ? 0 : 8,
-        }}
       >
           <AnimatePresence initial={false} mode="wait">
             <motion.div
