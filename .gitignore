@@ -4,6 +4,8 @@ dist
 .playwright-cli
 playwright-report/
 test-results/
+/.playwright-mcp/
+/output/
 .tmp
 bin/data/
 server/feedback
