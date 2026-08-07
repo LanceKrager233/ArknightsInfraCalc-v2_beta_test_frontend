@@ -169,6 +169,8 @@ npm run dev
 npm run lint
 npm test
 npm run test:api-contract
+npm run audit:security
+npm run test:deploy
 npm run check
 npm run build
 npm run test:production-client
@@ -179,6 +181,8 @@ npm start
 ```
 
 - `npm run check` 依次运行 lint、单元测试和 API 契约测试。
+- `npm run audit:security` 阻止 high / critical npm 漏洞进入受保护分支；依赖安全修复交付时仍应运行完整`npm audit`并清零已知漏洞。
+- `npm run test:deploy`验证发布包准备、release 淘汰、失败清理、回滚和磁盘空间保护。
 - `npm run build` 进行 Next 生产构建并覆盖 TypeScript 集成检查。
 - `npm run test:production-client` checks the production browser build for forbidden Skland login content.
 - `npm run test:e2e` 默认在 5184 端口自动启动 Next，并用 Playwright 拦截外部 API；通常不需要真实 CLI 或森空岛凭据。
@@ -200,7 +204,7 @@ npm run dev
 
 - 纯文档改动：核对所有路径、脚本、环境变量和链接确实存在；若直接推 main，至少运行 `npm run check`。
 - TypeScript、状态管理、解析或通用 UI 改动：运行 `npm run check`。
-- 依赖、类型、Next 配置、route handler、服务端或公共契约改动：运行 `npm run check` 和 `npm run build`。
+- 依赖、类型、Next 配置、route handler、服务端或公共契约改动：运行 `npm run check`、`npm run audit:security` 和 `npm run build`；依赖安全修复还要运行完整`npm audit`。
 - 用户流程、响应式、持久化、调试开关或森空岛 UI 改动：再运行 `npm run test:e2e`。
 - CLI 协议或真实求解链改动：启动 `npm run dev`，确认 `/api/health` 的成功信封中 `data.plannerReady: true`，再用 Full E2 生成三班排班。
 - 森空岛服务端改动：除自动化外，在安全测试环境验证二维码、轮询、Cookie 刷新、角色切换、同步和退出；不得把真实凭据写入测试夹具。
@@ -261,7 +265,7 @@ development loopback nginx: 127.0.0.1:4274 (SSH tunnel only until a dev domain i
 development persistent storage: /var/lib/arknights-infra-dev
 ```
 
-`main`和`develop` push 必须先通过`Frontend quality`，随后由`Deploy verified branch`从已验证 SHA 自动发布到各自 GitHub Environment。发布包只包含 Git 跟踪内容；服务器优先通过`/usr/local/sbin/arknights-infra-prepare-release`和`/var/cache/arknights-infra-deploy/repository.git`增量准备准确 SHA，仅在 helper 返回临时故障码`75`时回退完整 SCP。SHA、tree、路径或脚本哈希错误必须直接失败。新 release 从应用根目录的`shared/.env.local`和`shared/bin-data`继承环境配置，以`arkinfra`用户执行`npm ci`/`npm run build`，再原子切换`current`并重启对应 systemd。不得把服务器密码写入文件或命令；只使用受保护的 SSH key 与 known_hosts。手动发布仍必须基于对应已合并、已验证的远端分支。
+`main`和`develop` push 必须先通过`Frontend quality`，随后由`Deploy verified branch`从已验证 SHA 自动发布到各自 GitHub Environment。发布包只包含 Git 跟踪内容；服务器优先通过`/usr/local/sbin/arknights-infra-prepare-release`和`/var/cache/arknights-infra-deploy/repository.git`增量准备准确 SHA，仅在 helper 返回临时故障码`75`时回退完整 SCP。SHA、tree、路径或脚本哈希错误必须直接失败。新 release 从应用根目录的`shared/.env.local`和`shared/bin-data`继承环境配置，以`arkinfra`用户执行`npm ci`/`npm run build`，再原子切换`current`并重启对应 systemd。部署锁内只允许清理命名和提交标记均合法的 release 直属目录；每个环境保留当前 release 加两个回滚版本，失败半成品必须移除，清理后可用空间少于 3 GiB 时必须在创建新 release 前失败。`shared`和`/var/lib`永不进入 release 淘汰范围。不得把服务器密码写入文件或命令；只使用受保护的 SSH key 与 known_hosts。固定部署脚本变更时，先让提交通过门禁，再以`root:root 0755`原子安装并核对 SHA-256。手动发布仍必须基于对应已合并、已验证的远端分支。
 
 发布后至少验证：
 
@@ -270,6 +274,7 @@ development persistent storage: /var/lib/arknights-infra-dev
 - 生产 `debugTools: false`、`rateLimit: true`，公开响应不泄露内部字段。
 - 浏览器可载入 Full E2、生成三班、刷新恢复、下载 MAA 并提交一次最小反馈。
 - `/var/lib/arknights-infra/cli-runs` 和 `/var/lib/arknights-infra/feedback` 保持持久化且有正确所有权。
+- 每个环境最多存在当前 release 和两个合法回滚 release，没有失败半成品，应用分区剩余空间不少于 3 GiB。
 
 前端发布失败时，把 `current` 原子切回已确认的上一 release 后重启并复查健康检查。只更新线上 CLI 时遵循 `docs/UPDATE_SOLVER.md`，不要借机发布未合并的前端工作区。
 
