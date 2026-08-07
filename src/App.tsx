@@ -12,7 +12,6 @@ import { SklandStatus } from "@/components/pages/SklandStatus";
 import { TrainingAdvice } from "@/components/pages/TrainingAdvice";
 
 import {
-  authorizeSklandStatus,
   deleteAllSklandData,
   getHealth,
   getSampleOperbox,
@@ -20,7 +19,6 @@ import {
   getSklandStatus,
   logoutSkland,
   runPlan,
-  revokeSklandStatus,
   saveFeedback,
   selectSklandRole,
   toDisplayError,
@@ -205,6 +203,7 @@ function WorkbenchApp() {
   const [maaPaste, setMaaPaste] = useState("");
   const [sklandScheduleSnapshot, setSklandScheduleSnapshot] = useState<SklandScheduleSnapshot | null>(null);
   const [sklandStatusSnapshot, setSklandStatusSnapshot] = useState<SklandStatusSnapshot | null>(null);
+  const [sklandStatusReloadKey, setSklandStatusReloadKey] = useState(0);
   const [sklandAccounts, setSklandAccounts] = useState<SklandAccountSummary[]>([]);
   const [sklandActiveAccountId, setSklandActiveAccountId] = useState<string | null>(null);
   const [sklandConfigured, setSklandConfigured] = useState(false);
@@ -431,7 +430,7 @@ function WorkbenchApp() {
     if (
       !CLIENT_SKLAND_ENABLED
       || page !== "skland"
-      || !activeSklandAccount?.statusAuthorized
+      || !activeSklandAccount
       || sklandStatusSnapshot
       || statusLoadingAccount.current === activeSklandAccount.accountId
     ) return;
@@ -456,7 +455,7 @@ function WorkbenchApp() {
     return () => {
       cancelled = true;
     };
-  }, [activeSklandAccount, page, sklandStatusSnapshot]);
+  }, [activeSklandAccount, page, sklandStatusReloadKey, sklandStatusSnapshot]);
 
   async function handleFile(file: File): Promise<boolean> {
     setInputError(null);
@@ -530,15 +529,12 @@ function WorkbenchApp() {
     try {
       const session = await selectSklandRole(accountId, uid);
       if (!session.authenticated || !session.scheduleSnapshot) throw new Error("角色切换失败。");
-      const selectedAccount = session.accounts.find((account) => account.accountId === session.activeAccountId);
       let status: Awaited<ReturnType<typeof getSklandStatus>> | null = null;
       let statusError: unknown = null;
-      if (selectedAccount?.statusAuthorized) {
-        try {
-          status = await getSklandStatus();
-        } catch (error) {
-          statusError = error;
-        }
+      try {
+        status = await getSklandStatus();
+      } catch (error) {
+        statusError = error;
       }
       applySklandSession(session, false);
       if (status) {
@@ -917,34 +913,10 @@ function WorkbenchApp() {
     applySklandSession(session);
   }
 
-  async function handleAuthorizeSklandStatus() {
-    setSklandBusy(true);
+  function handleRetrySklandStatus() {
     setSklandError(null);
-    try {
-      const status = await authorizeSklandStatus();
-      setSklandAccounts(status.accounts);
-      setSklandActiveAccountId(status.activeAccountId);
-      setSklandStatusSnapshot(status.snapshot ?? null);
-    } catch (error) {
-      setSklandError(toDisplayError(error, "无法启用状态中心，请稍后重试。"));
-    } finally {
-      setSklandBusy(false);
-    }
-  }
-
-  async function handleRevokeSklandStatus() {
-    setSklandBusy(true);
-    setSklandError(null);
-    try {
-      const status = await revokeSklandStatus();
-      setSklandAccounts(status.accounts);
-      setSklandActiveAccountId(status.activeAccountId);
-      setSklandStatusSnapshot(null);
-    } catch (error) {
-      setSklandError(toDisplayError(error, "无法撤回状态中心授权，请稍后重试。"));
-    } finally {
-      setSklandBusy(false);
-    }
+    statusLoadingAccount.current = null;
+    setSklandStatusReloadKey((current) => current + 1);
   }
 
   async function handleDeleteAllSklandData() {
@@ -1149,8 +1121,7 @@ function WorkbenchApp() {
           onAuthenticated={handleSklandAuthenticated}
           onRoleChange={handleSklandRole}
           onLogout={handleSklandLogout}
-          onAuthorizeStatus={handleAuthorizeSklandStatus}
-          onRevokeStatus={handleRevokeSklandStatus}
+          onRetryStatus={handleRetrySklandStatus}
           onDeleteAllData={handleDeleteAllSklandData}
           onApplyLayout={handleApplySklandLayout}
           onContinueSetup={() => {

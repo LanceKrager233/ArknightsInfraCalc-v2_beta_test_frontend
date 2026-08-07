@@ -156,7 +156,7 @@ async function completeOAuthLogin(
   const dId = (await client.storage.getItem(STORAGE_DID_KEY)) ?? "";
   if (!dId) throw new SklandServiceError("BAD_DATA", "森空岛设备凭证生成失败。", 502);
   const session: SklandSessionPayload = {
-    version: 2,
+    version: 3,
     cred: auth.cred,
     token: auth.token,
     dId,
@@ -165,7 +165,6 @@ async function completeOAuthLogin(
     refreshedAt: Date.now(),
     expiresAt: Date.now() + SKLAND_SESSION_TTL_SECONDS * 1000,
     policyConsent,
-    statusConsent: null,
   };
   return {
     session,

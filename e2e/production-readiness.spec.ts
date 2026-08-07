@@ -687,7 +687,6 @@ const primarySklandAccount = {
   selectedUid: authenticatedSklandSnapshot.player.uid,
   roles: authenticatedSklandSnapshot.roles,
   credentialExpiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
-  statusAuthorized: true,
 };
 
 async function mockApis(
@@ -762,10 +761,8 @@ async function mockApis(
     });
   });
   await page.route("**/api/skland/status", (route) => {
-    const revoked = route.request().method() === "DELETE";
     const accounts = (options.sklandAccounts
-      ?? (options.sklandSnapshot ? [primarySklandAccount] : []))
-      .map((account) => ({ ...account, statusAuthorized: !revoked }));
+      ?? (options.sklandSnapshot ? [primarySklandAccount] : []));
     return route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -773,10 +770,9 @@ async function mockApis(
       body: JSON.stringify({
         success: true,
         data: {
-          authorized: !revoked,
           accounts,
           activeAccountId: options.activeAccountId ?? accounts[0]?.accountId ?? null,
-          ...(!revoked && options.sklandSnapshot ? { snapshot: options.sklandSnapshot } : {}),
+          ...(options.sklandSnapshot ? { snapshot: options.sklandSnapshot } : {}),
         },
         requestId,
       }),
@@ -2059,7 +2055,7 @@ test("publishes the site terms and privacy policy with upstream policy links", a
   await page.setViewportSize({ width: 390, height: 844 });
   await gotoStable(page, "/privacy");
   await expect(page.getByRole("heading", { name: "隐私政策", level: 1 })).toBeVisible();
-  await expect(page.getByText("版本与生效日期：2026-08-05")).toBeVisible();
+  await expect(page.getByText("版本与生效日期：2026-08-07")).toBeVisible();
   await expect(page.getByText("可露希尔基建终端项目维护者", { exact: false })).toBeVisible();
   await expect(page.getByRole("link", { name: "森空岛使用许可及服务协议" })).toHaveAttribute(
     "href",
@@ -2072,7 +2068,7 @@ test("publishes the site terms and privacy policy with upstream policy links", a
 
   await gotoStable(page, "/terms");
   await expect(page.getByRole("heading", { name: "服务条款", level: 1 })).toBeVisible();
-  await expect(page.getByText("版本与生效日期：2026-08-05")).toBeVisible();
+  await expect(page.getByText("版本与生效日期：2026-08-07")).toBeVisible();
   await expect(page.getByText(/非官方、非商业工具/)).toBeVisible();
 });
 
@@ -2085,8 +2081,8 @@ test("Skland login shows QR on every viewport and offers a separate mobile app s
       consent: {
         termsAccepted: true,
         privacyAccepted: true,
-        termsVersion: "2026-08-05",
-        privacyVersion: "2026-08-05-r2",
+        termsVersion: "2026-08-07",
+        privacyVersion: "2026-08-07",
       },
     });
     return route.fulfill({
@@ -2227,11 +2223,14 @@ test("Skland login waits for an explicit click and explains slow preparation", a
   expect(qrStartRequests).toBe(1);
 });
 
-test("Skland status uses separate authorization and deletion preserves non-Skland data", async ({ page }) => {
+test("Skland login loads full status by default and deletion preserves non-Skland data", async ({ page }) => {
+  const statusMethods: string[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/skland/status") statusMethods.push(request.method());
+  });
   await mockApis(page, {
     sklandConfigured: true,
     sklandSnapshot: authenticatedSklandSnapshot,
-    sklandAccounts: [{ ...primarySklandAccount, statusAuthorized: false }],
   });
   await seedV4Session(page);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -2239,13 +2238,16 @@ test("Skland status uses separate authorization and deletion preserves non-Sklan
   await page.getByRole("button", { name: "Toggle Sidebar" }).click();
   await page.getByRole("button", { name: "森空岛状态", exact: true }).click();
 
-  await expect(page.getByRole("heading", { name: "单独启用完整状态" })).toBeVisible();
-  await expect(page.getByText("UID 123••••789")).toHaveCount(0);
-  await page.getByRole("button", { name: "启用状态中心" }).click();
   await expect(page.getByText("UID 123••••789")).toBeVisible();
-
-  await page.getByRole("button", { name: "撤回状态中心授权" }).click();
-  await expect(page.getByRole("heading", { name: "单独启用完整状态" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "启用状态中心" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "撤回状态中心授权" })).toHaveCount(0);
+  await expect.poll(() => statusMethods).toEqual(["GET"]);
+  const [postStatus, deleteStatus] = await Promise.all([
+    page.request.post("/api/skland/status"),
+    page.request.delete("/api/skland/status"),
+  ]);
+  expect(postStatus.status()).toBe(405);
+  expect(deleteStatus.status()).toBe(405);
   await page.getByRole("button", { name: "删除全部森空岛数据" }).click();
   const deleteDialog = page.getByRole("dialog", { name: "删除全部森空岛数据？" });
   await expect(deleteDialog).toContainText("MAA 导入与手动布局会保留");
@@ -2313,7 +2315,6 @@ test("Skland status center keeps profile and recruitment in overview and support
       body: JSON.stringify({
         success: true,
         data: {
-          authorized: true,
           accounts: [{
             ...primarySklandAccount,
             selectedUid: currentStatusSnapshot.player.uid,
@@ -2582,7 +2583,6 @@ test("Skland supports adding, switching, and individually logging out multiple a
     selectedUid: secondarySnapshot.player.uid,
     roles: secondarySnapshot.roles,
     credentialExpiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
-    statusAuthorized: true,
   };
   let currentSnapshot = authenticatedSklandSnapshot;
   let currentAccounts = [primarySklandAccount];
@@ -2699,7 +2699,6 @@ test("Skland supports adding, switching, and individually logging out multiple a
     body: JSON.stringify({
       success: true,
       data: {
-        authorized: true,
         accounts: currentAccounts,
         activeAccountId: currentAccountId,
         snapshot: currentSnapshot,

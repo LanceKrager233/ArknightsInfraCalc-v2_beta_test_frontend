@@ -212,14 +212,14 @@ export function SklandLoginPanel({
               </span>
             </p>
             <CardDescription className="w-full text-pretty leading-6">
-              <span className="md:hidden">打开森空岛 App 扫码登录，成功后同步排班所需数据。</span>
+              <span className="md:hidden">打开森空岛 App 扫码登录，成功后同步排班与状态中心数据。</span>
               <span className="hidden md:inline">
-                打开森空岛 App，扫描页面中的二维码完成登录。登录成功后会同步当前角色的干员、基建布局和当前进驻。
+                打开森空岛 App，扫描页面中的二维码完成登录。登录成功后会同步当前角色的干员、基建布局和状态中心完整数据。
               </span>
             </CardDescription>
             <p>
-              <span className="md:hidden">排班同步不会自动签到；状态中心需要另行授权。</span>
-              <span className="hidden md:inline">排班同步不会自动签到或读取社区内容；头像、理智、任务和游戏进度仅在你单独授权状态中心后展示。</span>
+              <span className="md:hidden">不会自动签到；仅展示隐私政策列明的数据。</span>
+              <span className="hidden md:inline">本站不会自动签到或读取社区内容；头像、理智、任务和游戏进度按隐私政策列明的白名单展示。</span>
             </p>
           </div>
         </div>

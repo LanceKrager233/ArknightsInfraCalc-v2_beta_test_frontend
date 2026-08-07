@@ -211,7 +211,6 @@ export interface SklandAccountSummary {
   selectedUid: string;
   roles: SklandRole[];
   credentialExpiresAt: number;
-  statusAuthorized: boolean;
 }
 
 export interface SklandPlayer {
@@ -742,7 +741,6 @@ export type AppErrorCode =
   | "AIC-AUTH-2003"
   | "AIC-AUTH-2004"
   | "AIC-AUTH-2005"
-  | "AIC-AUTH-2006"
   | "AIC-AUTH-2007"
   | "AIC-PLAN-3001"
   | "AIC-PLAN-3002"
@@ -845,7 +843,6 @@ export interface SklandSessionData {
 }
 
 export interface SklandStatusData {
-  authorized: boolean;
   accounts: SklandAccountSummary[];
   activeAccountId: string | null;
   snapshot?: SklandStatusSnapshot;

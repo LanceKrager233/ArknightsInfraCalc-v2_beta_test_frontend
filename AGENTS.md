@@ -85,7 +85,7 @@ UI 控件优先组合 `src/components/ui/*` 中的现有 primitive。不要另�
 - `POST /api/skland/auth/qr/status`
 - `POST /api/skland/sync`
 - `POST /api/skland/role`
-- `GET`、`POST`、`DELETE /api/skland/status`
+- `GET /api/skland/status`
 - `DELETE /api/skland/data`
 
 所有公共响应使用 `ApiSuccess<T> | ApiFailure` 信封并返回 `X-Request-Id`。健康检查的公开就绪字段是 `data.plannerReady`，不是内部 `HealthApiResponse` 的 `ok` / `cliReady`。
@@ -105,7 +105,7 @@ UI 控件优先组合 `src/components/ui/*` 中的现有 primitive。不要另�
 - production 必须强制关闭调试工具并启用限流，不能被`BETA_DEBUG_TOOLS_ENABLED=1`或`BETA_RATE_LIMIT_ENABLED=0`覆盖；dev 可由部署环境集中管理这两个开关，调试入口仍需`?beta`二次门控。
 - `SKLAND_SESSION_SECRET` 必须至少 32 字节且长期稳定。森空岛会话使用 AES-256-GCM 封装在 HttpOnly Cookie 中；凭据不得进入 localStorage、CLI 运行记录、反馈包、console 或公开响应。
 - 非 localhost 的森空岛请求默认要求 HTTPS。`SKLAND_ALLOW_INSECURE_HTTP=1` 仅允许临时、可信的本地或内网测试，绝不能作为生产默认值。
-- 森空岛凭证从扫码成功起固定 7 天到期，刷新 token、读取会话和切换角色都不得续期；完整状态必须按账号独立授权，基础响应只返回排班白名单。
+- 森空岛凭证从扫码成功起固定 7 天到期，刷新 token、读取会话和切换角色都不得续期；用户同意当前条款与隐私政策并登录后，状态中心默认返回完整状态白名单，排班链路仍只使用最小排班字段。
 - 浏览器 v5 持久化可以保存布局、Box、来源标记和经过清理的最近排班，但必须继续剔除 debug、路径、stdout、stderr、请求/响应内部字段和森空岛凭据。
 
 ## 环境变量

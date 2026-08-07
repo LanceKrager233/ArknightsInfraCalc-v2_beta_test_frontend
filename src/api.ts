@@ -113,14 +113,6 @@ export function getSklandStatus(): Promise<SklandStatusData> {
   return requestData("/api/skland/status");
 }
 
-export function authorizeSklandStatus(): Promise<SklandStatusData> {
-  return requestData("/api/skland/status", { method: "POST" });
-}
-
-export function revokeSklandStatus(): Promise<SklandStatusData> {
-  return requestData("/api/skland/status", { method: "DELETE" });
-}
-
 export function pollSklandQr(scanId: string): Promise<SklandQrStatusData> {
   return requestData("/api/skland/auth/qr/status", {
     method: "POST",

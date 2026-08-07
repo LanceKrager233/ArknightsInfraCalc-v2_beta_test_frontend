@@ -14,7 +14,6 @@ import {
   LogOut,
   PackageCheck,
   Search,
-  ShieldCheck,
   Shirt,
   Sparkles,
   Trash2,
@@ -180,8 +179,7 @@ interface SklandStatusProps {
   onAuthenticated: (session: SklandSessionData) => void;
   onRoleChange: (accountId: string, uid: string) => Promise<void>;
   onLogout: () => Promise<void>;
-  onAuthorizeStatus: () => Promise<void>;
-  onRevokeStatus: () => Promise<void>;
+  onRetryStatus: () => void;
   onDeleteAllData: () => Promise<void>;
   onApplyLayout: () => void;
   onContinueSetup: () => void;
@@ -198,15 +196,11 @@ function credentialExpiryLabel(timestamp: number): string {
 
 function SklandDataControls({
   account,
-  authorized,
   busy,
-  onRevokeStatus,
   onDeleteAllData,
 }: {
   account: SklandAccountSummary;
-  authorized: boolean;
   busy: boolean;
-  onRevokeStatus: () => Promise<void>;
   onDeleteAllData: () => Promise<void>;
 }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -214,17 +208,12 @@ function SklandDataControls({
     <>
       <Card data-skland-data-controls>
         <CardHeader>
-          <CardTitle>数据与授权</CardTitle>
+          <CardTitle>数据管理</CardTitle>
           <CardDescription data-ui-number-font>
             登录凭证将在 {credentialExpiryLabel(account.credentialExpiresAt)} 固定过期，刷新页面不会延长保存期。
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          {authorized ? (
-            <Button type="button" variant="outline" disabled={busy} onClick={() => void onRevokeStatus()}>
-              撤回状态中心授权
-            </Button>
-          ) : null}
           <Button
             type="button"
             variant="destructive"
@@ -242,7 +231,7 @@ function SklandDataControls({
           <DialogHeader>
             <DialogTitle>删除全部森空岛数据？</DialogTitle>
             <DialogDescription>
-              将永久删除此浏览器中的全部森空岛账号、登录凭证、状态授权、同步数据、森空岛排班结果，以及服务端可关联的运行记录和反馈。MAA 导入与手动布局会保留；森空岛官方账号不会被删除。
+              将永久删除此浏览器中的全部森空岛账号、登录凭证、同步数据、森空岛排班结果，以及服务端可关联的运行记录和反馈。MAA 导入与手动布局会保留；森空岛官方账号不会被删除。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -1410,8 +1399,7 @@ export function SklandStatus({
   onAuthenticated,
   onRoleChange,
   onLogout,
-  onAuthorizeStatus,
-  onRevokeStatus,
+  onRetryStatus,
   onDeleteAllData,
   onApplyLayout,
   onContinueSetup,
@@ -1447,32 +1435,26 @@ export function SklandStatus({
   const activeRole = activeAccount?.roles.find((role) => role.uid === activeAccount.selectedUid) ?? activeAccount?.roles[0] ?? null;
 
   if (!snapshot && activeAccount) {
+    if (!error) return <LoadingState />;
     return (
-      <div className="grid gap-6 py-2 sm:py-5" data-skland-status-consent>
+      <div className="grid gap-6 py-2 sm:py-5" data-skland-status-load-error>
         <header className="max-w-2xl">
           <p className="text-xs font-medium tracking-wide text-primary">森空岛状态中心</p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight">单独启用完整状态</h2>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight">完整状态暂时无法加载</h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            当前已登录{activeRole ? `“${activeRole.nickname}”` : "森空岛"}，排班同步可以继续使用。状态中心是可选功能。
+            当前已登录{activeRole ? `“${activeRole.nickname}”` : "森空岛"}。你可以重新加载，或退出当前账号后重新扫码。
           </p>
         </header>
-        {error ? (
-          <Alert variant="destructive"><AlertDescription>{error.message}（{error.code}）</AlertDescription></Alert>
-        ) : null}
+        <Alert variant="destructive"><AlertDescription>{error.message}（{error.code}）</AlertDescription></Alert>
         <Card>
           <CardHeader>
-            <div className="mb-2 flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <ShieldCheck className="size-5" />
-            </div>
-            <CardTitle>允许读取状态中心附加数据？</CardTitle>
+            <CardTitle>重新加载状态中心</CardTitle>
             <CardDescription className="max-w-2xl leading-6">
-              启用后会读取并展示头像、UID、等级、理智、任务、公招、皮肤、训练、线索、活动和游戏进度。森空岛玩家接口会返回组合数据；未启用时，排班之外的字段会在服务端映射后立即丢弃。
+              登录后会按隐私政策列明的范围读取并展示完整状态；完整快照只保留在当前页面内存中。
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
-            <Button type="button" disabled={busy} onClick={() => void onAuthorizeStatus()}>
-              <ShieldCheck />启用状态中心
-            </Button>
+            <Button type="button" disabled={busy} onClick={onRetryStatus}>重新加载状态中心</Button>
             <Button type="button" variant="outline" disabled={busy} onClick={() => void onLogout()}>
               <LogOut />退出当前账号
             </Button>
@@ -1480,9 +1462,7 @@ export function SklandStatus({
         </Card>
         <SklandDataControls
           account={activeAccount}
-          authorized={false}
           busy={busy}
-          onRevokeStatus={onRevokeStatus}
           onDeleteAllData={onDeleteAllData}
         />
       </div>
@@ -1689,9 +1669,7 @@ export function SklandStatus({
 
       <SklandDataControls
         account={activeAccount}
-        authorized
         busy={busy}
-        onRevokeStatus={onRevokeStatus}
         onDeleteAllData={onDeleteAllData}
       />
     </div>
