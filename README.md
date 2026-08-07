@@ -21,6 +21,8 @@ http://127.0.0.1:5174
 
 ```powershell
 npm run check
+npm run audit:security
+npm run test:deploy
 npm run build
 npm run test:production-client
 npm run test:e2e
@@ -112,7 +114,7 @@ chmod +x bin/infra-cli
 | `main` | `production` | 线上站点 | 强制关闭 |
 | `develop` | `development` | dev 站点 | 开启，可由环境变量主动关闭 |
 
-推送到两个分支都会先执行`Frontend quality`。只有 push 门禁成功后，`Deploy verified branch`才会发布该次通过验证的 SHA；PR 检查不会触发部署。工作流优先调用服务器上固定的`scripts/prepare-release.sh`副本，从共享 Git 缓存增量取得对象并在服务器本地生成只包含 Git 跟踪内容的发布包。只有 helper 以状态码`75`报告临时 GitHub 网络、缓存或锁故障时，才退回原有的完整 SCP 上传；SHA、tree、路径或脚本哈希错误会直接终止。`scripts/deploy-release.sh`继续负责独立 release 目录、原子切换`current`软链、内部/公网健康检查和失败回滚。
+推送到两个分支都会先执行`Frontend quality`。只有 push 门禁成功后，`Deploy verified branch`才会发布该次通过验证的 SHA；PR 检查不会触发部署。工作流优先调用服务器上固定的`scripts/prepare-release.sh`副本，从共享 Git 缓存增量取得对象并在服务器本地生成只包含 Git 跟踪内容的发布包。只有 helper 以状态码`75`报告临时 GitHub 网络、缓存或锁故障时，才退回原有的完整 SCP 上传；SHA、tree、路径或脚本哈希错误会直接终止。`scripts/deploy-release.sh`负责独立 release 目录、原子切换`current`软链、内部/公网健康检查和失败回滚；它在构建前及成功后都只清理经过严格校验的旧 release，每个环境保留当前版本和两个回滚版本，并在清理后可用空间不足 3 GiB 时于创建新 release 前失败。失败构建的本次目录会自动移除，`shared`和`/var/lib`持久化数据不参与清理。
 
 需要在 GitHub 仓库创建`production`与`development`两个 Environment，并在每个 Environment 中配置同名、不同值的项目：
 
@@ -139,7 +141,7 @@ Variables：
 
 当前两个站点都通过 Tailscale Funnel 提供公网 HTTPS：production 为`https://instance-pi2ohhfj.tail2dca9.ts.net:8443`并转发到回环 Nginx `127.0.0.1:4174`，dev 为`https://instance-pi2ohhfj.tail2dca9.ts.net`并转发到`127.0.0.1:4274`；两个 Next 内部端口`127.0.0.1:4175`和`127.0.0.1:4275`也不直接开放公网。服务器 80 端口只将请求`308`重定向到 production HTTPS。两个 GitHub Environment 的`DEPLOY_PUBLIC_HEALTH_URL`必须分别使用对应 HTTPS 地址，`shared/.env.local`中的公开 Origin 也必须与各自入口一致并保持`SKLAND_ALLOW_INSECURE_HTTP=0`。使用`tailscale funnel status`检查公网转发；Funnel 不可用时不要回退到明文公网端口，可临时使用 SSH 隧道做只读诊断。
 
-Actions 使用独立`arkdeploy`密钥，并且 sudo 仅允许调用服务器上 root 所有的`/usr/local/sbin/arknights-infra-deploy`。增量 helper 不使用 sudo；两个固定脚本都会校验自身与已验证提交中脚本的 SHA-256，不匹配时拒绝发布，现有 root SSH 私钥不会进入 GitHub。Git 缓存只保存公开仓库对象和两个环境 ref，不保存 Environment Secrets、应用配置或用户数据。
+Actions 使用独立`arkdeploy`密钥，并且 sudo 仅允许调用服务器上 root 所有的`/usr/local/sbin/arknights-infra-deploy`。增量 helper 不使用 sudo；两个固定脚本都会校验自身与已验证提交中脚本的 SHA-256，不匹配时拒绝发布，现有 root SSH 私钥不会进入 GitHub。固定脚本发生变更时，先让对应提交通过完整质量门禁，再以`root:root 0755`和原子替换方式安装，并在批准或触发部署前复核服务器文件与提交中的 SHA-256。Git 缓存只保存公开仓库对象和两个环境 ref，不保存 Environment Secrets、应用配置或用户数据。
 
 ## 手动运行
 
