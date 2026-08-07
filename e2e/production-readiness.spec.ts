@@ -28,6 +28,23 @@ async function expectUnifiedDialogAction(
   await expect(button).toHaveCSS("font-size", "13px");
 }
 
+async function expectButtonGeometryStable(button: Locator) {
+  await expect(button).toBeVisible();
+  await expect.poll(() => button.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return {
+      hasSize: rect.width > 1 && rect.height > 1,
+      inlineTransform: (element as HTMLElement).style.transform,
+      collapsedTransform: style.transform === "matrix(0, 0, 0, 0, 0, 0)",
+    };
+  })).toEqual({
+    hasSize: true,
+    inlineTransform: "",
+    collapsedTransform: false,
+  });
+}
+
 async function armEndingTransitionCapture(element: Locator, label: string) {
   await element.evaluate((node, captureLabel) => {
     const attribute = `data-motion-exit-${captureLabel}`;
@@ -1280,6 +1297,32 @@ test("dialog and mobile sheet motion preserve direction, exit timing, and focus"
   await expectCapturedExitDuration(page, "sidebar", 220);
   await expect(sheet).toHaveCount(0);
   await expect(sidebarTrigger).toBeFocused();
+});
+
+test("shared action buttons keep their geometry after WebKit interactions", async ({ page }) => {
+  await mockApis(page);
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  const setupTrigger = page.getByRole("button", { name: "配置Box与布局" }).first();
+  await setupTrigger.click();
+  const setupDialog = page.getByRole("dialog");
+  await expect(setupDialog).toBeVisible();
+  await setupDialog.getByRole("button", { name: "Close" }).click();
+  await expect(setupDialog).toHaveCount(0);
+  await expect(setupTrigger).toBeFocused();
+  await expectButtonGeometryStable(setupTrigger);
+
+  const importButton = page.getByRole("button", { name: "全角色导入" });
+  await importButton.click();
+  await expectButtonGeometryStable(importButton);
+
+  const planButton = page.getByRole("button", { name: "生成排班" });
+  await expect(planButton).toBeEnabled();
+  await planButton.click();
+  await expect(page.getByText("排班已生成")).toBeVisible();
+  await expectButtonGeometryStable(planButton);
 });
 
 test("tooltips wait once and then open adjacent help instantly within the provider window", async ({ page }) => {
