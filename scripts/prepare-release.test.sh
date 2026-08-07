@@ -213,9 +213,10 @@ set -e
 test "$unavailable_status" -eq 75
 
 grep -Fq 'elif ! is_temporary_failure "$prepare_status"' "$repository_root/.github/workflows/deploy.yml"
-grep -Fq 'git bundle create "$local_bundle" HEAD "^$DEPLOY_PREVIOUS_SHA"' "$repository_root/.github/workflows/deploy.yml"
+grep -Fq 'bundle_base_source="server-cache"' "$repository_root/.github/workflows/deploy.yml"
+grep -Fq 'git bundle create "$local_bundle" HEAD "^$bundle_base_sha"' "$repository_root/.github/workflows/deploy.yml"
 grep -Fq 'transport_mode="git-bundle"' "$repository_root/.github/workflows/deploy.yml"
-grep -Fq 'timeout --kill-after=10s 300s scp' "$repository_root/.github/workflows/deploy.yml"
+grep -Fq 'timeout --kill-after=10s 1500s scp' "$repository_root/.github/workflows/deploy.yml"
 grep -Fq 'fetch-depth: 0' "$repository_root/.github/workflows/deploy.yml"
 
 echo "Release preparation integration tests passed."

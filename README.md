@@ -114,7 +114,7 @@ chmod +x bin/infra-cli
 | `main` | `production` | 线上站点 | 强制关闭 |
 | `develop` | `development` | dev 站点 | 开启，可由环境变量主动关闭 |
 
-推送到两个分支都会先执行`Frontend quality`。只有 push 门禁成功后，`Deploy verified branch`才会发布该次通过验证的 SHA；PR 检查不会触发部署。工作流优先调用服务器上固定的`scripts/prepare-release.sh`副本，从共享 Git 缓存增量取得对象并在服务器本地生成只包含 Git 跟踪内容的发布包。helper 以状态码`75`报告临时 GitHub 网络、缓存或锁故障时，Runner 会先上传相对上一次 push SHA 的增量 Git bundle；服务器严格校验 bundle 的路径、所有者、HEAD、前置对象、commit tree 和完整对象图后导入缓存。只有 bundle 基线不可用、传输失败或缓存缺少前置对象时才退回完整 SCP；SHA、tree、路径或脚本哈希错误会直接终止。`scripts/deploy-release.sh`负责独立 release 目录、原子切换`current`软链、内部/公网健康检查和失败回滚；它在构建前及成功后都只清理经过严格校验的旧 release，每个环境保留当前版本和两个回滚版本，并在清理后可用空间不足 3 GiB 时于创建新 release 前失败。失败构建的本次目录会自动移除，`shared`和`/var/lib`持久化数据不参与清理。
+推送到两个分支都会先执行`Frontend quality`。只有 push 门禁成功后，`Deploy verified branch`才会发布该次通过验证的 SHA；PR 检查不会触发部署。工作流优先调用服务器上固定的`scripts/prepare-release.sh`副本，从共享 Git 缓存增量取得对象并在服务器本地生成只包含 Git 跟踪内容的发布包。helper 以状态码`75`报告临时 GitHub 网络、缓存或锁故障时，Runner 会读取该环境的服务器缓存 ref，并优先上传从该 ref 到已验证 SHA 的增量 Git bundle；缓存 ref 不可用时才尝试上一次 push SHA。服务器严格校验 bundle 的路径、所有者、HEAD、前置对象、commit tree 和完整对象图后导入缓存。只有 bundle 基线不可用、传输失败或缓存缺少前置对象时才退回完整 SCP；SHA、tree、路径或脚本哈希错误会直接终止。`scripts/deploy-release.sh`负责独立 release 目录、原子切换`current`软链、内部/公网健康检查和失败回滚；它在构建前及成功后都只清理经过严格校验的旧 release，每个环境保留当前版本和两个回滚版本，并在清理后可用空间不足 3 GiB 时于创建新 release 前失败。失败构建的本次目录会自动移除，`shared`和`/var/lib`持久化数据不参与清理。
 
 需要在 GitHub 仓库创建`production`与`development`两个 Environment，并在每个 Environment 中配置同名、不同值的项目：
 

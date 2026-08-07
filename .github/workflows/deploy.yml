@@ -123,6 +123,7 @@ jobs:
 
           transport_mode="git-cache"
           fallback_reason="none"
+          bundle_base_source="not-needed"
           transfer_bytes=0
           release_prepared=0
           if [[ "$prepare_status" -eq 0 ]]; then
@@ -136,10 +137,27 @@ jobs:
 
           if [[ "$release_prepared" -eq 0 ]]; then
             bundle_ready=0
-            if [[ "$DEPLOY_PREVIOUS_SHA" != "0000000000000000000000000000000000000000" ]] \
+            bundle_base_sha=""
+            bundle_base_source="none"
+            remote_cache_base="$(timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
+              "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
+              "git --git-dir=/var/cache/arknights-infra-deploy/repository.git rev-parse 'refs/arknights-infra/environments/$DEPLOYMENT_ENV'" \
+              2>/dev/null || true)"
+            if [[ "$remote_cache_base" =~ ^[0-9a-f]{40}$ ]] \
+              && [[ "$remote_cache_base" != "$DEPLOY_SHA" ]] \
+              && git cat-file -e "${remote_cache_base}^{commit}" \
+              && git merge-base --is-ancestor "$remote_cache_base" HEAD; then
+              bundle_base_sha="$remote_cache_base"
+              bundle_base_source="server-cache"
+            elif [[ "$DEPLOY_PREVIOUS_SHA" != "0000000000000000000000000000000000000000" ]] \
               && git cat-file -e "${DEPLOY_PREVIOUS_SHA}^{commit}" \
               && git merge-base --is-ancestor "$DEPLOY_PREVIOUS_SHA" HEAD; then
-              if git bundle create "$local_bundle" HEAD "^$DEPLOY_PREVIOUS_SHA"; then
+              bundle_base_sha="$DEPLOY_PREVIOUS_SHA"
+              bundle_base_source="previous-push"
+            fi
+
+            if [[ -n "$bundle_base_sha" ]]; then
+              if git bundle create "$local_bundle" HEAD "^$bundle_base_sha"; then
                 bundle_ready=1
               else
                 fallback_reason="incremental-bundle-create-failed"
@@ -151,7 +169,7 @@ jobs:
             if [[ "$bundle_ready" -eq 1 ]]; then
               bundle_bytes="$(stat -c '%s' "$local_bundle")"
               set +e
-              timeout --kill-after=10s 300s scp "${ssh_options[@]}" \
+              timeout --kill-after=10s 1500s scp "${ssh_options[@]}" \
                 "$local_bundle" \
                 "${DEPLOY_SSH_USER}@${DEPLOY_HOST}:$remote_bundle"
               bundle_transfer_status=$?
@@ -198,9 +216,9 @@ jobs:
           {
             echo "### Release transport"
             echo
-            echo "| Environment | SHA | Mode | Seconds | Transferred bytes | Archive bytes | Fallback reason |"
-            echo "| --- | --- | --- | ---: | ---: | ---: | --- |"
-            echo "| $DEPLOYMENT_ENV | \`${DEPLOY_SHA:0:12}\` | $transport_mode | $prepare_elapsed_seconds | $transfer_bytes | $archive_bytes | $fallback_reason |"
+            echo "| Environment | SHA | Mode | Bundle base | Seconds | Transferred bytes | Archive bytes | Fallback reason |"
+            echo "| --- | --- | --- | --- | ---: | ---: | ---: | --- |"
+            echo "| $DEPLOYMENT_ENV | \`${DEPLOY_SHA:0:12}\` | $transport_mode | $bundle_base_source | $prepare_elapsed_seconds | $transfer_bytes | $archive_bytes | $fallback_reason |"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Deploy and verify
