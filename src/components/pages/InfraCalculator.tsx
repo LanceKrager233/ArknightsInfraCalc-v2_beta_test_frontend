@@ -1,6 +1,7 @@
 "use client";
 
 import { Download, FileJson, FlaskConical, Loader2, Settings2, Terminal } from "lucide-react";
+import { AnimatePresence } from "motion/react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -132,14 +133,27 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               </div>
             )}
           >
-            <PlanTelemetry
-              key={scheduleResult?.diagnosticId ?? "no-plan"}
-              profile={scheduleResult?.profile}
-              rotation={scheduleResult?.rotation}
-              layout={layout}
-              activeShift={activeShift}
-            />
-            <ShiftComparisonCard comparison={closestComparison} />
+            <AnimatePresence initial={false} mode="wait">
+              {scheduleResult ? (
+                <PlanTelemetry
+                  key={scheduleResult.diagnosticId}
+                  profile={scheduleResult.profile}
+                  rotation={scheduleResult.rotation}
+                  layout={layout}
+                  activeShift={activeShift}
+                  planRevision={scheduleResult.diagnosticId}
+                />
+              ) : null}
+            </AnimatePresence>
+            <AnimatePresence initial={false} mode="wait">
+              {closestComparison ? (
+                <ShiftComparisonCard
+                  key={scheduleResult?.diagnosticId ?? "comparison"}
+                  comparison={closestComparison}
+                  planRevision={scheduleResult?.diagnosticId}
+                />
+              ) : null}
+            </AnimatePresence>
             <ScheduleBoard
               rows={rows}
               layout={layout}

@@ -16,9 +16,11 @@ import {
   Smile,
   Upload,
 } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { CSSProperties, ChangeEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { ThinkingOrb } from "thinking-orbs";
 
+import { AnimatedNumber, AnimatedText } from "@/components/AnimatedText";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Accordion, AccordionItem, AccordionPanel, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
@@ -47,6 +49,12 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 import { operatorProfessionPresentation } from "@/operatorPortraits";
 import { roomVisualFor } from "@/room-visuals";
+import {
+  MOTION_DURATION,
+  MOTION_EASE_IN_OUT,
+  MOTION_EASE_OUT,
+  type ShiftDirection,
+} from "@/motion";
 
 export { roomVisualFor } from "@/room-visuals";
 
@@ -106,7 +114,7 @@ import {
 
 type Option<T extends string> = {
   value: T;
-  label: string;
+  label: ReactNode;
 };
 
 export function ProductToggleGroup<T extends string>({
@@ -241,7 +249,7 @@ export function FileDrop({
   }
 
   return (
-    <Label className="motion-press flex min-h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-[4px] border border-dashed bg-background px-4 py-5 text-center transition-[color,background-color,border-color,scale] duration-[var(--motion-duration-press)] ease-[var(--motion-ease-out)] active:scale-[0.97] hover:border-primary/40 hover:bg-muted/40">
+    <Label pressable className="flex min-h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-[4px] border border-dashed bg-background px-4 py-5 text-center transition-[color,background-color,border-color] duration-[var(--motion-duration-state)] ease-[var(--motion-ease-out)] hover:border-primary/40 hover:bg-muted/40">
       <Upload className="size-5 text-primary" />
       <span className="font-medium text-foreground">{fileName ?? "上传练度 JSON / XLSX"}</span>
       <span className="text-xs text-muted-foreground">
@@ -278,7 +286,7 @@ export function PresetSelector({
           value={preset.label}
           variant="outline"
           className={cn(
-            "infra-preset-surface motion-press group/preset relative isolate h-auto min-h-18 justify-between overflow-hidden rounded-none border border-white/10 bg-[#272A2B] px-3 py-3 text-left text-white transition-[background-color,border-color,scale] duration-[var(--motion-duration-press)] ease-[var(--motion-ease-out)] hover:border-white/22 hover:bg-[#303435] hover:text-white active:scale-[0.97]",
+            "infra-preset-surface group/preset relative isolate h-auto min-h-18 justify-between overflow-hidden rounded-none border border-white/10 bg-[#272A2B] px-3 py-3 text-left text-white transition-[background-color,border-color] duration-[var(--motion-duration-state)] ease-[var(--motion-ease-out)] hover:border-white/22 hover:bg-[#303435] hover:text-white",
             selected.label === preset.label && "border-[#FFD800]/72 bg-[#303027] text-white hover:border-[#FFD800]/82 hover:bg-[#343329] hover:text-white"
           )}
         >
@@ -629,26 +637,33 @@ export function StatusBar({
       role={error ? "alert" : "status"}
       aria-live={error ? "assertive" : "polite"}
     >
-      <span
-        key={content.state}
-        className="plan-status-content flex min-w-0 flex-1 items-center gap-2"
-        data-slot="status-content"
-      >
-        <span className="flex size-5 shrink-0 items-center justify-center" aria-hidden="true">
-          {content.icon}
-        </span>
-        <span
-          className={cn(
-            "min-w-0 flex-1 truncate",
-            !error && "tabular-nums",
-            loading && "plan-status-shimmer"
-          )}
-          data-slot="status-text"
-          data-text={loading ? content.text : undefined}
+      <AnimatePresence initial={false} mode="wait">
+        <motion.span
+          key={content.state}
+          className="flex min-w-0 flex-1 items-center gap-2"
+          data-slot="status-content"
+          initial={{ opacity: 0, transform: "scale(0.98)" }}
+          animate={{ opacity: 1, transform: "scale(1)" }}
+          exit={{ opacity: 0, transform: "scale(0.98)" }}
+          transition={{ duration: MOTION_DURATION.feedback, ease: MOTION_EASE_OUT }}
+          style={{ transformOrigin: "left center" }}
         >
-          {content.text}
-        </span>
-      </span>
+          <span className="flex size-5 shrink-0 items-center justify-center" aria-hidden="true">
+            {content.icon}
+          </span>
+          <span
+            className={cn(
+              "min-w-0 flex-1 truncate",
+              !error && "tabular-nums",
+              loading && "plan-status-shimmer"
+            )}
+            data-slot="status-text"
+            data-text={loading ? content.text : undefined}
+          >
+            {content.text}
+          </span>
+        </motion.span>
+      </AnimatePresence>
       {error ? (
         <span className="flex shrink-0 items-center gap-1">
           {error.retryable ? (
@@ -755,12 +770,15 @@ export function PlanTelemetry({
   rotation,
   layout,
   activeShift,
+  planRevision,
 }: {
   profile?: UserProfile;
   rotation?: RotationJson;
   layout: BaseBlueprint;
   activeShift: number;
+  planRevision?: string;
 }) {
+  const shouldReduceMotion = useReducedMotion();
   if (!profile && !rotation) return null;
 
   const active = rotation?.shifts?.[activeShift];
@@ -803,7 +821,32 @@ export function PlanTelemetry({
   const domains = profile?.domains ?? [];
 
   return (
-    <section className="plan-result-summary mb-4 overflow-hidden border-y border-[#313131]/15 bg-[#F3F1EA]" aria-label="效率概览" data-plan-summary>
+    <motion.section
+      className="mb-4 overflow-hidden border-y border-[#313131]/15 bg-[#F3F1EA]"
+      aria-label="效率概览"
+      data-plan-summary
+      data-plan-revision={planRevision}
+      initial={{
+        opacity: 0,
+        transform: shouldReduceMotion ? "none" : "translate3d(0, 10px, 0)",
+        clipPath: shouldReduceMotion ? "none" : "inset(0 0 5% 0)",
+      }}
+      animate={{
+        opacity: 1,
+        transform: "none",
+        clipPath: shouldReduceMotion ? "none" : "inset(0 0 0 0)",
+      }}
+      exit={{
+        opacity: 0,
+        transform: shouldReduceMotion ? "none" : "translate3d(0, -4px, 0)",
+        clipPath: "none",
+      }}
+      transition={{
+        duration: shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.emphasis,
+        delay: shouldReduceMotion ? 0 : 0.06,
+        ease: MOTION_EASE_OUT,
+      }}
+    >
       <div className="grid grid-cols-[auto_1fr] items-stretch max-md:grid-cols-1">
         <div className="flex min-w-36 flex-col justify-center bg-[#313131] px-4 py-3 text-white">
           <span className="text-xs font-semibold uppercase tracking-[0.12em] text-white/55">效率概览</span>
@@ -826,15 +869,24 @@ export function PlanTelemetry({
               ? relativeMetricDelta(metric.value, metric.baseline)
               : undefined;
             return (
-              <div
+              <motion.div
                 key={metric.label}
                 className="px-4 py-3"
                 data-plan-metric
-                style={{ "--motion-index": metricIndex } as CSSProperties}
+                initial={{
+                  opacity: 0,
+                  transform: shouldReduceMotion ? "none" : "translate3d(0, 4px, 0)",
+                }}
+                animate={{ opacity: 1, transform: "none" }}
+                transition={{
+                  duration: shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.content,
+                  delay: shouldReduceMotion ? 0 : 0.06 + metricIndex * 0.045,
+                  ease: MOTION_EASE_OUT,
+                }}
               >
                 <span className="font-number block text-xs text-[#313131]/58">{metric.label}</span>
                 <strong className="font-technical mt-0.5 block text-lg font-semibold tabular-nums tracking-[0.01em] text-[#313131]">
-                  {compactNumber(value, displayDigits)}{metric.suffix}
+                  <AnimatedNumber value={`${compactNumber(value, displayDigits)}${metric.suffix}`} />
                 </strong>
                 <span className="mt-0.5 block whitespace-nowrap text-[10px] tabular-nums text-[#313131]/52">
                   参考 {baseline === undefined ? "—" : `${compactNumber(baseline, displayDigits)}${metric.suffix}`}
@@ -844,23 +896,34 @@ export function PlanTelemetry({
                     </span>
                   )}
                 </span>
-              </div>
+              </motion.div>
             );
           })}
           {active ? (
-            <div
+            <motion.div
               className="px-4 py-3"
               data-plan-metric
-              style={{ "--motion-index": dailyMetrics.length } as CSSProperties}
+              initial={{
+                opacity: 0,
+                transform: shouldReduceMotion ? "none" : "translate3d(0, 4px, 0)",
+              }}
+              animate={{ opacity: 1, transform: "none" }}
+              transition={{
+                duration: shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.content,
+                delay: shouldReduceMotion ? 0 : 0.06 + dailyMetrics.length * 0.045,
+                ease: MOTION_EASE_OUT,
+              }}
             >
               <span className="block text-xs text-[#313131]/58">当前班次</span>
               <strong className="font-technical mt-0.5 block text-lg font-semibold tabular-nums tracking-[0.01em] text-[#313131]">
-                {compactNumber(active.duration_hours)}h
+                <AnimatedNumber value={`${compactNumber(active.duration_hours)}h`} />
               </strong>
               {activeTeamSummary ? (
-                <span className="mt-0.5 block whitespace-nowrap text-[10px] text-[#313131]/52">{activeTeamSummary}</span>
+                <span className="mt-0.5 block whitespace-nowrap text-[10px] text-[#313131]/52">
+                  <AnimatedText value={activeTeamSummary} />
+                </span>
               ) : null}
-            </div>
+            </motion.div>
           ) : null}
         </div>
       </div>
@@ -928,7 +991,7 @@ export function PlanTelemetry({
           </div>
         </details>
       ) : null}
-    </section>
+    </motion.section>
   );
 }
 
@@ -980,15 +1043,19 @@ export function RoomEfficiencyReadout({ value, details = true }: { value: RoomEf
   return (
     <div className="min-w-0" title={value.details.map((detail) => `${detail.label} ${detail.value}`).join(" · ")}>
       <div className="flex min-w-0 items-center gap-1.5">
-        <strong className="infra-room-value font-technical shrink-0 text-base font-semibold tabular-nums tracking-[0.01em] text-[var(--room-accent)] max-sm:text-xs">{value.primaryValue}</strong>
-        <span className="truncate text-xs font-medium text-white/68">{value.primaryLabel}</span>
+        <strong className="infra-room-value font-technical shrink-0 text-base font-semibold tabular-nums tracking-[0.01em] text-[var(--room-accent)] max-sm:text-xs">
+          <AnimatedText value={value.primaryValue} />
+        </strong>
+        <span className="truncate text-xs font-medium text-white/68">
+          <AnimatedText value={value.primaryLabel} />
+        </span>
         {value.includesCrossStation ? <span className="shrink-0 bg-white/12 px-1 text-xs font-normal text-white/82">含跨设施</span> : null}
       </div>
       {details && value.details.length ? (
         <div className="font-technical mt-1 flex max-h-9 flex-wrap gap-x-2 gap-y-0.5 overflow-hidden text-xs leading-4 tracking-[0.01em] text-white/60 max-sm:max-h-none">
           {value.details.map((detail) => (
-            <span key={`${detail.label}-${detail.value}`} className={detail.kind === "cross-station" ? "font-semibold text-[#C8F75A]" : undefined}>
-              {detail.label} <span className="font-number">{detail.value}</span>
+            <span key={`${detail.kind}-${detail.label}`} className={detail.kind === "cross-station" ? "font-semibold text-[#C8F75A]" : undefined}>
+              {detail.label} <span className="font-number"><AnimatedText value={detail.value} /></span>
             </span>
           ))}
         </div>
@@ -1016,13 +1083,13 @@ function RoomEfficiencyDetails({
     >
       {value.details.map((detail) => (
         <span
-          key={`${detail.label}-${detail.value}`}
+          key={`${detail.kind}-${detail.label}`}
           className={cn(
             "whitespace-nowrap",
             detail.kind === "cross-station" && "font-semibold text-[#C8F75A]"
           )}
         >
-          {detail.label} <span className="font-number">{detail.value}</span>
+          {detail.label} <span className="font-number"><AnimatedText value={detail.value} /></span>
         </span>
       ))}
     </div>
@@ -1105,7 +1172,7 @@ function OperatorSlotShell({
   compactView: boolean;
   frameClassName: string;
   frameContent?: ReactNode;
-  label: string;
+  label: ReactNode;
   labelClassName: string;
   title?: string;
 }) {
@@ -1192,6 +1259,8 @@ export function OperatorSlot({
   compactFactory = false,
   compactView = false,
   centerFrameInList = false,
+  shiftDirection = 0,
+  transitionDelay = 0,
 }: {
   slot: RoomRow["operatorSlots"][number] | undefined;
   currentMorale?: number;
@@ -1199,92 +1268,110 @@ export function OperatorSlot({
   compactFactory?: boolean;
   compactView?: boolean;
   centerFrameInList?: boolean;
+  shiftDirection?: ShiftDirection;
+  transitionDelay?: number;
 }) {
-  if (!slot) {
-    if (autofill) {
-      return (
-        <OperatorSlotShell
-          ariaLabel="自动补位"
-          centerFrameInList={centerFrameInList}
-          compactFactory={compactFactory}
-          compactView={compactView}
-          frameClassName="border-[#666] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.08)]"
-          frameContent={
-            <span className="flex h-full items-center justify-center text-xs font-semibold tracking-[0.14em] text-white/55">
-              AUTO
-            </span>
-          }
-          label="自动补位"
-          labelClassName="text-white/55"
-        />
-      );
-    }
+  const shouldReduceMotion = useReducedMotion();
+  const identity = slot?.name ?? (autofill ? "autofill" : "empty");
+  const profession = slot ? operatorProfessionPresentation(slot.name) : null;
+  const enterTransform = shouldReduceMotion || shiftDirection === 0
+    ? "none"
+    : `translate3d(${shiftDirection * 6}px, 0, 0)`;
+  const exitTransform = shouldReduceMotion || shiftDirection === 0
+    ? "none"
+    : `translate3d(${shiftDirection * -4}px, 0, 0)`;
+  const ariaLabel = slot?.name ?? (autofill ? "自动补位" : "空置");
+  const frameClassName = slot
+    ? "border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)]"
+    : autofill
+      ? "border-[#666] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.08)]"
+      : "border-[#4B4B4B] bg-[#3C3C3C]";
 
-    return (
-      <OperatorSlotShell
-        ariaLabel="空置"
-        centerFrameInList={centerFrameInList}
-        compactFactory={compactFactory}
-        compactView={compactView}
-        frameClassName="border-[#4B4B4B] bg-[#3C3C3C] after:absolute after:left-1/2 after:top-1/2 after:h-0.5 after:w-[78%] after:origin-center after:-translate-x-1/2 after:-translate-y-1/2 after:rotate-[-45deg] after:bg-[#4B4B4B] after:content-['']"
-        label="占"
-        labelClassName="text-transparent select-none"
-      />
-    );
-  }
-
-  const profession = operatorProfessionPresentation(slot.name);
   return (
     <OperatorSlotShell
+      ariaLabel={ariaLabel}
       centerFrameInList={centerFrameInList}
       compactFactory={compactFactory}
       compactView={compactView}
-      frameClassName="border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)]"
+      frameClassName={frameClassName}
       frameContent={
-        <>
-          {slot.portrait ? (
-            <>
-              <img src={slot.portrait} alt={slot.name} className="absolute inset-0 h-full w-full object-cover outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10" />
-              {profession ? (
-                <img
-                  src={profession.icon}
-                  alt={`职业：${profession.label}`}
-                  title={`职业：${profession.label}`}
-                  className="absolute left-0 top-0 z-10 h-[25%] w-auto"
-                />
-              ) : null}
-            </>
-          ) : (
-            <div className="flex h-full items-center justify-center bg-[#4B4B4B] px-2 text-center text-xs font-semibold text-white">
-              {slot.name}
-            </div>
-          )}
-          {slot.buildingSkill ? (
-            <BuildingSkillBadge skill={slot.buildingSkill} />
-          ) : typeof slot.skill === "number" ? (
-            <span
-              className="absolute right-0 top-0 z-10 flex size-9 items-center justify-center border-b border-l border-white/22 bg-black/76 text-xs font-semibold text-white"
-              aria-label={`基建技能 S${slot.skill}，暂无技能资料`}
-            >
-              S<span className="font-number">{slot.skill}</span>
-            </span>
-          ) : null}
-          {typeof currentMorale === "number" ? (
-          <span
-            className="absolute bottom-0.5 left-0.5 flex items-center gap-0.5 whitespace-nowrap rounded-sm bg-black/72 px-1 py-0.5 text-xs font-normal leading-none text-white shadow-[0_1px_3px_rgba(0,0,0,0.5)] [&_svg]:size-2.5 max-sm:bottom-0.5 max-sm:left-0.5 max-sm:px-0.5 max-sm:[&_svg]:size-2.5"
-            aria-label={`当前心情 ${currentMorale}/24`}
-            title={`当前心情 ${currentMorale}/24`}
+        <AnimatePresence initial={false} mode="sync">
+          <motion.div
+            key={identity}
+            className="absolute inset-0"
+            data-operator-identity={identity}
+            initial={{ opacity: 0, transform: enterTransform }}
+            animate={{ opacity: 1, transform: "none" }}
+            exit={{
+              opacity: 0,
+              transform: exitTransform,
+              pointerEvents: "none",
+              transition: {
+                duration: MOTION_DURATION.fast,
+                ease: MOTION_EASE_OUT,
+              },
+            }}
+            transition={{
+              duration: shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.state,
+              delay: shouldReduceMotion ? 0 : transitionDelay,
+              ease: MOTION_EASE_OUT,
+            }}
           >
-            <Smile className="text-[#FFD501]" />
-            <span className="max-sm:hidden">当前</span>
-            <span className="font-number">{currentMorale}</span>
-          </span>
-          ) : null}
-        </>
+            {slot ? (
+              <>
+                {slot.portrait ? (
+                  <>
+                    <img src={slot.portrait} alt={slot.name} className="absolute inset-0 h-full w-full object-cover outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10" />
+                    {profession ? (
+                      <img
+                        src={profession.icon}
+                        alt=""
+                        aria-hidden="true"
+                        title={`职业：${profession.label}`}
+                        className="absolute left-0 top-0 z-10 h-[25%] w-auto"
+                      />
+                    ) : null}
+                  </>
+                ) : (
+                  <div className="flex h-full items-center justify-center bg-[#4B4B4B] px-2 text-center text-xs font-semibold text-white">
+                    <AnimatedText value={slot.name} />
+                  </div>
+                )}
+                {slot.buildingSkill ? (
+                  <BuildingSkillBadge skill={slot.buildingSkill} />
+                ) : typeof slot.skill === "number" ? (
+                  <span
+                    className="absolute right-0 top-0 z-10 flex size-9 items-center justify-center border-b border-l border-white/22 bg-black/76 text-xs font-semibold text-white"
+                    aria-label={`基建技能 S${slot.skill}，暂无技能资料`}
+                  >
+                    S<span className="font-number">{slot.skill}</span>
+                  </span>
+                ) : null}
+                {typeof currentMorale === "number" ? (
+                  <span
+                    className="absolute bottom-0.5 left-0.5 flex items-center gap-0.5 whitespace-nowrap rounded-sm bg-black/72 px-1 py-0.5 text-xs font-normal leading-none text-white shadow-[0_1px_3px_rgba(0,0,0,0.5)] [&_svg]:size-2.5 max-sm:bottom-0.5 max-sm:left-0.5 max-sm:px-0.5 max-sm:[&_svg]:size-2.5"
+                    aria-label={`当前心情 ${currentMorale}/24`}
+                    title={`当前心情 ${currentMorale}/24`}
+                  >
+                    <Smile className="text-[#FFD501]" />
+                    <span className="max-sm:hidden">当前</span>
+                    <span className="font-number"><AnimatedNumber value={currentMorale} /></span>
+                  </span>
+                ) : null}
+              </>
+            ) : autofill ? (
+              <span className="flex h-full items-center justify-center text-xs font-semibold tracking-[0.14em] text-white/55">
+                AUTO
+              </span>
+            ) : (
+              <span className="absolute left-1/2 top-1/2 h-0.5 w-[78%] origin-center -translate-x-1/2 -translate-y-1/2 rotate-[-45deg] bg-[#4B4B4B]" aria-hidden="true" />
+            )}
+          </motion.div>
+        </AnimatePresence>
       }
-      label={slot.name}
-      labelClassName="text-white"
-      title={slot.label}
+      label={slot ? <AnimatedText value={slot.name} /> : autofill ? "自动补位" : "占"}
+      labelClassName={slot ? "text-white" : autofill ? "text-white/55" : "text-transparent select-none"}
+      title={slot?.label}
     />
   );
 }
@@ -1319,6 +1406,18 @@ export function ScheduleBoard({
   const [viewMode, setViewMode] = useState<"list" | "compact">("list");
   const [supportsCompactLayout, setSupportsCompactLayout] = useState(false);
   const preferredViewMode = useRef<"list" | "compact" | null>(null);
+  const [shiftTransition, setShiftTransition] = useState<{
+    activeShift: number;
+    direction: ShiftDirection;
+  }>({ activeShift, direction: 0 });
+  const shouldReduceMotion = useReducedMotion();
+  let shiftDirection = shiftTransition.direction;
+
+  if (shiftTransition.activeShift !== activeShift) {
+    shiftDirection = activeShift > shiftTransition.activeShift ? 1 : -1;
+    setShiftTransition({ activeShift, direction: shiftDirection });
+  }
+
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 768px)");
     const syncViewMode = (canUseCompactLayout: boolean) => {
@@ -1417,7 +1516,14 @@ export function ScheduleBoard({
                 </Button>
               ) : null}
               <Button type="button" variant="outline" size="sm" onClick={toggleAuxiliaryGroups}>
-                <ChevronDown className={cn("transition-transform", allAuxiliaryCollapsed ? "-rotate-90" : "rotate-0")} />
+                <motion.span
+                  className="flex size-4 items-center justify-center"
+                  animate={{ transform: allAuxiliaryCollapsed ? "rotate(-90deg)" : "rotate(0deg)" }}
+                  transition={{ duration: MOTION_DURATION.fast, ease: MOTION_EASE_IN_OUT }}
+                  aria-hidden="true"
+                >
+                  <ChevronDown className="size-4" />
+                </motion.span>
                 {allAuxiliaryCollapsed ? "展开辅助设施" : "一键折叠辅助设施"}
               </Button>
             </div>
@@ -1425,11 +1531,55 @@ export function ScheduleBoard({
         </div>
         {shiftInfoSlot ? <div className="min-w-0 max-sm:w-full">{shiftInfoSlot}</div> : null}
       </div>
-      <div
-        key={planRevision ?? "empty-plan"}
-        className="plan-result-reveal"
-        data-plan-revision={planRevision || undefined}
-      >
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={planRevision ?? "empty-plan"}
+          data-plan-board
+          data-plan-revision={planRevision || undefined}
+          initial={{
+            opacity: 0,
+            transform: shouldReduceMotion ? "none" : "translate3d(0, 8px, 0)",
+            clipPath: shouldReduceMotion ? "none" : "inset(0 0 4% 0)",
+          }}
+          animate={{
+            opacity: 1,
+            transform: "none",
+            clipPath: shouldReduceMotion ? "none" : "inset(0 0 0 0)",
+          }}
+          exit={{
+            opacity: 0,
+            transform: shouldReduceMotion ? "none" : "translate3d(0, -4px, 0)",
+            clipPath: "none",
+          }}
+          transition={{
+            duration: shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.emphasis,
+            delay: shouldReduceMotion ? 0 : 0.15,
+            ease: MOTION_EASE_OUT,
+          }}
+        >
+          <AnimatePresence initial={false} mode="wait">
+            <motion.div
+              key={viewMode}
+              data-schedule-view={viewMode}
+              initial={{
+                opacity: 0,
+                transform: shouldReduceMotion ? "none" : "translate3d(0, 8px, 0)",
+              }}
+              animate={{ opacity: 1, transform: "none", pointerEvents: "auto" }}
+              exit={{
+                opacity: 0,
+                transform: shouldReduceMotion ? "none" : "translate3d(0, -6px, 0)",
+                pointerEvents: "none",
+                transition: {
+                  duration: shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.fast,
+                  ease: MOTION_EASE_IN_OUT,
+                },
+              }}
+              transition={{
+                duration: shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.content,
+                ease: MOTION_EASE_OUT,
+              }}
+            >
         {viewMode === "list" ? (
           <>
           {rowGroups.map((group) => {
@@ -1453,7 +1603,14 @@ export function ScheduleBoard({
                 <span className="infra-room-accent h-7 w-1.5 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
                 <h3 className="truncate text-[21px] font-medium leading-none text-[#313131]">{group.label}</h3>
                 <span className="font-number text-xs text-[#313131]/56">{group.rows.length}</span>
-                <ChevronDown className={cn("size-4 shrink-0 text-[#313131]/45 transition-transform", collapsed && "-rotate-90")} />
+                <motion.span
+                  className="flex size-4 shrink-0 items-center justify-center text-[#313131]/45"
+                  animate={{ transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)" }}
+                  transition={{ duration: MOTION_DURATION.fast, ease: MOTION_EASE_IN_OUT }}
+                  aria-hidden="true"
+                >
+                  <ChevronDown className="size-4" />
+                </motion.span>
               </button>
               {auxiliary && collapsed ? (
                 <Button
@@ -1575,12 +1732,14 @@ export function ScheduleBoard({
                       >
                         {slots.map((slot, index) => (
                           <OperatorSlot
-                            key={`${slot?.name ?? "empty"}-${index}`}
+                            key={`${row.key}-${index}`}
                             slot={slot}
                             currentMorale={slot ? currentMoraleByOperator?.get(slot.name) : undefined}
                             autofill={row.group === "dormitory" && row.autofill}
                             compactFactory={compactFactoryRoom}
                             centerFrameInList
+                            shiftDirection={shiftDirection}
+                            transitionDelay={Math.min(index, 2) * 0.02}
                           />
                         ))}
                       </div>
@@ -1622,10 +1781,14 @@ export function ScheduleBoard({
             currentMoraleByOperator={currentMoraleByOperator}
             activeShift={activeShift}
             activePlan={activePlan}
+            shiftDirection={shiftDirection}
             onIssue={onIssue}
           />
         )}
-      </div>
+            </motion.div>
+          </AnimatePresence>
+        </motion.div>
+      </AnimatePresence>
     </div>
   );
 }

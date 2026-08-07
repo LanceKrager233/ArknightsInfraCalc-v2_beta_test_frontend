@@ -2,8 +2,10 @@
 
 import * as React from "react"
 import { Combobox as ComboboxPrimitive } from "@base-ui/react"
+import { motion, type HTMLMotionProps } from "motion/react"
 
 import { cn } from "@/lib/utils"
+import { MOTION_EASE_OUT } from "@/motion"
 import { Button } from "@/components/ui/button"
 import {
   InputGroup,
@@ -129,7 +131,22 @@ function ComboboxContent({
         <ComboboxPrimitive.Popup
           data-slot="combobox-content"
           data-chips={!!anchor}
-          className={cn("motion-popover group/combobox-content relative max-h-(--available-height) w-(--anchor-width) max-w-(--available-width) min-w-(--anchor-width) overflow-hidden rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 *:data-[slot=input-group]:m-1 *:data-[slot=input-group]:mb-0 *:data-[slot=input-group]:h-8 *:data-[slot=input-group]:border-input/30 *:data-[slot=input-group]:bg-input/30 *:data-[slot=input-group]:shadow-none", className )}
+          render={(renderProps, state) => (
+            <motion.div
+              {...(renderProps as unknown as HTMLMotionProps<"div">)}
+              initial={{ opacity: 0, transform: "scale(0.98)" }}
+              animate={{
+                opacity: state.open ? 1 : 0,
+                transform: state.open ? "scale(1)" : "scale(0.98)",
+              }}
+              transition={{
+                duration: state.open ? 0.24 : 0.16,
+                ease: MOTION_EASE_OUT,
+              }}
+              style={{ ...(renderProps.style ?? {}), transformOrigin: "var(--transform-origin)" }}
+            />
+          )}
+          className={cn("group/combobox-content relative max-h-(--available-height) w-(--anchor-width) max-w-(--available-width) min-w-(--anchor-width) overflow-hidden rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 *:data-[slot=input-group]:m-1 *:data-[slot=input-group]:mb-0 *:data-[slot=input-group]:h-8 *:data-[slot=input-group]:border-input/30 *:data-[slot=input-group]:bg-input/30 *:data-[slot=input-group]:shadow-none", className )}
           {...props}
         />
       </ComboboxPrimitive.Positioner>

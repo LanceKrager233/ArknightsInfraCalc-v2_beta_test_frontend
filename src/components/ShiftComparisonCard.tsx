@@ -1,9 +1,20 @@
 "use client";
 
+import { motion, useReducedMotion } from "motion/react";
+
+import { AnimatedNumber } from "@/components/AnimatedText";
 import { cn } from "@/lib/utils";
+import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
 import type { ShiftComparison } from "@/types";
 
-export function ShiftComparisonCard({ comparison }: { comparison: ShiftComparison | null }) {
+export function ShiftComparisonCard({
+  comparison,
+  planRevision,
+}: {
+  comparison: ShiftComparison | null;
+  planRevision?: string;
+}) {
+  const shouldReduceMotion = useReducedMotion();
   if (!comparison) return null;
   const groups = [
     { label: "需要换入", names: comparison.missing, tone: "text-sky-700" },
@@ -12,17 +23,36 @@ export function ShiftComparisonCard({ comparison }: { comparison: ShiftCompariso
     { label: "疲劳但仍排入", names: comparison.tiredScheduled, tone: "text-destructive" },
   ] as const;
   return (
-    <section className="mb-5 border-y border-primary/25 bg-primary/5 px-4 py-4 text-sm" aria-labelledby="closest-shift-title">
+    <motion.section
+      className="mb-5 border-y border-primary/25 bg-primary/5 px-4 py-4 text-sm"
+      aria-labelledby="closest-shift-title"
+      data-shift-comparison
+      data-plan-revision={planRevision}
+      initial={{
+        opacity: 0,
+        transform: shouldReduceMotion ? "none" : "translate3d(0, 8px, 0)",
+      }}
+      animate={{ opacity: 1, transform: "none" }}
+      exit={{
+        opacity: 0,
+        transform: shouldReduceMotion ? "none" : "translate3d(0, -4px, 0)",
+      }}
+      transition={{
+        duration: shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.content,
+        delay: shouldReduceMotion ? 0 : 0.11,
+        ease: MOTION_EASE_OUT,
+      }}
+    >
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
         <div>
           <span className="text-xs font-medium text-muted-foreground">当前状态匹配</span>
           <h3 id="closest-shift-title" className="mt-0.5 text-base font-semibold">
-            当前最接近第 <span className="font-number">{comparison.planIndex + 1}</span> 班
+            当前最接近第 <span className="font-number"><AnimatedNumber value={comparison.planIndex + 1} /></span> 班
           </h3>
         </div>
         <div className="text-right">
           <span className="text-xs text-muted-foreground">房间匹配</span>
-          <strong className="ml-2 text-lg tabular-nums">{comparison.score}%</strong>
+          <strong className="ml-2 text-lg tabular-nums"><AnimatedNumber value={`${comparison.score}%`} /></strong>
         </div>
       </div>
       <div
@@ -33,9 +63,16 @@ export function ShiftComparisonCard({ comparison }: { comparison: ShiftCompariso
         aria-valuemax={100}
         aria-valuenow={comparison.score}
       >
-        <div
-          className="h-full bg-primary transition-[width]"
-          style={{ width: `${Math.max(0, Math.min(100, comparison.score))}%` }}
+        <motion.div
+          className="h-full bg-primary"
+          initial={{ transform: "scaleX(0)" }}
+          animate={{ transform: `scaleX(${Math.max(0, Math.min(100, comparison.score)) / 100})` }}
+          transition={{
+            duration: shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.emphasis,
+            delay: shouldReduceMotion ? 0 : 0.11,
+            ease: MOTION_EASE_OUT,
+          }}
+          style={{ transformOrigin: "left center" }}
         />
       </div>
       <dl className="mt-4 grid grid-cols-2 divide-x divide-y divide-border/70 border-y border-border/70 sm:grid-cols-4 sm:divide-y-0">
@@ -43,7 +80,7 @@ export function ShiftComparisonCard({ comparison }: { comparison: ShiftCompariso
           <div key={group.label} className="px-3 py-2 first:pl-0 sm:first:pl-0">
             <dt className="text-xs text-muted-foreground">{group.label}</dt>
             <dd className={cn("mt-0.5 text-base font-semibold tabular-nums", group.tone)}>
-              {group.names.length}
+              <AnimatedNumber value={group.names.length} />
             </dd>
           </div>
         ))}
@@ -57,7 +94,7 @@ export function ShiftComparisonCard({ comparison }: { comparison: ShiftCompariso
             <div key={group.label} className="min-w-0 border-t border-border/70 pt-3">
               <div className="flex items-center justify-between gap-3">
                 <strong className={cn("text-xs", group.tone)}>{group.label}</strong>
-                <span className="text-xs tabular-nums text-muted-foreground">{group.names.length}</span>
+                <span className="text-xs tabular-nums text-muted-foreground"><AnimatedNumber value={group.names.length} /></span>
               </div>
               <p className="mt-1.5 break-words text-sm leading-6 text-muted-foreground">
                 {group.names.join("、") || "无"}
@@ -66,6 +103,6 @@ export function ShiftComparisonCard({ comparison }: { comparison: ShiftCompariso
           ))}
         </div>
       </details>
-    </section>
+    </motion.section>
   );
 }

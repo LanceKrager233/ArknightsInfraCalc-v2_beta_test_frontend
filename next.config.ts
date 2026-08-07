@@ -7,6 +7,9 @@ const nextConfig: NextConfig = {
   env: {
     APP_CLIENT_SKLAND_ENABLED: isSklandFeatureEnabled() ? "1" : "0",
   },
+  experimental: {
+    cpus: 4,
+  },
   typedRoutes: false,
 };
 

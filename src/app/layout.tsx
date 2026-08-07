@@ -3,6 +3,7 @@ import { Barlow_Condensed, Noto_Sans_SC } from "next/font/google";
 import localFont from "next/font/local";
 import "overlayscrollbars/overlayscrollbars.css";
 
+import { AppMotionProvider } from "@/components/MotionProvider";
 import { PageScrollbar } from "@/components/ui/page-scrollbar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
@@ -54,8 +55,10 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body>
-        <PageScrollbar />
-        <TooltipProvider>{children}</TooltipProvider>
+        <AppMotionProvider>
+          <PageScrollbar />
+          <TooltipProvider>{children}</TooltipProvider>
+        </AppMotionProvider>
       </body>
     </html>
   );

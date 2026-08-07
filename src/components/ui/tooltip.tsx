@@ -1,8 +1,10 @@
 "use client"
 
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
+import { motion, type HTMLMotionProps } from "motion/react"
 
 import { cn } from "@/lib/utils"
+import { MOTION_EASE_OUT } from "@/motion"
 
 function TooltipProvider({
   delay = 400,
@@ -51,8 +53,23 @@ function TooltipContent({
       >
         <TooltipPrimitive.Popup
           data-slot="tooltip-content"
+          render={(renderProps, state) => (
+            <motion.div
+              {...(renderProps as unknown as HTMLMotionProps<"div">)}
+              initial={{ opacity: 0, transform: "scale(0.98)" }}
+              animate={{
+                opacity: state.open ? 1 : 0,
+                transform: state.open ? "scale(1)" : "scale(0.98)",
+              }}
+              transition={{
+                duration: state.instant ? 0 : state.open ? 0.24 : 0.16,
+                ease: MOTION_EASE_OUT,
+              }}
+              style={{ ...(renderProps.style ?? {}), transformOrigin: "var(--transform-origin)" }}
+            />
+          )}
           className={cn(
-            "motion-popover z-50 inline-flex w-fit max-w-xs items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs text-background has-data-[slot=kbd]:pr-1.5 **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:rounded-sm",
+            "z-50 inline-flex w-fit max-w-xs items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs text-background has-data-[slot=kbd]:pr-1.5 **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:rounded-sm",
             className
           )}
           {...props}

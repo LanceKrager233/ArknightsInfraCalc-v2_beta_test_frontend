@@ -1,11 +1,13 @@
 "use client";
 
 import { LogIn } from "lucide-react";
+import { motion } from "motion/react";
 
 import { Button } from "@/components/ui/button";
 import { CLIENT_SKLAND_ENABLED } from "@/client-features";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import type { SklandAccountSummary, SklandStatusSnapshot } from "@/types";
+import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
 
 interface AppTopBarProps {
   account?: SklandAccountSummary | null;
@@ -38,9 +40,11 @@ export function AppTopBar({ account, statusSnapshot, sessionLoading, onOpenSklan
               data-skland-topbar-loading
             />
           ) : account ? (
-            <button
+            <motion.button
               type="button"
-              className="motion-press grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-primary text-sm font-semibold text-primary-foreground shadow-sm ring-1 ring-black/10 transition-[box-shadow,scale] duration-[var(--motion-duration-press)] ease-[var(--motion-ease-out)] hover:shadow-md active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-primary text-sm font-semibold text-primary-foreground shadow-sm ring-1 ring-black/10 transition-shadow duration-[var(--motion-duration-state)] ease-[var(--motion-ease-out)] hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              whileTap={{ transform: "scale(0.97)" }}
+              transition={{ duration: MOTION_DURATION.press, ease: MOTION_EASE_OUT }}
               onClick={onOpenSkland}
               aria-label={accountLabel}
               title={nickname ?? "已登录森空岛"}
@@ -62,7 +66,7 @@ export function AppTopBar({ account, statusSnapshot, sessionLoading, onOpenSklan
                   />
                 ) : nickname?.slice(0, 1) ?? "森"}
               </span>
-            </button>
+            </motion.button>
           ) : (
             <Button
               type="button"

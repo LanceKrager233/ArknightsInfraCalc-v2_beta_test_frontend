@@ -2,9 +2,11 @@
 
 import * as React from "react"
 import { Dialog as SheetPrimitive } from "@base-ui/react/dialog"
+import { motion, type HTMLMotionProps } from "motion/react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { MOTION_DURATION, MOTION_EASE_DRAWER, MOTION_EASE_IN_OUT, MOTION_EASE_OUT } from "@/motion"
 import { XIcon } from "lucide-react"
 
 function Sheet({ ...props }: SheetPrimitive.Root.Props) {
@@ -27,8 +29,19 @@ function SheetOverlay({ className, ...props }: SheetPrimitive.Backdrop.Props) {
   return (
     <SheetPrimitive.Backdrop
       data-slot="sheet-overlay"
+      render={(renderProps, state) => (
+        <motion.div
+          {...(renderProps as unknown as HTMLMotionProps<"div">)}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: state.open ? 1 : 0 }}
+          transition={{
+            duration: state.open ? 0.2 : MOTION_DURATION.fast,
+            ease: MOTION_EASE_OUT,
+          }}
+        />
+      )}
       className={cn(
-        "motion-sheet-overlay fixed inset-0 z-50 bg-black/10 supports-backdrop-filter:backdrop-blur-xs",
+        "fixed inset-0 z-50 bg-black/10 supports-backdrop-filter:backdrop-blur-xs",
         className
       )}
       {...props}
@@ -46,14 +59,36 @@ function SheetContent({
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
 }) {
+  const closedTransform = side === "right"
+    ? "translate3d(100%, 0, 0)"
+    : side === "left"
+      ? "translate3d(-100%, 0, 0)"
+      : side === "top"
+        ? "translate3d(0, -100%, 0)"
+        : "translate3d(0, 100%, 0)"
+
   return (
     <SheetPortal>
       <SheetOverlay />
       <SheetPrimitive.Popup
         data-slot="sheet-content"
         data-side={side}
+        render={(renderProps, state) => (
+          <motion.div
+            {...(renderProps as unknown as HTMLMotionProps<"div">)}
+            initial={{ opacity: 0, transform: closedTransform }}
+            animate={{
+              opacity: state.open ? 1 : 0,
+              transform: state.open ? "translate3d(0, 0, 0)" : closedTransform,
+            }}
+            transition={{
+              duration: state.open ? MOTION_DURATION.emphasis : 0.22,
+              ease: state.open ? MOTION_EASE_DRAWER : MOTION_EASE_IN_OUT,
+            }}
+          />
+        )}
         className={cn(
-          "motion-sheet-content fixed z-50 flex flex-col gap-4 bg-popover bg-clip-padding text-sm text-popover-foreground shadow-lg data-[side=bottom]:inset-x-0 data-[side=bottom]:bottom-0 data-[side=bottom]:h-auto data-[side=bottom]:border-t data-[side=left]:inset-y-0 data-[side=left]:left-0 data-[side=left]:h-full data-[side=left]:w-3/4 data-[side=left]:border-r data-[side=right]:inset-y-0 data-[side=right]:right-0 data-[side=right]:h-full data-[side=right]:w-3/4 data-[side=right]:border-l data-[side=top]:inset-x-0 data-[side=top]:top-0 data-[side=top]:h-auto data-[side=top]:border-b data-[side=left]:sm:max-w-sm data-[side=right]:sm:max-w-sm",
+          "fixed z-50 flex flex-col gap-4 bg-popover bg-clip-padding text-sm text-popover-foreground shadow-lg data-[side=bottom]:inset-x-0 data-[side=bottom]:bottom-0 data-[side=bottom]:h-auto data-[side=bottom]:border-t data-[side=left]:inset-y-0 data-[side=left]:left-0 data-[side=left]:h-full data-[side=left]:w-3/4 data-[side=left]:border-r data-[side=right]:inset-y-0 data-[side=right]:right-0 data-[side=right]:h-full data-[side=right]:w-3/4 data-[side=right]:border-l data-[side=top]:inset-x-0 data-[side=top]:top-0 data-[side=top]:h-auto data-[side=top]:border-b data-[side=left]:sm:max-w-sm data-[side=right]:sm:max-w-sm",
           className
         )}
         {...props}

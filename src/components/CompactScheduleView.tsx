@@ -7,6 +7,7 @@ import {
   maxRoomLevel,
   tradeOrderFor,
 } from "@/blueprint";
+import { AnimatedText } from "@/components/AnimatedText";
 import { LevelDiamonds, OperatorSlot, roomVisualFor } from "@/components";
 import { presentRoomEfficiency } from "@/efficiency";
 import {
@@ -31,6 +32,7 @@ import {
 } from "@/schedule-view-presentation";
 import type { RoomRow } from "@/schedule";
 import type { BaseBlueprint, MaaPlan } from "@/types";
+import type { ShiftDirection } from "@/motion";
 
 export interface CompactScheduleViewProps {
   rows: RoomRow[];
@@ -38,6 +40,7 @@ export interface CompactScheduleViewProps {
   currentMoraleByOperator?: ReadonlyMap<string, number>;
   activeShift: number;
   activePlan?: MaaPlan;
+  shiftDirection: ShiftDirection;
   onIssue: (row: RoomRow) => void;
 }
 
@@ -59,6 +62,7 @@ function CompactRoomCard({
   efficiency,
   slots,
   currentMoraleByOperator,
+  shiftDirection,
   horizontal,
   className = "",
   style,
@@ -69,6 +73,7 @@ function CompactRoomCard({
   efficiency: ReturnType<typeof presentRoomEfficiency>;
   slots: (RoomRow["operatorSlots"][number] | undefined)[];
   currentMoraleByOperator?: ReadonlyMap<string, number>;
+  shiftDirection: ShiftDirection;
   horizontal: boolean;
   className?: string;
   style?: CSSProperties;
@@ -119,18 +124,18 @@ function CompactRoomCard({
   const efficiencyBlock = efficiency ? (
     <div>
       {isPower ? (
-        <span className="infra-room-value font-technical text-sm font-semibold tabular-nums text-[var(--room-accent)]">{efficiency.primaryValue}</span>
+        <span className="infra-room-value font-technical text-sm font-semibold tabular-nums text-[var(--room-accent)]"><AnimatedText value={efficiency.primaryValue} /></span>
       ) : row.group === "trading" || row.group === "manufacture" ? (
         <div className="font-technical flex flex-wrap items-center gap-x-1.5 text-xs tracking-[0.01em] text-white/76">
-          <span className="infra-room-value font-semibold tabular-nums text-[var(--room-accent)]">{efficiency.primaryValue}</span>
+          <span className="infra-room-value font-semibold tabular-nums text-[var(--room-accent)]"><AnimatedText value={efficiency.primaryValue} /></span>
           {efficiency.details.map((detail) => (
             <span key={detail.label} className={`font-number ${detail.kind === "cross-station" ? "text-[#C8F75A]" : ""}`}>
-              / {detail.label} {detail.value}
+              / {detail.label} <AnimatedText value={detail.value} />
             </span>
           ))}
         </div>
       ) : (
-        <span className="font-technical text-sm tabular-nums text-white/66">{efficiency.primaryValue}</span>
+        <span className="font-technical text-sm tabular-nums text-white/66"><AnimatedText value={efficiency.primaryValue} /></span>
       )}
     </div>
   ) : null;
@@ -143,11 +148,13 @@ function CompactRoomCard({
 
   const operators = slots.map((slot, index) => (
     <OperatorSlot
-      key={`${slot?.name ?? "empty"}-${index}`}
+      key={`${row.key}-${index}`}
       slot={slot}
       currentMorale={slot ? currentMoraleByOperator?.get(slot.name) : undefined}
       autofill={row.group === "dormitory" && row.autofill}
       compactView
+      shiftDirection={shiftDirection}
+      transitionDelay={Math.min(index, 2) * 0.02}
     />
   ));
 
@@ -198,7 +205,7 @@ function CompactRoomCard({
 }
 
 export function CompactScheduleView(props: CompactScheduleViewProps) {
-  const { rows, layout, currentMoraleByOperator } = props;
+  const { rows, layout, currentMoraleByOperator, shiftDirection } = props;
 
   if (rows.length === 0) {
     return (
@@ -237,6 +244,7 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
         efficiency={efficiency}
         slots={slots}
         currentMoraleByOperator={currentMoraleByOperator}
+        shiftDirection={shiftDirection}
         horizontal={usesCompactHorizontalCard(row.group, powerCount)}
         className="min-w-0"
         style={widthPercent !== undefined ? { flexBasis: `${widthPercent}%` } : { flex: 1 }}

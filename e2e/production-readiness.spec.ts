@@ -36,7 +36,10 @@ async function armEndingTransitionCapture(element: Locator, label: string) {
 
     const capture = () => {
       if (!node.hasAttribute("data-ending-style")) return false;
-      root.setAttribute(attribute, getComputedStyle(node).transitionDuration);
+      requestAnimationFrame(() => {
+        const durations = node.getAnimations().map((animation) => animation.effect?.getTiming().duration ?? 0);
+        root.setAttribute(attribute, JSON.stringify(durations));
+      });
       return true;
     };
 
@@ -49,8 +52,112 @@ async function armEndingTransitionCapture(element: Locator, label: string) {
   }, label);
 }
 
-async function expectCapturedExitDuration(page: Page, label: string, duration: string) {
-  await expect.poll(() => page.locator("html").getAttribute(`data-motion-exit-${label}`)).toContain(duration);
+async function expectCapturedExitDuration(page: Page, label: string, durationMs: number) {
+  await expect.poll(() => page.locator("html").getAttribute(`data-motion-exit-${label}`)).toContain(String(durationMs));
+}
+
+async function expectMotionDuration(element: Locator, durationMs: number, subtree = false) {
+  await expect.poll(() => element.evaluate((node, options) => (
+    node.getAnimations({ subtree: options.subtree }).some((animation) => {
+      const duration = Number(animation.effect?.getTiming().duration ?? 0);
+      return Math.abs(duration - options.durationMs) < 1;
+    })
+  ), { durationMs, subtree })).toBe(true);
+}
+
+async function armMotionCapture(page: Page, selector: string, label: string, durationMs: number) {
+  await page.evaluate(({ selector, label, durationMs }) => {
+    const attribute = `data-motion-enter-${label}`;
+    const root = document.documentElement;
+    const startedAt = performance.now();
+    root.removeAttribute(attribute);
+
+    const inspect = () => {
+      const timing = Array.from(document.querySelectorAll(selector))
+        .flatMap((element) => element.getAnimations())
+        .map((animation) => animation.effect?.getTiming())
+        .find((candidate) => Math.abs(Number(candidate?.duration ?? 0) - durationMs) < 1);
+      if (timing) {
+        root.setAttribute(attribute, JSON.stringify({
+          duration: Number(timing.duration),
+          delay: Number(timing.delay),
+        }));
+        return;
+      }
+      if (performance.now() - startedAt < 5_000) requestAnimationFrame(inspect);
+    };
+
+    inspect();
+  }, { selector, label, durationMs });
+}
+
+async function armMotionCollectionCapture(page: Page, selector: string, label: string, durationMs: number) {
+  await page.evaluate(({ selector, label, durationMs }) => {
+    const attribute = `data-motion-enter-${label}`;
+    const root = document.documentElement;
+    const startedAt = performance.now();
+    root.removeAttribute(attribute);
+
+    const inspect = () => {
+      const elements = Array.from(document.querySelectorAll(selector));
+      const timings = elements.map((element) => element.getAnimations()
+        .map((animation) => animation.effect?.getTiming())
+        .find((candidate) => Math.abs(Number(candidate?.duration ?? 0) - durationMs) < 1));
+      if (elements.length > 0 && timings.every(Boolean)) {
+        root.setAttribute(attribute, JSON.stringify(timings.map((timing) => ({
+          duration: Number(timing?.duration),
+          delay: Number(timing?.delay),
+        }))));
+        return;
+      }
+      if (performance.now() - startedAt < 5_000) requestAnimationFrame(inspect);
+    };
+
+    inspect();
+  }, { selector, label, durationMs });
+}
+
+async function expectCapturedMotion(page: Page, label: string, durationMs: number, delayMs = 0) {
+  await expect.poll(async () => {
+    const value = await page.locator("html").getAttribute(`data-motion-enter-${label}`);
+    return value ? JSON.parse(value) as { duration: number; delay: number } : null;
+  }).toEqual({ duration: durationMs, delay: delayMs });
+}
+
+async function expectCapturedMotionDelays(page: Page, label: string, durationMs: number, delays: number[]) {
+  await expect.poll(async () => {
+    const value = await page.locator("html").getAttribute(`data-motion-enter-${label}`);
+    return value ? JSON.parse(value) as Array<{ duration: number; delay: number }> : null;
+  }).toEqual(delays.map((delay) => ({ duration: durationMs, delay })));
+}
+
+async function armTransientStyleCapture(page: Page, selector: string, label: string) {
+  await page.evaluate(({ selector, label }) => {
+    const attribute = `data-motion-style-${label}`;
+    const root = document.documentElement;
+    const startedAt = performance.now();
+    root.removeAttribute(attribute);
+
+    const inspect = () => {
+      for (const element of document.querySelectorAll(selector)) {
+        const style = getComputedStyle(element);
+        const opacity = Number(style.opacity);
+        const transform = style.transform;
+        const moved = !["none", "matrix(1, 0, 0, 1, 0, 0)", "matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)"].includes(transform);
+        if (moved || opacity < 0.999) {
+          root.setAttribute(attribute, JSON.stringify({ opacity, transform }));
+          return;
+        }
+      }
+      if (performance.now() - startedAt < 5_000) requestAnimationFrame(inspect);
+    };
+
+    inspect();
+  }, { selector, label });
+}
+
+async function expectCapturedStyleMotion(page: Page, label: string) {
+  await expect.poll(() => page.locator("html").getAttribute(`data-motion-style-${label}`)).not.toBeNull();
 }
 
 async function waitForOwnAnimations(element: Locator) {
@@ -296,21 +403,31 @@ const productChangePlanData = {
   },
 };
 
+const motionPlanBase = rotationResultData({
+  rotationProfile: "abc_12_6_6",
+  durations: [12, 6, 6],
+});
+
 const motionPlanData = {
-  ...twoShiftPlanData,
+  ...motionPlanBase,
   maa: {
-    ...twoShiftPlanData.maa,
-    plans: [0, 1].map((index) => ({
+    ...motionPlanBase.maa,
+    plans: [0, 1, 2].map((index) => ({
       ...maaPlan(index),
       rooms: {
         control: [{ operators: [] }],
-        trading: [0, 1].map(() => ({ product: "LMD", operators: [], sort: true, autofill: false })),
+        trading: [0, 1].map((roomIndex) => ({
+          product: "LMD",
+          operators: roomIndex === 0 ? [{ name: ["阿米娅", "凯尔希", "贝洛内"][index], skill: 2 }] : [],
+          sort: true,
+          autofill: false,
+        })),
         manufacture: [0, 1, 2, 3].map(() => ({ product: "Gold", operators: [], sort: true, autofill: false })),
         power: [0, 1, 2].map(() => ({ operators: [] })),
         dormitory: [0, 1, 2, 3].map(() => ({ operators: [], autofill: true })),
         meeting: [{ operators: [] }],
         hire: [{ operators: [] }],
-        processing: [{ operators: [{ name: "阿米娅", skill: 2 }] }],
+        processing: [{ operators: [{ name: ["阿米娅", "凯尔希", "贝洛内"][index], skill: 2 }] }],
       },
     })),
   },
@@ -952,7 +1069,7 @@ test("shows the solving orb only while a plan request is running", async ({ page
   expect(Math.abs(completeTextX - readyTextX)).toBeLessThan(1);
 });
 
-test("plan completion reveals status, metrics, and schedule once without resetting board state", async ({ page }) => {
+test("plan completion reveals status, metrics, and schedule once without resetting board state", async ({ page, browserName }) => {
   await mockApis(page);
   let releasePlan!: () => void;
   const planGate = new Promise<void>((resolve) => {
@@ -980,56 +1097,94 @@ test("plan completion reveals status, metrics, and schedule once without resetti
   await expect(restoreHidden).toBeVisible();
 
   await page.getByRole("button", { name: "生成排班" }).click();
+  await armMotionCapture(
+    page,
+    '[data-status-state="loading"] [data-slot="status-content"]',
+    "loading-status",
+    140
+  );
   const status = page.locator('[data-slot="plan-status"]');
   await expect(status).toHaveAttribute("data-status-state", "loading");
-  await expect(status.locator('[data-slot="status-content"]')).toHaveCSS("transition-duration", /0\.14s/);
+  await expectCapturedMotion(page, "loading-status", 140);
 
+  if (browserName === "webkit") {
+    await armTransientStyleCapture(page, "[data-plan-summary]", "plan-summary");
+    await armTransientStyleCapture(page, "[data-plan-board]", "plan-board");
+    await armTransientStyleCapture(page, "[data-plan-metric]", "plan-metrics");
+  } else {
+    await armMotionCapture(page, "[data-plan-summary]", "plan-summary", 320);
+    await armMotionCapture(page, "[data-plan-board]", "plan-board", 320);
+    await armMotionCollectionCapture(page, "[data-plan-metric]", "plan-metrics", 280);
+  }
   releasePlan();
   await expect(status).toHaveAttribute("data-status-state", "success");
   const summary = page.locator("[data-plan-summary]");
-  const board = page.locator("[data-plan-revision]");
+  const board = page.locator("[data-plan-board]");
   await expect(summary).toBeVisible();
   await expect(board).toHaveAttribute("data-plan-revision", diagnosticId);
   await expect(listTab).toHaveAttribute("aria-selected", "true");
   await expect(restoreHidden).toBeVisible();
 
+  if (browserName === "webkit") {
+    await expectCapturedStyleMotion(page, "plan-summary");
+    await expectCapturedStyleMotion(page, "plan-board");
+    await expectCapturedStyleMotion(page, "plan-metrics");
+  } else {
+    await expectCapturedMotion(page, "plan-summary", 320, 60);
+    await expectCapturedMotion(page, "plan-board", 320, 150);
+    await expectCapturedMotionDelays(page, "plan-metrics", 280, [60, 105, 150, 195]);
+  }
   const choreography = await page.evaluate(() => {
-    const style = (selector: string) => getComputedStyle(document.querySelector<HTMLElement>(selector)!);
-    const statusBar = style('[data-slot="plan-status"]');
-    const statusContent = style('[data-slot="status-content"]');
-    const planSummary = style("[data-plan-summary]");
-    const planBoard = style("[data-plan-revision]");
-    const metricDelays = Array.from(document.querySelectorAll<HTMLElement>("[data-plan-metric]"))
-      .map((metric) => getComputedStyle(metric).transitionDelay.split(",")[0].trim());
+    const statusBar = getComputedStyle(document.querySelector<HTMLElement>('[data-slot="plan-status"]')!);
     return {
       statusBarDuration: statusBar.transitionDuration,
-      statusContentDuration: statusContent.transitionDuration,
-      summaryDuration: planSummary.transitionDuration,
-      boardDuration: planBoard.transitionDuration,
-      boardDelay: planBoard.transitionDelay,
-      metricDelays,
     };
   });
   expect(choreography.statusBarDuration).toContain("0.16s");
-  expect(choreography.statusContentDuration).toContain("0.14s");
-  expect(choreography.summaryDuration).toContain("0.2s");
-  expect(choreography.boardDuration).toContain("0.22s");
-  expect(choreography.boardDelay).toContain("0.08s");
-  expect(choreography.metricDelays).toEqual(["0s", "0.04s", "0.08s", "0.12s"]);
 
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(650);
   await board.evaluate((element) => {
     element.setAttribute("data-motion-sentinel", "stable");
   });
-  const secondShift = page.getByRole("tab", { name: /第 2 班 · 12h/ });
+  await armTransientStyleCapture(page, "[data-plan-board] [data-operator-identity]", "shift-slots");
+  const operatorIdentitiesBefore = await board.locator("[data-operator-identity]").evaluateAll((nodes) => (
+    nodes.map((node) => node.getAttribute("data-operator-identity"))
+  ));
+  const firstShift = page.getByRole("tab", { name: /第 1 班 · 12h/ });
+  const secondShift = page.getByRole("tab", { name: /第 2 班 · 6h/ });
+  const thirdShift = page.getByRole("tab", { name: /第 3 班 · 6h/ });
   await secondShift.click();
   await expect(secondShift).toHaveAttribute("aria-selected", "true");
   await expect(board).toHaveAttribute("data-motion-sentinel", "stable");
   expect(await board.evaluate((element) => element.getAnimations().filter((animation) => animation.playState === "running").length)).toBe(0);
+  await expectCapturedStyleMotion(page, "shift-slots");
+  await expect.poll(() => board.locator("[data-operator-identity]").evaluateAll((nodes) => (
+    nodes.map((node) => node.getAttribute("data-operator-identity"))
+  ))).not.toEqual(operatorIdentitiesBefore);
+
+  await firstShift.click();
+  await thirdShift.click();
+  await secondShift.click();
+  await expect(secondShift).toHaveAttribute("aria-selected", "true");
+  await page.waitForTimeout(320);
+  await expect(board.locator('[data-operator-identity="凯尔希"]').first()).toBeVisible();
+  await expect(board.locator('[data-operator-identity="阿米娅"], [data-operator-identity="贝洛内"]')).toHaveCount(0);
+  if (browserName === "webkit") {
+    await armTransientStyleCapture(page, '[data-schedule-view="compact"]', "compact-view");
+  } else {
+    await armMotionCapture(page, '[data-schedule-view="compact"]', "compact-view", 280);
+  }
 
   await page.getByRole("tab", { name: "一图流布局" }).click();
   await expect(board).toHaveAttribute("data-motion-sentinel", "stable");
   expect(await board.evaluate((element) => element.getAnimations().filter((animation) => animation.playState === "running").length)).toBe(0);
+  const compactView = board.locator('[data-schedule-view="compact"]');
+  await expect(compactView).toBeVisible();
+  if (browserName === "webkit") {
+    await expectCapturedStyleMotion(page, "compact-view");
+  } else {
+    await expectCapturedMotion(page, "compact-view", 280);
+  }
 });
 
 test("reduced motion keeps feedback timing while removing movement, clipping, and staggering", async ({ page }) => {
@@ -1056,39 +1211,37 @@ test("reduced motion keeps feedback timing while removing movement, clipping, an
   await expect(page.locator('[data-slot="plan-status"]')).toHaveAttribute("data-status-state", "loading");
   await expect(page.locator(".animate-spin").first()).toHaveCSS("animation-duration", "1.6s");
 
+  await armMotionCapture(page, "[data-plan-summary]", "reduced-summary", 140);
+  await armMotionCapture(page, "[data-plan-board]", "reduced-board", 140);
+  await armMotionCapture(page, "[data-plan-metric]", "reduced-metric", 140);
   releasePlan();
   await expect(page.locator('[data-slot="plan-status"]')).toHaveAttribute("data-status-state", "success");
-  await expect(page.locator("[data-plan-summary]")).toBeVisible();
+  const summary = page.locator("[data-plan-summary]");
+  await expect(summary).toBeVisible();
+  await expectCapturedMotion(page, "reduced-summary", 140);
+  await expectCapturedMotion(page, "reduced-board", 140);
+  await expectCapturedMotion(page, "reduced-metric", 140);
   const reduced = await page.evaluate(() => {
     const statusBar = getComputedStyle(document.querySelector<HTMLElement>('[data-slot="plan-status"]')!);
-    const statusContent = getComputedStyle(document.querySelector<HTMLElement>('[data-slot="status-content"]')!);
-    const metric = getComputedStyle(document.querySelector<HTMLElement>("[data-plan-metric]")!);
-    const board = getComputedStyle(document.querySelector<HTMLElement>("[data-plan-revision]")!);
+    const boardElement = document.querySelector<HTMLElement>("[data-plan-board]")!;
+    const movingFrames = boardElement.getAnimations({ subtree: true }).flatMap((animation) => {
+      const effect = animation.effect;
+      return effect instanceof KeyframeEffect ? effect.getKeyframes() : [];
+    }).filter((frame) => (
+      (typeof frame.transform === "string" && !["none", "matrix(1, 0, 0, 1, 0, 0)"].includes(frame.transform))
+      || (typeof frame.clipPath === "string" && frame.clipPath !== "none")
+    ));
     return {
       statusProperties: statusBar.transitionProperty,
       statusDuration: statusBar.transitionDuration,
-      contentProperties: statusContent.transitionProperty,
-      contentDuration: statusContent.transitionDuration,
-      contentScale: statusContent.scale,
-      metricTranslate: metric.translate,
-      metricDelay: metric.transitionDelay,
-      boardTranslate: board.translate,
-      boardClipPath: board.clipPath,
-      boardDelay: board.transitionDelay,
-      boardDuration: board.transitionDuration,
+      movingFrameCount: movingFrames.length,
+      calligraphCount: boardElement.querySelectorAll("[data-calligraph]").length,
     };
   });
   expect(reduced.statusProperties).toContain("background-color");
   expect(reduced.statusDuration).toContain("0.16s");
-  expect(reduced.contentProperties).toContain("opacity");
-  expect(reduced.contentDuration).toContain("0.14s");
-  expect(reduced.contentScale).toBe("1");
-  expect(reduced.metricTranslate).toMatch(/^(none|0px)$/);
-  expect(reduced.metricDelay).toBe("0s");
-  expect(reduced.boardTranslate).toMatch(/^(none|0px)$/);
-  expect(reduced.boardClipPath).toBe("none");
-  expect(reduced.boardDelay).toBe("0s");
-  expect(reduced.boardDuration).toContain("0.14s");
+  expect(reduced.movingFrameCount).toBe(0);
+  expect(reduced.calligraphCount).toBe(0);
 });
 
 test("dialog and mobile sheet motion preserve direction, exit timing, and focus", async ({ page }) => {
@@ -1100,13 +1253,12 @@ test("dialog and mobile sheet motion preserve direction, exit timing, and focus"
   const setupTrigger = page.getByRole("button", { name: "配置Box与布局" }).first();
   await setupTrigger.click();
   const setupDialog = page.getByRole("dialog");
-  await expect(setupDialog).toHaveClass(/motion-dialog-content/);
-  await expect(setupDialog).toHaveCSS("transition-duration", /0\.2s/);
   await expect(setupDialog).toHaveCSS("transform-origin", /.+/);
+  await expectMotionDuration(setupDialog, 300);
   await page.setViewportSize({ width: 768, height: 900 });
   await armEndingTransitionCapture(setupDialog, "setup");
   await setupDialog.getByRole("button", { name: "Close" }).click();
-  await expectCapturedExitDuration(page, "setup", "0.14s");
+  await expectCapturedExitDuration(page, "setup", 180);
   await expect(setupDialog).toHaveCount(0);
   await expect(setupTrigger).toBeFocused();
 
@@ -1114,23 +1266,22 @@ test("dialog and mobile sheet motion preserve direction, exit timing, and focus"
   const issueTrigger = page.getByRole("button", { name: /反馈排班问题/ }).first();
   await issueTrigger.click();
   const feedbackDialog = page.getByRole("dialog");
-  await expect(feedbackDialog).toHaveCSS("transition-duration", /0\.2s/);
+  await expectMotionDuration(feedbackDialog, 300);
   await armEndingTransitionCapture(feedbackDialog, "feedback");
   await feedbackDialog.getByRole("button", { name: "取消" }).click();
-  await expectCapturedExitDuration(page, "feedback", "0.14s");
+  await expectCapturedExitDuration(page, "feedback", 180);
   await expect(feedbackDialog).toHaveCount(0);
   await expect(issueTrigger).toBeFocused();
 
   await page.setViewportSize({ width: 390, height: 844 });
   const sidebarTrigger = page.getByRole("button", { name: "Toggle Sidebar" });
   await sidebarTrigger.click();
-  const sheet = page.locator('[data-mobile="true"].motion-sheet-content');
+  const sheet = page.locator('[data-mobile="true"][data-sidebar="sidebar"]');
   await expect(sheet).toHaveAttribute("data-side", "left");
-  await expect(sheet).toHaveClass(/motion-sheet-content/);
-  await expect(sheet).toHaveCSS("transition-duration", /0\.22s/);
+  await expectMotionDuration(sheet, 320);
   await armEndingTransitionCapture(sheet, "sidebar");
   await page.keyboard.press("Escape");
-  await expectCapturedExitDuration(page, "sidebar", "0.16s");
+  await expectCapturedExitDuration(page, "sidebar", 220);
   await expect(sheet).toHaveCount(0);
   await expect(sidebarTrigger).toBeFocused();
 });
@@ -1166,7 +1317,7 @@ test("tooltips wait once and then open adjacent help instantly within the provid
   await calculatorTrigger.hover();
   const firstTooltip = page.locator('[data-slot="tooltip-content"][data-open]');
   await expect(firstTooltip).toBeVisible({ timeout: 1_500 });
-  await expect(firstTooltip).toHaveCSS("transition-duration", /0\.16s/);
+  await expectMotionDuration(firstTooltip, 240);
   await expect(page.locator("html")).toHaveAttribute("data-tooltip-open-delay", /.+/);
   const firstOpenDelay = Number(await page.locator("html").getAttribute("data-tooltip-open-delay"));
   expect(firstOpenDelay).toBeGreaterThanOrEqual(300);
@@ -1175,7 +1326,9 @@ test("tooltips wait once and then open adjacent help instantly within the provid
   await adviceTrigger.hover();
   const instantTooltip = page.locator('[data-slot="tooltip-content"][data-instant][data-open]');
   await expect(instantTooltip).toBeVisible({ timeout: 200 });
-  await expect(instantTooltip).toHaveCSS("transition-duration", "0s");
+  expect(await instantTooltip.evaluate((node) => node.getAnimations().every((animation) => (
+    Number(animation.effect?.getTiming().duration ?? 0) === 0
+  )))).toBe(true);
 });
 
 test("Full E2 stays in place and completes generation, shifts, MAA export, and feedback", async ({ page }) => {

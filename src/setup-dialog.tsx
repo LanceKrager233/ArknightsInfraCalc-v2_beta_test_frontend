@@ -421,7 +421,7 @@ export function SetupDialog({
                     <details className="setup-quiet-details pt-1">
                       <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">高级工具</summary>
                       <div className="grid gap-2 py-3 sm:grid-cols-2">
-                        <label className="motion-press flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-[4px] border border-dashed text-sm font-medium text-muted-foreground transition-[color,border-color,background-color,scale] duration-[var(--motion-duration-press)] ease-[var(--motion-ease-out)] active:scale-[0.97] hover:border-primary hover:bg-muted/40 hover:text-primary">
+                        <Label pressable className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-[4px] border border-dashed text-sm font-medium text-muted-foreground transition-[color,border-color,background-color] duration-[var(--motion-duration-state)] ease-[var(--motion-ease-out)] hover:border-primary hover:bg-muted/40 hover:text-primary">
                           <Upload className="size-4" />导入布局
                           <input
                             className="sr-only"
@@ -433,7 +433,7 @@ export function SetupDialog({
                               event.currentTarget.value = "";
                             }}
                           />
-                        </label>
+                        </Label>
                         <Button type="button" variant="outline" className="min-h-11 w-full" onClick={onDownloadLayout}>
                           <FileJson />导出布局
                         </Button>
