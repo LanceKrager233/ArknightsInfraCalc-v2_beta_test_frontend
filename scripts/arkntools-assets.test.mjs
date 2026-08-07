@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -103,15 +103,21 @@ test("generates deterministic catalogs and normalizes the known 35px icon input"
     "src/generated/arkntools/building-skill-catalog.json",
     "src/generated/arkntools/source.json",
     "public/images/building-skills/icon_shared.png",
-    "public/images/operator-portraits/001_alpha.png",
+    "public/images/operator-portraits/001_alpha.webp",
   ];
   for (const relative of relativeFiles) {
     assert.deepEqual(await readFile(path.join(first, relative)), await readFile(path.join(second, relative)));
   }
   const normalized = await sharp(path.join(first, "public/images/building-skills/icon_shared.png")).metadata();
   assert.deepEqual([normalized.width, normalized.height], [36, 36]);
-  const portrait = await sharp(path.join(first, "public/images/operator-portraits/001_alpha.png")).metadata();
+  const portrait = await sharp(path.join(first, "public/images/operator-portraits/001_alpha.webp")).metadata();
   assert.deepEqual([portrait.width, portrait.height], [180, 180]);
+  assert.equal(portrait.format, "webp");
+  const [webpSize, pngSize] = await Promise.all([
+    stat(path.join(first, "public/images/operator-portraits/001_alpha.webp")),
+    stat(path.join(source, "portraits/avatar/char_001_alpha.png")),
+  ]);
+  assert.ok(webpSize.size < pngSize.size, "WebP 头像应比源 PNG 更小。");
 });
 
 test("rejects duplicate names and missing referenced images before installing output", async (t) => {

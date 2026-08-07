@@ -116,5 +116,5 @@ export function operatorProfessionPresentation(
 ): { label: string; icon: string } | undefined {
   const profession = operatorProfessionFor(name);
   const label = profession !== undefined ? PROFESSION_LABELS[profession] : undefined;
-  return label ? { label, icon: `/images/profession/${label}.png` } : undefined;
+  return label ? { label, icon: `/images/profession/${label}.webp` } : undefined;
 }

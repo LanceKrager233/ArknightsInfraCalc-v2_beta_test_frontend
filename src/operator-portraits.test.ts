@@ -11,11 +11,11 @@ import {
 } from "./operatorPortraits.ts";
 
 test("resolves portraits by stable id before display name and keeps planner aliases", () => {
-  const amiyaPortrait = "/images/operator-portraits/002_amiya.png";
+  const amiyaPortrait = "/images/operator-portraits/002_amiya.webp";
   assert.equal(operatorPortraitFor("名称可以不同", "char_002_amiya"), amiyaPortrait);
   assert.equal(operatorPortraitFor("阿米娅(近卫)"), amiyaPortrait);
   assert.equal(operatorPortraitFor("阿米娅(医疗)"), amiyaPortrait);
-  assert.equal(operatorPortraitFor("嘉辛塔"), "/images/operator-portraits/4237_jcinta.png");
+  assert.equal(operatorPortraitFor("嘉辛塔"), "/images/operator-portraits/4237_jcinta.webp");
   assert.equal(operatorPortraitFor("不存在的干员"), undefined);
 });
 
@@ -31,12 +31,12 @@ test("maps the one-based planner skill index to presentation-only building skill
 
 test("resolves numeric profession codes to labeled icons for every cataloged operator", () => {
   assert.deepEqual(operatorProfessionFor("阿米娅"), 6);
-  assert.deepEqual(operatorProfessionPresentation("阿米娅"), { label: "术师", icon: "/images/profession/术师.png" });
+  assert.deepEqual(operatorProfessionPresentation("阿米娅"), { label: "术师", icon: "/images/profession/术师.webp" });
   for (const operator of OPERATOR_CATALOG) {
     const profession = operatorProfessionFor(operator.name);
     assert.equal(profession, operator.profession);
     assert.ok(PROFESSION_LABELS[profession as number]);
-    assert.equal(operatorProfessionPresentation(operator.name)?.icon, `/images/profession/${PROFESSION_LABELS[profession as number]}.png`);
+    assert.equal(operatorProfessionPresentation(operator.name)?.icon, `/images/profession/${PROFESSION_LABELS[profession as number]}.webp`);
   }
   assert.equal(operatorProfessionFor("不存在的干员"), undefined);
   assert.equal(operatorProfessionPresentation("不存在的干员"), undefined);
@@ -48,6 +48,6 @@ test("generated catalog has unique ids, names, and matching stable portrait path
   assert.equal(new Set(OPERATOR_CATALOG.map((operator) => operator.name)).size, OPERATOR_CATALOG.length);
   for (const operator of OPERATOR_CATALOG) {
     assert.match(operator.id, /^char_[A-Za-z0-9_&]+$/);
-    assert.equal(operator.portrait, `/images/operator-portraits/${operator.id.slice(5)}.png`);
+    assert.equal(operator.portrait, `/images/operator-portraits/${operator.id.slice(5)}.webp`);
   }
 });

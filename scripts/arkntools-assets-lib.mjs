@@ -16,8 +16,9 @@ const MANAGED_PATHS = [
 ];
 
 // 干员头像来自 ArknightsGameResource 仓库的 avatar 目录，文件名形如 char_<shortId>.png；
-// 按上游原尺寸直接拷贝，不做缩放。
+// 按上游原尺寸使用：只校验是 PNG，然后有损转成 WebP（透明背景保留，q85 + 智能色度抽样避免边缘色晕）。
 const PORTRAITS_DIRECTORY = "avatar";
+const WEBP_PORTRAIT_OPTIONS = { quality: 85, effort: 6, smartSubsample: true };
 
 const SOURCE_PATHS = {
   characterData: "assets/data/character.json",
@@ -105,26 +106,35 @@ async function mapLimit(items, limit, mapper) {
   return results;
 }
 
-async function validatePng(filePath, width, height, label) {
+// sharp 直接读文件路径时，libvips 会缓存文件句柄，Windows 上随后重命名/删除该文件会 EBUSY
+//（实测 write→metadata()→rename 100% 复现）；因此一律先 readFile 成 Buffer 再交给 sharp，
+// sharp 不持有磁盘句柄。fs.readFile 在 resolve 前就会关闭自己的句柄。
+async function readImageMetadata(filePath, label) {
   const stat = await lstat(filePath);
-  assert(stat.isFile() && !stat.isSymbolicLink(), `${label} 必须是普通 PNG 文件。`);
-  const metadata = await sharp(filePath).metadata();
+  assert(stat.isFile() && !stat.isSymbolicLink(), `${label} 必须是普通文件。`);
+  return sharp(await readFile(filePath)).metadata();
+}
+
+async function validatePng(filePath, width, height, label) {
+  const metadata = await readImageMetadata(filePath, label);
   assert(metadata.format === "png", `${label} 不是 PNG。`);
   assert(metadata.width === width && metadata.height === height, `${label} 尺寸应为 ${width}×${height}。`);
 }
 
 // 头像按上游原尺寸使用，只校验文件是 PNG，不强制具体尺寸。
 async function validatePngFormat(filePath, label) {
-  const stat = await lstat(filePath);
-  assert(stat.isFile() && !stat.isSymbolicLink(), `${label} 必须是普通 PNG 文件。`);
-  const metadata = await sharp(filePath).metadata();
+  const metadata = await readImageMetadata(filePath, label);
   assert(metadata.format === "png", `${label} 不是 PNG。`);
 }
 
+// 已安装的头像应已是 WebP，只校验格式，不强制具体尺寸。
+async function validateWebpFormat(filePath, label) {
+  const metadata = await readImageMetadata(filePath, label);
+  assert(metadata.format === "webp", `${label} 不是 WebP。`);
+}
+
 async function inspectSourceIcon(filePath, label) {
-  const stat = await lstat(filePath);
-  assert(stat.isFile() && !stat.isSymbolicLink(), `${label} 必须是普通 PNG 文件。`);
-  const metadata = await sharp(filePath).metadata();
+  const metadata = await readImageMetadata(filePath, label);
   assert(metadata.format === "png", `${label} 不是 PNG。`);
   const exact = metadata.width === 36 && metadata.height === 36;
   const knownNarrowInput = metadata.width === 35 && metadata.height === 36;
@@ -137,8 +147,8 @@ function normalizeCommit(value) {
   return value.toLowerCase();
 }
 
-function relativeAssetPath(directory, name) {
-  return `/images/${directory}/${name}.png`;
+function relativeAssetPath(directory, name, extension = "png") {
+  return `/images/${directory}/${name}.${extension}`;
 }
 
 async function loadSource(sourceRoot, sourceSha, portraitsRoot, portraitsSha) {
@@ -197,7 +207,7 @@ async function loadSource(sourceRoot, sourceSha, portraitsRoot, portraitsSha) {
       rarity: metadata.star,
       profession: metadata.profession,
       position: metadata.position,
-      portrait: relativeAssetPath("operator-portraits", shortId),
+      portrait: relativeAssetPath("operator-portraits", shortId, "webp"),
       buildingSkills,
     });
   }
@@ -228,7 +238,7 @@ async function loadSource(sourceRoot, sourceSha, portraitsRoot, portraitsSha) {
   const portraitFiles = operators.map((operator) => {
     const shortId = operator.id.slice("char_".length);
     return {
-      name: `${shortId}.png`,
+      name: `${shortId}.webp`,
       source: path.join(resolvedPortraits, PORTRAITS_DIRECTORY, `char_${shortId}.png`),
     };
   });
@@ -275,7 +285,8 @@ async function writeStage(stageRoot, generated) {
   await Promise.all([mkdir(portraitTarget, { recursive: true }), mkdir(iconTarget, { recursive: true }), mkdir(dataTarget, { recursive: true })]);
 
   await Promise.all([
-    mapLimit(generated.portraitFiles, 16, ({ source, name }) => copyFile(source, path.join(portraitTarget, name))),
+    mapLimit(generated.portraitFiles, 16, ({ source, name }) =>
+      sharp(source).webp(WEBP_PORTRAIT_OPTIONS).toFile(path.join(portraitTarget, name))),
     mapLimit(generated.iconFiles, 16, ({ source, name, normalizeWidth }) => normalizeWidth
       ? sharp(source)
           .extend({ right: 1, background: { r: 0, g: 0, b: 0, alpha: 0 } })
@@ -288,12 +299,12 @@ async function writeStage(stageRoot, generated) {
   ]);
 }
 
-async function listRegularPngNames(directory, label) {
+async function listRegularAssetNames(directory, label, extension) {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = [];
   for (const entry of entries) {
     assert(entry.isFile() && !entry.isSymbolicLink(), `${label} 只能包含普通文件：${entry.name}`);
-    assert(entry.name.endsWith(".png") && SAFE_ASSET_NAME.test(entry.name.slice(0, -4)), `${label} 包含不安全文件名：${entry.name}`);
+    assert(entry.name.endsWith(`.${extension}`) && SAFE_ASSET_NAME.test(entry.name.slice(0, -(extension.length + 1))), `${label} 包含不安全文件名：${entry.name}`);
     files.push(entry.name);
   }
   return files.sort((left, right) => left.localeCompare(right, "en"));
@@ -329,8 +340,8 @@ export async function checkGeneratedAssets(root) {
     ids.add(operator.id);
     names.add(operator.name);
     const shortId = operator.id.slice(5);
-    assert(operator.portrait === relativeAssetPath("operator-portraits", shortId), `干员 ${operator.id} 的头像路径无效。`);
-    portraitNames.push(`${shortId}.png`);
+    assert(operator.portrait === relativeAssetPath("operator-portraits", shortId, "webp"), `干员 ${operator.id} 的头像路径无效。`);
+    portraitNames.push(`${shortId}.webp`);
     assert(Array.isArray(operator.buildingSkills), `干员 ${operator.id} 的基建技能无效。`);
     operator.buildingSkills.forEach((skill, offset) => {
       assert(skill.index === offset + 1, `干员 ${operator.id} 的基建技能序号不连续。`);
@@ -355,8 +366,8 @@ export async function checkGeneratedAssets(root) {
   const portraitDirectory = path.join(resolvedRoot, MANAGED_PATHS[0]);
   const iconDirectory = path.join(resolvedRoot, MANAGED_PATHS[1]);
   const [actualPortraits, actualIcons] = await Promise.all([
-    listRegularPngNames(portraitDirectory, "干员头像目录"),
-    listRegularPngNames(iconDirectory, "基建技能图标目录"),
+    listRegularAssetNames(portraitDirectory, "干员头像目录", "webp"),
+    listRegularAssetNames(iconDirectory, "基建技能图标目录", "png"),
   ]);
   const expectedPortraits = portraitNames.sort((left, right) => left.localeCompare(right, "en"));
   const expectedIcons = [...referencedIcons].sort((left, right) => left.localeCompare(right, "en"));
@@ -367,7 +378,7 @@ export async function checkGeneratedAssets(root) {
   assert(manifest.counts?.portraits === actualPortraits.length, "来源清单的头像数量不一致。");
   assert(manifest.counts?.buildingSkillIcons === actualIcons.length, "来源清单的技能图标数量不一致。");
 
-  await mapLimit(actualPortraits, 16, (name) => validatePngFormat(path.join(portraitDirectory, name), `干员头像 ${name}`));
+  await mapLimit(actualPortraits, 16, (name) => validateWebpFormat(path.join(portraitDirectory, name), `干员头像 ${name}`));
   await mapLimit(actualIcons, 16, (name) => validatePng(path.join(iconDirectory, name), 36, 36, `基建技能图标 ${name}`));
   return manifest;
 }
@@ -401,20 +412,33 @@ async function desiredManagedFiles(stageRoot) {
   return existingManagedFiles(stageRoot);
 }
 
-// Windows 上文件监视器、索引服务或杀毒软件可能在目录换名瞬间短暂持有句柄，
-// 导致 rename 偶发 EPERM/EACCES/EBUSY；间隔重试几次即可越过瞬时锁。
-async function renameWithRetry(source, target) {
+// Windows 上文件监视器、索引服务或杀毒软件可能在目录换名/删除瞬间短暂持有句柄，
+// 导致 rename/rm 偶发 EPERM/EACCES/EBUSY/ENOTEMPTY。撞锁时按递增间隔重试直到
+// WINDOWS_LOCK_TIMEOUT_MS；无锁时第一次尝试即成功，重试不产生额外等待。
+const WINDOWS_LOCK_TIMEOUT_MS = 30_000;
+
+async function retryWindowsLock(operation) {
+  const startedAt = Date.now();
   const retriableCodes = new Set(["EPERM", "EACCES", "EBUSY", "ENOTEMPTY"]);
-  for (let attempt = 1; attempt <= 8; attempt += 1) {
+  let attempt = 0;
+  for (;;) {
+    attempt += 1;
     try {
-      await rename(source, target);
-      return;
+      return await operation();
     } catch (error) {
       if (!(error && typeof error === "object" && "code" in error && retriableCodes.has(error.code))) throw error;
-      if (attempt === 8) throw error;
-      await delay(150 * attempt);
+      if (Date.now() - startedAt >= WINDOWS_LOCK_TIMEOUT_MS) throw error;
+      await delay(Math.min(200 * attempt, 1500));
     }
   }
+}
+
+async function renameWithRetry(source, target) {
+  await retryWindowsLock(() => rename(source, target));
+}
+
+async function removeWithRetry(target, options) {
+  await retryWindowsLock(() => rm(target, options));
 }
 
 async function installStage(root, stageRoot) {
@@ -440,11 +464,11 @@ async function installStage(root, stageRoot) {
       installed.push(target);
     }
   } catch (error) {
-    for (const target of installed.reverse()) await rm(target, { recursive: true, force: true });
+    for (const target of installed.reverse()) await removeWithRetry(target, { recursive: true, force: true });
     for (const { target, backup } of backedUp.reverse()) await renameWithRetry(backup, target);
     throw error;
   } finally {
-    await rm(backupRoot, { recursive: true, force: true });
+    await removeWithRetry(backupRoot, { recursive: true, force: true });
   }
 }
 
@@ -460,6 +484,9 @@ export async function generateAssets({ sourceRoot, sourceSha, portraitsRoot, por
   const stageRoot = await mkdtemp(path.join(root, ".tmp", "arkntools-assets-stage-"));
   try {
     await writeStage(stageRoot, generated);
+    // Windows 杀毒/索引服务会对刚批量写入的图片短暂加锁；先停顿让扫描完成，
+    // 再进入校验/安装，减少后续重命名整棵树时被 EBUSY 卡住的概率。
+    await delay(1000);
     await checkGeneratedAssets(stageRoot);
     const [beforeFiles, afterFiles] = await Promise.all([existingManagedFiles(root), desiredManagedFiles(stageRoot)]);
     const removals = [...beforeFiles].filter((file) => !afterFiles.has(file)).sort();
@@ -470,6 +497,6 @@ export async function generateAssets({ sourceRoot, sourceSha, portraitsRoot, por
     await checkGeneratedAssets(root);
     return { manifest: generated.manifest, removals };
   } finally {
-    await rm(stageRoot, { recursive: true, force: true });
+    await removeWithRetry(stageRoot, { recursive: true, force: true });
   }
 }
