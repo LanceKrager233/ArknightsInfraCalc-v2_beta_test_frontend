@@ -8,7 +8,8 @@
 - 应用软链：`/opt/arknights-infra/current`
 - 求解器：`/opt/arknights-infra/current/bin/infra-cli`
 - 内部 Next 端口：`4175`
-- 公网 nginx 端口：`4174`
+- Funnel 回环 nginx：`127.0.0.1:4176`
+- 直连/IP 兼容 nginx：`0.0.0.0:4174`（受 Host 限制，不是发布健康检查入口）
 - 服务：`arknights-infra`
 - 持久化目录：`/var/lib/arknights-infra`
 
@@ -217,7 +218,10 @@ echo "root-only 回滚备份：$backup_dir"
 systemctl is-active arknights-infra
 ss -ltnp 'sport = :4175'
 curl -fsS http://127.0.0.1:4175/api/health
-curl -fsS http://127.0.0.1:4174/api/health
+curl -fsS \
+  -H 'Host: instance-pi2ohhfj.tail2dca9.ts.net:8443' \
+  -H 'X-Forwarded-Proto: https' \
+  http://127.0.0.1:4176/api/health
 journalctl -u arknights-infra -n 80 --no-pager
 ```
 
@@ -239,7 +243,7 @@ journalctl -u arknights-infra -n 120 --no-pager
 `plan_contract_sha256` 仅进入私有运行记录和反馈归因，不参与路由或健康判定；
 因此 schema 文件的 LF/CRLF 字节差异不会触发 legacy。
 
-然后在公网 `http://114.66.55.78:4174/` 载入 Full E2 并生成一次排班，
+然后在 production 公网 HTTPS `https://instance-pi2ohhfj.tail2dca9.ts.net:8443/` 载入 Full E2 并生成一次排班，
 确认 `infra-cli serve` 的真实调用链正常。若前端仍可通过 legacy 模式完成求解，则不应仅为切换内部协议而绕过核心仓库测试门禁更新二进制。
 
 ## 4. 手动回滚
