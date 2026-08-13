@@ -178,6 +178,7 @@ export interface HealthApiResponse {
       protocolVersion: number | null;
       schemaVersion: number | null;
       contractSha256: string | null;
+      solverExecutableSha256: string | null;
       reason: string | null;
     };
   };
@@ -608,6 +609,14 @@ export interface UserProfile {
   narration_hints: string[];
 }
 
+export interface SolverObservation {
+  protocol_version: number | null;
+  plan_schema_version: number | null;
+  plan_contract_sha256: string | null;
+  solver_executable_sha256: string | null;
+  observed_at: string;
+}
+
 export interface DebugBundle {
   version: string;
   startedAt: string;
@@ -626,6 +635,7 @@ export interface DebugBundle {
   profileJson?: UserProfile;
   maaJson?: MaaJson;
   rotationJson?: RotationJson;
+  solver?: SolverObservation;
   shiftFiles?: string[];
   shiftReadErrors?: string[];
   serveRequest?: unknown;
@@ -723,6 +733,7 @@ export interface PlanApiResponse {
   profileJson?: UserProfile;
   maaJson?: MaaJson;
   rotationJson?: RotationJson;
+  solver?: SolverObservation;
   debugBundle?: DebugBundle;
   runId?: string;
   runPath?: string;
@@ -798,7 +809,7 @@ export interface PublicPlanDebug {
   command?: string;
   stdout?: string;
   stderr?: string;
-  debugBundle?: DebugBundle;
+  debugBundle?: Omit<DebugBundle, "solver">;
 }
 
 export interface PublicPlanData {
