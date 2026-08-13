@@ -1286,6 +1286,7 @@ export function OperatorSlot({
   centerFrameInList = false,
   shiftDirection = 0,
   transitionDelay = 0,
+  portraitSize = 180,
   showSkillTooltip = false,
 }: {
   slot: RoomRow["operatorSlots"][number] | undefined;
@@ -1296,6 +1297,7 @@ export function OperatorSlot({
   centerFrameInList?: boolean;
   shiftDirection?: ShiftDirection;
   transitionDelay?: number;
+  portraitSize?: number;
   /** 悬停卡片时展示干员全部基建技能 tooltip，并关闭卡片自身的原生 title hover。 */
   showSkillTooltip?: boolean;
 }) {
@@ -1349,8 +1351,8 @@ export function OperatorSlot({
                     <img
                       src={slot.portrait}
                       alt={slot.name}
-                      width={180}
-                      height={180}
+                      width={portraitSize}
+                      height={portraitSize}
                       loading="lazy"
                       decoding="async"
                       className="absolute inset-0 h-full w-full object-cover outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10"

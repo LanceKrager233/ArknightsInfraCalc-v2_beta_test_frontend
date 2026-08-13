@@ -132,6 +132,7 @@ function ActionCard({
             label: action.operator || "未知干员",
             portrait,
           }}
+          portraitSize={80}
           showSkillTooltip
         />
         {/* 右侧：移动端上下两行（文本 / 徽章左右排），PC 端内部左右两列（文本 / 徽章上下排） */}

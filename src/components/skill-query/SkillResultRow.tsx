@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 
-import { BUILDING_ROOM_LABELS, buildingRoomPrefixForSkillId } from "@/building-rooms";
 import { OperatorSlot } from "@/components";
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -193,8 +192,6 @@ function SkillDetailDialog({
 }) {
   const skill = selected ? BUILDING_SKILL_CATALOG[selected.id] : undefined;
   const unlockLabel = selected ? buildingSkillUnlockLabel(selected.elite, selected.level, enhanced) : "";
-  const roomPrefix = selected ? buildingRoomPrefixForSkillId(selected.id) : null;
-  const roomLabel = roomPrefix ? BUILDING_ROOM_LABELS[roomPrefix] : undefined;
 
   return (
     <Dialog
