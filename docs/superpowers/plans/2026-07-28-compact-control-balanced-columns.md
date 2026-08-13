@@ -1,5 +1,7 @@
 # Compact Control Balanced Columns Implementation Plan
 
+> **Archived:** This is a historical UI implementation record. Any release instructions in adjacent dated plans are obsolete; use [`../../DEVELOPMENT_RELEASE_GUARDRAILS.md`](../../DEVELOPMENT_RELEASE_GUARDRAILS.md) and the repository `AGENTS.md` for current deployment and rollback rules.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Compress the compact-view control center to the horizontal 110px card geometry, make the two compact columns end at the same vertical position, and reuse list-view facility backgrounds on every compact card.
