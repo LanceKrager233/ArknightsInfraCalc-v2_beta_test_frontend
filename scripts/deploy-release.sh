@@ -368,11 +368,23 @@ if [[ -f "$shared_root/.env.local" ]]; then
   install -m 0600 "$shared_root/.env.local" "$release_dir/.env.local"
 fi
 
-if [[ ! -d "$shared_root/bin-data" && -n "$previous_release" && -d "$previous_release/bin/data" ]]; then
+has_complete_solver_data() {
+  local data_root="$1"
+  local required_file
+  [[ -d "$data_root" && ! -L "$data_root" ]] || return 1
+  for required_file in operator_instances.json skill_table.json base_systems.json training_advice_knowledge.json; do
+    [[ -f "$data_root/$required_file" && ! -L "$data_root/$required_file" ]] || return 1
+  done
+}
+
+if [[ ! -d "$shared_root/bin-data" \
+  && -n "$previous_release" \
+  && -d "$previous_release/bin/data" ]] \
+  && has_complete_solver_data "$previous_release/bin/data"; then
   install -d -m 0755 "$shared_root/bin-data"
   cp -a "$previous_release/bin/data/." "$shared_root/bin-data/"
 fi
-if [[ -d "$shared_root/bin-data" ]]; then
+if [[ -d "$shared_root/bin-data" ]] && has_complete_solver_data "$shared_root/bin-data"; then
   install -d -m 0755 "$release_dir/bin/data"
   cp -a "$shared_root/bin-data/." "$release_dir/bin/data/"
 fi

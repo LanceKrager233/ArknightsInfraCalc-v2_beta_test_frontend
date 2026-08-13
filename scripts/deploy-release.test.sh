@@ -41,7 +41,7 @@ setup_fixture() {
   unknown_release="$releases_root/operator-notes"
   archive_path="$archive_root/arknights-infra-development-${new_sha}.tar.gz"
 
-  mkdir -p "$releases_root" "$shared_root" "$archive_root" "$fixture_root/payload/bin" "$fixture_root/outside" "$fixture_root/var/lib/arknights-infra-dev"
+  mkdir -p "$releases_root" "$shared_root/bin-data" "$archive_root" "$fixture_root/payload/bin" "$fixture_root/outside" "$fixture_root/var/lib/arknights-infra-dev"
   create_complete_release "$app_root" "$(basename "$current_release")" "$current_sha"
   create_complete_release "$app_root" "$(basename "$previous_release")" "$previous_sha"
   create_complete_release "$app_root" "$(basename "$older_release")" "$older_sha"
@@ -54,6 +54,9 @@ setup_fixture() {
   ln -s "$current_release" "$app_root/current"
   printf 'development\n' > "$shared_root/deployment-environment"
   printf 'keep-authorization\n' > "$shared_root/authorization-state"
+  printf '{}\n' > "$shared_root/bin-data/operator_instances.json"
+  printf '{}\n' > "$shared_root/bin-data/skill_table.json"
+  printf '{}\n' > "$shared_root/bin-data/base_systems.json"
   printf 'keep-persistent-data\n' > "$fixture_root/var/lib/arknights-infra-dev/state"
   printf '{"name":"deploy-fixture","private":true}\n' > "$fixture_root/payload/package.json"
   printf 'test solver artifact\n' > "$fixture_root/payload/bin/infra-cli"
@@ -136,6 +139,29 @@ test ! -e "$oldest_release"
 test ! -e "$older_release"
 test ! -e "$archive_path"
 test "$(awk -F= '$1 == "INFRA_CLI_EXPECTED_SHA256" { print $2 }' "$app_root/current/.env.production.local")" = "$expected_fixture_solver_sha256"
+test ! -e "$app_root/current/bin/data"
+test -f "$shared_root/bin-data/operator_instances.json"
+assert_fixture_safety
+
+setup_fixture complete-runtime-data
+printf '{}\n' > "$shared_root/bin-data/training_advice_knowledge.json"
+run_deploy none 4194304
+test -f "$app_root/current/bin/data/operator_instances.json"
+test -f "$app_root/current/bin/data/skill_table.json"
+test -f "$app_root/current/bin/data/base_systems.json"
+test -f "$app_root/current/bin/data/training_advice_knowledge.json"
+assert_fixture_safety
+
+setup_fixture symlink-runtime-data
+rm -f -- "$shared_root/bin-data/operator_instances.json" \
+  "$shared_root/bin-data/skill_table.json" \
+  "$shared_root/bin-data/base_systems.json"
+ln -s "$fixture_root/outside" "$shared_root/bin-data/operator_instances.json"
+ln -s "$fixture_root/outside" "$shared_root/bin-data/skill_table.json"
+ln -s "$fixture_root/outside" "$shared_root/bin-data/base_systems.json"
+ln -s "$fixture_root/outside" "$shared_root/bin-data/training_advice_knowledge.json"
+run_deploy none 4194304
+test ! -e "$app_root/current/bin/data"
 assert_fixture_safety
 
 setup_fixture build-failure

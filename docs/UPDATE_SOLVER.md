@@ -82,6 +82,29 @@ test -f "$env_file"
 test ! -L "$installed_cli"
 test ! -L "$env_file"
 
+# infra-cli 会自动发现可执行文件旁的 bin/data。只要存在任一外部核心数据文件，
+# 就必须整套匹配当前 Worker；半套旧数据会覆盖内置数据并使 plan.compute 失败。
+runtime_data="$app/bin/data"
+runtime_data_files=(operator_instances.json skill_table.json base_systems.json training_advice_knowledge.json)
+runtime_data_present=0
+runtime_data_complete=1
+if [[ -L "$runtime_data" ]]; then
+  runtime_data_present=1
+  runtime_data_complete=0
+elif [[ -d "$runtime_data" ]] \
+  && [[ -n "$(find "$runtime_data" -mindepth 1 -maxdepth 1 ! -name baked -print -quit)" ]]; then
+  runtime_data_present=1
+fi
+for required_file in "${runtime_data_files[@]}"; do
+  if [[ ! -f "$runtime_data/$required_file" || -L "$runtime_data/$required_file" ]]; then
+    runtime_data_complete=0
+  fi
+done
+if [[ "$runtime_data_present" -eq 1 && "$runtime_data_complete" -ne 1 ]]; then
+  echo "bin/data 是不完整的旧数据集；请改走完整前端 release，或先成套更新 Worker 数据文件。" >&2
+  exit 1
+fi
+
 echo "Uploaded solver:"
 sha256sum "$new_cli"
 expected_solver_sha256=$(sha256sum "$new_cli" | cut -d ' ' -f 1)
