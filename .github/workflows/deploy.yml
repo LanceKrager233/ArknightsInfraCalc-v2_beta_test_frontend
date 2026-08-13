@@ -29,6 +29,8 @@ jobs:
       DEPLOY_PUBLIC_HEALTH_URL: ${{ vars.DEPLOY_PUBLIC_HEALTH_URL }}
       DEPLOY_DEBUG_TOOLS_ENABLED: ${{ vars.DEPLOY_DEBUG_TOOLS_ENABLED || '0' }}
       DEPLOY_RATE_LIMIT_ENABLED: ${{ vars.DEPLOY_RATE_LIMIT_ENABLED || '1' }}
+      DEPLOY_PREPARE_HELPER_CONTRACT: "1"
+      DEPLOY_RELEASE_HELPER_CONTRACT: "1"
 
     steps:
       - name: Checkout verified commit
@@ -48,6 +50,7 @@ jobs:
           test -n "$DEPLOY_SSH_KNOWN_HOSTS"
           [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9._-]+$ ]]
           [[ "$DEPLOY_SSH_USER" =~ ^[A-Za-z0-9_-]+$ ]]
+          test "$DEPLOY_SSH_USER" != "root"
           [[ "$DEPLOY_APP_ROOT" =~ ^/opt/arknights-infra(-[A-Za-z0-9._-]+)?$ ]]
           [[ "$DEPLOY_SERVICE" =~ ^arknights-infra(-[A-Za-z0-9_.@-]+)?$ ]]
           [[ "$DEPLOY_RUN_USER" =~ ^[A-Za-z0-9_-]+$ ]]
@@ -55,6 +58,8 @@ jobs:
           [[ "$DEPLOY_INTERNAL_PORT" =~ ^[0-9]{2,5}$ ]]
           [[ "$DEPLOY_DEBUG_TOOLS_ENABLED" =~ ^[01]$ ]]
           [[ "$DEPLOY_RATE_LIMIT_ENABLED" =~ ^[01]$ ]]
+          [[ "$DEPLOY_PREPARE_HELPER_CONTRACT" =~ ^[1-9][0-9]*$ ]]
+          [[ "$DEPLOY_RELEASE_HELPER_CONTRACT" =~ ^[1-9][0-9]*$ ]]
           if [[ "$DEPLOYMENT_ENV" == "production" ]]; then
             test "$DEPLOY_APP_ROOT" = "/opt/arknights-infra"
             test "$DEPLOY_SERVICE" = "arknights-infra"
@@ -76,12 +81,58 @@ jobs:
           printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
 
+      - name: Verify installed deployment helper contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh_options=(
+            -o BatchMode=yes
+            -o ConnectTimeout=15
+            -o ConnectionAttempts=2
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=3
+          )
+
+          verify_helper() {
+            local label="$1"
+            local helper_path="$2"
+            local expected_contract="$3"
+            local metadata actual_contract artifact_sha256
+
+            metadata="$(timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
+              "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
+              "test -f '$helper_path' && test ! -L '$helper_path' && stat -c '%U:%G:%a' -- '$helper_path'")"
+            if [[ "$metadata" != "root:root:755" ]]; then
+              echo "$label helper must be a root:root 0755 regular file; received: $metadata" >&2
+              exit 1
+            fi
+
+            actual_contract="$(timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
+              "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
+              "'$helper_path' --contract-version")"
+            if [[ "$actual_contract" != "$expected_contract" ]]; then
+              echo "$label helper contract mismatch: expected $expected_contract, received $actual_contract" >&2
+              exit 1
+            fi
+
+            artifact_sha256="$(timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
+              "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
+              "sha256sum -- '$helper_path' | cut -d ' ' -f 1")"
+            [[ "$artifact_sha256" =~ ^[0-9a-f]{64}$ ]]
+            printf '%s helper contract=%s sha256=%s\n' "$label" "$actual_contract" "$artifact_sha256" \
+              >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          verify_helper prepare /usr/local/sbin/arknights-infra-prepare-release \
+            "$DEPLOY_PREPARE_HELPER_CONTRACT"
+          verify_helper deploy /usr/local/sbin/arknights-infra-deploy \
+            "$DEPLOY_RELEASE_HELPER_CONTRACT"
+
       - name: Prepare or upload release archive
         shell: bash
         run: |
           set -euo pipefail
           prepare_started_at="$(date +%s)"
-          prepare_script_sha256="$(sha256sum scripts/prepare-release.sh | cut -d ' ' -f 1)"
           deploy_tree_sha="$(git rev-parse 'HEAD^{tree}')"
           remote_archive="/tmp/arknights-infra-${DEPLOYMENT_ENV}-${DEPLOY_SHA}.tar.gz"
 
@@ -91,8 +142,7 @@ jobs:
             '$DEPLOYMENT_ENV' \
             '$DEPLOY_SHA' \
             '$deploy_tree_sha' \
-            '$remote_archive' \
-            '$prepare_script_sha256'"
+            '$remote_archive'"
           prepare_status=$?
           set -e
 
@@ -126,7 +176,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          deploy_script_sha256="$(sha256sum scripts/deploy-release.sh | cut -d ' ' -f 1)"
           ssh -o BatchMode=yes "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
             "sudo -n /usr/local/sbin/arknights-infra-deploy \
             '$DEPLOYMENT_ENV' \
@@ -138,5 +187,4 @@ jobs:
             '$DEPLOY_INTERNAL_PORT' \
             '$DEPLOY_PUBLIC_HEALTH_URL' \
             '$DEPLOY_DEBUG_TOOLS_ENABLED' \
-            '$DEPLOY_RATE_LIMIT_ENABLED' \
-            '$deploy_script_sha256'"
+            '$DEPLOY_RATE_LIMIT_ENABLED'"

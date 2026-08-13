@@ -3,6 +3,28 @@ set -euo pipefail
 
 readonly release_retention_count=3
 readonly minimum_free_kib=$((3 * 1024 * 1024))
+readonly helper_contract_version=1
+# Temporary rollout bridge for the final byte-hash caller shared by both protected branches.
+readonly legacy_caller_sha256="d04259fb3c4e37d2a0f04afab492834eb2537edc5a11acaa66dcf593b2af021b"
+
+if [[ "${1:-}" == "--contract-version" ]]; then
+  if (( $# != 1 )); then
+    echo "--contract-version does not accept additional arguments." >&2
+    exit 2
+  fi
+  printf '%s\n' "$helper_contract_version"
+  exit 0
+fi
+
+if (( $# == 11 )); then
+  if [[ "${11:-}" != "$legacy_caller_sha256" ]]; then
+    echo "Legacy deployment caller hash is not allowlisted." >&2
+    exit 2
+  fi
+elif (( $# != 10 )); then
+  echo "Usage: $0 <environment> <release-sha> <archive-path> <app-root> <service> <run-user> <internal-port> <public-health-url> <debug-tools> <rate-limit>" >&2
+  exit 2
+fi
 
 deployment_environment="${1:-}"
 release_sha="${2:-}"
@@ -14,7 +36,6 @@ internal_port="${7:-}"
 public_health_url="${8:-}"
 debug_tools_enabled="${9:-0}"
 rate_limit_enabled="${10:-1}"
-expected_script_sha256="${11:-}"
 
 test_mode="${ARKNIGHTS_INFRA_DEPLOY_TEST_MODE:-0}"
 test_root="${ARKNIGHTS_INFRA_DEPLOY_TEST_ROOT:-}"
@@ -44,18 +65,9 @@ fi
 if [[ ! "$debug_tools_enabled" =~ ^[01]$ || ! "$rate_limit_enabled" =~ ^[01]$ ]]; then
   fail_validation "Debug and rate-limit flags must be 0 or 1."
 fi
-if [[ ! "$expected_script_sha256" =~ ^[0-9a-f]{64}$ ]]; then
-  fail_validation "Deployment script hash must be a SHA-256 digest."
-fi
-
 for required_command in awk basename bash cat chmod cp cut date df dirname flock gzip install ln mkdir mv node readlink realpath rm sha256sum sleep sort tar tr; do
   command -v "$required_command" >/dev/null || fail_validation "Required command is unavailable: $required_command"
 done
-
-actual_script_sha256="$(sha256sum "$0" | cut -d ' ' -f 1)"
-if [[ "$actual_script_sha256" != "$expected_script_sha256" ]]; then
-  fail_validation "The reviewed deployment script does not match the server-installed runner."
-fi
 
 if [[ "$test_mode" == "1" ]]; then
   if [[ "$(realpath "$0")" == "/usr/local/sbin/arknights-infra-deploy" ]]; then
