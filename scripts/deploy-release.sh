@@ -68,7 +68,7 @@ if [[ "$test_mode" == "1" ]]; then
     *) fail_validation "Test mode requires an isolated directory below /tmp." ;;
   esac
   case "$test_fail_stage" in
-    none|install|build|restart|internal-health|public-health) ;;
+    none|install|build|restart|internal-health|solver-version|solver-fingerprint|public-health) ;;
     *) fail_validation "Invalid test failure stage." ;;
   esac
   if [[ -n "$test_available_kib" && ! "$test_available_kib" =~ ^[0-9]+$ ]]; then
@@ -352,6 +352,15 @@ else
   runuser -u "$run_user" -- tar --no-same-owner --no-same-permissions -xzf "$archive_path" -C "$release_dir"
 fi
 
+solver_executable="$release_dir/bin/infra-cli"
+if [[ ! -f "$solver_executable" || -L "$solver_executable" ]]; then
+  fail_validation "Release is missing a regular Linux solver executable: bin/infra-cli"
+fi
+expected_solver_sha256="$(sha256sum "$solver_executable" | cut -d ' ' -f 1)"
+if [[ ! "$expected_solver_sha256" =~ ^[0-9a-f]{64}$ ]]; then
+  fail_validation "Unable to calculate the solver artifact SHA-256 digest."
+fi
+
 if [[ ! -f "$shared_root/.env.local" && -n "$previous_release" && -f "$previous_release/.env.local" ]]; then
   install -m 0600 "$previous_release/.env.local" "$shared_root/.env.local"
 fi
@@ -359,11 +368,23 @@ if [[ -f "$shared_root/.env.local" ]]; then
   install -m 0600 "$shared_root/.env.local" "$release_dir/.env.local"
 fi
 
-if [[ ! -d "$shared_root/bin-data" && -n "$previous_release" && -d "$previous_release/bin/data" ]]; then
+has_complete_solver_data() {
+  local data_root="$1"
+  local required_file
+  [[ -d "$data_root" && ! -L "$data_root" ]] || return 1
+  for required_file in operator_instances.json skill_table.json base_systems.json training_advice_knowledge.json; do
+    [[ -f "$data_root/$required_file" && ! -L "$data_root/$required_file" ]] || return 1
+  done
+}
+
+if [[ ! -d "$shared_root/bin-data" \
+  && -n "$previous_release" \
+  && -d "$previous_release/bin/data" ]] \
+  && has_complete_solver_data "$previous_release/bin/data"; then
   install -d -m 0755 "$shared_root/bin-data"
   cp -a "$previous_release/bin/data/." "$shared_root/bin-data/"
 fi
-if [[ -d "$shared_root/bin-data" ]]; then
+if [[ -d "$shared_root/bin-data" ]] && has_complete_solver_data "$shared_root/bin-data"; then
   install -d -m 0755 "$release_dir/bin/data"
   cp -a "$shared_root/bin-data/." "$release_dir/bin/data/"
 fi
@@ -379,6 +400,7 @@ APP_DEPLOYMENT_ENV=$deployment_environment
 SKLAND_FEATURE_ENABLED=$skland_enabled
 BETA_DEBUG_TOOLS_ENABLED=$debug_tools_enabled
 BETA_RATE_LIMIT_ENABLED=$rate_limit_enabled
+INFRA_CLI_EXPECTED_SHA256=$expected_solver_sha256
 EOF
 
 printf '%s\n' "$release_sha" > "$release_dir/.release-sha"
@@ -429,7 +451,9 @@ fi
 health_url="http://127.0.0.1:${internal_port}/api/health"
 health_body=""
 if [[ "$test_mode" == "1" ]]; then
-  if simulate_failure internal-health; then
+  if simulate_failure internal-health \
+    && simulate_failure solver-version \
+    && simulate_failure solver-fingerprint; then
     if [[ "$deployment_environment" == "production" ]]; then
       health_body='{"success":true,"data":{"plannerReady":true}}'
     else

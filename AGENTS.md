@@ -114,7 +114,8 @@ UI 控件优先组合 `src/components/ui/*` 中的现有 primitive。不要另�
 
 | 变量 | 用途 |
 | --- | --- |
-| `INFRA_CLI_PATH` | 显式指定当前平台可执行的 `infra-cli` |
+| `INFRA_CLI_PATH` | 本地或未托管环境显式指定当前平台可执行的 `infra-cli`；设置预期制品指纹后不覆盖部署制品 |
+| `INFRA_CLI_EXPECTED_SHA256` | 部署生成的 `bin/infra-cli` 制品指纹；启用后固定使用仓库制品，版本或 Worker 自报指纹不一致时健康检查失败，本地可省略 |
 | `INFRA_CORE_ROOT` | 指定相邻核心仓库，默认 `../ArknightsInfraCalc-v2` |
 | `ARKNIGHTS_INFRA_DATA_DIR` | 指定 CLI 运行数据目录 |
 | `BETA_CLI_TIMEOUT_MS` | CLI 请求超时，默认 `120000` |
@@ -171,6 +172,7 @@ npm test
 npm run test:api-contract
 npm run audit:security
 npm run test:deploy
+npm run test:solver-contract
 npm run check
 npm run build
 npm run test:production-client
@@ -183,6 +185,7 @@ npm start
 - `npm run check` 依次运行 lint、单元测试和 API 契约测试。
 - `npm run audit:security` 阻止 high / critical npm 漏洞进入受保护分支；依赖安全修复交付时仍应运行完整`npm audit`并清零已知漏洞。
 - `npm run test:deploy`验证发布包准备、release 淘汰、失败清理、回滚和磁盘空间保护。
+- `npm run test:solver-contract` 仅在 Linux 执行，验证仓库内 ELF 制品指纹并用 Full E2 真实调用 `plan.compute`。
 - `npm run build` 进行 Next 生产构建并覆盖 TypeScript 集成检查。
 - `npm run test:production-client` checks the production browser build for forbidden Skland login content.
 - `npm run test:e2e` 默认在 5184 端口自动启动 Next，并用 Playwright 拦截外部 API；通常不需要真实 CLI 或森空岛凭据。
@@ -268,7 +271,7 @@ development public HTTPS: https://instance-pi2ohhfj.tail2dca9.ts.net (Tailscale 
 development persistent storage: /var/lib/arknights-infra-dev
 ```
 
-`main`和`develop` push 必须先通过`Frontend quality`，随后由`Deploy verified branch`从已验证 SHA 自动发布到各自 GitHub Environment。发布包只包含 Git 跟踪内容；服务器优先通过`/usr/local/sbin/arknights-infra-prepare-release`和`/var/cache/arknights-infra-deploy/repository.git`增量准备准确 SHA，仅在 helper 返回临时故障码`75`时回退完整 SCP。SHA、tree、路径或脚本哈希错误必须直接失败。新 release 从应用根目录的`shared/.env.local`和`shared/bin-data`继承环境配置，以`arkinfra`用户执行`npm ci`/`npm run build`，再原子切换`current`并重启对应 systemd。部署锁内只允许清理命名和提交标记均合法的 release 直属目录；每个环境保留当前 release 加两个回滚版本，失败半成品必须移除，清理后可用空间少于 3 GiB 时必须在创建新 release 前失败。`shared`和`/var/lib`永不进入 release 淘汰范围。不得把服务器密码写入文件或命令；只使用受保护的 SSH key 与 known_hosts。固定部署脚本变更时，先让提交通过门禁，再以`root:root 0755`原子安装并核对 SHA-256。手动发布仍必须基于对应已合并、已验证的远端分支。
+`main`和`develop` push 必须先通过`Frontend quality`，随后由`Deploy verified branch`从已验证 SHA 自动发布到各自 GitHub Environment。发布包只包含 Git 跟踪内容；服务器优先通过`/usr/local/sbin/arknights-infra-prepare-release`和`/var/cache/arknights-infra-deploy/repository.git`增量准备准确 SHA，仅在 helper 返回临时故障码`75`时回退完整 SCP。SHA、tree、路径或脚本哈希错误必须直接失败。新 release 从应用根目录的`shared/.env.local`继承环境配置；`shared/bin-data`只有包含当前 Worker 所需的完整数据文件集时才注入 release，不完整的旧数据保留但不得覆盖制品内置数据。随后以`arkinfra`用户执行`npm ci`/`npm run build`，再原子切换`current`并重启对应 systemd。部署锁内只允许清理命名和提交标记均合法的 release 直属目录；每个环境保留当前 release 加两个回滚版本，失败半成品必须移除，清理后可用空间少于 3 GiB 时必须在创建新 release 前失败。`shared`和`/var/lib`永不进入 release 淘汰范围。不得把服务器密码写入文件或命令；只使用受保护的 SSH key 与 known_hosts。固定部署脚本变更时，先让提交通过门禁，再以`root:root 0755`原子安装并核对 SHA-256。手动发布仍必须基于对应已合并、已验证的远端分支。
 
 发布后至少验证：
 
