@@ -114,7 +114,8 @@ UI 控件优先组合 `src/components/ui/*` 中的现有 primitive。不要另�
 
 | 变量 | 用途 |
 | --- | --- |
-| `INFRA_CLI_PATH` | 显式指定当前平台可执行的 `infra-cli` |
+| `INFRA_CLI_PATH` | 本地或未托管环境显式指定当前平台可执行的 `infra-cli`；设置预期制品指纹后不覆盖部署制品 |
+| `INFRA_CLI_EXPECTED_SHA256` | 部署生成的 `bin/infra-cli` 制品指纹；启用后固定使用仓库制品，版本或 Worker 自报指纹不一致时健康检查失败，本地可省略 |
 | `INFRA_CORE_ROOT` | 指定相邻核心仓库，默认 `../ArknightsInfraCalc-v2` |
 | `ARKNIGHTS_INFRA_DATA_DIR` | 指定 CLI 运行数据目录 |
 | `BETA_CLI_TIMEOUT_MS` | CLI 请求超时，默认 `120000` |
@@ -171,6 +172,7 @@ npm test
 npm run test:api-contract
 npm run audit:security
 npm run test:deploy
+npm run test:solver-contract
 npm run check
 npm run build
 npm run test:production-client
@@ -183,6 +185,7 @@ npm start
 - `npm run check` 依次运行 lint、单元测试和 API 契约测试。
 - `npm run audit:security` 阻止 high / critical npm 漏洞进入受保护分支；依赖安全修复交付时仍应运行完整`npm audit`并清零已知漏洞。
 - `npm run test:deploy`验证发布包准备、release 淘汰、失败清理、回滚和磁盘空间保护。
+- `npm run test:solver-contract` 仅在 Linux 执行，验证仓库内 ELF 制品指纹并用 Full E2 真实调用 `plan.compute`。
 - `npm run build` 进行 Next 生产构建并覆盖 TypeScript 集成检查。
 - `npm run test:production-client` checks the production browser build for forbidden Skland login content.
 - `npm run test:e2e` 默认在 5184 端口自动启动 Next，并用 Playwright 拦截外部 API；通常不需要真实 CLI 或森空岛凭据。

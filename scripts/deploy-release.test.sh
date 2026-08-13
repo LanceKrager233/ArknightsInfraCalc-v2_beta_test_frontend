@@ -41,7 +41,7 @@ setup_fixture() {
   unknown_release="$releases_root/operator-notes"
   archive_path="$archive_root/arknights-infra-development-${new_sha}.tar.gz"
 
-  mkdir -p "$releases_root" "$shared_root" "$archive_root" "$fixture_root/payload" "$fixture_root/outside" "$fixture_root/var/lib/arknights-infra-dev"
+  mkdir -p "$releases_root" "$shared_root" "$archive_root" "$fixture_root/payload/bin" "$fixture_root/outside" "$fixture_root/var/lib/arknights-infra-dev"
   create_complete_release "$app_root" "$(basename "$current_release")" "$current_sha"
   create_complete_release "$app_root" "$(basename "$previous_release")" "$previous_sha"
   create_complete_release "$app_root" "$(basename "$older_release")" "$older_sha"
@@ -56,6 +56,8 @@ setup_fixture() {
   printf 'keep-authorization\n' > "$shared_root/authorization-state"
   printf 'keep-persistent-data\n' > "$fixture_root/var/lib/arknights-infra-dev/state"
   printf '{"name":"deploy-fixture","private":true}\n' > "$fixture_root/payload/package.json"
+  printf 'test solver artifact\n' > "$fixture_root/payload/bin/infra-cli"
+  expected_fixture_solver_sha256="$(sha256sum "$fixture_root/payload/bin/infra-cli" | cut -d ' ' -f 1)"
   tar -czf "$archive_path" -C "$fixture_root/payload" .
 }
 
@@ -133,6 +135,7 @@ test ! -e "$incomplete_release"
 test ! -e "$oldest_release"
 test ! -e "$older_release"
 test ! -e "$archive_path"
+test "$(awk -F= '$1 == "INFRA_CLI_EXPECTED_SHA256" { print $2 }' "$app_root/current/.env.production.local")" = "$expected_fixture_solver_sha256"
 assert_fixture_safety
 
 setup_fixture build-failure
@@ -158,6 +161,20 @@ setup_fixture health-failure
 assert_failure internal-health
 test "$(readlink -f "$app_root/current")" = "$current_release"
 test "$(count_valid_releases)" -eq 3
+test -z "$(find "$releases_root" -mindepth 1 -maxdepth 1 -type d -name "*-${new_sha:0:12}" -print -quit)"
+test ! -e "$archive_path"
+assert_fixture_safety
+
+setup_fixture solver-version-mismatch
+assert_failure solver-version
+test "$(readlink -f "$app_root/current")" = "$current_release"
+test -z "$(find "$releases_root" -mindepth 1 -maxdepth 1 -type d -name "*-${new_sha:0:12}" -print -quit)"
+test ! -e "$archive_path"
+assert_fixture_safety
+
+setup_fixture solver-fingerprint-mismatch
+assert_failure solver-fingerprint
+test "$(readlink -f "$app_root/current")" = "$current_release"
 test -z "$(find "$releases_root" -mindepth 1 -maxdepth 1 -type d -name "*-${new_sha:0:12}" -print -quit)"
 test ! -e "$archive_path"
 assert_fixture_safety
