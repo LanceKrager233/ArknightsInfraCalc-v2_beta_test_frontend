@@ -3,9 +3,12 @@ set -euo pipefail
 
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 helper="$repository_root/scripts/prepare-release.sh"
-helper_sha256="$(sha256sum "$helper" | cut -d ' ' -f 1)"
 test_root="$(mktemp -d)"
 trap 'rm -rf -- "$test_root"' EXIT
+
+test "$("$helper" --contract-version)" = "1"
+legacy_develop_caller_sha256="0ab06ae9b1b7d535c6958e84fd06484a05a35975bca1be1dd17031d5de72fec3"
+legacy_main_caller_sha256="e6fc105b477d86242aba400d0001d6c9a42b75f0d9c7af2a9fc3d633d691848d"
 
 source_repository="$test_root/source"
 origin_repository="$test_root/origin.git"
@@ -51,7 +54,7 @@ run_helper() {
     ARKNIGHTS_INFRA_PREPARE_TEST_CACHE_ROOT="$cache_root" \
     ARKNIGHTS_INFRA_PREPARE_TEST_RETRY_DELAY_SECONDS=0 \
     "$@" \
-    "$helper" "$environment" "$sha" "$tree" "$archive" "$helper_sha256"
+    "$helper" "$environment" "$sha" "$tree" "$archive"
 }
 
 run_helper_with_bundle() {
@@ -68,7 +71,42 @@ run_helper_with_bundle() {
     ARKNIGHTS_INFRA_PREPARE_TEST_CACHE_ROOT="$cache_root" \
     ARKNIGHTS_INFRA_PREPARE_TEST_RETRY_DELAY_SECONDS=0 \
     "$@" \
-    "$helper" "$environment" "$sha" "$tree" "$archive" "$helper_sha256" "$bundle"
+    "$helper" "$environment" "$sha" "$tree" "$archive" "$bundle"
+}
+
+run_legacy_helper() {
+  local caller_sha256="$1"
+  local environment="$2"
+  local sha="$3"
+  local tree="$4"
+  local archive="$5"
+  shift 5
+  env \
+    ARKNIGHTS_INFRA_PREPARE_TEST_MODE=1 \
+    ARKNIGHTS_INFRA_PREPARE_TEST_ROOT="$test_root" \
+    ARKNIGHTS_INFRA_PREPARE_TEST_REPOSITORY_URL="$origin_repository" \
+    ARKNIGHTS_INFRA_PREPARE_TEST_CACHE_ROOT="$cache_root" \
+    ARKNIGHTS_INFRA_PREPARE_TEST_RETRY_DELAY_SECONDS=0 \
+    "$@" \
+    "$helper" "$environment" "$sha" "$tree" "$archive" "$caller_sha256"
+}
+
+run_legacy_helper_with_bundle() {
+  local caller_sha256="$1"
+  local environment="$2"
+  local sha="$3"
+  local tree="$4"
+  local archive="$5"
+  local bundle="$6"
+  shift 6
+  env \
+    ARKNIGHTS_INFRA_PREPARE_TEST_MODE=1 \
+    ARKNIGHTS_INFRA_PREPARE_TEST_ROOT="$test_root" \
+    ARKNIGHTS_INFRA_PREPARE_TEST_REPOSITORY_URL="$origin_repository" \
+    ARKNIGHTS_INFRA_PREPARE_TEST_CACHE_ROOT="$cache_root" \
+    ARKNIGHTS_INFRA_PREPARE_TEST_RETRY_DELAY_SECONDS=0 \
+    "$@" \
+    "$helper" "$environment" "$sha" "$tree" "$archive" "$caller_sha256" "$bundle"
 }
 
 assert_status() {
@@ -126,9 +164,9 @@ test "$(git --git-dir="$cache_root/repository.git" cat-file -p "$incremental_sha
 
 production_archive="$test_root/arknights-infra-production-${incremental_sha}.tar.gz"
 rm -f "$incremental_archive"
-run_helper production "$incremental_sha" "$incremental_tree" "$production_archive" &
+run_legacy_helper "$legacy_main_caller_sha256" production "$incremental_sha" "$incremental_tree" "$production_archive" &
 production_pid=$!
-run_helper development "$incremental_sha" "$incremental_tree" "$incremental_archive" &
+run_legacy_helper "$legacy_develop_caller_sha256" development "$incremental_sha" "$incremental_tree" "$incremental_archive" &
 development_pid=$!
 wait "$production_pid"
 wait "$development_pid"
@@ -143,7 +181,8 @@ bundle_path="$test_root/arknights-infra-development-${bundle_sha}.bundle"
 bundle_archive="$test_root/arknights-infra-development-${bundle_sha}.tar.gz"
 git -C "$source_repository" bundle create "$bundle_path" HEAD "^$incremental_sha"
 mv "$origin_repository" "$test_root/origin-unavailable.git"
-run_helper_with_bundle development "$bundle_sha" "$bundle_tree" "$bundle_archive" "$bundle_path"
+run_legacy_helper_with_bundle "$legacy_develop_caller_sha256" development \
+  "$bundle_sha" "$bundle_tree" "$bundle_archive" "$bundle_path"
 mv "$test_root/origin-unavailable.git" "$origin_repository"
 expected_tar_sha="$(git -C "$source_repository" archive --format=tar "$bundle_sha" | sha256sum | cut -d ' ' -f 1)"
 actual_tar_sha="$(gzip -dc "$bundle_archive" | sha256sum | cut -d ' ' -f 1)"
@@ -179,16 +218,12 @@ assert_status 2 run_helper development "${incremental_sha%?}x" "$incremental_tre
 assert_status 2 run_helper development "$incremental_sha" "$(different_hash "$incremental_tree")" "$incremental_archive"
 assert_status 2 run_helper development "$incremental_sha" "$incremental_tree" "$test_root/wrong.tar.gz"
 
-set +e
-env \
-  ARKNIGHTS_INFRA_PREPARE_TEST_MODE=1 \
-  ARKNIGHTS_INFRA_PREPARE_TEST_ROOT="$test_root" \
-  ARKNIGHTS_INFRA_PREPARE_TEST_REPOSITORY_URL="$origin_repository" \
-  ARKNIGHTS_INFRA_PREPARE_TEST_CACHE_ROOT="$cache_root" \
-  "$helper" development "$incremental_sha" "$incremental_tree" "$incremental_archive" "$(different_hash "$helper_sha256")" >/dev/null 2>&1
-bad_hash_status=$?
-set -e
-test "$bad_hash_status" -eq 2
+assert_status 2 "$helper" --contract-version unexpected
+assert_status 2 "$helper" development "$incremental_sha" "$incremental_tree"
+assert_status 2 "$helper" development "$incremental_sha" "$incremental_tree" "$incremental_archive" \
+  "$test_root/wrong.bundle" unexpected
+assert_status 2 run_legacy_helper "$(different_hash "$legacy_develop_caller_sha256")" development \
+  "$incremental_sha" "$incremental_tree" "$incremental_archive"
 
 git -C "$source_repository" commit --allow-empty -m "unavailable" >/dev/null
 unavailable_sha="$(git -C "$source_repository" rev-parse HEAD)"
@@ -207,7 +242,7 @@ env \
   ARKNIGHTS_INFRA_PREPARE_TEST_CACHE_ROOT="$unavailable_cache" \
   ARKNIGHTS_INFRA_PREPARE_TEST_RETRY_DELAY_SECONDS=0 \
   "$helper" development "$unavailable_sha" "$unavailable_tree" \
-  "$test_root/arknights-infra-development-${unavailable_sha}.tar.gz" "$helper_sha256" >/dev/null 2>&1
+  "$test_root/arknights-infra-development-${unavailable_sha}.tar.gz" >/dev/null 2>&1
 unavailable_status=$?
 set -e
 test "$unavailable_status" -eq 75
@@ -218,5 +253,11 @@ grep -Fq 'git bundle create "$local_bundle" HEAD "^$bundle_base_sha"' "$reposito
 grep -Fq 'transport_mode="git-bundle"' "$repository_root/.github/workflows/deploy.yml"
 grep -Fq 'timeout --kill-after=10s 1500s scp' "$repository_root/.github/workflows/deploy.yml"
 grep -Fq 'fetch-depth: 0' "$repository_root/.github/workflows/deploy.yml"
+grep -Fq 'test "$DEPLOY_SSH_USER" != "root"' "$repository_root/.github/workflows/deploy.yml"
+grep -Fq 'DEPLOY_PREPARE_HELPER_CONTRACT: "1"' "$repository_root/.github/workflows/deploy.yml"
+grep -Fq 'DEPLOY_RELEASE_HELPER_CONTRACT: "1"' "$repository_root/.github/workflows/deploy.yml"
+grep -Fq 'verify_helper prepare /usr/local/sbin/arknights-infra-prepare-release' "$repository_root/.github/workflows/deploy.yml"
+grep -Fq 'verify_helper deploy /usr/local/sbin/arknights-infra-deploy' "$repository_root/.github/workflows/deploy.yml"
+grep -Fq -- '--contract-version")"' "$repository_root/.github/workflows/deploy.yml"
 
 echo "Release preparation integration tests passed."

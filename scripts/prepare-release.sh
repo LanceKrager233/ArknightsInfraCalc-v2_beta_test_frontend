@@ -2,15 +2,45 @@
 set -euo pipefail
 
 readonly temporary_failure_status=75
+readonly helper_contract_version=1
+# Temporary rollout bridge for the final byte-hash callers on the two protected branches.
+readonly legacy_develop_caller_sha256="0ab06ae9b1b7d535c6958e84fd06484a05a35975bca1be1dd17031d5de72fec3"
+readonly legacy_main_caller_sha256="e6fc105b477d86242aba400d0001d6c9a42b75f0d9c7af2a9fc3d633d691848d"
 readonly production_repository_url="https://github.com/KnightCodeSquareMatrix/ArknightsInfraCalc-v2_beta_test_frontend.git"
 readonly production_cache_root="/var/cache/arknights-infra-deploy"
+
+if [[ "${1:-}" == "--contract-version" ]]; then
+  if (( $# != 1 )); then
+    echo "--contract-version does not accept additional arguments." >&2
+    exit 2
+  fi
+  printf '%s\n' "$helper_contract_version"
+  exit 0
+fi
+
+legacy_caller=0
+if (( $# == 5 || $# == 6 )) && [[ "${5:-}" =~ ^[0-9a-f]{64}$ ]]; then
+  case "$5" in
+    "$legacy_develop_caller_sha256"|"$legacy_main_caller_sha256") legacy_caller=1 ;;
+    *)
+      echo "Legacy release preparation caller hash is not allowlisted." >&2
+      exit 2
+      ;;
+  esac
+elif (( $# < 4 || $# > 5 )); then
+  echo "Usage: $0 <environment> <release-sha> <tree-sha> <archive-path> [bundle-path]" >&2
+  exit 2
+fi
 
 deployment_environment="${1:-}"
 release_sha="${2:-}"
 expected_tree_sha="${3:-}"
 archive_path="${4:-}"
-expected_script_sha256="${5:-}"
-bundle_path="${6:-}"
+if (( legacy_caller == 1 )); then
+  bundle_path="${6:-}"
+else
+  bundle_path="${5:-}"
+fi
 
 fail_validation() {
   echo "$1" >&2
@@ -31,18 +61,9 @@ fi
 if [[ ! "$expected_tree_sha" =~ ^[0-9a-f]{40}$ ]]; then
   fail_validation "Tree SHA must be a full lowercase Git object hash."
 fi
-if [[ ! "$expected_script_sha256" =~ ^[0-9a-f]{64}$ ]]; then
-  fail_validation "Release preparation script hash must be a SHA-256 digest."
-fi
-
-for required_command in flock git gzip id mktemp mv readlink realpath sed sha256sum stat timeout; do
+for required_command in flock git gzip id mktemp mv readlink realpath sed stat timeout; do
   command -v "$required_command" >/dev/null || fail_validation "Required command is unavailable: $required_command"
 done
-
-actual_script_sha256="$(sha256sum "$0" | cut -d ' ' -f 1)"
-if [[ "$actual_script_sha256" != "$expected_script_sha256" ]]; then
-  fail_validation "The reviewed release preparation script does not match the server-installed helper."
-fi
 
 export GIT_TERMINAL_PROMPT=0
 export GIT_HTTP_LOW_SPEED_LIMIT=1024

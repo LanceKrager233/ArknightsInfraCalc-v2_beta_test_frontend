@@ -1,5 +1,7 @@
 # Compact Auxiliary Cards and Dormitory Stack Implementation Plan
 
+> **Archived:** This is a historical UI implementation record. Its unchecked root/SCP deployment steps target an obsolete release layout and must not be executed. Follow [`../../DEVELOPMENT_RELEASE_GUARDRAILS.md`](../../DEVELOPMENT_RELEASE_GUARDRAILS.md) and the repository `AGENTS.md` for the current verified-branch workflow.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make compact-view meeting and office cards use the same short horizontal arrangement as power cards, then move all dormitories into an independent right-hand stack so they immediately fill the space below those short cards.

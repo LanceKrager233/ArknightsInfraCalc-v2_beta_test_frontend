@@ -1,5 +1,7 @@
 # 更新线上求解器
 
+本页只描述“当前 release 内单独替换求解器”的高风险例外流程。Windows/Linux 制品差异、协议版本与两个 hash 的长期语义、完整运行数据要求和正常 develop→main 发布顺序见[开发与发布维护准则](./DEVELOPMENT_RELEASE_GUARDRAILS.md)。
+
 当前线上环境：
 
 - SSH：`root@114.66.55.78`
