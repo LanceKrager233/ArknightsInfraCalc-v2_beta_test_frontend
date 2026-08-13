@@ -267,8 +267,9 @@ production branch: main
 production app root: /opt/arknights-infra
 production systemd: arknights-infra
 production internal Next: 127.0.0.1:4175
-production loopback nginx: 127.0.0.1:4174
-production public HTTPS: https://instance-pi2ohhfj.tail2dca9.ts.net:8443 (Tailscale Funnel to loopback nginx)
+production Funnel nginx: 127.0.0.1:4176
+production direct-IP nginx: 0.0.0.0:4174 (Host-restricted compatibility listener; not the Funnel target)
+production public HTTPS: https://instance-pi2ohhfj.tail2dca9.ts.net:8443 (Tailscale Funnel to 127.0.0.1:4176)
 production HTTP redirect: port 80 redirects to public HTTPS
 production persistent storage: /var/lib/arknights-infra
 
