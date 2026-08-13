@@ -44,6 +44,9 @@ jobs:
       - name: API contract tests
         run: npm run test:api-contract
 
+      - name: Bundled solver contract smoke
+        run: npm run test:solver-contract
+
       - name: Deployment script tests
         run: npm run test:deploy
 
