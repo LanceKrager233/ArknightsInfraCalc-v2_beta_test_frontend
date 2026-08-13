@@ -17,7 +17,7 @@ import {
   Upload,
 } from "lucide-react";
 import { AnimatePresence, motion, useAnimate, useReducedMotion } from "motion/react";
-import { CSSProperties, ChangeEvent, ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { CSSProperties, ChangeEvent, ReactElement, ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ThinkingOrb } from "thinking-orbs";
 
 import { AnimatedNumber, AnimatedText } from "@/components/AnimatedText";
@@ -47,7 +47,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
-import { operatorProfessionPresentation } from "@/operatorPortraits";
+import { OperatorSkillTooltip } from "@/components/OperatorSkillTooltip";
+import {
+  BUILDING_SKILL_ENHANCED_WORD,
+  buildingSkillUnlockLabel,
+  buildingSkillUnlockPrefix,
+  operatorProfessionPresentation,
+} from "@/operatorPortraits";
 import { roomVisualFor } from "@/room-visuals";
 import {
   MOTION_DURATION,
@@ -1172,6 +1178,7 @@ function OperatorSlotShell({
   compactView,
   frameClassName,
   frameContent,
+  frameWrapper = (frame) => frame,
   label,
   labelClassName,
   title,
@@ -1182,10 +1189,25 @@ function OperatorSlotShell({
   compactView: boolean;
   frameClassName: string;
   frameContent?: ReactNode;
+  /** 可选：包装头像框元素（例如包上技能 tooltip 的 trigger）。默认原样返回。 */
+  frameWrapper?: (frame: ReactElement) => ReactElement;
   label: ReactNode;
   labelClassName: string;
   title?: string;
 }) {
+  const frame = (
+    <div
+      className={cn(
+        "relative aspect-square h-[var(--operator-slot-size)] min-w-0 shrink-0 overflow-hidden border-2 max-sm:border",
+        frameClassName,
+        centerFrameInList && "max-sm:h-auto max-sm:w-full sm:absolute sm:left-0 sm:top-1/2 sm:-translate-y-1/2",
+      )}
+      aria-label={ariaLabel}
+    >
+      {frameContent}
+    </div>
+  );
+
   return (
     <div
       className={cn(
@@ -1198,16 +1220,7 @@ function OperatorSlotShell({
       )}
       title={title}
     >
-      <div
-        className={cn(
-          "relative aspect-square h-[var(--operator-slot-size)] min-w-0 shrink-0 overflow-hidden border-2 max-sm:border",
-          frameClassName,
-          centerFrameInList && "max-sm:h-auto max-sm:w-full sm:absolute sm:left-0 sm:top-1/2 sm:-translate-y-1/2",
-        )}
-        aria-label={ariaLabel}
-      >
-        {frameContent}
-      </div>
+      {frameWrapper(frame)}
       <span
         className={cn(
           "mt-0.5 block truncate text-center leading-tight",
@@ -1222,16 +1235,9 @@ function OperatorSlotShell({
   );
 }
 
-function buildingSkillUnlockLabel(elite: number, level: number): string {
-  if (elite === 0 && level === 1) return "初始解锁";
-  if (elite === 0) return `等级 ${level} 解锁`;
-  if (level === 1) return `精英 ${elite} 解锁`;
-  return `精英 ${elite} · 等级 ${level} 解锁`;
-}
-
 function BuildingSkillBadge({ skill }: { skill: NonNullable<RoomRow["operatorSlots"][number]["buildingSkill"]> }) {
   const [open, setOpen] = useState(false);
-  const unlockLabel = buildingSkillUnlockLabel(skill.elite, skill.level);
+  const unlockLabel = buildingSkillUnlockLabel(skill.elite, skill.level, skill.enhanced);
   return (
     <Tooltip open={open} onOpenChange={setOpen}>
       <TooltipTrigger
@@ -1255,7 +1261,16 @@ function BuildingSkillBadge({ skill }: { skill: NonNullable<RoomRow["operatorSlo
         className="max-w-80 flex-col items-start gap-1.5 whitespace-normal px-3 py-2 text-left leading-relaxed"
       >
         <span className="font-semibold">S<span className="font-number">{skill.index}</span> · {skill.name}</span>
-        <span className="text-background/72">{unlockLabel}</span>
+        <span className="text-background/72">
+          {skill.enhanced ? (
+            <>
+              <span>{buildingSkillUnlockPrefix(skill.elite, skill.level)}</span>
+              <span className="text-[#22BBFF]">{BUILDING_SKILL_ENHANCED_WORD}</span>
+            </>
+          ) : (
+            unlockLabel
+          )}
+        </span>
         <span>{skill.description}</span>
       </TooltipContent>
     </Tooltip>
@@ -1271,6 +1286,7 @@ export function OperatorSlot({
   centerFrameInList = false,
   shiftDirection = 0,
   transitionDelay = 0,
+  showSkillTooltip = false,
 }: {
   slot: RoomRow["operatorSlots"][number] | undefined;
   currentMorale?: number;
@@ -1280,9 +1296,12 @@ export function OperatorSlot({
   centerFrameInList?: boolean;
   shiftDirection?: ShiftDirection;
   transitionDelay?: number;
+  /** 悬停卡片时展示干员全部基建技能 tooltip，并关闭卡片自身的原生 title hover。 */
+  showSkillTooltip?: boolean;
 }) {
   const shouldReduceMotion = useReducedMotion();
   const identity = slot?.name ?? (autofill ? "autofill" : "empty");
+  const suppressNativeTitles = showSkillTooltip && slot !== undefined;
   const profession = slot ? operatorProfessionPresentation(slot.name) : null;
   const enterX = shouldReduceMotion ? 0 : shiftDirection * 6;
   const exitX = shouldReduceMotion ? 0 : shiftDirection * -4;
@@ -1293,7 +1312,7 @@ export function OperatorSlot({
       ? "border-[#666] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.08)]"
       : "border-[#4B4B4B] bg-[#3C3C3C]";
 
-  return (
+  const shell = (
     <OperatorSlotShell
       ariaLabel={ariaLabel}
       centerFrameInList={centerFrameInList}
@@ -1341,7 +1360,7 @@ export function OperatorSlot({
                         src={profession.icon}
                         alt=""
                         aria-hidden="true"
-                        title={`职业：${profession.label}`}
+                        title={suppressNativeTitles ? undefined : `职业：${profession.label}`}
                         className="absolute left-0 top-0 z-10 h-[25%] w-auto"
                       />
                     ) : null}
@@ -1365,7 +1384,7 @@ export function OperatorSlot({
                   <span
                     className="absolute bottom-0.5 left-0.5 flex items-center gap-0.5 whitespace-nowrap rounded-sm bg-black/72 px-1 py-0.5 text-xs font-normal leading-none text-white shadow-[0_1px_3px_rgba(0,0,0,0.5)] [&_svg]:size-2.5 max-sm:bottom-0.5 max-sm:left-0.5 max-sm:px-0.5 max-sm:[&_svg]:size-2.5"
                     aria-label={`当前心情 ${currentMorale}/24`}
-                    title={`当前心情 ${currentMorale}/24`}
+                    title={suppressNativeTitles ? undefined : `当前心情 ${currentMorale}/24`}
                   >
                     <Smile className="text-[#FFD501]" />
                     <span className="max-sm:hidden">当前</span>
@@ -1383,11 +1402,14 @@ export function OperatorSlot({
           </motion.div>
         </AnimatePresence>
       }
+      frameWrapper={showSkillTooltip && slot ? (frame) => <OperatorSkillTooltip name={slot.name} trigger={frame} /> : undefined}
       label={slot ? <AnimatedText value={slot.name} trend={shiftDirection} /> : autofill ? "自动补位" : "占"}
       labelClassName={slot ? "text-white" : autofill ? "text-white/55" : "text-transparent select-none"}
-      title={slot?.label}
+      title={suppressNativeTitles ? undefined : slot?.label}
     />
   );
+
+  return shell;
 }
 
 export function ScheduleBoard({
@@ -1739,6 +1761,7 @@ export function ScheduleBoard({
                             autofill={row.group === "dormitory" && row.autofill}
                             compactFactory={compactFactoryRoom}
                             centerFrameInList
+                            showSkillTooltip
                             shiftDirection={shiftDirection}
                             transitionDelay={Math.min(index, 2) * 0.02}
                           />

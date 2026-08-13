@@ -1,6 +1,6 @@
 "use client";
 
-import { Calculator, Cloud, GraduationCap } from "lucide-react";
+import { Calculator, Cloud, GraduationCap, Search } from "lucide-react";
 
 import { CLIENT_SKLAND_ENABLED } from "@/client-features";
 import {
@@ -14,7 +14,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-export type AppPage = "calculator" | "training" | "skland";
+export type AppPage = "calculator" | "training" | "skland" | "skill-query";
 
 interface AppSidebarProps {
   page: AppPage;
@@ -55,6 +55,16 @@ export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
               >
                 <GraduationCap className="size-5" />
                 <span>练卡建议</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                isActive={page === "skill-query"}
+                onClick={() => handlePageChange("skill-query")}
+                tooltip="技能查询"
+              >
+                <Search className="size-5" />
+                <span>技能查询</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             {CLIENT_SKLAND_ENABLED ? (

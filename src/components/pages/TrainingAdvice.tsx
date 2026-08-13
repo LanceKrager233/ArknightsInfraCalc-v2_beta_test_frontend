@@ -1,5 +1,6 @@
 import { ArrowUpRight, CircleAlert, ClipboardCheck, GraduationCap } from "lucide-react";
 
+import { OperatorSlot } from "@/components";
 import { InfraTechnicalCard, InfraTechnicalHeading } from "@/components/InfraTechnicalCard";
 import { Button } from "@/components/ui/button";
 import { operatorPortraitFor } from "@/operatorPortraits";
@@ -124,38 +125,31 @@ function ActionCard({
       dataSlot="training-advice-card"
       showEmblem={false}
     >
-      <div className="grid min-w-0 gap-4 sm:grid-cols-[80px_minmax(0,1fr)_auto] sm:items-center">
-        <div className="relative size-20 overflow-hidden bg-[#3C3C3C] outline outline-1 -outline-offset-1 outline-white/12">
-          {portrait ? (
-            <img
-              src={portrait}
-              alt={action.operator}
-              width={80}
-              height={80}
-              loading="lazy"
-              decoding="async"
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div className="grid h-full place-items-center px-2 text-center text-xs font-semibold">{action.operator || "未知干员"}</div>
-          )}
-          <div className="absolute inset-x-0 bottom-0 truncate bg-black/70 px-1.5 py-1 text-center text-[11px] font-semibold">
-            {action.operator || "未指定干员"}
+      <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-4">
+        <OperatorSlot
+          slot={{
+            name: action.operator || "未知干员",
+            label: action.operator || "未知干员",
+            portrait,
+          }}
+          showSkillTooltip
+        />
+        {/* 右侧：移动端上下两行（文本 / 徽章左右排），PC 端内部左右两列（文本 / 徽章上下排） */}
+        <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-white/55">
+              <span className="font-medium text-[var(--room-accent)]">{actionDomainLabel(action.domain_id)}</span>
+              <span aria-hidden="true">·</span>
+              <span>{actionKindLabel(action.kind)}</span>
+            </div>
+            <p className="font-number mt-2 max-w-[72ch] text-pretty text-sm leading-6 text-white/82">{action.message}</p>
           </div>
-        </div>
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-white/55">
-            <span className="font-medium text-[var(--room-accent)]">{actionDomainLabel(action.domain_id)}</span>
-            <span aria-hidden="true">·</span>
-            <span>{actionKindLabel(action.kind)}</span>
+          <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-end">
+            <span className="font-number border border-[var(--room-accent)]/45 bg-black/18 px-2.5 py-1 text-xs font-semibold text-[var(--room-accent)]">
+              {action.priority || "未分级"}
+            </span>
+            <span className="border border-white/15 bg-white/7 px-2.5 py-1 text-xs text-white/70">{state}</span>
           </div>
-          <p className="font-number mt-2 max-w-[72ch] text-pretty text-sm leading-6 text-white/82">{action.message}</p>
-        </div>
-        <div className="flex flex-wrap gap-2 sm:flex-col sm:items-end">
-          <span className="font-number border border-[var(--room-accent)]/45 bg-black/18 px-2.5 py-1 text-xs font-semibold text-[var(--room-accent)]">
-            {action.priority || "未分级"}
-          </span>
-          <span className="border border-white/15 bg-white/7 px-2.5 py-1 text-xs text-white/70">{state}</span>
         </div>
       </div>
     </InfraTechnicalCard>

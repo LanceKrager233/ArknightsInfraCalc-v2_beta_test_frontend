@@ -159,6 +159,7 @@ function CompactRoomCard({
       currentMorale={slot ? currentMoraleByOperator?.get(slot.name) : undefined}
       autofill={row.group === "dormitory" && row.autofill}
       compactView
+      showSkillTooltip
       shiftDirection={shiftDirection}
       transitionDelay={Math.min(index, 2) * 0.02}
     />

@@ -8,6 +8,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar, type AppPage } from "@/components/layout/AppSidebar";
 import { AppTopBar } from "@/components/layout/AppTopBar";
 import { InfraCalculator } from "@/components/pages/InfraCalculator";
+import { SkillQuery } from "@/components/pages/SkillQuery";
 import { SklandStatus } from "@/components/pages/SklandStatus";
 import { TrainingAdvice } from "@/components/pages/TrainingAdvice";
 
@@ -1119,6 +1120,8 @@ function WorkbenchApp() {
           onOpenCalculator={() => setPage("calculator")}
           onCopyUid={(uid) => void copyText(uid)}
         />
+      ) : page === "skill-query" ? (
+        <SkillQuery />
       ) : (
         <TrainingAdvice operbox={operbox} layout={layout} profile={result?.profile} onOpenCalculator={() => setPage("calculator")} />
       )}

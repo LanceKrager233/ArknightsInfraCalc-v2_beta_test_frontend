@@ -5,6 +5,10 @@ import sourceManifest from "./generated/arkntools/source.json" with { type: "jso
 import {
   OPERATOR_CATALOG,
   PROFESSION_LABELS,
+  buildingSkillUnlockLabel,
+  buildingSkillUnlockPrefix,
+  isBuildingSkillEnhanced,
+  operatorBuildingSkillList,
   operatorPortraitFor,
   operatorPresentationFor,
   operatorProfessionFor,
@@ -44,6 +48,96 @@ test("resolves numeric profession codes to labeled icons for every cataloged ope
   }
   assert.equal(operatorProfessionFor("不存在的干员"), undefined);
   assert.equal(operatorProfessionPresentation("不存在的干员"), undefined);
+});
+
+test("marks the higher-index skill of a same-prefix pair as enhanced", () => {
+  const refs = [
+    { index: 1, id: "trade_ord_wt&cost_002", elite: 0, level: 1 },
+    { index: 2, id: "trade_ord_wt&cost_012", elite: 2, level: 1 },
+  ];
+  assert.equal(isBuildingSkillEnhanced(refs, refs[0]), false);
+  assert.equal(isBuildingSkillEnhanced(refs, refs[1]), true);
+  assert.equal(isBuildingSkillEnhanced(refs, { index: 9, id: "unrelated_id", elite: 2, level: 1 }), false);
+  // 同干员只有一个该前缀技能时不算提升
+  assert.equal(isBuildingSkillEnhanced([refs[1]], refs[1]), false);
+});
+
+test("pairs skills by prefix regardless of elite (桑葚 hire_spd_cost_100 → _110)", () => {
+  const refs = [
+    { index: 1, id: "hire_spd_cost_100", elite: 0, level: 1 },
+    { index: 2, id: "hire_spd_cost_110", elite: 1, level: 1 },
+  ];
+  assert.equal(isBuildingSkillEnhanced(refs, refs[1]), true);
+  assert.equal(isBuildingSkillEnhanced(refs, refs[0]), false);
+});
+
+test("flags both of 芙兰卡's same-prefix higher-index skills (后缀可多字符不同)", () => {
+  const refs = [
+    { index: 1, id: "train_spd&profession_020", elite: 0, level: 1 },
+    { index: 2, id: "train_spd&profession_021", elite: 2, level: 1 },
+    { index: 3, id: "meet_spd&team_000", elite: 0, level: 1 },
+    { index: 4, id: "meet_spd&team_031", elite: 2, level: 1 },
+  ];
+  assert.equal(isBuildingSkillEnhanced(refs, refs[0]), false);
+  assert.equal(isBuildingSkillEnhanced(refs, refs[1]), true);
+  assert.equal(isBuildingSkillEnhanced(refs, refs[2]), false);
+  assert.equal(isBuildingSkillEnhanced(refs, refs[3]), true);
+});
+
+test("flags every skill above the minimum index in a three-skill prefix group (赫拉格)", () => {
+  const refs = [
+    { index: 1, id: "dorm_rec_all&oneself_010", elite: 0, level: 1 },
+    { index: 2, id: "dorm_rec_all&oneself_011", elite: 1, level: 1 },
+    { index: 3, id: "dorm_rec_all&oneself_012", elite: 2, level: 1 },
+  ];
+  assert.equal(isBuildingSkillEnhanced(refs, refs[0]), false);
+  assert.equal(isBuildingSkillEnhanced(refs, refs[1]), true);
+  assert.equal(isBuildingSkillEnhanced(refs, refs[2]), true);
+});
+
+test("renders the elite-2 提升 label for enhanced skills", () => {
+  assert.equal(buildingSkillUnlockLabel(0, 1), "初始解锁");
+  assert.equal(buildingSkillUnlockLabel(0, 3), "等级 3 解锁");
+  assert.equal(buildingSkillUnlockLabel(2, 1), "精英 2 解锁");
+  assert.equal(buildingSkillUnlockLabel(2, 3), "精英 2 · 等级 3 解锁");
+  assert.equal(buildingSkillUnlockLabel(2, 1, true), "精英 2 提升");
+  assert.equal(buildingSkillUnlockLabel(2, 3, true), "精英 2 · 等级 3 提升");
+  assert.equal(buildingSkillUnlockPrefix(2, 1), "精英 2 ");
+
+  // operatorPresentationFor 的展示结果带上 enhanced 标记
+  assert.equal(operatorPresentationFor({ name: "折光", skill: 2 }).buildingSkill?.enhanced, true);
+  assert.equal(operatorPresentationFor({ name: "折光", skill: 1 }).buildingSkill?.enhanced, false);
+});
+
+test("resolves an operator's full building skill list sorted by index", () => {
+  const skills = operatorBuildingSkillList("折光");
+  assert.deepEqual(skills.map((skill) => [skill.index, skill.enhanced]), [[1, false], [2, true]]);
+  for (const skill of skills) {
+    assert.ok(skill.name.length > 0);
+    assert.ok(skill.description.length > 0);
+    assert.match(skill.icon, /^\/images\//);
+  }
+  assert.deepEqual(operatorBuildingSkillList("不存在的干员"), []);
+});
+
+test("same-prefix enhanced pairs are detected across the catalog", () => {
+  const enhancedByOperator = new Map<string, string[]>();
+  for (const operator of OPERATOR_CATALOG) {
+    const flagged: string[] = [];
+    for (const ref of operator.buildingSkills) {
+      if (isBuildingSkillEnhanced(operator.buildingSkills, ref)) flagged.push(ref.id);
+    }
+    if (flagged.length) enhancedByOperator.set(operator.name, flagged);
+  }
+  // 折光、桑葚、芙兰卡都按同前缀规则判为提升
+  assert.ok(enhancedByOperator.get("折光")?.includes("trade_ord_wt&cost_012"));
+  assert.ok(enhancedByOperator.get("桑葚")?.includes("hire_spd_cost_110"));
+  assert.ok(enhancedByOperator.get("芙兰卡")?.includes("meet_spd&team_031"));
+  // 赫拉格三阶段：index 1 之外的后两个都是提升
+  assert.ok(enhancedByOperator.get("赫拉格")?.includes("dorm_rec_all&oneself_011"));
+  assert.ok(enhancedByOperator.get("赫拉格")?.includes("dorm_rec_all&oneself_012"));
+  assert.ok(!enhancedByOperator.get("赫拉格")?.includes("dorm_rec_all&oneself_010"));
+  assert.ok(enhancedByOperator.size >= 100);
 });
 
 test("generated catalog has unique ids, names, and matching stable portrait paths", () => {
