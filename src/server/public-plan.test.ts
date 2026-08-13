@@ -29,8 +29,11 @@ function internalResult(): PlanApiResponse {
       nestedInternal: {
         cliPath: "C:\\secret\\future-cli.exe",
         debugBundle: { future: true },
+        solver: { future: true },
+        plan_contract_sha256: "a".repeat(64),
+        solver_executable_sha256: "b".repeat(64),
       },
-    } as UserProfile & { nestedInternal: { cliPath: string; debugBundle: { future: boolean } } },
+    } as UserProfile & { nestedInternal: Record<string, unknown> },
     maaJson: {
       title: "C:\\private\\title",
       planTimes: 2,
@@ -43,7 +46,12 @@ function internalResult(): PlanApiResponse {
         },
       }],
       scheduleType: { planTimes: 2, trading: 2, manufacture: 4, power: 3, dormitory: 4 },
-    },
+      nestedInternal: {
+        solver: { future: true },
+        plan_contract_sha256: "a".repeat(64),
+        solver_executable_sha256: "b".repeat(64),
+      },
+    } as PlanApiResponse["maaJson"] & { nestedInternal: Record<string, unknown> },
     rotationJson: {
       profile: "abc_12_6_6",
       shifts: [{
@@ -66,6 +74,13 @@ function internalResult(): PlanApiResponse {
       daily: { trade: 4.2, manu: 8.4, power: 2.2 },
       future_internal: "secret",
     } as unknown as PlanApiResponse["rotationJson"],
+    solver: {
+      protocol_version: 1,
+      plan_schema_version: 1,
+      plan_contract_sha256: "a".repeat(64),
+      solver_executable_sha256: "b".repeat(64),
+      observed_at: "2026-08-13T00:00:00.000Z",
+    },
     debugBundle: {
       version: "test",
       startedAt: "2026-07-28T00:00:00.000Z",
@@ -81,6 +96,13 @@ function internalResult(): PlanApiResponse {
       stderr: "",
       serveRequest: { method: "plan.compute" },
       serveResponse: { ok: true },
+      solver: {
+        protocol_version: 1,
+        plan_schema_version: 1,
+        plan_contract_sha256: "a".repeat(64),
+        solver_executable_sha256: "b".repeat(64),
+        observed_at: "2026-08-13T00:00:00.000Z",
+      },
     },
   };
 }
@@ -117,6 +139,9 @@ test("production public plan data recursively excludes internal fields", () => {
       "future_internal",
       "assignment",
       "efficiencies",
+      "solver",
+      "plan_contract_sha256",
+      "solver_executable_sha256",
     ]) {
       assert.equal(keys.has(forbidden), false, `must not expose ${forbidden}`);
     }
@@ -146,6 +171,10 @@ test("debug fields require the server environment switch", () => {
     const data = toPublicPlanData(internalResult(), { layoutLabel: "243", sourceName: "示例" }, "request");
     assert.equal(data.debug?.command, "infra-cli serve");
     assert.equal(data.debug?.stdout, "secret stdout");
+    const keys = keysDeep(data.debug?.debugBundle);
+    assert.equal(keys.has("solver"), false);
+    assert.equal(keys.has("plan_contract_sha256"), false);
+    assert.equal(keys.has("solver_executable_sha256"), false);
   } finally {
     if (previous === undefined) delete process.env.BETA_DEBUG_TOOLS_ENABLED;
     else process.env.BETA_DEBUG_TOOLS_ENABLED = previous;

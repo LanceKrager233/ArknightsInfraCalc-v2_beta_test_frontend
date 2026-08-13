@@ -15,12 +15,16 @@ import type {
   OperBoxEntry,
   PlanApiResponse,
   RotationProfile,
+  SolverObservation,
 } from "@/types";
 import { isSklandConfigured, sklandDisabledReason } from "@/server/skland/session";
 import { PublicApiError } from "./api-contract";
 import {
+  createSolverObservation,
   inspectPlanComputeCapability,
+  inspectSolverDeploymentReadiness,
   parsePlanComputePayload,
+  solverObservationFromPlanRecord,
 } from "./plan-protocol";
 import { normalizeRotationResult } from "@/rotation-result";
 import { parseShiftFile } from "./shift-parser";
@@ -78,10 +82,14 @@ const legacySklandPurgeMarker = path.join(storageRoot, ".skland-legacy-purge-v1.
 function cliCandidates() {
   const platformCliName = process.platform === "win32" ? "infra-cli.exe" : "infra-cli";
   const fallbackCliName = process.platform === "win32" ? "infra-cli" : "infra-cli.exe";
+  const bundledPlatformCli = path.join(bundledCliRoot, platformCliName);
+  if (process.env.INFRA_CLI_EXPECTED_SHA256 !== undefined) {
+    return [bundledPlatformCli];
+  }
   const candidates = [
     process.env.INFRA_CLI_PATH,
     readActiveCliPath(),
-    path.join(bundledCliRoot, platformCliName),
+    bundledPlatformCli,
     path.join(repoRoot, platformCliName),
     path.join(bundledCliRoot, fallbackCliName),
     path.join(repoRoot, fallbackCliName),
@@ -393,16 +401,16 @@ export async function deleteSklandOwnedData(ownerTags: string[]): Promise<{ runs
   return { runs, feedback };
 }
 
-async function dataOwnerTagForDiagnostic(diagnosticId: string): Promise<string | null> {
+async function privateRunForDiagnostic(
+  diagnosticId: string
+): Promise<{ directory: string; result: JsonRecord } | null> {
   if (!/^[a-f0-9-]{36}$/i.test(diagnosticId)) return null;
   const suffix = `_${diagnosticId}`;
   const directory = (await runDirectories())
     .find((candidate) => path.basename(candidate).endsWith(suffix));
   if (!directory) return null;
-  const metadata = await ownerMetadata(directory);
-  return metadata?.diagnosticId === diagnosticId && typeof metadata.ownerTag === "string"
-    ? metadata.ownerTag
-    : null;
+  const result = await readJsonIfExists(path.join(directory, "result.json"));
+  return isObject(result) && result.runId === diagnosticId ? { directory, result } : null;
 }
 
 async function readShiftFiles(outputDir: string) {
@@ -811,11 +819,18 @@ export async function getHealth(): Promise<HealthApiResponse> {
       try {
         const pingResult = await getServeClient().ping();
         const planCompute = inspectPlanComputeCapability(pingResult.response);
+        const deploymentReadiness = inspectSolverDeploymentReadiness(
+          planCompute,
+          process.env.INFRA_CLI_EXPECTED_SHA256
+        );
         serve = {
           ...getServeClient().info(),
           protocolMode: planCompute.supported ? "plan.compute" : "legacy",
           planCompute,
         };
+        if (!deploymentReadiness.ready) {
+          serveError = deploymentReadiness.reason;
+        }
       } catch (error) {
         serveError = error instanceof Error ? error.message : String(error);
       }
@@ -873,12 +888,18 @@ export async function saveFeedback(body: FeedbackRequest): Promise<FeedbackData>
   const issuePath = path.join(feedbackDir, "issue.json");
   await mkdir(feedbackDir, { recursive: true });
 
-  const dataOwnerTag = await dataOwnerTagForDiagnostic(body.diagnosticId);
+  const linkedRun = await privateRunForDiagnostic(body.diagnosticId);
+  const owner = linkedRun ? await ownerMetadata(linkedRun.directory) : null;
+  const dataOwnerTag = owner?.diagnosticId === body.diagnosticId && typeof owner.ownerTag === "string"
+    ? owner.ownerTag
+    : null;
+  const solver = solverObservationFromPlanRecord(linkedRun?.result);
   const meta = {
     feedbackId,
     savedAt,
     diagnosticId: body.diagnosticId,
     consent: body.consent,
+    solver,
     ...(dataOwnerTag ? { dataOwnerTag } : {}),
   };
 
@@ -900,6 +921,7 @@ export async function saveFeedback(body: FeedbackRequest): Promise<FeedbackData>
 export async function runPlan(body: unknown): Promise<PlanApiResponse> {
   let runDir = "";
   let resultPath = "";
+  let solver: SolverObservation | undefined;
   const startedAt = new Date().toISOString();
   const start = performance.now();
 
@@ -962,6 +984,7 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
 
     const pingResult = await getServeClient().ping();
     const planCompute = inspectPlanComputeCapability(pingResult.response);
+    solver = createSolverObservation(planCompute, new Date().toISOString());
     let serveResult: ServeResult;
     let profileJson: unknown;
     let maaJson: unknown;
@@ -1060,6 +1083,7 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
       profileJson: profileJson as DebugBundle["profileJson"],
       maaJson: maaJson as DebugBundle["maaJson"],
       rotationJson: rotationJson as DebugBundle["rotationJson"],
+      solver,
       shiftFiles,
       shiftReadErrors,
       serveRequest: serveResult.request,
@@ -1098,6 +1122,7 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
       profileJson: profileJson as PlanApiResponse["profileJson"],
       maaJson: maaJson as PlanApiResponse["maaJson"],
       rotationJson: rotationJson as PlanApiResponse["rotationJson"],
+      solver,
       debugBundle,
       runId,
       runPath: runDir,
@@ -1122,6 +1147,7 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
     const errorPayload: PlanApiResponse = {
       success: false,
       startedAt,
+      solver,
       error: error instanceof Error ? error.message : String(error),
       runPath: runDir || undefined,
       relativeRunPath: runDir ? path.relative(repoRoot, runDir) : undefined,
