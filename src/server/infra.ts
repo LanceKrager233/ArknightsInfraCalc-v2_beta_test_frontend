@@ -34,6 +34,7 @@ import {
   isPrivateStorageChild,
   isSafePrivateStorageRoot,
 } from "./private-storage";
+import { resolveRuntimeDataDir } from "./runtime-data";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -178,16 +179,6 @@ function resolveCliPath() {
     throw new Error(`没有找到可运行的 infra-cli，已检查：${details}`);
   }
   return found.path;
-}
-
-function resolveRuntimeDataDir(cliPath: string) {
-  const requiredFiles = ["operator_instances.json", "skill_table.json", "base_systems.json"];
-  const candidates = [process.env.ARKNIGHTS_INFRA_DATA_DIR, path.join(path.dirname(cliPath), "data")].filter(Boolean) as string[];
-  return (
-    candidates
-      .map((candidate) => path.resolve(candidate))
-      .find((candidate) => requiredFiles.every((fileName) => existsSync(path.join(candidate, fileName)))) ?? null
-  );
 }
 
 function resolveSampleOperboxPath() {
@@ -522,6 +513,8 @@ class InfraCliServeClient {
       const env = { ...process.env };
       if (dataDir) {
         env.ARKNIGHTS_INFRA_DATA_DIR = dataDir;
+      } else {
+        delete env.ARKNIGHTS_INFRA_DATA_DIR;
       }
       const cwd = path.dirname(cliPath);
       const child = spawn(/* turbopackIgnore: true */ cliPath, ["serve"], { cwd, env, windowsHide: true, shell: false });
