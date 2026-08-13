@@ -32,6 +32,8 @@ npm run test:e2e:webkit
 
 `npm run test:e2e`运行默认 Chromium 门禁；涉及响应式、触控或 Safari 兼容性的 UI 改动还应运行独立 WebKit 门禁。
 
+仓库文本由`.gitattributes`和`.editorconfig`统一为 UTF-8/LF。Windows 日常开发使用 PowerShell；部署 shell 测试应在 Linux CI 或显式指定的 WSL Ubuntu 中运行，裸`bash`可能指向 Docker WSL 或 Git Bash。完整跨平台约束见[开发与发布维护准则](./docs/DEVELOPMENT_RELEASE_GUARDRAILS.md)。
+
 设施卡片的透明徽记由现有 WebP 素材确定性提取。调整提取规则后重新生成并核对产物：
 
 ```powershell
@@ -114,7 +116,7 @@ chmod +x bin/infra-cli
 | `main` | `production` | 线上站点 | 强制关闭 |
 | `develop` | `development` | dev 站点 | 开启，可由环境变量主动关闭 |
 
-推送到两个分支都会先执行`Frontend quality`。只有 push 门禁成功后，`Deploy verified branch`才会发布该次通过验证的 SHA；PR 检查不会触发部署。工作流优先调用服务器上固定的`scripts/prepare-release.sh`副本，从共享 Git 缓存增量取得对象并在服务器本地生成只包含 Git 跟踪内容的发布包。只有 helper 以状态码`75`报告临时 GitHub 网络、缓存或锁故障时，才退回原有的完整 SCP 上传；SHA、tree、路径或脚本哈希错误会直接终止。`scripts/deploy-release.sh`负责独立 release 目录、原子切换`current`软链、内部/公网健康检查和失败回滚；它在构建前及成功后都只清理经过严格校验的旧 release，每个环境保留当前版本和两个回滚版本，并在清理后可用空间不足 3 GiB 时于创建新 release 前失败。失败构建的本次目录会自动移除，`shared`和`/var/lib`持久化数据不参与清理。
+推送到两个分支都会先执行`Frontend quality`。只有 push 门禁成功后，`Deploy verified branch`才会发布该次通过验证的 SHA；PR 检查不会触发部署。工作流先确认服务器两个固定 helper 是`root:root 0755`普通文件且`--contract-version`与当前工作流兼容，再从共享 Git 缓存增量取得对象并在服务器本地生成只包含 Git 跟踪内容的发布包。只有 helper 以状态码`75`报告临时 GitHub 网络、缓存或锁故障时，才退回完整 SCP 上传；SHA、tree、路径或 helper 契约错误会直接终止。`scripts/deploy-release.sh`负责独立 release 目录、原子切换`current`软链、内部/公网健康检查和失败回滚；它在构建前及成功后都只清理经过严格校验的旧 release，每个环境保留当前版本和两个回滚版本，并在清理后可用空间不足 3 GiB 时于创建新 release 前失败。失败构建的本次目录会自动移除，`shared`和`/var/lib`持久化数据不参与清理。
 
 需要在 GitHub 仓库创建`production`与`development`两个 Environment，并在每个 Environment 中配置同名、不同值的项目：
 
@@ -137,11 +139,11 @@ Variables：
 
 服务器需要预先创建两套 systemd 服务、Nginx 站点和独立持久化目录。每套应用根目录的`shared/.env.local`保存该环境的非仓库配置；dev 在其中配置森空岛密钥和 Origin，production 不需要森空岛密钥。SSH 部署账号只应获得运行发布脚本所需的最小免密 sudo 权限。`develop`首次启用前应从已验证的`main`创建，并为两个分支启用必须通过`Frontend quality`的保护规则。
 
-增量发布还需要一次性以 root 将已评审提交中的`scripts/prepare-release.sh`按`root:root 0755`安装为`/usr/local/sbin/arknights-infra-prepare-release`，并创建`arkdeploy:arkdeploy 0750`的`/var/cache/arknights-infra-deploy`。首次启用时以当前 production release 和准确的 commit/tree/script digest 运行 helper，并设置`ARKNIGHTS_INFRA_SEED_RELEASE_DIR=/opt/arknights-infra/current`；helper 会逐个核对并导入未变化的本地 blob，只从 GitHub 补取元数据及被构建改写的少量文件。演练生成的`/tmp`发布包验证后删除，不调用 root 部署 runner，也不重启服务。
+增量发布还需要一次性以 root 将已评审提交中的两个 helper 按`root:root 0755`原子安装到`/usr/local/sbin`，并创建`arkdeploy:arkdeploy 0750`的`/var/cache/arknights-infra-deploy`。首次启用时以当前 production release 和准确的 commit/tree 运行 prepare helper，并设置`ARKNIGHTS_INFRA_SEED_RELEASE_DIR=/opt/arknights-infra/current`；helper 会逐个核对并导入未变化的本地 blob，只从 GitHub 补取元数据及被构建改写的少量文件。演练生成的`/tmp`发布包验证后删除，不调用 root 部署 runner，也不重启服务。
 
 当前两个站点都通过 Tailscale Funnel 提供公网 HTTPS：production 为`https://instance-pi2ohhfj.tail2dca9.ts.net:8443`并转发到回环 Nginx `127.0.0.1:4174`，dev 为`https://instance-pi2ohhfj.tail2dca9.ts.net`并转发到`127.0.0.1:4274`；两个 Next 内部端口`127.0.0.1:4175`和`127.0.0.1:4275`也不直接开放公网。服务器 80 端口只将请求`308`重定向到 production HTTPS。两个 GitHub Environment 的`DEPLOY_PUBLIC_HEALTH_URL`必须分别使用对应 HTTPS 地址，`shared/.env.local`中的公开 Origin 也必须与各自入口一致并保持`SKLAND_ALLOW_INSECURE_HTTP=0`。使用`tailscale funnel status`检查公网转发；Funnel 不可用时不要回退到明文公网端口，可临时使用 SSH 隧道做只读诊断。
 
-Actions 使用独立`arkdeploy`密钥，并且 sudo 仅允许调用服务器上 root 所有的`/usr/local/sbin/arknights-infra-deploy`。增量 helper 不使用 sudo；两个固定脚本都会校验自身与已验证提交中脚本的 SHA-256，不匹配时拒绝发布，现有 root SSH 私钥不会进入 GitHub。固定脚本发生变更时，先让对应提交通过完整质量门禁，再以`root:root 0755`和原子替换方式安装，并在批准或触发部署前复核服务器文件与提交中的 SHA-256。Git 缓存只保存公开仓库对象和两个环境 ref，不保存 Environment Secrets、应用配置或用户数据。
+Actions 使用独立`arkdeploy`密钥，并且 sudo 仅允许调用服务器上 root 所有的`/usr/local/sbin/arknights-infra-deploy`。prepare helper 不使用 sudo；两个固定脚本当前使用契约版本`1`，工作流检查普通文件、`root:root 0755`和版本一致性，并把服务器文件 SHA-256写入审计摘要。兼容的内部修改不要求在 main/develop 部署之间切换脚本；不兼容升级必须先通过完整 PR 门禁，再以 root 原子安装并复核 owner/mode/version/hash，最后才合并。现有 root SSH 私钥不会进入 GitHub。Git 缓存只保存公开仓库对象和两个环境 ref，不保存 Environment Secrets、应用配置或用户数据。
 
 ## 手动运行
 
@@ -177,6 +179,7 @@ fixtures/operbox_full_e2.json
 ## 文档入口
 
 - [开发指南](./docs/DEVELOPMENT_GUIDE.md)：API 契约、环境变量、本地调试和质量门禁。
+- [开发与发布维护准则](./docs/DEVELOPMENT_RELEASE_GUARDRAILS.md)：Windows/Linux 差异、求解器身份、helper 契约和双分支发布。
 - [上线产品化报告](./docs/FRONTEND_PRODUCTION_READINESS_REPORT.md)：改造基线、错误码、数据流、验证结果和 DevTools 排查方法。
 - [Frontend Serve Guide](./docs/FRONTEND_SERVE_GUIDE.md)：`infra-cli serve` 协议及公共 DTO 边界。
 - [`infra-cli advice` 输出评估](./docs/INFRA_CLI_ADVICE_REPORT.md)：结构化练卡报告、字段说明、安全边界和未来前端接入方案。

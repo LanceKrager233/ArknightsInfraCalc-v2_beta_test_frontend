@@ -3,9 +3,11 @@ set -euo pipefail
 
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 helper="$repository_root/scripts/deploy-release.sh"
-helper_sha256="$(sha256sum "$helper" | cut -d ' ' -f 1)"
 test_root="$(mktemp -d)"
 trap 'rm -rf -- "$test_root"' EXIT
+
+test "$(bash "$helper" --contract-version)" = "1"
+legacy_caller_sha256="d04259fb3c4e37d2a0f04afab492834eb2537edc5a11acaa66dcf593b2af021b"
 
 current_sha="1111111111111111111111111111111111111111"
 previous_sha="2222222222222222222222222222222222222222"
@@ -65,6 +67,11 @@ setup_fixture() {
 }
 
 run_deploy() {
+  local legacy_hash="${4:-}"
+  local -a legacy_arg=()
+  if [[ -n "$legacy_hash" ]]; then
+    legacy_arg=("$legacy_hash")
+  fi
   env \
     ARKNIGHTS_INFRA_DEPLOY_TEST_MODE=1 \
     ARKNIGHTS_INFRA_DEPLOY_TEST_ROOT="$fixture_root" \
@@ -81,15 +88,16 @@ run_deploy() {
       "${3:-}" \
       1 \
       1 \
-      "$helper_sha256"
+      "${legacy_arg[@]}"
 }
 
 assert_failure() {
   local expected_stage="$1"
   local available_kib="${2:-4194304}"
   local public_url="${3:-}"
+  local legacy_hash="${4:-}"
   set +e
-  run_deploy "$expected_stage" "$available_kib" "$public_url" >/dev/null 2>&1
+  run_deploy "$expected_stage" "$available_kib" "$public_url" "$legacy_hash" >/dev/null 2>&1
   actual_status=$?
   set -e
   if [[ "$actual_status" -eq 0 ]]; then
@@ -129,6 +137,23 @@ assert_fixture_safety() {
   test -L "$symlink_release"
   test -d "$unknown_release"
 }
+
+set +e
+bash "$helper" --contract-version unexpected >/dev/null 2>&1
+invalid_contract_query_status=$?
+bash "$helper" development >/dev/null 2>&1
+invalid_argument_count_status=$?
+set -e
+test "$invalid_contract_query_status" -eq 2
+test "$invalid_argument_count_status" -eq 2
+
+setup_fixture legacy-caller
+run_deploy none 4194304 "" "$legacy_caller_sha256"
+test "$(cat "$app_root/current/.release-sha")" = "$new_sha"
+
+setup_fixture unknown-legacy-caller
+assert_failure none 4194304 "" "${legacy_caller_sha256%?}0"
+test "$(readlink -f "$app_root/current")" = "$current_release"
 
 setup_fixture success
 run_deploy none 4194304

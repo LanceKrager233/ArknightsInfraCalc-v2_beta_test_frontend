@@ -35,6 +35,8 @@ npm run test:e2e:webkit
 
 `npm run check`依次运行 lint、单元/持久化测试和公开 API 契约测试。`npm run test:e2e`运行默认 Chromium 门禁；涉及响应式、触控或 Safari 兼容性的 UI 改动还应运行独立 WebKit 门禁。完整合并门禁还包括生产构建和 Playwright E2E。
 
+Windows 前端命令使用 PowerShell。部署 shell 测试只以 Linux CI 或显式 WSL Ubuntu 结果为准；裸`bash`可能被 Windows 解析到 Docker WSL、Git Bash 或系统 shim。行尾、平台二进制和 helper 生命周期见[开发与发布维护准则](./DEVELOPMENT_RELEASE_GUARDRAILS.md)。
+
 ## 核心目录
 
 | 路径 | 责任 |
@@ -208,10 +210,10 @@ GitHub Actions 在面向`main`或`develop`的 PR 和 push 上使用 Node 22，�
 9. `npm run test:e2e`
 10. `npm run test:e2e:production-profile`
 
-`main`和`develop`都执行相同质量门禁。通过 push 门禁后，部署工作流分别使用 GitHub Environments `production`和`development`中的 SSH Secrets 与部署 Variables 发布对应站点；PR 不部署。服务器 helper 从`/var/cache/arknights-infra-deploy/repository.git`增量准备准确 SHA 的发布包，production/development 使用独立 refs 和共享`flock`。helper 只有在 GitHub 网络、缓存或锁的临时故障时返回`75`并允许完整 SCP 回退，所有完整性错误都直接失败。`DEPLOY_DEBUG_TOOLS_ENABLED`和`DEPLOY_RATE_LIMIT_ENABLED`集中管理 dev 的调试入口与限流，production 则固定为调试关闭、限流开启。production-profile 门禁会故意反向设置森空岛、调试和限流变量，确认 production 的强制策略不可被误配置绕过。
+`main`和`develop`都执行相同质量门禁。通过 push 门禁后，部署工作流分别使用 GitHub Environments `production`和`development`中的 SSH Secrets 与部署 Variables 发布对应站点；PR 不部署。工作流先验证两个服务器 helper 是`root:root 0755`普通文件且显式契约版本兼容，再从`/var/cache/arknights-infra-deploy/repository.git`增量准备准确 SHA 的发布包；production/development 使用独立 refs 和共享`flock`。helper 只有在 GitHub 网络、缓存或锁的临时故障时返回`75`并允许完整 SCP 回退，SHA、tree、路径和 helper 契约等完整性错误都直接失败。`DEPLOY_DEBUG_TOOLS_ENABLED`和`DEPLOY_RATE_LIMIT_ENABLED`集中管理 dev 的调试入口与限流，production 则固定为调试关闭、限流开启。production-profile 门禁会故意反向设置森空岛、调试和限流变量，确认 production 的强制策略不可被误配置绕过。
 Production client isolation scans static JavaScript and public HTML/RSC; production-profile separately verifies hidden UI, absent requests and health fields, and the API 404 boundary. Both gates are required.
 
-production 和 dev Nginx 分别只监听`127.0.0.1:4174`与`127.0.0.1:4274`。公网访问由 Tailscale Funnel 的 8443 与 443 HTTPS 入口提供；用`tailscale funnel status`核对持久化配置和公开地址。服务器 80 端口只重定向到 production HTTPS，不要把两个回环应用端口重新暴露到公网。Actions 部署用户使用独立密钥，sudo 只允许固定的`/usr/local/sbin/arknights-infra-deploy`。root 所有的 deploy runner 和`/usr/local/sbin/arknights-infra-prepare-release`都必须来自准确的已评审提交并保持 LF 行尾；工作流传入脚本 SHA-256，不匹配时拒绝发布。prepare helper 以`arkdeploy`运行，不新增 sudo 权限；缓存根必须由该用户拥有且不能被 group/other 写入。
+production 和 dev Nginx 分别只监听`127.0.0.1:4174`与`127.0.0.1:4274`。公网访问由 Tailscale Funnel 的 8443 与 443 HTTPS 入口提供；用`tailscale funnel status`核对持久化配置和公开地址。服务器 80 端口只重定向到 production HTTPS，不要把两个回环应用端口重新暴露到公网。Actions 部署用户使用独立密钥，sudo 只允许固定的`/usr/local/sbin/arknights-infra-deploy`。root 所有的 deploy runner 和`/usr/local/sbin/arknights-infra-prepare-release`必须保持 LF、普通文件和`root:root 0755`；二者用`--contract-version`报告当前接口版本，文件 SHA-256只作安装/回滚审计。prepare helper 以`arkdeploy`运行，不新增 sudo 权限；缓存根必须由该用户拥有且不能被 group/other 写入。
 
 E2E 使用固定数据和接口拦截，不要求 CI 中存在真实 CLI。每次 UI 修改至少检查 390px、768px、1440px、三个一级导航和两处锁定区域。错误码新增或修改必须同步更新：
 
@@ -230,4 +232,4 @@ npm run test:e2e
 npm run test:e2e:webkit
 ```
 
-随后在真实浏览器检查 `/api/health`、Full E2、2/3/4 班切换、MAA 导出、反馈提交和 v5/旧版本迁移恢复。生产部署、回滚和存储目录规则继续以仓库 `AGENTS.md` 为准。
+随后在真实浏览器检查 `/api/health`、Full E2、2/3/4 班切换、MAA 导出、反馈提交和 v5/旧版本迁移恢复。生产部署、回滚和存储目录的强制规则以仓库 `AGENTS.md` 为准，长期维护原因与 helper 升级顺序见[开发与发布维护准则](./DEVELOPMENT_RELEASE_GUARDRAILS.md)。

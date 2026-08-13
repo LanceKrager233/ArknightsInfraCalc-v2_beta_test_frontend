@@ -1,5 +1,7 @@
 # 明日方舟基建排班助手上线产品化报告
 
+> 历史状态：本文记录 2026-07-28 的产品化基线和当次发布结果，不是当前运维手册。现行跨平台、求解器与双环境发布规则见[`DEVELOPMENT_RELEASE_GUARDRAILS.md`](./DEVELOPMENT_RELEASE_GUARDRAILS.md)和仓库根目录`AGENTS.md`。
+
 ## 执行摘要
 
 本次改造把前端从 beta 验收工作台收敛为正式产品“明日方舟基建排班助手”，重点完成用户文案、公开 API 白名单、统一错误码、请求保护、反馈最小化、v4 本地持久化、hydration 修复和自动化门禁。实施日期为 2026-07-28，工作分支为 `codex/frontend-production-readiness`，起始提交为 `387dd66`，前端改造提交为 `cde1cec`，发布前边界加固提交为 `04377b4`，合并提交为 `01e5085`。

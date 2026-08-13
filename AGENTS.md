@@ -39,6 +39,14 @@
 7. 不提交运行产物和本地状态，包括 `.next/`、`test-results/`、`playwright-report/`、`.tmp/`、`bin/data/`、`server/storage/`、`*.local` 和临时部署包。
 8. `AGENTS.md` 是已跟踪的团队指令；当仓库约定确实变化时可以更新并提交。
 
+## 每次任务的跨平台检查
+
+- 文本统一使用 UTF-8 与 LF；Windows 本仓库保持`core.autocrlf=false`、`core.eol=lf`。提交前运行`git diff --check`，涉及文本批量修改或 schema/脚本时再检查`git ls-files --eol`。
+- 不对 ELF、PE、图片、字体等二进制做行尾或编码转换。不要假定 Windows 能运行 Linux ELF，也不要依赖 Windows 文件系统替代 Linux 的 executable bit、大小写和符号链接语义。
+- PowerShell 适合日常前端命令；`scripts/*.sh`发布测试必须在 Linux CI 或显式指定的 WSL Ubuntu 中运行。Windows 裸`bash`可能命中 Docker WSL、Git Bash 或系统 shim，不能作为可重复环境。
+- 求解器或协议改动必须把核心 commit、Linux CLI、完整运行数据、同提交 Full E2 fixture、制品 hash 和真实三班冒烟当成一个原子集合核对。
+- 跨平台、求解器身份、helper 契约和双分支发布的长期原因与操作见[`docs/DEVELOPMENT_RELEASE_GUARDRAILS.md`](docs/DEVELOPMENT_RELEASE_GUARDRAILS.md)。本节保留每次任务必须执行的动作，不在两处复制全部背景。
+
 ## 关键结构
 
 | 路径 | 职责 |
@@ -134,6 +142,8 @@ server/storage/active-cli.json
 ```
 
 CLI 查找以当前平台文件名为优先，覆盖仓库 `bin/`、仓库根目录和核心仓库 `target/{release,debug}`；不要假定 Windows 能运行 Linux ELF，或 Linux 能运行 PE 文件。`bin/data/` 是可选且被忽略的运行数据目录。
+
+Worker 能力只由`protocol_version`和`plan_schema_version`判断；`plan_contract_sha256`只进入私有诊断，不得硬编码为前端路由条件。部署启用`INFRA_CLI_EXPECTED_SHA256`时还必须核对仓库 Linux 制品 hash 与 Worker 自报的`solver_executable_sha256`，不一致应使健康检查失败并回滚。
 
 ### 安全、功能与测试
 
@@ -271,7 +281,9 @@ development public HTTPS: https://instance-pi2ohhfj.tail2dca9.ts.net (Tailscale 
 development persistent storage: /var/lib/arknights-infra-dev
 ```
 
-`main`和`develop` push 必须先通过`Frontend quality`，随后由`Deploy verified branch`从已验证 SHA 自动发布到各自 GitHub Environment。发布包只包含 Git 跟踪内容；服务器优先通过`/usr/local/sbin/arknights-infra-prepare-release`和`/var/cache/arknights-infra-deploy/repository.git`增量准备准确 SHA，仅在 helper 返回临时故障码`75`时回退完整 SCP。SHA、tree、路径或脚本哈希错误必须直接失败。新 release 从应用根目录的`shared/.env.local`继承环境配置；`shared/bin-data`只有包含当前 Worker 所需的完整数据文件集时才注入 release，不完整的旧数据保留但不得覆盖制品内置数据。随后以`arkinfra`用户执行`npm ci`/`npm run build`，再原子切换`current`并重启对应 systemd。部署锁内只允许清理命名和提交标记均合法的 release 直属目录；每个环境保留当前 release 加两个回滚版本，失败半成品必须移除，清理后可用空间少于 3 GiB 时必须在创建新 release 前失败。`shared`和`/var/lib`永不进入 release 淘汰范围。不得把服务器密码写入文件或命令；只使用受保护的 SSH key 与 known_hosts。固定部署脚本变更时，先让提交通过门禁，再以`root:root 0755`原子安装并核对 SHA-256。手动发布仍必须基于对应已合并、已验证的远端分支。
+`main`和`develop` push 必须先通过`Frontend quality`，随后由`Deploy verified branch`从已验证 SHA 自动发布到各自 GitHub Environment。发布包只包含 Git 跟踪内容；服务器优先通过`/usr/local/sbin/arknights-infra-prepare-release`和`/var/cache/arknights-infra-deploy/repository.git`增量准备准确 SHA，仅在 helper 返回临时故障码`75`时回退完整 SCP。SHA、tree、路径或 helper 契约错误必须直接失败。新 release 从应用根目录的`shared/.env.local`继承环境配置；`shared/bin-data`只有包含当前 Worker 所需的完整数据文件集时才注入 release，不完整的旧数据保留但不得覆盖制品内置数据。随后以`arkinfra`用户执行`npm ci`/`npm run build`，再原子切换`current`并重启对应 systemd。部署锁内只允许清理命名和提交标记均合法的 release 直属目录；每个环境保留当前 release 加两个回滚版本，失败半成品必须移除，清理后可用空间少于 3 GiB 时必须在创建新 release 前失败。`shared`和`/var/lib`永不进入 release 淘汰范围。不得把服务器密码写入文件或命令；只使用受保护的 SSH key 与 known_hosts。手动发布仍必须基于对应已合并、已验证的远端分支。
+
+两个固定 helper 必须是`root:root 0755`普通文件并支持`--contract-version`；当前 prepare/deploy 契约均为`1`。工作流以契约版本做兼容握手，并把服务器文件 SHA-256只作为审计信息。内部实现保持参数、退出码和权限语义兼容时不得随意升级版本；任何不兼容修改必须成套更新脚本、工作流、测试和文档，先通过完整 PR 门禁，再在合并前原子安装并复核新 helper。不得通过跳过 owner/mode/version 检查让部署通过。
 
 发布后至少验证：
 
