@@ -1,4 +1,5 @@
 import type {
+  DebugBundle,
   MaaJson,
   PlanApiResponse,
   PublicPlanData,
@@ -11,6 +12,11 @@ import { isDebugToolsEnabled, PublicApiError } from "./api-contract.ts";
 import { normalizeRotationResult, rotationFallbackProfile } from "../rotation-result.ts";
 
 const PATH_SEPARATOR = /[/\\]+/g;
+const SOLVER_DIAGNOSTIC_FIELDS = new Set([
+  "solver",
+  "plan_contract_sha256",
+  "solver_executable_sha256",
+]);
 
 function safeDuration(value: unknown): number {
   const duration = Number(value);
@@ -33,16 +39,31 @@ export function safeDisplayName(value: unknown, fallback: string, maxLength = 80
 }
 
 function sanitizeProfile(profile: UserProfile, layoutLabel: string, sourceName: string): UserProfile {
+  const publicDomains = stripInternalFields(structuredClone(profile.domains));
   return {
     ...stripInternalFields(structuredClone(profile)),
     layout_label: safeDisplayName(layoutLabel, "当前布局"),
     operbox_label: safeDisplayName(sourceName, "已导入的干员数据"),
     baseline_label: "产品推荐基准",
-    domains: profile.domains.map((domain) => ({
+    domains: publicDomains.map((domain) => ({
       ...domain,
       label: safeDisplayName(domain.label, "效率指标", 120),
     })),
   };
+}
+
+function stripSolverDiagnostics<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripSolverDiagnostics(item)) as T;
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([key]) => !SOLVER_DIAGNOSTIC_FIELDS.has(key.toLowerCase()))
+        .map(([key, child]) => [key, stripSolverDiagnostics(child)])
+    ) as T;
+  }
+  return value;
 }
 
 function sanitizeMaa(maa: MaaJson, layoutLabel: string): MaaJson {
@@ -50,6 +71,13 @@ function sanitizeMaa(maa: MaaJson, layoutLabel: string): MaaJson {
     ...stripInternalFields(structuredClone(maa)),
     title: `可露希尔基建终端 · ${safeDisplayName(layoutLabel, "当前布局")}`,
   };
+}
+
+function sanitizePublicDebugBundle(
+  debugBundle: DebugBundle | undefined
+): Omit<DebugBundle, "solver"> | undefined {
+  if (!debugBundle) return undefined;
+  return stripSolverDiagnostics(structuredClone(debugBundle)) as Omit<DebugBundle, "solver">;
 }
 
 export function toPublicPlanData(
@@ -85,7 +113,7 @@ export function toPublicPlanData(
       command: result.command,
       stdout: result.stdout,
       stderr: result.stderr,
-      debugBundle: result.debugBundle,
+      debugBundle: sanitizePublicDebugBundle(result.debugBundle),
     };
   }
   return data;

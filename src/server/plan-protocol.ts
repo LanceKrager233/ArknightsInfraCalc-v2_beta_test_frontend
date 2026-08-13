@@ -1,16 +1,23 @@
-import type { OperBoxEntry } from "../types";
+import type { OperBoxEntry, SolverObservation } from "../types";
 
 export type ProtocolRecord = Record<string, unknown>;
 
 export const PLAN_PROTOCOL_VERSION = 1;
 export const PLAN_SCHEMA_VERSION = 1;
-export const PLAN_CONTRACT_SHA256 = "52b78160b7f3290c6939807af5b7d6d31ee8322ea68de9288773eebca32d5102";
+
+const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
 export type PlanComputeCapability = {
   supported: boolean;
   protocolVersion: number | null;
   schemaVersion: number | null;
   contractSha256: string | null;
+  solverExecutableSha256: string | null;
+  reason: string | null;
+};
+
+export type SolverDeploymentReadiness = {
+  ready: boolean;
   reason: string | null;
 };
 
@@ -24,12 +31,17 @@ export function isProtocolRecord(value: unknown): value is ProtocolRecord {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+export function normalizeSha256(value: unknown): string | null {
+  return typeof value === "string" && SHA256_PATTERN.test(value) ? value : null;
+}
+
 export function inspectPlanComputeCapability(response: unknown): PlanComputeCapability {
   const envelope = isProtocolRecord(response) ? response : {};
   const result = isProtocolRecord(envelope.result) ? envelope.result : {};
   const protocolVersion = typeof result.protocol_version === "number" ? result.protocol_version : null;
   const schemaVersion = typeof result.plan_schema_version === "number" ? result.plan_schema_version : null;
-  const contractSha256 = typeof result.plan_contract_sha256 === "string" ? result.plan_contract_sha256 : null;
+  const contractSha256 = normalizeSha256(result.plan_contract_sha256);
+  const solverExecutableSha256 = normalizeSha256(result.solver_executable_sha256);
 
   if (envelope.ok !== true) {
     return {
@@ -37,6 +49,7 @@ export function inspectPlanComputeCapability(response: unknown): PlanComputeCapa
       protocolVersion,
       schemaVersion,
       contractSha256,
+      solverExecutableSha256,
       reason: "ping 未返回成功响应",
     };
   }
@@ -46,6 +59,7 @@ export function inspectPlanComputeCapability(response: unknown): PlanComputeCapa
       protocolVersion,
       schemaVersion,
       contractSha256,
+      solverExecutableSha256,
       reason: `protocol_version 需要 ${PLAN_PROTOCOL_VERSION}，当前为 ${protocolVersion ?? "缺失"}`,
     };
   }
@@ -55,16 +69,8 @@ export function inspectPlanComputeCapability(response: unknown): PlanComputeCapa
       protocolVersion,
       schemaVersion,
       contractSha256,
+      solverExecutableSha256,
       reason: `plan_schema_version 需要 ${PLAN_SCHEMA_VERSION}，当前为 ${schemaVersion ?? "缺失"}`,
-    };
-  }
-  if (contractSha256 !== PLAN_CONTRACT_SHA256) {
-    return {
-      supported: false,
-      protocolVersion,
-      schemaVersion,
-      contractSha256,
-      reason: "plan.compute v1 契约 SHA-256 不匹配",
     };
   }
 
@@ -73,8 +79,79 @@ export function inspectPlanComputeCapability(response: unknown): PlanComputeCapa
     protocolVersion,
     schemaVersion,
     contractSha256,
+    solverExecutableSha256,
     reason: null,
   };
+}
+
+export function inspectSolverDeploymentReadiness(
+  capability: PlanComputeCapability,
+  expectedSolverExecutableSha256: string | undefined
+): SolverDeploymentReadiness {
+  if (expectedSolverExecutableSha256 === undefined) {
+    return { ready: true, reason: null };
+  }
+
+  if (!capability.supported) {
+    return {
+      ready: false,
+      reason: capability.reason ?? "Worker 协议版本不兼容",
+    };
+  }
+
+  const expected = normalizeSha256(expectedSolverExecutableSha256);
+  if (!expected) {
+    return {
+      ready: false,
+      reason: "INFRA_CLI_EXPECTED_SHA256 不是有效的小写 SHA-256 指纹",
+    };
+  }
+  if (capability.solverExecutableSha256 !== expected) {
+    return {
+      ready: false,
+      reason: capability.solverExecutableSha256
+        ? "Worker 自报的求解器制品指纹与部署制品不一致"
+        : "Worker 未返回有效的 solver_executable_sha256",
+    };
+  }
+
+  return { ready: true, reason: null };
+}
+
+export function createSolverObservation(
+  capability: PlanComputeCapability,
+  observedAt: string
+): SolverObservation {
+  return {
+    protocol_version: capability.protocolVersion,
+    plan_schema_version: capability.schemaVersion,
+    plan_contract_sha256: capability.contractSha256,
+    solver_executable_sha256: capability.solverExecutableSha256,
+    observed_at: observedAt,
+  };
+}
+
+export function parseSolverObservation(value: unknown): SolverObservation | null {
+  if (!isProtocolRecord(value) || typeof value.observed_at !== "string") return null;
+  const observedAt = value.observed_at;
+  if (!Number.isFinite(Date.parse(observedAt))) return null;
+
+  const protocolVersion = value.protocol_version;
+  const schemaVersion = value.plan_schema_version;
+  if (protocolVersion !== null && !Number.isInteger(protocolVersion)) return null;
+  if (schemaVersion !== null && !Number.isInteger(schemaVersion)) return null;
+
+  return {
+    protocol_version: protocolVersion as number | null,
+    plan_schema_version: schemaVersion as number | null,
+    plan_contract_sha256: normalizeSha256(value.plan_contract_sha256),
+    solver_executable_sha256: normalizeSha256(value.solver_executable_sha256),
+    observed_at: observedAt,
+  };
+}
+
+export function solverObservationFromPlanRecord(value: unknown): SolverObservation | null {
+  return isProtocolRecord(value) ? parseSolverObservation(value.solver) : null;
 }
 
 export function assertUniqueOperboxIdentities(entries: OperBoxEntry[]) {
