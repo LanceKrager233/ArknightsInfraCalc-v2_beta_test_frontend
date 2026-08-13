@@ -271,7 +271,7 @@ development public HTTPS: https://instance-pi2ohhfj.tail2dca9.ts.net (Tailscale 
 development persistent storage: /var/lib/arknights-infra-dev
 ```
 
-`main`和`develop` push 必须先通过`Frontend quality`，随后由`Deploy verified branch`从已验证 SHA 自动发布到各自 GitHub Environment。发布包只包含 Git 跟踪内容；服务器优先通过`/usr/local/sbin/arknights-infra-prepare-release`和`/var/cache/arknights-infra-deploy/repository.git`增量准备准确 SHA，仅在 helper 返回临时故障码`75`时回退完整 SCP。SHA、tree、路径或脚本哈希错误必须直接失败。新 release 从应用根目录的`shared/.env.local`和`shared/bin-data`继承环境配置，以`arkinfra`用户执行`npm ci`/`npm run build`，再原子切换`current`并重启对应 systemd。部署锁内只允许清理命名和提交标记均合法的 release 直属目录；每个环境保留当前 release 加两个回滚版本，失败半成品必须移除，清理后可用空间少于 3 GiB 时必须在创建新 release 前失败。`shared`和`/var/lib`永不进入 release 淘汰范围。不得把服务器密码写入文件或命令；只使用受保护的 SSH key 与 known_hosts。固定部署脚本变更时，先让提交通过门禁，再以`root:root 0755`原子安装并核对 SHA-256。手动发布仍必须基于对应已合并、已验证的远端分支。
+`main`和`develop` push 必须先通过`Frontend quality`，随后由`Deploy verified branch`从已验证 SHA 自动发布到各自 GitHub Environment。发布包只包含 Git 跟踪内容；服务器优先通过`/usr/local/sbin/arknights-infra-prepare-release`和`/var/cache/arknights-infra-deploy/repository.git`增量准备准确 SHA，仅在 helper 返回临时故障码`75`时回退完整 SCP。SHA、tree、路径或脚本哈希错误必须直接失败。新 release 从应用根目录的`shared/.env.local`继承环境配置；`shared/bin-data`只有包含当前 Worker 所需的完整数据文件集时才注入 release，不完整的旧数据保留但不得覆盖制品内置数据。随后以`arkinfra`用户执行`npm ci`/`npm run build`，再原子切换`current`并重启对应 systemd。部署锁内只允许清理命名和提交标记均合法的 release 直属目录；每个环境保留当前 release 加两个回滚版本，失败半成品必须移除，清理后可用空间少于 3 GiB 时必须在创建新 release 前失败。`shared`和`/var/lib`永不进入 release 淘汰范围。不得把服务器密码写入文件或命令；只使用受保护的 SSH key 与 known_hosts。固定部署脚本变更时，先让提交通过门禁，再以`root:root 0755`原子安装并核对 SHA-256。手动发布仍必须基于对应已合并、已验证的远端分支。
 
 发布后至少验证：
 
