@@ -412,6 +412,7 @@ APP_DEPLOYMENT_ENV=$deployment_environment
 SKLAND_FEATURE_ENABLED=$skland_enabled
 BETA_DEBUG_TOOLS_ENABLED=$debug_tools_enabled
 BETA_RATE_LIMIT_ENABLED=$rate_limit_enabled
+BETA_TRUST_PROXY_HEADERS=1
 INFRA_CLI_EXPECTED_SHA256=$expected_solver_sha256
 EOF
 

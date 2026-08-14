@@ -164,6 +164,10 @@ test ! -e "$oldest_release"
 test ! -e "$older_release"
 test ! -e "$archive_path"
 test "$(awk -F= '$1 == "INFRA_CLI_EXPECTED_SHA256" { print $2 }' "$app_root/current/.env.production.local")" = "$expected_fixture_solver_sha256"
+if [[ "$(awk -F= '$1 == "BETA_TRUST_PROXY_HEADERS" { print $2 }' "$app_root/current/.env.production.local")" != "1" ]]; then
+  echo "Deploy must enable trusted proxy headers for per-client rate limiting." >&2
+  exit 1
+fi
 test ! -e "$app_root/current/bin/data"
 test -f "$shared_root/bin-data/operator_instances.json"
 assert_fixture_safety
