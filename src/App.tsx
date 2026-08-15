@@ -590,8 +590,6 @@ function WorkbenchApp() {
     setResultClearNotice(null);
     setInputError(null);
     setApiError(null);
-    setResult(null);
-    setActiveShift(0);
     clearIssueState();
 
     try {
@@ -603,6 +601,7 @@ function WorkbenchApp() {
         rotation: rotationProfile,
       });
       setCliReady(true);
+      setActiveShift(0);
       setResult(response);
       if (response.maa.plans[0]) {
         const plan = response.maa.plans[0];
@@ -1207,4 +1206,3 @@ function WorkbenchApp() {
 }
 
 export default WorkbenchApp;
-

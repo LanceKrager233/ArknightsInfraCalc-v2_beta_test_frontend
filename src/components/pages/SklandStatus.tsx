@@ -48,6 +48,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { HoldToConfirm } from "@/components/ui/hold-to-confirm";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LevelDiamonds, OperatorSlot, roomVisualFor } from "@/components";
@@ -203,58 +204,25 @@ function SklandDataControls({
   busy: boolean;
   onDeleteAllData: () => Promise<void>;
 }) {
-  const [deleteOpen, setDeleteOpen] = useState(false);
   return (
-    <>
-      <Card data-skland-data-controls>
-        <CardHeader>
-          <CardTitle>数据管理</CardTitle>
-          <CardDescription data-ui-number-font>
-            登录凭证将在 {credentialExpiryLabel(account.credentialExpiresAt)} 固定过期，刷新页面不会延长保存期。
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="destructive"
-            disabled={busy}
-            onClick={() => setDeleteOpen(true)}
-            data-skland-delete-all
-          >
-            <Trash2 />删除全部森空岛数据
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="max-w-[min(500px,calc(100vw-2rem))]">
-          <DialogHeader>
-            <DialogTitle>删除全部森空岛数据？</DialogTitle>
-            <DialogDescription>
-              将永久删除此浏览器中的全部森空岛账号、登录凭证、同步数据、森空岛排班结果，以及服务端可关联的运行记录和反馈。MAA 导入与手动布局会保留；森空岛官方账号不会被删除。
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button type="button" variant="ghost" disabled={busy} onClick={() => setDeleteOpen(false)}>保留数据</Button>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={busy}
-              onClick={() => void (async () => {
-                try {
-                  await onDeleteAllData();
-                  setDeleteOpen(false);
-                } catch {
-                  // 页面会保留确认框，并由上层展示统一错误信息。
-                }
-              })()}
-            >
-              <Trash2 />删除全部森空岛数据
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+    <section className="grid gap-3 pt-2" data-skland-data-controls>
+      <div>
+        <h2 className="text-sm font-semibold">数据管理</h2>
+        <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground" data-ui-number-font>
+          登录凭证将在 {credentialExpiryLabel(account.credentialExpiresAt)} 固定过期。按住下方按钮会永久删除全部森空岛账号、凭证、同步数据及可关联记录；MAA 导入与手动布局会保留。
+        </p>
+      </div>
+      <HoldToConfirm
+        disabled={busy}
+        confirmLabel="正在删除"
+        className="w-full sm:w-fit"
+        onConfirm={() => void onDeleteAllData().catch(() => {
+          // 上层统一展示删除失败信息；此处只避免产生未处理的 Promise rejection。
+        })}
+      >
+        <Trash2 className="size-4" />按住删除全部森空岛数据
+      </HoldToConfirm>
+    </section>
   );
 }
 

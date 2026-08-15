@@ -1,7 +1,6 @@
 "use client";
 
 import { Download, FileJson, FlaskConical, Loader2, Settings2, Terminal } from "lucide-react";
-import { AnimatePresence } from "motion/react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -12,13 +11,12 @@ import {
   DebugActions,
   IssuePanel,
   Panel,
-  PlanTelemetry,
   RunButton,
   ScheduleBoard,
   ShiftTabs,
   StatusBar,
 } from "@/components";
-import { ShiftComparisonCard } from "@/components/ShiftComparisonCard";
+import { PlanResultSummary } from "@/components/PlanResultSummary";
 import type { ShiftDirection } from "@/motion";
 import type { RoomRow } from "@/schedule";
 import type {
@@ -139,27 +137,16 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               </div>
             )}
           >
-            <AnimatePresence initial={false} mode="wait">
-              {scheduleResult ? (
-                <PlanTelemetry
-                  key={scheduleResult.diagnosticId}
-                  profile={scheduleResult.profile}
-                  rotation={scheduleResult.rotation}
-                  layout={layout}
-                  activeShift={activeShift}
-                  planRevision={scheduleResult.diagnosticId}
-                />
-              ) : null}
-            </AnimatePresence>
-            <AnimatePresence initial={false} mode="wait">
-              {closestComparison ? (
-                <ShiftComparisonCard
-                  key={scheduleResult?.diagnosticId ?? "comparison"}
-                  comparison={closestComparison}
-                  planRevision={scheduleResult?.diagnosticId}
-                />
-              ) : null}
-            </AnimatePresence>
+            {scheduleResult ? (
+              <PlanResultSummary
+                profile={scheduleResult.profile}
+                rotation={scheduleResult.rotation}
+                layout={layout}
+                activeShift={activeShift}
+                comparison={closestComparison}
+                planRevision={scheduleResult.diagnosticId}
+              />
+            ) : null}
             <ScheduleBoard
               rows={rows}
               layout={layout}

@@ -1003,19 +1003,38 @@ test("two-shift output drives labels, teams, metric units, and profile details",
   await expect(shiftTabs).toHaveCount(2);
   await expect(page.locator("[data-shift-tabs]")).toHaveCSS("overflow-y", "hidden");
   await expect(page.getByRole("tab", { name: /第 3 班/ })).toHaveCount(0);
-  await expect(page.getByText("主力 上班 · 替补 休息", { exact: true })).toBeVisible();
+  await expect(shiftTabs.first()).toHaveAttribute("aria-label", /主力 上班 · 替补 休息/);
 
   await expect(page.getByText("5.288×", { exact: true })).toBeVisible();
-  await expect(page.getByText("24h 贸易", { exact: true }).locator("..")).toContainText(/参考 4\.968×\s*· \+6\.4%/);
   await expect(page.getByText("917.5%", { exact: true })).toBeVisible();
-  await expect(page.getByText("24h 制造", { exact: true }).locator("..")).toContainText(/参考 850%\s*· \+7\.9%/);
   await expect(page.getByText("355.2%", { exact: true })).toBeVisible();
 
   await page.getByRole("tab", { name: /第 2 班 · 12h/ }).click();
-  await expect(page.getByText("替补 上班 · 主力 休息", { exact: true })).toBeVisible();
+  await expect(shiftTabs.nth(1)).toHaveAttribute("aria-label", /替补 上班 · 主力 休息/);
 
-  await page.locator("details").filter({ hasText: "效率详情" }).locator("summary").click();
+  const detailsTrigger = page.locator('[data-plan-details-trigger="efficiency"]').last();
+  await detailsTrigger.click();
+  const detailsSheet = page.locator('[data-slot="drawer-content"]');
+  await expect(detailsSheet).toBeVisible();
+  await expect(detailsSheet.getByText("24h 贸易", { exact: true }).locator("..")).toContainText(/参考 4\.968×\s*\+6\.4%/);
+  await expect(detailsSheet.getByText("24h 制造", { exact: true }).locator("..")).toContainText(/参考 850%\s*\+7\.9%/);
+  await expect(detailsSheet.locator('[data-efficiency-insights] [data-insight-state="positive"]')).toHaveCount(3);
   await expect(page.getByText("机制等效 当前 1.42 · 参考 1.31", { exact: true })).toBeVisible();
+  await expect(detailsSheet.locator('[data-recommendation-card="compact"]')).toHaveCount(1);
+  await page.keyboard.press("Escape");
+  await expect(page.locator('[data-slot="drawer-root"]')).toHaveCount(0);
+  await expect(detailsTrigger).toBeFocused();
+
+  await detailsTrigger.click();
+  const drawerHandle = page.locator('[data-slot="drawer-handle"]');
+  const handleBox = await drawerHandle.boundingBox();
+  expect(handleBox).not.toBeNull();
+  await page.mouse.move(handleBox!.x + 40, handleBox!.y + handleBox!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(handleBox!.x + handleBox!.width * 0.65, handleBox!.y + handleBox!.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await expect(page.locator('[data-slot="drawer-root"]')).toHaveCount(0);
+  await expect(detailsTrigger).toBeFocused();
 
   await page.getByRole("button", { name: "练卡建议" }).click();
   await expect(page.getByText("练度提升", { exact: true })).toBeVisible();
@@ -1188,6 +1207,20 @@ test("Skland calculator keeps the schedule visible before and after sidebar navi
   await expect(page.getByText("排班已生成")).toBeVisible();
   await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
   await expect(page.getByRole("button", { name: "导出到 MAA" })).toBeEnabled();
+  const comparisonTrigger = page.locator('[data-plan-details-trigger="comparison"]');
+  await expect(comparisonTrigger).toBeVisible();
+  await comparisonTrigger.click();
+  const comparisonSheet = page.locator('[data-slot="drawer-content"]');
+  await expect(comparisonSheet.locator("[data-plan-details-section]")).toHaveAttribute("data-plan-details-section", "comparison");
+  await expect(comparisonSheet.locator("[data-shift-comparison-details]")).toBeVisible();
+  const comparisonTable = comparisonSheet.getByRole("table", { name: "干员房间调整" });
+  await expect(comparisonTable).toBeVisible();
+  await expect(comparisonTable.getByRole("columnheader")).toHaveText(["干员", "当前", "目标", "状态"]);
+  const adjustmentNames = await comparisonTable.locator('[role="rowgroup"] [role="row"] > strong').allTextContents();
+  expect(new Set(adjustmentNames).size).toBe(adjustmentNames.length);
+  await page.keyboard.press("Escape");
+  await expect(page.locator('[data-slot="drawer-root"]')).toHaveCount(0);
+  await expect(comparisonTrigger).toBeFocused();
 
   const returnToCalculator = async (destination: "练卡建议" | "森空岛状态", marker: string, label: string) => {
     await page.getByRole("button", { name: destination, exact: true }).click();
@@ -1254,14 +1287,17 @@ test("plan completion reveals status, metrics, and schedule once without resetti
   await expect(status).toHaveAttribute("data-status-state", "loading");
   await expectCapturedMotion(page, "loading-status", 140);
 
+  const boardBeforePlan = page.locator("[data-plan-board]");
+  await boardBeforePlan.evaluate((element) => {
+    element.setAttribute("data-motion-sentinel", "stable");
+  });
+
   if (browserName === "webkit") {
     await armTransientStyleCapture(page, "[data-plan-summary]", "plan-summary");
-    await armTransientStyleCapture(page, "[data-plan-board]", "plan-board");
     await armTransientStyleCapture(page, "[data-plan-metric]", "plan-metrics");
   } else {
-    await armMotionCapture(page, "[data-plan-summary]", "plan-summary", 320);
-    await armMotionCapture(page, "[data-plan-board]", "plan-board", 320);
-    await armMotionCollectionCapture(page, "[data-plan-metric]", "plan-metrics", 280);
+    await armMotionCapture(page, "[data-plan-summary]", "plan-summary", 460);
+    await armMotionCollectionCapture(page, "[data-plan-metric]", "plan-metrics", 360);
   }
   releasePlan();
   await expect(status).toHaveAttribute("data-status-state", "success");
@@ -1269,17 +1305,17 @@ test("plan completion reveals status, metrics, and schedule once without resetti
   const board = page.locator("[data-plan-board]");
   await expect(summary).toBeVisible();
   await expect(board).toHaveAttribute("data-plan-revision", diagnosticId);
+  await expect(board).toHaveAttribute("data-motion-sentinel", "stable");
+  expect(await board.evaluate((element) => element.getAnimations().filter((animation) => animation.playState === "running").length)).toBe(0);
   await expect(listTab).toHaveAttribute("aria-selected", "true");
   await expect(restoreHidden).toBeVisible();
 
   if (browserName === "webkit") {
     await expectCapturedStyleMotion(page, "plan-summary");
-    await expectCapturedStyleMotion(page, "plan-board");
     await expectCapturedStyleMotion(page, "plan-metrics");
   } else {
-    await expectCapturedMotion(page, "plan-summary", 320, 60);
-    await expectCapturedMotion(page, "plan-board", 320, 150);
-    await expectCapturedMotionDelays(page, "plan-metrics", 280, [60, 105, 150, 195]);
+    await expectCapturedMotion(page, "plan-summary", 460, 40);
+    await expectCapturedMotionDelays(page, "plan-metrics", 360, [100, 150, 215, 280]);
   }
   const choreography = await page.evaluate(() => {
     const statusBar = getComputedStyle(document.querySelector<HTMLElement>('[data-slot="plan-status"]')!);
@@ -1314,7 +1350,7 @@ test("plan completion reveals status, metrics, and schedule once without resetti
       totalElementCount: document.querySelectorAll("*").length,
     };
   });
-  expect(renderingBudget.summaryCalligraphCount).toBe(4);
+  expect(renderingBudget.summaryCalligraphCount).toBe(3);
   expect(renderingBudget.boardCalligraphCount).toBe(renderingBudget.roomPrimaryCount);
   expect(renderingBudget.totalCalligraphCount).toBe(
     renderingBudget.summaryCalligraphCount + renderingBudget.boardCalligraphCount
@@ -1394,26 +1430,29 @@ test("reduced motion keeps feedback timing while removing movement, clipping, an
   await expect(page.locator('[data-slot="plan-status"]')).toHaveAttribute("data-status-state", "loading");
   await expect(page.locator(".animate-spin").first()).toHaveCSS("animation-duration", "1.6s");
 
+  const board = page.locator("[data-plan-board]");
+  await board.evaluate((element) => {
+    element.setAttribute("data-motion-sentinel", "stable");
+  });
+
   if (browserName === "webkit") {
     await armTransientStyleCapture(page, "[data-plan-summary]", "reduced-summary");
-    await armTransientStyleCapture(page, "[data-plan-board]", "reduced-board");
     await armTransientStyleCapture(page, "[data-plan-metric]", "reduced-metric");
   } else {
     await armMotionCapture(page, "[data-plan-summary]", "reduced-summary", 140);
-    await armMotionCapture(page, "[data-plan-board]", "reduced-board", 140);
     await armMotionCapture(page, "[data-plan-metric]", "reduced-metric", 140);
   }
   releasePlan();
   await expect(page.locator('[data-slot="plan-status"]')).toHaveAttribute("data-status-state", "success");
   const summary = page.locator("[data-plan-summary]");
   await expect(summary).toBeVisible();
+  await expect(board).toHaveAttribute("data-motion-sentinel", "stable");
+  expect(await board.evaluate((element) => element.getAnimations().filter((animation) => animation.playState === "running").length)).toBe(0);
   if (browserName === "webkit") {
     await expectCapturedStyleMotion(page, "reduced-summary");
-    await expectCapturedStyleMotion(page, "reduced-board");
     await expectCapturedStyleMotion(page, "reduced-metric");
   } else {
     await expectCapturedMotion(page, "reduced-summary", 140);
-    await expectCapturedMotion(page, "reduced-board", 140);
     await expectCapturedMotion(page, "reduced-metric", 140);
   }
   const reduced = await page.evaluate(() => {
@@ -2502,10 +2541,18 @@ test("Skland login loads full status by default and deletion preserves non-Sklan
   ]);
   expect(postStatus.status()).toBe(405);
   expect(deleteStatus.status()).toBe(405);
-  await page.getByRole("button", { name: "删除全部森空岛数据" }).click();
-  const deleteDialog = page.getByRole("dialog", { name: "删除全部森空岛数据？" });
-  await expect(deleteDialog).toContainText("MAA 导入与手动布局会保留");
-  await deleteDialog.getByRole("button", { name: "删除全部森空岛数据" }).click();
+  const dataControls = page.locator("[data-skland-data-controls]");
+  await expect(dataControls).toContainText("MAA 导入与手动布局会保留");
+  expect(await dataControls.evaluate((element) => element.parentElement?.lastElementChild === element)).toBe(true);
+  const deleteAll = page.getByRole("button", { name: "按住删除全部森空岛数据" });
+  await deleteAll.click();
+  await expect(page.getByRole("heading", { name: "把当前罗德岛带进排班助手" })).toHaveCount(0);
+  const deleteBox = await deleteAll.boundingBox();
+  expect(deleteBox).not.toBeNull();
+  await page.mouse.move(deleteBox!.x + deleteBox!.width / 2, deleteBox!.y + deleteBox!.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(1900);
+  await page.mouse.up();
   await expect(page.getByRole("heading", { name: "把当前罗德岛带进排班助手" })).toBeVisible();
 
   await page.getByRole("button", { name: "Toggle Sidebar" }).click();

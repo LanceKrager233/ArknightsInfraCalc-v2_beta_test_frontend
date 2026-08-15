@@ -16,8 +16,8 @@ import {
   Smile,
   Upload,
 } from "lucide-react";
-import { AnimatePresence, motion, useAnimate, useReducedMotion } from "motion/react";
-import { CSSProperties, ChangeEvent, ReactElement, ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { CSSProperties, ChangeEvent, ReactElement, ReactNode, useEffect, useRef, useState } from "react";
 import { ThinkingOrb } from "thinking-orbs";
 
 import { AnimatedNumber, AnimatedText } from "@/components/AnimatedText";
@@ -75,7 +75,7 @@ import {
   roomKindLabel,
   tradeOrderFor,
 } from "./blueprint";
-import { CompactScheduleView } from "@/components/CompactScheduleView";
+import { CompactScheduleSkeleton, CompactScheduleView } from "@/components/CompactScheduleView";
 import { manufacturePoolReady, presentRoomEfficiency, profileEfficiency, RoomEfficiencyPresentation } from "./efficiency";
 import {
   relativeMetricDelta,
@@ -1445,29 +1445,9 @@ export function ScheduleBoard({
   const [hiddenGroups, setHiddenGroups] = useState<Record<string, boolean>>({});
   const [viewMode, setViewMode] = useState<"list" | "compact">("list");
   const [supportsCompactLayout, setSupportsCompactLayout] = useState(false);
+  const [viewModeReady, setViewModeReady] = useState(false);
   const preferredViewMode = useRef<"list" | "compact" | null>(null);
   const shouldReduceMotion = useReducedMotion();
-  const animatedPlanRevision = useRef(planRevision);
-  const [boardScope, animateBoard] = useAnimate();
-
-  useLayoutEffect(() => {
-    const previousRevision = animatedPlanRevision.current;
-    animatedPlanRevision.current = planRevision;
-    if (!planRevision || previousRevision === planRevision || !boardScope.current) return;
-
-    const controls = animateBoard(
-      boardScope.current,
-      shouldReduceMotion
-        ? { opacity: [0, 1] }
-        : { opacity: [0, 1], y: [8, 0] },
-      {
-        duration: shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.emphasis,
-        delay: shouldReduceMotion ? 0 : 0.15,
-        ease: MOTION_EASE_OUT,
-      },
-    );
-    return () => controls.stop();
-  }, [animateBoard, boardScope, planRevision, shouldReduceMotion]);
 
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 768px)");
@@ -1478,6 +1458,7 @@ export function ScheduleBoard({
         : "list";
       setViewMode(nextViewMode);
       onViewModeChange?.(nextViewMode);
+      setViewModeReady(true);
     };
 
     syncViewMode(mq.matches);
@@ -1583,7 +1564,6 @@ export function ScheduleBoard({
         {shiftInfoSlot ? <div className="min-w-0 max-sm:w-full">{shiftInfoSlot}</div> : null}
       </div>
       <motion.div
-        ref={boardScope}
         data-plan-board
         data-plan-revision={planRevision || undefined}
       >
@@ -1610,7 +1590,9 @@ export function ScheduleBoard({
                 ease: MOTION_EASE_OUT,
               }}
             >
-        {viewMode === "list" ? (
+        {!viewModeReady ? (
+          <CompactScheduleSkeleton />
+        ) : viewMode === "list" ? (
           <>
           {rowGroups.map((group) => {
         const visual = roomVisualFor(group.rows[0]?.group ?? "default");
