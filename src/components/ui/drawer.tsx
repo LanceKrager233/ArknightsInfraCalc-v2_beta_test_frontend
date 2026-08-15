@@ -45,6 +45,7 @@ export function Drawer({
   const shellRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
+  const dragStartClientXRef = useRef<number | null>(null);
   const animationRef = useRef<{ stop: () => void } | null>(null);
   const away = width + 24;
   const x = useMotionValue(open ? 0 : away);
@@ -163,9 +164,15 @@ export function Drawer({
     }
   }, [close]);
 
-  const handleDragEnd = useCallback((_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+  const handleDragEnd = useCallback((event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     setDragging(false);
-    if (info.offset.x > width * 0.38 || info.velocity.x > 520) {
+    const pointerX = "clientX" in event ? event.clientX : event.changedTouches[0]?.clientX;
+    const rawOffset = dragStartClientXRef.current === null || pointerX === undefined
+      ? info.offset.x
+      : pointerX - dragStartClientXRef.current;
+    dragStartClientXRef.current = null;
+    const renderedWidth = panelRef.current?.getBoundingClientRect().width ?? width;
+    if (Math.max(info.offset.x, rawOffset) > renderedWidth * 0.25 || info.velocity.x > 520) {
       close();
       return;
     }
@@ -196,7 +203,7 @@ export function Drawer({
         className={cn("absolute inset-y-0 right-0 flex flex-col border-l border-[#313131]/18 bg-[#F5F3EC] text-[#313131] shadow-[-24px_0_56px_-28px_rgba(24,26,26,0.48)] outline-none", dragging && "select-none", className)}
         data-slot="drawer-content"
       >
-        <header className={cn("flex min-h-[68px] select-none items-start gap-3 border-b border-[#313131]/12 bg-[#ECE9DF] px-5 py-4", dragging ? "cursor-grabbing" : "cursor-grab")} onPointerDown={(event) => { if (open) controls.start(event); }} data-slot="drawer-handle">
+        <header className={cn("flex min-h-[68px] select-none items-start gap-3 border-b border-[#313131]/12 bg-[#ECE9DF] px-5 py-4", dragging ? "cursor-grabbing" : "cursor-grab")} onPointerDown={(event) => { if (open) { dragStartClientXRef.current = event.clientX; controls.start(event); } }} data-slot="drawer-handle">
           <span className="mt-0.5 h-8 w-1 shrink-0 bg-primary" aria-hidden="true" />
           <div className="min-w-0 flex-1"><h2 id={titleId} className="truncate font-heading text-base font-semibold">{title}</h2>{description ? <p className="mt-0.5 truncate text-xs text-[#313131]/58">{description}</p> : null}</div>
           <Button type="button" variant="ghost" size="icon" className="-mr-2 size-10" aria-label="关闭详情" onPointerDown={(event) => event.stopPropagation()} onClick={close}><XIcon /><span className="sr-only">关闭详情</span></Button>
