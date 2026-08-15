@@ -57,6 +57,8 @@ import { planToRows, RoomRow } from "./schedule";
 import { DEFAULT_ROTATION_PROFILE } from "./rotation-settings";
 import { SetupDialog } from "./setup-dialog";
 import { closestShift, compareShifts } from "./skland";
+import { applyFiammettaSettings, scheduledOperatorNames, validateFiammettaExport } from "./fiammetta-settings";
+import { operatorBuildingSkillList } from "./operatorPortraits";
 import {
   BaseBlueprint,
   BoxSource,
@@ -200,6 +202,8 @@ function WorkbenchApp() {
   const [layoutSource, setLayoutSource] = useState<"local" | "skland">("local");
   const [localLayoutBackup, setLocalLayoutBackup] = useState<BaseBlueprint | null>(null);
   const [rotationProfile, setRotationProfile] = useState<RotationProfile>(DEFAULT_ROTATION_PROFILE);
+  const [fiammettaEnabled, setFiammettaEnabled] = useState(false);
+  const [fiammettaTarget, setFiammettaTarget] = useState<string | null>(null);
   const [inputMode, setInputMode] = useState<"skland" | "maa">(CLIENT_SKLAND_ENABLED ? "skland" : "maa");
   const [maaPaste, setMaaPaste] = useState("");
   const [sklandScheduleSnapshot, setSklandScheduleSnapshot] = useState<SklandScheduleSnapshot | null>(null);
@@ -247,6 +251,13 @@ function WorkbenchApp() {
   const activePlan = scheduleResult?.maa.plans?.[activeShift];
   const activeRotationShift = scheduleResult?.rotation.shifts?.[activeShift];
   const rows = useMemo(() => planToRows(activePlan, activeRotationShift, layout), [activePlan, activeRotationShift, layout]);
+  const scheduledOperators = useMemo(() => scheduledOperatorNames(scheduleResult?.maa), [scheduleResult?.maa]);
+  const eligibleFiammettaTargets = useMemo(() => new Set(
+    (operbox ?? [])
+      .filter((operator) => operator.own && scheduledOperators.has(operator.name) && operatorBuildingSkillList(operator.name).length > 0)
+      .map((operator) => operator.name)
+  ), [operbox, scheduledOperators]);
+  const ownsFiammetta = Boolean(operbox?.some((operator) => operator.own && operator.name === "菲亚梅塔"));
   const currentMoraleByOperator = useMemo(() => {
     if (!CLIENT_SKLAND_ENABLED || boxSource !== "skland" || !sklandScheduleSnapshot) return undefined;
 
@@ -313,6 +324,8 @@ function WorkbenchApp() {
         setLayoutSource(restoredLayoutSource);
         setLocalLayoutBackup(CLIENT_SKLAND_ENABLED ? restored.localLayoutBackup : null);
         setRotationProfile(restored.rotationProfile);
+        setFiammettaEnabled(Boolean(restored.fiammettaEnabled));
+        setFiammettaTarget(restored.fiammettaTarget ?? null);
         setResult(restored.result);
         setActiveShift(restored.activeShift);
         initialLayoutForRestore.current = restoredLayout;
@@ -346,6 +359,8 @@ function WorkbenchApp() {
         layoutSource,
         localLayoutBackup,
         rotationProfile,
+        fiammettaEnabled,
+        fiammettaTarget,
         result,
         activeShift,
       });
@@ -353,7 +368,7 @@ function WorkbenchApp() {
     } catch {
       setStorageNotice(displayError("AIC-LOCAL-7001", "浏览器无法保存本地数据，但仍可继续生成排班。"));
     }
-  }, [hasRestoredSession, preset, layout, operbox, fileName, boxSource, layoutDirty, layoutSource, localLayoutBackup, rotationProfile, result, activeShift]);
+  }, [hasRestoredSession, preset, layout, operbox, fileName, boxSource, layoutDirty, layoutSource, localLayoutBackup, rotationProfile, fiammettaEnabled, fiammettaTarget, result, activeShift]);
 
   useEffect(() => {
     if (!hasRestoredSession || typeof window === "undefined") return;
@@ -602,7 +617,27 @@ function WorkbenchApp() {
       });
       setCliReady(true);
       setActiveShift(0);
-      setResult(response);
+      const responseScheduledOperators = scheduledOperatorNames(response.maa);
+      const responseTargets = new Set(
+        operbox
+          .filter((operator) => operator.own && responseScheduledOperators.has(operator.name) && operatorBuildingSkillList(operator.name).length > 0)
+          .map((operator) => operator.name)
+      );
+      const fiammettaError = validateFiammettaExport({
+        settings: { enabled: fiammettaEnabled, target: fiammettaTarget },
+        ownsFiammetta,
+        eligibleTargets: responseTargets,
+      });
+      setResult({
+        ...response,
+        maa: applyFiammettaSettings(response.maa, {
+          enabled: fiammettaEnabled && !fiammettaError,
+          target: fiammettaTarget,
+        }),
+      });
+      if (fiammettaError && fiammettaEnabled) {
+        setApiError(displayError("AIC-BOX-1101", `${fiammettaError} 本次结果未写入菲亚梅塔换人。`));
+      }
       if (response.maa.plans[0]) {
         const plan = response.maa.plans[0];
         const maaFactoryRooms = plan.rooms?.manufacture;
@@ -657,7 +692,17 @@ function WorkbenchApp() {
   }
 
   function handleDownloadMaa() {
-    if (result?.maa) downloadJson("arknights-infra-schedule-maa.json", result.maa);
+    if (!result?.maa) return;
+    const validationError = validateFiammettaExport({
+      settings: { enabled: fiammettaEnabled, target: fiammettaTarget },
+      ownsFiammetta,
+      eligibleTargets: eligibleFiammettaTargets,
+    });
+    if (validationError) {
+      setApiError(displayError("AIC-BOX-1101", validationError));
+      return;
+    }
+    downloadJson("arknights-infra-schedule-maa.json", result.maa);
   }
 
   function handleDownloadBundle() {
@@ -738,6 +783,17 @@ function WorkbenchApp() {
 
   function handleRotationProfileChange(value: RotationProfile) {
     setRotationProfile(value);
+    clearPlanResult();
+  }
+
+  function handleFiammettaEnabledChange(enabled: boolean) {
+    setFiammettaEnabled(enabled);
+    clearPlanResult();
+  }
+
+  function handleFiammettaTargetChange(target: string) {
+    setFiammettaTarget(target);
+    setFiammettaEnabled(true);
     clearPlanResult();
   }
 
@@ -1168,6 +1224,11 @@ function WorkbenchApp() {
         layout={layout}
         rotationProfile={rotationProfile}
         onRotationProfileChange={handleRotationProfileChange}
+        fiammettaEnabled={fiammettaEnabled}
+        fiammettaTarget={fiammettaTarget}
+        scheduledOperators={scheduledOperators}
+        onFiammettaEnabledChange={handleFiammettaEnabledChange}
+        onFiammettaTargetChange={handleFiammettaTargetChange}
         onPresetSelect={handlePresetSelect}
         onLayoutFile={handleLayoutFile}
         onDownloadLayout={() => downloadJson(`layout-${layout.template}.json`, layout)}

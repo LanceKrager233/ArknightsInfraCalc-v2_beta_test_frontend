@@ -1,0 +1,43 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { applyFiammettaSettings, scheduledOperatorNames, validateFiammettaExport } from "./fiammetta-settings.ts";
+import type { MaaJson } from "./types.ts";
+
+const maa: MaaJson = {
+  title: "test",
+  plans: [
+    { name: "早班", rooms: {}, Fiammetta: { enable: true, target: "旧目标", order: "post" } },
+    { name: "晚班", rooms: {} },
+  ],
+};
+
+test("writes the selected Fiammetta target to every shift", () => {
+  const result = applyFiammettaSettings(maa, { enabled: true, target: "巫恋" });
+  assert.deepEqual(result.plans.map((plan) => plan.Fiammetta), [
+    { enable: true, target: "巫恋", order: "pre" },
+    { enable: true, target: "巫恋", order: "pre" },
+  ]);
+  assert.equal(maa.plans[0].Fiammetta?.target, "旧目标");
+});
+
+test("removes Fiammetta output when the setting is disabled or incomplete", () => {
+  assert.equal(applyFiammettaSettings(maa, { enabled: false, target: "巫恋" }).plans[0].Fiammetta, undefined);
+  assert.equal(applyFiammettaSettings(maa, { enabled: true, target: null }).plans[0].Fiammetta, undefined);
+});
+
+test("collects only operators that actually participate in a generated schedule", () => {
+  const schedule: MaaJson = {
+    title: "schedule",
+    plans: [{ name: "早班", rooms: { trading: [{ operators: ["巫恋", { name: "龙舌兰" }, null] }] } }],
+  };
+  assert.deepEqual([...scheduledOperatorNames(schedule)].sort(), ["巫恋", "龙舌兰"]);
+});
+
+test("blocks invalid Fiammetta exports", () => {
+  const targets = new Set(["巫恋"]);
+  assert.match(validateFiammettaExport({ settings: { enabled: true, target: "巫恋" }, ownsFiammetta: false, eligibleTargets: targets }) ?? "", /未拥有/);
+  assert.match(validateFiammettaExport({ settings: { enabled: true, target: null }, ownsFiammetta: true, eligibleTargets: targets }) ?? "", /选择/);
+  assert.match(validateFiammettaExport({ settings: { enabled: true, target: "闲置干员" }, ownsFiammetta: true, eligibleTargets: targets }) ?? "", /未参与/);
+  assert.equal(validateFiammettaExport({ settings: { enabled: true, target: "巫恋" }, ownsFiammetta: true, eligibleTargets: targets }), null);
+});
