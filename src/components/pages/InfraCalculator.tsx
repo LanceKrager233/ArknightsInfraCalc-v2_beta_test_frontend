@@ -36,6 +36,7 @@ interface InfraCalculatorProps {
   scheduleResult: PublicPlanData | null;
   activeShift: number;
   rows: RoomRow[];
+  changedRoomIds: ReadonlySet<string>;
   currentMoraleByOperator: Map<string, number> | undefined;
   activePlan: MaaPlan | undefined;
   closestComparison: ShiftComparison | null;
@@ -52,6 +53,7 @@ interface InfraCalculatorProps {
   onLoadSample: () => Promise<boolean>;
   onOpenSetup: () => void;
   onRun: () => void;
+  onCancelRun: () => void;
   onRetry: () => void;
   onCopyDiagnostic: () => void;
   onSetActiveShift: (shift: number) => void;
@@ -68,12 +70,12 @@ interface InfraCalculatorProps {
 export function InfraCalculator(props: InfraCalculatorProps) {
   const {
     layout, showBetaPanels,
-    result, scheduleResult, activeShift, rows, currentMoraleByOperator,
+    result, scheduleResult, activeShift, rows, changedRoomIds, currentMoraleByOperator,
     activePlan, closestComparison,
     resultClearNotice,
     issueForPanel, issueReport, feedbackResult, feedbackError,
     sampleLoading, loading, canRun, plannerReady, statusError,
-    onLoadSample, onOpenSetup, onRun, onRetry, onCopyDiagnostic,
+    onLoadSample, onOpenSetup, onRun, onCancelRun, onRetry, onCopyDiagnostic,
     onSetActiveShift, onMarkIssue,
     onFactoryRecipeChange, onTradeOrderChange,
     onDownloadMaa, onDownloadBundle, onCopyCommand,
@@ -133,7 +135,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                   {sampleLoading ? <Loader2 className="animate-spin" /> : <FlaskConical />}
                   {sampleLoading ? "正在载入" : "全角色导入"}
                 </Button>
-                <RunButton canRun={canRun} loading={loading} onRun={onRun} />
+                {loading ? <Button type="button" variant="destructive" onClick={onCancelRun}>取消计算</Button> : <RunButton canRun={canRun} loading={false} onRun={onRun} />}
               </div>
             )}
           >
@@ -149,6 +151,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
             ) : null}
             <ScheduleBoard
               rows={rows}
+              changedRoomIds={changedRoomIds}
               layout={layout}
               planRevision={result?.diagnosticId}
               currentMoraleByOperator={currentMoraleByOperator}

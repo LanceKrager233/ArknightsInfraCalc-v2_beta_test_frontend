@@ -1423,6 +1423,7 @@ export function ScheduleBoard({
   activeShift,
   shiftDirection = 0,
   activePlan,
+  changedRoomIds = new Set<string>(),
   onIssue,
   onFactoryRecipeChange,
   onTradeOrderChange,
@@ -1436,6 +1437,7 @@ export function ScheduleBoard({
   activeShift: number;
   shiftDirection?: ShiftDirection;
   activePlan?: MaaPlan;
+  changedRoomIds?: ReadonlySet<string>;
   onIssue: (row: RoomRow) => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
@@ -1444,6 +1446,7 @@ export function ScheduleBoard({
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [hiddenGroups, setHiddenGroups] = useState<Record<string, boolean>>({});
   const [viewMode, setViewMode] = useState<"list" | "compact">("list");
+  const [operatorQuery, setOperatorQuery] = useState("");
   const [supportsCompactLayout, setSupportsCompactLayout] = useState(false);
   const [viewModeReady, setViewModeReady] = useState(false);
   const preferredViewMode = useRef<"list" | "compact" | null>(null);
@@ -1475,7 +1478,11 @@ export function ScheduleBoard({
     );
   }
 
-  const rowGroups = buildListScheduleGroups(rows);
+  const normalizedQuery = operatorQuery.trim().toLocaleLowerCase("zh-CN");
+  const visibleRows = normalizedQuery
+    ? rows.filter((row) => row.title.toLocaleLowerCase("zh-CN").includes(normalizedQuery) || row.operators.some((name) => name.toLocaleLowerCase("zh-CN").includes(normalizedQuery)))
+    : rows;
+  const rowGroups = buildListScheduleGroups(visibleRows);
   const auxiliaryGroups = rowGroups.filter((group) => AUXILIARY_ROOM_GROUPS.has(group.rows[0]?.group ?? ""));
   const hiddenAuxiliaryCount = auxiliaryGroups.filter((group) => hiddenGroups[group.label]).length;
   const allAuxiliaryCollapsed =
@@ -1562,6 +1569,10 @@ export function ScheduleBoard({
           ) : null}
         </div>
         {shiftInfoSlot ? <div className="min-w-0 max-sm:w-full">{shiftInfoSlot}</div> : null}
+      </div>
+      <div className="flex items-center gap-2">
+        <Input value={operatorQuery} onChange={(event) => setOperatorQuery(event.target.value)} placeholder="搜索干员或房间" aria-label="搜索排班中的干员或房间" className="h-10 max-w-sm" />
+        {changedRoomIds.size ? <span className="text-xs text-amber-700">较上次求解变更 {changedRoomIds.size} 个房间</span> : null}
       </div>
       <motion.div
         data-plan-board
@@ -1673,6 +1684,7 @@ export function ScheduleBoard({
                       compactInlineRoom && "[container-type:inline-size]",
                       listFunctionalRoomSpanClass(row.group),
                       row.suspicious && "ring-2 ring-destructive ring-offset-2"
+                      , changedRoomIds.has(row.roomId) && "ring-2 ring-amber-400 ring-offset-2"
                     )}
                     data-room-group={row.group}
                     data-room-title={row.title}
@@ -1784,7 +1796,7 @@ export function ScheduleBoard({
           </>
         ) : (
           <CompactScheduleView
-            rows={rows}
+            rows={visibleRows}
             layout={layout}
             currentMoraleByOperator={currentMoraleByOperator}
             activeShift={activeShift}
