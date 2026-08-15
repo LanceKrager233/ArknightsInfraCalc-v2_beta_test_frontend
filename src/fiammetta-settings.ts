@@ -6,6 +6,10 @@ export interface FiammettaSettings {
   order?: "pre" | "post";
 }
 
+export function isFiammettaTargetAvailable(target: string | null, eligibleTargets: ReadonlySet<string>): boolean {
+  return Boolean(target && eligibleTargets.has(target));
+}
+
 function operatorName(value: string | MaaOperatorSlot | null): string | null {
   if (typeof value === "string") return value.trim() || null;
   return value?.name?.trim() || null;
