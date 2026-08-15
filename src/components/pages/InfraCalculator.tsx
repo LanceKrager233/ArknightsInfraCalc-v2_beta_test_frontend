@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, FileJson, FlaskConical, Loader2, Settings2, Terminal } from "lucide-react";
+import { Clock3, Download, FileJson, FlaskConical, Loader2, Settings2, Terminal } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -56,6 +56,7 @@ interface InfraCalculatorProps {
   onCopyDiagnostic: () => void;
   onSetActiveShift: (shift: number) => void;
   onMarkIssue: (row: RoomRow) => void;
+  onPerformanceIssue: () => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
   onDownloadMaa: () => void;
@@ -74,7 +75,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     issueForPanel, issueReport, feedbackResult, feedbackError,
     sampleLoading, loading, canRun, plannerReady, statusError,
     onLoadSample, onOpenSetup, onRun, onRetry, onCopyDiagnostic,
-    onSetActiveShift, onMarkIssue,
+    onSetActiveShift, onMarkIssue, onPerformanceIssue,
     onFactoryRecipeChange, onTradeOrderChange,
     onDownloadMaa, onDownloadBundle, onCopyCommand,
     onClearResultNotice, onDismissResultClearWarning,
@@ -138,14 +139,22 @@ export function InfraCalculator(props: InfraCalculatorProps) {
             )}
           >
             {scheduleResult ? (
-              <PlanResultSummary
-                profile={scheduleResult.profile}
-                rotation={scheduleResult.rotation}
-                layout={layout}
-                activeShift={activeShift}
-                comparison={closestComparison}
-                planRevision={scheduleResult.diagnosticId}
-              />
+              <>
+                <PlanResultSummary
+                  profile={scheduleResult.profile}
+                  rotation={scheduleResult.rotation}
+                  layout={layout}
+                  activeShift={activeShift}
+                  comparison={closestComparison}
+                  planRevision={scheduleResult.diagnosticId}
+                />
+                {scheduleResult.durationMs > 200 ? (
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950" role="status">
+                    <span className="flex items-center gap-2"><Clock3 className="size-4" />本次求解耗时 {Math.round(scheduleResult.durationMs)} ms</span>
+                    <Button type="button" size="sm" variant="outline" className="border-amber-400 bg-white" onClick={onPerformanceIssue}>提交性能反馈</Button>
+                  </div>
+                ) : null}
+              </>
             ) : null}
             <ScheduleBoard
               rows={rows}

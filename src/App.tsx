@@ -686,6 +686,13 @@ function WorkbenchApp() {
     setIssueOpen(true);
   }
 
+  function handlePerformanceIssue() {
+    const row = rows[0];
+    if (!row || !result) return;
+    handleMarkIssue(row);
+    setIssueDraftNote(`运行时间过长：${Math.round(result.durationMs)} ms`);
+  }
+
   async function handleSaveIssue() {
     if (!issueDraftRow || !issueDraftNote.trim()) return;
     if (!result?.diagnosticId) {
@@ -1085,6 +1092,7 @@ function WorkbenchApp() {
           }}
           onSetActiveShift={setActiveShift}
           onMarkIssue={handleMarkIssue}
+          onPerformanceIssue={handlePerformanceIssue}
           onFactoryRecipeChange={handleScheduleFactoryRecipeChange}
           onTradeOrderChange={handleScheduleTradeOrderChange}
           onDownloadMaa={handleDownloadMaa}
