@@ -5,6 +5,7 @@ import { LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CLIENT_SKLAND_ENABLED } from "@/client-features";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { AuthAccountControl } from "@/components/auth/AuthAccountControl";
 import type { SklandAccountSummary, SklandStatusSnapshot } from "@/types";
 
 interface AppTopBarProps {
@@ -29,7 +30,9 @@ export function AppTopBar({ account, statusSnapshot, sessionLoading, onOpenSklan
       <h1 className="sr-only">可露希尔基建终端</h1>
       <div className="app-content-track flex h-[65px] items-center">
         <SidebarTrigger className="size-11 shrink-0 md:hidden" />
-        {CLIENT_SKLAND_ENABLED ? <div className="ms-auto flex h-11 min-w-11 items-center justify-end">
+        <div className="ms-auto flex h-11 min-w-11 items-center justify-end gap-2">
+          <AuthAccountControl />
+        {CLIENT_SKLAND_ENABLED ? <div className="flex h-11 min-w-11 items-center justify-end">
           {sessionLoading && !account ? (
             <div
               className="h-11 w-28 animate-pulse rounded-xl bg-muted motion-reduce:animate-none sm:w-32"
@@ -78,6 +81,7 @@ export function AppTopBar({ account, statusSnapshot, sessionLoading, onOpenSklan
             </Button>
           )}
         </div> : null}
+        </div>
       </div>
     </header>
   );

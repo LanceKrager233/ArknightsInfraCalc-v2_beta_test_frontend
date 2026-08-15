@@ -765,6 +765,7 @@ export type AppErrorCode =
   | "AIC-AUTH-2004"
   | "AIC-AUTH-2005"
   | "AIC-AUTH-2007"
+  | "AIC-AUTH-2008"
   | "AIC-PLAN-3001"
   | "AIC-PLAN-3002"
   | "AIC-PLAN-3003"

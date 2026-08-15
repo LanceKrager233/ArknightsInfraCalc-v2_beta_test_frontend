@@ -18,6 +18,7 @@ import { isRotationProfile } from "@/rotation-settings";
 import type { BaseBlueprint, OperBoxEntry, RotationProfile } from "@/types";
 import { activeSklandAccount, readSklandAccountStore } from "@/server/skland/http";
 import { sklandDataOwnerTag } from "@/server/skland/session";
+import { auth } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,6 +29,8 @@ export async function POST(request: Request) {
   let release: (() => void) | undefined;
   try {
     assertSameOrigin(request);
+    const session = await auth.api.getSession({ headers: request.headers });
+    if (!session) throw new PublicApiError("AIC-AUTH-2008");
     const ip = requestClientIp(request);
     enforceRateLimit("plan", ip, 20, 10 * 60_000, "AIC-PLAN-3002");
     release = acquirePlanSlot(ip);
