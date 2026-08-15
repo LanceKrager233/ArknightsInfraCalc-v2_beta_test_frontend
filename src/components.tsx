@@ -1288,6 +1288,7 @@ export function OperatorSlot({
   transitionDelay = 0,
   portraitSize = 180,
   showSkillTooltip = false,
+  searchQuery = "",
 }: {
   slot: RoomRow["operatorSlots"][number] | undefined;
   currentMorale?: number;
@@ -1300,6 +1301,7 @@ export function OperatorSlot({
   portraitSize?: number;
   /** 悬停卡片时展示干员全部基建技能 tooltip，并关闭卡片自身的原生 title hover。 */
   showSkillTooltip?: boolean;
+  searchQuery?: string;
 }) {
   const shouldReduceMotion = useReducedMotion();
   const identity = slot?.name ?? (autofill ? "autofill" : "empty");
@@ -1308,6 +1310,7 @@ export function OperatorSlot({
   const enterX = shouldReduceMotion ? 0 : shiftDirection * 6;
   const exitX = shouldReduceMotion ? 0 : shiftDirection * -4;
   const ariaLabel = slot?.name ?? (autofill ? "自动补位" : "空置");
+  const searchMatched = Boolean(slot && searchQuery && slot.name.toLocaleLowerCase("zh-CN").includes(searchQuery));
   const frameClassName = slot
     ? "border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)]"
     : autofill
@@ -1406,7 +1409,7 @@ export function OperatorSlot({
       }
       frameWrapper={showSkillTooltip && slot ? (frame) => <OperatorSkillTooltip name={slot.name} trigger={frame} /> : undefined}
       label={slot ? <AnimatedText value={slot.name} trend={shiftDirection} /> : autofill ? "自动补位" : "占"}
-      labelClassName={slot ? "text-white" : autofill ? "text-white/55" : "text-transparent select-none"}
+      labelClassName={slot ? (searchMatched ? "bg-[#FFD501] px-1 text-[#202020]" : "text-white") : autofill ? "text-white/55" : "text-transparent select-none"}
       title={suppressNativeTitles ? undefined : slot?.label}
     />
   );
@@ -1447,10 +1450,22 @@ export function ScheduleBoard({
   const [hiddenGroups, setHiddenGroups] = useState<Record<string, boolean>>({});
   const [viewMode, setViewMode] = useState<"list" | "compact">("list");
   const [operatorQuery, setOperatorQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [supportsCompactLayout, setSupportsCompactLayout] = useState(false);
   const [viewModeReady, setViewModeReady] = useState(false);
   const preferredViewMode = useRef<"list" | "compact" | null>(null);
   const shouldReduceMotion = useReducedMotion();
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "k") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, []);
 
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 768px)");
@@ -1570,8 +1585,8 @@ export function ScheduleBoard({
         </div>
         {shiftInfoSlot ? <div className="min-w-0 max-sm:w-full">{shiftInfoSlot}</div> : null}
       </div>
-      <div className="flex items-center gap-2">
-        <Input value={operatorQuery} onChange={(event) => setOperatorQuery(event.target.value)} placeholder="搜索干员或房间" aria-label="搜索排班中的干员或房间" className="h-10 max-w-sm" />
+      <div className="sticky top-0 z-20 flex items-center gap-2 bg-background/95 py-2 backdrop-blur-sm">
+        <Input ref={searchInputRef} value={operatorQuery} onChange={(event) => setOperatorQuery(event.target.value)} placeholder="搜索干员或房间" aria-label="搜索排班中的干员或房间" className="h-10 max-w-sm" />
         {changedRoomIds.size ? <span className="text-xs text-amber-700">较上次求解变更 {changedRoomIds.size} 个房间</span> : null}
       </div>
       <motion.div
@@ -1760,6 +1775,7 @@ export function ScheduleBoard({
                             showSkillTooltip
                             shiftDirection={shiftDirection}
                             transitionDelay={Math.min(index, 2) * 0.02}
+                            searchQuery={normalizedQuery}
                           />
                         ))}
                       </div>

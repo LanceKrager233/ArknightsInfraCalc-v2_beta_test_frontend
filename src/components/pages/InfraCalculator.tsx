@@ -37,6 +37,7 @@ interface InfraCalculatorProps {
   activeShift: number;
   rows: RoomRow[];
   changedRoomIds: ReadonlySet<string>;
+  planHistory: Array<{ savedAt: string; result: PublicPlanData }>;
   currentMoraleByOperator: Map<string, number> | undefined;
   activePlan: MaaPlan | undefined;
   closestComparison: ShiftComparison | null;
@@ -54,6 +55,7 @@ interface InfraCalculatorProps {
   onOpenSetup: () => void;
   onRun: () => void;
   onCancelRun: () => void;
+  onRestorePlan: (entry: { savedAt: string; result: PublicPlanData }) => void;
   onRetry: () => void;
   onCopyDiagnostic: () => void;
   onSetActiveShift: (shift: number) => void;
@@ -70,12 +72,12 @@ interface InfraCalculatorProps {
 export function InfraCalculator(props: InfraCalculatorProps) {
   const {
     layout, showBetaPanels,
-    result, scheduleResult, activeShift, rows, changedRoomIds, currentMoraleByOperator,
+    result, scheduleResult, activeShift, rows, changedRoomIds, planHistory, currentMoraleByOperator,
     activePlan, closestComparison,
     resultClearNotice,
     issueForPanel, issueReport, feedbackResult, feedbackError,
     sampleLoading, loading, canRun, plannerReady, statusError,
-    onLoadSample, onOpenSetup, onRun, onCancelRun, onRetry, onCopyDiagnostic,
+    onLoadSample, onOpenSetup, onRun, onCancelRun, onRestorePlan, onRetry, onCopyDiagnostic,
     onSetActiveShift, onMarkIssue,
     onFactoryRecipeChange, onTradeOrderChange,
     onDownloadMaa, onDownloadBundle, onCopyCommand,
@@ -153,6 +155,16 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                 comparison={closestComparison}
                 planRevision={scheduleResult.diagnosticId}
               />
+            ) : null}
+            {planHistory.length > 1 ? (
+              <div className="mb-3 flex items-center gap-2 overflow-x-auto border-y border-border/70 py-2" aria-label="最近求解记录">
+                <span className="shrink-0 text-xs font-medium text-muted-foreground">最近记录</span>
+                {planHistory.map((entry, index) => (
+                  <Button key={entry.result.diagnosticId} type="button" size="sm" variant={entry.result.diagnosticId === result?.diagnosticId ? "default" : "outline"} className="shrink-0" onClick={() => onRestorePlan(entry)}>
+                    {index + 1} · {Math.round(entry.result.durationMs)}ms
+                  </Button>
+                ))}
+              </div>
             ) : null}
             <ScheduleBoard
               rows={rows}
