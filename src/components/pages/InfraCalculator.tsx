@@ -140,7 +140,12 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                   {sampleLoading ? <Loader2 className="animate-spin" /> : <FlaskConical />}
                   {sampleLoading ? "正在载入" : "全角色导入"}
                 </Button>
-                {loading ? <Button type="button" variant="destructive" onClick={onCancelRun}>取消计算</Button> : <RunButton canRun={canRun} loading={false} onRun={onRun} />}
+                {loading ? (
+                  <Button type="button" variant="destructive" onClick={onCancelRun} aria-label="取消计算">
+                    <Loader2 className="animate-spin" />
+                    取消计算
+                  </Button>
+                ) : <RunButton canRun={canRun} loading={false} onRun={onRun} />}
               </div>
             )}
           >
