@@ -12,13 +12,15 @@ import type { OperBoxEntry } from "@/types";
 type FiammettaSettingsProps = {
   enabled: boolean;
   target: string | null;
+  order: "pre" | "post";
   operbox: OperBoxEntry[] | null;
   scheduledOperators: ReadonlySet<string>;
   onEnabledChange: (enabled: boolean) => void;
   onTargetChange: (target: string) => void;
+  onOrderChange: (order: "pre" | "post") => void;
 };
 
-export function FiammettaSettings({ enabled, target, operbox, scheduledOperators, onEnabledChange, onTargetChange }: FiammettaSettingsProps) {
+export function FiammettaSettings({ enabled, target, order, operbox, scheduledOperators, onEnabledChange, onTargetChange, onOrderChange }: FiammettaSettingsProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const ownsFiammetta = Boolean(operbox?.some((operator) => operator.own && operator.name === "菲亚梅塔"));
@@ -67,7 +69,8 @@ export function FiammettaSettings({ enabled, target, operbox, scheduledOperators
       {unavailableReason ? <p className="text-xs text-amber-700" role="status">{unavailableReason}</p> : null}
 
       {enabled ? (
-        <div className="flex min-h-20 items-center gap-3 border border-border bg-muted/20 p-3">
+        <div className="grid gap-3 border border-border bg-muted/20 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+          <div className="flex min-w-0 items-center gap-3">
           <div className="size-14 shrink-0 overflow-hidden border border-border bg-[#272A2B]">
             {selected?.portrait ? <img src={selected.portrait} alt="" className="size-full object-cover" /> : <HeartPulse className="m-4 size-6 text-muted-foreground" aria-hidden="true" />}
           </div>
@@ -78,6 +81,11 @@ export function FiammettaSettings({ enabled, target, operbox, scheduledOperators
           <Button type="button" variant="outline" className="h-10 shrink-0" onClick={() => setOpen(true)} disabled={!candidates.length}>
             选择干员
           </Button>
+          </div>
+          <div className="grid grid-cols-2 gap-1" aria-label="菲亚梅塔执行时机">
+            <Button type="button" size="sm" variant={order === "pre" ? "default" : "outline"} onClick={() => onOrderChange("pre")}>换班前</Button>
+            <Button type="button" size="sm" variant={order === "post" ? "default" : "outline"} onClick={() => onOrderChange("post")}>换班后</Button>
+          </div>
         </div>
       ) : null}
 

@@ -21,6 +21,14 @@ test("writes the selected Fiammetta target to every shift", () => {
   assert.equal(maa.plans[0].Fiammetta?.target, "旧目标");
 });
 
+test("writes the selected Fiammetta execution order", () => {
+  const result = applyFiammettaSettings(maa, { enabled: true, target: "巫恋", order: "post" });
+  assert.deepEqual(result.plans.map((plan) => plan.Fiammetta), [
+    { enable: true, target: "巫恋", order: "post" },
+    { enable: true, target: "巫恋", order: "post" },
+  ]);
+});
+
 test("removes Fiammetta output when the setting is disabled or incomplete", () => {
   assert.equal(applyFiammettaSettings(maa, { enabled: false, target: "巫恋" }).plans[0].Fiammetta, undefined);
   assert.equal(applyFiammettaSettings(maa, { enabled: true, target: null }).plans[0].Fiammetta, undefined);
