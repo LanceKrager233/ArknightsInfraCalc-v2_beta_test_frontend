@@ -69,9 +69,17 @@ export function Drawer({
     glide(open ? 0 : away);
     if (!open) {
       const closingAnimation = animationRef.current;
+      const fallbackTimer = window.setTimeout(() => {
+        if (animationRef.current === closingAnimation) setMounted(false);
+      }, 1_000);
       void Promise.resolve(closingAnimation).then(() => {
+        window.clearTimeout(fallbackTimer);
         if (animationRef.current === closingAnimation) setMounted(false);
       });
+      return () => {
+        window.clearTimeout(fallbackTimer);
+        animationRef.current?.stop();
+      };
     }
     return () => animationRef.current?.stop();
   }, [away, glide, mounted, open, x]);
@@ -172,12 +180,12 @@ export function Drawer({
       : pointerX - dragStartClientXRef.current;
     dragStartClientXRef.current = null;
     const renderedWidth = panelRef.current?.getBoundingClientRect().width ?? width;
-    if (Math.max(info.offset.x, rawOffset) > renderedWidth * 0.25 || info.velocity.x > 520) {
+    if (Math.max(x.get(), info.offset.x, rawOffset) > renderedWidth * 0.25 || info.velocity.x > 520) {
       close();
       return;
     }
     glide(0);
-  }, [close, glide, width]);
+  }, [close, glide, width, x]);
 
   if (!host || !mounted) return null;
   return createPortal(
@@ -203,7 +211,21 @@ export function Drawer({
         className={cn("absolute inset-y-0 right-0 flex flex-col border-l border-[#313131]/18 bg-[#F5F3EC] text-[#313131] shadow-[-24px_0_56px_-28px_rgba(24,26,26,0.48)] outline-none", dragging && "select-none", className)}
         data-slot="drawer-content"
       >
-        <header className={cn("flex min-h-[68px] select-none items-start gap-3 border-b border-[#313131]/12 bg-[#ECE9DF] px-5 py-4", dragging ? "cursor-grabbing" : "cursor-grab")} onPointerDown={(event) => { if (open) { dragStartClientXRef.current = event.clientX; controls.start(event); } }} data-slot="drawer-handle">
+        <header
+          className={cn("flex min-h-[68px] select-none items-start gap-3 border-b border-[#313131]/12 bg-[#ECE9DF] px-5 py-4", dragging ? "cursor-grabbing" : "cursor-grab")}
+          onPointerDown={(event) => {
+            if (!open) return;
+            dragStartClientXRef.current = event.clientX;
+            event.currentTarget.setPointerCapture(event.pointerId);
+            controls.start(event);
+          }}
+          onPointerUp={(event) => {
+            const startX = dragStartClientXRef.current;
+            const renderedWidth = panelRef.current?.getBoundingClientRect().width ?? width;
+            if (startX !== null && event.clientX - startX > renderedWidth * 0.25) close();
+          }}
+          data-slot="drawer-handle"
+        >
           <span className="mt-0.5 h-8 w-1 shrink-0 bg-primary" aria-hidden="true" />
           <div className="min-w-0 flex-1"><h2 id={titleId} className="truncate font-heading text-base font-semibold">{title}</h2>{description ? <p className="mt-0.5 truncate text-xs text-[#313131]/58">{description}</p> : null}</div>
           <Button type="button" variant="ghost" size="icon" className="-mr-2 size-10" aria-label="关闭详情" onPointerDown={(event) => event.stopPropagation()} onClick={close}><XIcon /><span className="sr-only">关闭详情</span></Button>
