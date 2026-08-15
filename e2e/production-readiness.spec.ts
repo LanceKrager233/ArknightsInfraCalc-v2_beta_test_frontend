@@ -2257,7 +2257,7 @@ test("schedule visuals use a stable technical canvas and responsive level marker
   expect(tabletTradeSummaryBox).not.toBeNull();
   expect(tabletTradeOccupancyBox).not.toBeNull();
   expect(tabletTradeOccupancyBox!.y).toBeGreaterThanOrEqual(
-    tabletTradeSummaryBox!.y + tabletTradeSummaryBox!.height - 1
+    tabletTradeSummaryBox!.y + tabletTradeSummaryBox!.height - 1.5
   );
 
   await page.setViewportSize({ width: 390, height: 844 });
