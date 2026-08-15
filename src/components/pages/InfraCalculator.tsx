@@ -1,9 +1,10 @@
 "use client";
 
-import { Download, FileJson, FlaskConical, HeartPulse, Loader2, Settings2, Terminal } from "lucide-react";
+import { Download, FileJson, FlaskConical, HeartPulse, Keyboard, Loader2, Settings2, Terminal } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 
 import type { FactoryRecipe, TradeOrder } from "@/blueprint";
@@ -85,6 +86,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     onClearResultNotice, onDismissResultClearWarning,
   } = props;
   const [scheduleViewMode, setScheduleViewMode] = useState<"list" | "compact">("list");
+  const [shortcutGuideOpen, setShortcutGuideOpen] = useState(false);
   const [shiftDirection, setShiftDirection] = useState<ShiftDirection>(0);
   const showBetaSidebar = showBetaPanels && scheduleViewMode === "list";
   const fiammettaTarget = activePlan?.Fiammetta?.enable
@@ -190,6 +192,9 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                       <span className="whitespace-nowrap"><span className="text-muted-foreground">换心情</span> {fiammettaTarget}</span>
                     </span>
                   ) : null}
+                  <Button type="button" size="icon-sm" variant="ghost" aria-label="查看快捷键" title="查看快捷键" onClick={() => setShortcutGuideOpen(true)}>
+                    <Keyboard />
+                  </Button>
                   <ShiftTabs
                     maaJson={result?.maa}
                     rotation={result?.rotation}
@@ -245,6 +250,19 @@ export function InfraCalculator(props: InfraCalculatorProps) {
           </div>
         </aside>
       ) : null}
+      <Dialog open={shortcutGuideOpen} onOpenChange={setShortcutGuideOpen}>
+        <DialogContent className="gap-5 sm:max-w-lg">
+          <DialogHeader className="gap-1.5">
+            <DialogTitle className="text-xl font-semibold">快捷键</DialogTitle>
+            <DialogDescription className="text-sm leading-6">排班主界面的全局快捷操作</DialogDescription>
+          </DialogHeader>
+          <div className="divide-y divide-border border-y border-border px-3 sm:px-4">
+            <div className="flex min-h-14 items-center justify-between gap-5 py-3 max-sm:flex-wrap max-sm:gap-2"><span className="text-[15px] font-medium leading-6">展开并聚焦排班搜索</span><kbd className="shrink-0 border border-border bg-muted px-3 py-1.5 font-mono text-sm font-semibold">Ctrl + K</kbd></div>
+            <div className="flex min-h-14 items-center justify-between gap-5 py-3 max-sm:flex-wrap max-sm:gap-2"><span className="text-[15px] font-medium leading-6">关闭搜索；计算中取消请求</span><kbd className="shrink-0 border border-border bg-muted px-3 py-1.5 font-mono text-sm font-semibold">Esc</kbd></div>
+            <div className="flex min-h-14 items-center justify-between gap-5 py-3 max-sm:flex-wrap max-sm:gap-2"><span className="text-[15px] font-medium leading-6">展开或收起侧边栏</span><kbd className="shrink-0 border border-border bg-muted px-3 py-1.5 font-mono text-sm font-semibold">Ctrl + B</kbd></div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

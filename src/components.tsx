@@ -13,8 +13,10 @@ import {
   Play,
   RotateCcw,
   Save,
+  Search,
   Smile,
   Upload,
+  X,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { CSSProperties, ChangeEvent, ReactElement, ReactNode, useEffect, useRef, useState } from "react";
@@ -1453,6 +1455,7 @@ export function ScheduleBoard({
   const [hiddenGroups, setHiddenGroups] = useState<Record<string, boolean>>({});
   const [viewMode, setViewMode] = useState<"list" | "compact">("list");
   const [operatorQuery, setOperatorQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [supportsCompactLayout, setSupportsCompactLayout] = useState(false);
   const [viewModeReady, setViewModeReady] = useState(false);
@@ -1463,12 +1466,17 @@ export function ScheduleBoard({
     const handleShortcut = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "k") {
         event.preventDefault();
-        searchInputRef.current?.focus();
+        setSearchOpen(true);
+        window.requestAnimationFrame(() => searchInputRef.current?.focus());
+      }
+      if (event.key === "Escape" && searchOpen) {
+        setSearchOpen(false);
+        setOperatorQuery("");
       }
     };
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
-  }, []);
+  }, [searchOpen]);
 
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 768px)");
@@ -1565,6 +1573,19 @@ export function ScheduleBoard({
               <TabsTrigger value="list">列表式布局</TabsTrigger>
             </TabsList>
           </Tabs>
+          {searchOpen ? (
+            <div className="flex items-center gap-1">
+              <Input ref={searchInputRef} value={operatorQuery} onChange={(event) => setOperatorQuery(event.target.value)} placeholder="搜索干员或房间" aria-label="搜索排班中的干员或房间" className="h-9 w-[min(280px,46vw)]" />
+              <Button type="button" variant="ghost" size="icon-sm" aria-label="关闭搜索" onClick={() => { setSearchOpen(false); setOperatorQuery(""); }}>
+                <X />
+              </Button>
+            </div>
+          ) : (
+            <Button type="button" variant="ghost" size="icon-sm" aria-label="搜索干员或房间" title="搜索（Ctrl+K）" onClick={() => { setSearchOpen(true); window.requestAnimationFrame(() => searchInputRef.current?.focus()); }}>
+              <Search />
+            </Button>
+          )}
+          {changedRoomIds.size ? <span className="text-xs text-amber-700">较上次求解变更 {changedRoomIds.size} 个房间</span> : null}
           {viewMode === "list" && auxiliaryGroups.length ? (
             <div className="flex flex-wrap justify-end gap-2">
               {hiddenAuxiliaryCount ? (
@@ -1587,10 +1608,6 @@ export function ScheduleBoard({
           ) : null}
         </div>
         {shiftInfoSlot ? <div className="min-w-0 max-sm:w-full">{shiftInfoSlot}</div> : null}
-      </div>
-      <div className="sticky top-0 z-20 flex items-center gap-2 bg-background/95 py-2 backdrop-blur-sm">
-        <Input ref={searchInputRef} value={operatorQuery} onChange={(event) => setOperatorQuery(event.target.value)} placeholder="搜索干员或房间" aria-label="搜索排班中的干员或房间" className="h-10 max-w-sm" />
-        {changedRoomIds.size ? <span className="text-xs text-amber-700">较上次求解变更 {changedRoomIds.size} 个房间</span> : null}
       </div>
       <motion.div
         data-plan-board
