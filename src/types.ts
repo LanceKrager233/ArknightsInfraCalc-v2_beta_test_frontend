@@ -546,6 +546,16 @@ export interface ShiftComparison {
   unexpected: string[];
   misplaced: string[];
   tiredScheduled: string[];
+  adjustments: ShiftAdjustment[];
+}
+
+export type ShiftAdjustmentIssue = "missing" | "unexpected" | "misplaced" | "tired";
+
+export interface ShiftAdjustment {
+  operator: string;
+  currentRoomKey: string | null;
+  targetRoomKey: string | null;
+  issues: ShiftAdjustmentIssue[];
 }
 
 export type Severity = "ok" | "warn" | "critical";

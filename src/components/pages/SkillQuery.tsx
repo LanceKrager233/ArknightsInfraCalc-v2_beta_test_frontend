@@ -1,14 +1,15 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { motion, useReducedMotion } from "motion/react";
 
 import { Search, X } from "lucide-react";
 
 import { filterOperators, type BuildingRoomPrefix } from "@/building-rooms";
-import { Pagination } from "@/components/skill-query/Pagination";
 import { SkillResultRow } from "@/components/skill-query/SkillResultRow";
 import { SkillRoomTagBar } from "@/components/skill-query/SkillRoomTagBar";
 import { Input } from "@/components/ui/input";
+import { LoadMore } from "@/components/ui/load-more";
 import { OPERATOR_CATALOG } from "@/operatorPortraits";
 
 export const SKILL_QUERY_PAGE_SIZE = 10;
@@ -16,22 +17,28 @@ export const SKILL_QUERY_PAGE_SIZE = 10;
 export function SkillQuery() {
   const [selectedRooms, setSelectedRooms] = useState<readonly BuildingRoomPrefix[]>([]);
   const [query, setQuery] = useState("");
-  const [page, setPage] = useState(1);
+  const [visibleCount, setVisibleCount] = useState(SKILL_QUERY_PAGE_SIZE);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const shouldReduceMotion = useReducedMotion();
 
   const filtered = useMemo(() => filterOperators(OPERATOR_CATALOG, selectedRooms, query), [query, selectedRooms]);
-  const pageCount = Math.max(1, Math.ceil(filtered.length / SKILL_QUERY_PAGE_SIZE));
-  const safePage = Math.min(page, pageCount);
-  const paged = filtered.slice((safePage - 1) * SKILL_QUERY_PAGE_SIZE, safePage * SKILL_QUERY_PAGE_SIZE);
+  const visible = filtered.slice(0, visibleCount);
+  const hasMore = visibleCount < filtered.length;
+  const loadMore = useCallback(async () => {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const nextCount = Math.min(visibleCount + SKILL_QUERY_PAGE_SIZE, filtered.length);
+    setVisibleCount(nextCount);
+    return nextCount < filtered.length;
+  }, [filtered.length, visibleCount]);
 
   function handleRoomsChange(next: readonly BuildingRoomPrefix[]) {
     setSelectedRooms(next);
-    setPage(1);
+    setVisibleCount(SKILL_QUERY_PAGE_SIZE);
   }
 
   function handleQueryChange(value: string) {
     setQuery(value);
-    setPage(1);
+    setVisibleCount(SKILL_QUERY_PAGE_SIZE);
   }
 
   function handleClearQuery() {
@@ -84,13 +91,13 @@ export function SkillQuery() {
         ) : (
           <>
             <div className="grid gap-3">
-              {paged.map((operator) => (
-                <SkillResultRow key={operator.id} operator={operator} />
+              {visible.map((operator, index) => (
+                <motion.div key={operator.id} initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: shouldReduceMotion ? 0 : 0.24, delay: shouldReduceMotion ? 0 : Math.min(index % SKILL_QUERY_PAGE_SIZE, 4) * 0.025 }}>
+                  <SkillResultRow operator={operator} />
+                </motion.div>
               ))}
             </div>
-            <div className="mt-4">
-              <Pagination page={safePage} pageCount={pageCount} onPageChange={setPage} />
-            </div>
+            <LoadMore key={`${query}:${selectedRooms.join(",")}`} hasMore={hasMore} onLoad={loadMore} className="mt-4 border-t border-border/60 pt-2" />
           </>
         )}
       </div>
