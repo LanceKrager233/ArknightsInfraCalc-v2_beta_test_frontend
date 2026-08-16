@@ -65,12 +65,22 @@ export interface MaaOperatorSlot {
   skill?: number;
 }
 
+export type MaaExecutionOrder = "pre" | "post";
+export type MaaPeriod = [start: string, end: string];
+
+export interface MaaOperatorGroup {
+  name: string;
+  operators: string[];
+}
+
 export interface MaaRoom {
   operators: (string | MaaOperatorSlot | null)[];
   product?: string;
   skip?: boolean;
   sort?: boolean;
   autofill?: boolean;
+  candidates?: string[];
+  use_operator_groups?: boolean;
 }
 
 export interface MaaRooms {
@@ -87,9 +97,19 @@ export interface MaaRooms {
 export interface MaaPlan {
   name: string;
   description?: string;
+  description_post?: string;
+  period?: MaaPeriod[];
+  duration?: number;
+  groups?: MaaOperatorGroup[];
   rooms: MaaRooms;
-  Fiammetta?: { enable: boolean; target?: string | string[]; order?: string };
-  drones?: { enable?: boolean; room: string; index: number; order: string };
+  Fiammetta?: { enable: boolean; target?: string | string[]; order?: MaaExecutionOrder };
+  drones?: {
+    enable?: boolean;
+    room: "trading" | "manufacture";
+    index: number;
+    rule?: string;
+    order: MaaExecutionOrder;
+  };
 }
 
 export interface MaaJson {

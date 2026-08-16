@@ -34,6 +34,31 @@ test("removes Fiammetta output when the setting is disabled or incomplete", () =
   assert.equal(applyFiammettaSettings(maa, { enabled: true, target: null }).plans[0].Fiammetta, undefined);
 });
 
+test("preserves advanced MAA protocol fields while updating Fiammetta", () => {
+  const protocolMaa: MaaJson = {
+    title: "schedule",
+    plans: [{
+      name: "早班",
+      description_post: "换班后说明",
+      period: [["08:00", "20:00"]],
+      duration: 720,
+      groups: [{ name: "贸易组", operators: ["龙舌兰"] }],
+      drones: { room: "trading", index: 1, rule: "all", order: "post" },
+      rooms: {
+        trading: [{ operators: ["龙舌兰"], candidates: ["但书"], use_operator_groups: true }],
+      },
+    }],
+  };
+
+  const updated = applyFiammettaSettings(protocolMaa, { enabled: true, target: "龙舌兰" });
+
+  assert.equal(updated.plans[0].description_post, "换班后说明");
+  assert.deepEqual(updated.plans[0].period, [["08:00", "20:00"]]);
+  assert.deepEqual(updated.plans[0].groups, [{ name: "贸易组", operators: ["龙舌兰"] }]);
+  assert.equal(updated.plans[0].drones?.rule, "all");
+  assert.deepEqual(updated.plans[0].rooms.trading?.[0].candidates, ["但书"]);
+});
+
 test("collects only operators that actually participate in a generated schedule", () => {
   const schedule: MaaJson = {
     title: "schedule",

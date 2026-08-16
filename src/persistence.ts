@@ -9,6 +9,7 @@ import type {
 } from "./types";
 import { CLIENT_SKLAND_ENABLED } from "./client-features.ts";
 import { stripInternalFields } from "./internal-field-safety.ts";
+import { sanitizeMaaJson } from "./maa-safety.ts";
 import { normalizeRotationProfile } from "./rotation-settings.ts";
 import { normalizeRotationResult } from "./rotation-result.ts";
 
@@ -119,7 +120,7 @@ export function normalizePersistedPlanData(value: unknown, fallbackProfile: Rota
 
   return {
     profile: stripInternalFields(structuredClone(profile)),
-    maa: stripInternalFields(structuredClone(maa)),
+    maa: sanitizeMaaJson(maa),
     rotation: normalizeRotationResult({
       source: rotation,
       profile,
