@@ -1215,9 +1215,29 @@ test("Skland calculator keeps the schedule visible before and after sidebar navi
   await expect(comparisonSheet.locator("[data-shift-comparison-details]")).toBeVisible();
   const comparisonTable = comparisonSheet.getByRole("table", { name: "干员房间调整" });
   await expect(comparisonTable).toBeVisible();
-  await expect(comparisonTable.getByRole("columnheader")).toHaveText(["干员", "当前", "目标", "状态"]);
-  const adjustmentNames = await comparisonTable.locator('[role="rowgroup"] [role="row"] > strong').allTextContents();
+  await expect(comparisonTable.getByRole("columnheader")).toHaveText(["操作", "干员", "当前房间", "目标房间"]);
+  const adjustmentNames = await comparisonTable.locator("tbody tr td:nth-child(2)").allTextContents();
   expect(new Set(adjustmentNames).size).toBe(adjustmentNames.length);
+  const tableColumnOffsets = await comparisonTable.evaluate((table) => {
+    const headers = Array.from(table.querySelectorAll("th"));
+    const firstRowCells = Array.from(table.querySelectorAll("tbody tr:first-child td"));
+    return headers.map((header, index) => Math.abs(header.getBoundingClientRect().x - firstRowCells[index].getBoundingClientRect().x));
+  });
+  expect(tableColumnOffsets.every((offset) => offset < 0.5)).toBe(true);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobileAdjustmentGroups = comparisonSheet.locator("[data-mobile-adjustment-groups]");
+  await expect(mobileAdjustmentGroups).toBeVisible();
+  await expect(mobileAdjustmentGroups.getByRole("heading", { level: 4 })).toContainText(["需换出", "需换入", "位置调整"]);
+  for (const issue of ["unexpected", "missing", "misplaced"] as const) {
+    const group = mobileAdjustmentGroups.locator(`[data-adjustment-group="${issue}"]`);
+    const declaredCount = Number((await group.locator(".font-number").textContent())?.match(/\d+/)?.[0] ?? 0);
+    await expect(group.locator("li strong")).toHaveCount(declaredCount);
+    if (declaredCount === 0) await expect(group.getByText("无", { exact: true })).toBeVisible();
+  }
+  const mobileComparisonWidth = await mobileAdjustmentGroups.evaluate((element) => ({ client: element.clientWidth, scroll: element.scrollWidth }));
+  expect(mobileComparisonWidth.scroll).toBeLessThanOrEqual(mobileComparisonWidth.client);
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.keyboard.press("Escape");
   await expect(page.locator('[data-slot="drawer-root"]')).toHaveCount(0);
   await expect(comparisonTrigger).toBeFocused();
@@ -1628,6 +1648,19 @@ test("Full E2 stays in place and completes generation, shifts, MAA export, and f
     { columns: "90px 90px", columnGap: "8px", rowGap: "10px" },
     { columns: "90px 90px", columnGap: "8px", rowGap: "10px" },
   ]);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobileFactoryControls = page.getByRole("group", { name: /制造站 1 配方/ }).first();
+  await expect(mobileFactoryControls).toBeVisible();
+  const mobileFactoryLayout = await mobileFactoryControls.evaluate((element) => ({
+    columns: getComputedStyle(element).gridTemplateColumns.split(" ").length,
+    rowPositions: Array.from(element.children).map((child) => child.getBoundingClientRect().y),
+    fits: element.scrollWidth <= element.clientWidth,
+  }));
+  expect(mobileFactoryLayout.columns).toBe(3);
+  expect(new Set(mobileFactoryLayout.rowPositions).size).toBe(1);
+  expect(mobileFactoryLayout.fits).toBe(true);
+  await page.setViewportSize({ width: 1440, height: 900 });
 
   await page.getByRole("button", { name: "生成排班" }).click();
   await expect(page.getByText("排班已生成")).toBeVisible();
