@@ -57,6 +57,7 @@ import { planToRows, RoomRow } from "./schedule";
 import { DEFAULT_ROTATION_PROFILE } from "./rotation-settings";
 import { SetupDialog } from "./setup-dialog";
 import { closestShift, compareShifts } from "./skland";
+import { setupConfigurationFingerprint } from "./setup-configuration";
 import { applyFiammettaSettings, scheduledOperatorNames, validateFiammettaExport } from "./fiammetta-settings";
 import { operatorBuildingSkillList } from "./operatorPortraits";
 import {
@@ -261,6 +262,13 @@ function WorkbenchApp() {
       .map((operator) => operator.name)
   ), [operbox, scheduledOperators]);
   const ownsFiammetta = Boolean(operbox?.some((operator) => operator.own && operator.name === "菲亚梅塔"));
+  const setupConfigurationKey = useMemo(() => setupConfigurationFingerprint({
+    layout,
+    rotationProfile,
+    fiammettaEnabled,
+    fiammettaTarget,
+    fiammettaOrder,
+  }), [fiammettaEnabled, fiammettaOrder, fiammettaTarget, layout, rotationProfile]);
   const changedRoomIds = useMemo(() => {
     const previousPlan = previousResult?.maa.plans?.[activeShift];
     if (!previousPlan || !activePlan) return new Set<string>();
@@ -678,8 +686,10 @@ function WorkbenchApp() {
       if (error instanceof DOMException && error.name === "AbortError") return;
       setApiError(toDisplayError(error, "排班请求失败，请稍后重试。"));
     } finally {
-      if (planAbortRef.current === controller) planAbortRef.current = null;
-      setLoading(false);
+      if (planAbortRef.current === controller) {
+        planAbortRef.current = null;
+        setLoading(false);
+      }
     }
   }
 
@@ -1259,7 +1269,7 @@ function WorkbenchApp() {
         presets={PRESETS}
         preset={preset}
         layout={layout}
-        layoutDirty={layoutDirty}
+        configurationKey={setupConfigurationKey}
         rotationProfile={rotationProfile}
         onRotationProfileChange={handleRotationProfileChange}
         fiammettaEnabled={fiammettaEnabled}

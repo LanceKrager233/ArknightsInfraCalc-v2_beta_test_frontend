@@ -1686,8 +1686,8 @@ export function ScheduleBoard({
                       listRoomHeightClass(row.group),
                       compactInlineRoom && "[container-type:inline-size]",
                       listFunctionalRoomSpanClass(row.group),
-                      row.suspicious && "ring-2 ring-destructive ring-offset-2"
-                      , changedRoomIds.has(row.roomId) && "ring-2 ring-amber-400 ring-offset-2"
+                      row.suspicious && "ring-2 ring-destructive ring-offset-2",
+                      changedRoomIds.has(row.roomId) && "ring-2 ring-amber-400 ring-offset-2"
                     )}
                     data-room-group={row.group}
                     data-room-title={row.title}

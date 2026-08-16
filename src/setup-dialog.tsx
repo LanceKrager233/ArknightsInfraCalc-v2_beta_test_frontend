@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { RotationSettings } from "@/components/RotationSettings";
 import { FiammettaSettings } from "@/components/FiammettaSettings";
 import { CLIENT_SKLAND_ENABLED } from "@/client-features";
+import { hasSetupConfigurationChanged } from "@/setup-configuration";
 
 import type { FactoryRecipe, PowerBudget, TradeOrder } from "./blueprint";
 import { FileDrop, LayoutEditor, PresetSelector } from "./components";
@@ -45,7 +46,7 @@ type SetupDialogProps = {
   presets: PresetDef[];
   preset: PresetDef;
   layout: BaseBlueprint;
-  layoutDirty: boolean;
+  configurationKey: string;
   rotationProfile: RotationProfile;
   onRotationProfileChange: (value: RotationProfile) => void;
   fiammettaEnabled: boolean;
@@ -104,7 +105,7 @@ export function SetupDialog({
   presets,
   preset,
   layout,
-  layoutDirty,
+  configurationKey,
   rotationProfile,
   onRotationProfileChange,
   fiammettaEnabled,
@@ -134,6 +135,7 @@ export function SetupDialog({
   const [showMaaPaste, setShowMaaPaste] = useState(false);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
+  const [openingConfigurationKey, setOpeningConfigurationKey] = useState(configurationKey);
   const wasOpenRef = useRef(false);
   const pendingExternalReviewRef = useRef(false);
   const boxPanelRef = useRef<HTMLDivElement>(null);
@@ -154,7 +156,10 @@ export function SetupDialog({
     pendingExternalReviewRef.current = false;
     setShowImportOptions(!hasBox);
     setShowMaaPaste(false);
-  }, [hasBox, initialStep, open]);
+    setOpeningConfigurationKey(configurationKey);
+  }, [configurationKey, hasBox, initialStep, open]);
+
+  const configurationChanged = open && hasSetupConfigurationChanged(openingConfigurationKey, configurationKey);
 
   useEffect(() => {
     if (open && !hasBox) setShowImportOptions(true);
@@ -228,7 +233,7 @@ export function SetupDialog({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => {
-      if (!nextOpen && layoutDirty) {
+      if (!nextOpen && configurationChanged) {
         setCloseConfirmOpen(true);
         return;
       }
@@ -249,7 +254,7 @@ export function SetupDialog({
           <div data-setup-top className="px-4 pb-3 pt-4 sm:px-7 sm:pb-4 sm:pt-6">
             <div className="flex min-h-9 items-center gap-3 pr-12">
               <DialogTitle>排班设置</DialogTitle>
-              {layoutDirty ? <span className="border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">配置已修改</span> : null}
+              {configurationChanged ? <span className="border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">配置已修改</span> : null}
             </div>
             <TabsList
               data-setup-step-list
