@@ -1236,7 +1236,8 @@ test("Skland calculator keeps the schedule visible before and after sidebar navi
   }
   const desktopRoomLabels = desktopAdjustmentGroups.locator("[data-room-label]");
   await expect(desktopRoomLabels.first()).toBeVisible();
-  await expect(desktopRoomLabels.first()).toHaveCSS("border-style", "solid");
+  await expect(desktopRoomLabels.first()).toHaveCSS("border-width", "0px");
+  await expect(desktopRoomLabels.first().locator("[data-room-indicator]")).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });
   const mobileAdjustmentGroups = comparisonSheet.locator("[data-mobile-adjustment-groups]");
@@ -1250,6 +1251,15 @@ test("Skland calculator keeps the schedule visible before and after sidebar navi
     if (declaredCount === 0) await expect(group.getByText("无", { exact: true })).toBeVisible();
   }
   await expect(mobileAdjustmentGroups.locator("[data-room-label]").first()).toBeVisible();
+  await expect(mobileAdjustmentGroups.locator("[data-room-label]").first()).toHaveCSS("border-width", "0px");
+  const firstMobileAdjustmentRow = mobileAdjustmentGroups.locator("[data-mobile-adjustment-row]").first();
+  const mobileRowAlignment = await firstMobileAdjustmentRow.evaluate((row) => {
+    const operator = row.querySelector("strong")?.getBoundingClientRect();
+    const action = row.querySelector("[data-mobile-adjustment-action]")?.getBoundingClientRect();
+    return operator && action ? Math.abs((operator.top + operator.height / 2) - (action.top + action.height / 2)) : Number.POSITIVE_INFINITY;
+  });
+  expect(mobileRowAlignment).toBeLessThan(2);
+  await expect(firstMobileAdjustmentRow.locator("strong")).toHaveCSS("font-size", "14px");
   const mobileComparisonWidth = await mobileAdjustmentGroups.evaluate((element) => ({ client: element.clientWidth, scroll: element.scrollWidth }));
   expect(mobileComparisonWidth.scroll).toBeLessThanOrEqual(mobileComparisonWidth.client);
   await page.setViewportSize({ width: 1440, height: 900 });
