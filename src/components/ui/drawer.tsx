@@ -46,6 +46,7 @@ export function Drawer({
   const panelRef = useRef<HTMLDivElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const dragStartClientXRef = useRef<number | null>(null);
+  const dragMaxOffsetXRef = useRef(0);
   const animationRef = useRef<{ stop: () => void } | null>(null);
   const away = width + 24;
   const x = useMotionValue(open ? 0 : away);
@@ -69,17 +70,9 @@ export function Drawer({
     glide(open ? 0 : away);
     if (!open) {
       const closingAnimation = animationRef.current;
-      const fallbackTimer = window.setTimeout(() => {
-        if (animationRef.current === closingAnimation) setMounted(false);
-      }, 1_000);
       void Promise.resolve(closingAnimation).then(() => {
-        window.clearTimeout(fallbackTimer);
         if (animationRef.current === closingAnimation) setMounted(false);
       });
-      return () => {
-        window.clearTimeout(fallbackTimer);
-        animationRef.current?.stop();
-      };
     }
     return () => animationRef.current?.stop();
   }, [away, glide, mounted, open, x]);
@@ -178,14 +171,16 @@ export function Drawer({
     const rawOffset = dragStartClientXRef.current === null || pointerX === undefined
       ? info.offset.x
       : pointerX - dragStartClientXRef.current;
+    const trackedOffset = dragMaxOffsetXRef.current;
     dragStartClientXRef.current = null;
+    dragMaxOffsetXRef.current = 0;
     const renderedWidth = panelRef.current?.getBoundingClientRect().width ?? width;
-    if (Math.max(x.get(), info.offset.x, rawOffset) > renderedWidth * 0.25 || info.velocity.x > 520) {
+    if (Math.max(info.offset.x, rawOffset, trackedOffset) > renderedWidth * 0.25 || info.velocity.x > 520) {
       close();
       return;
     }
     glide(0);
-  }, [close, glide, width, x]);
+  }, [close, glide, width]);
 
   if (!host || !mounted) return null;
   return createPortal(
@@ -216,13 +211,19 @@ export function Drawer({
           onPointerDown={(event) => {
             if (!open) return;
             dragStartClientXRef.current = event.clientX;
-            event.currentTarget.setPointerCapture(event.pointerId);
+            dragMaxOffsetXRef.current = 0;
             controls.start(event);
           }}
-          onPointerUp={(event) => {
-            const startX = dragStartClientXRef.current;
-            const renderedWidth = panelRef.current?.getBoundingClientRect().width ?? width;
-            if (startX !== null && event.clientX - startX > renderedWidth * 0.25) close();
+          onPointerMove={(event) => {
+            if (dragStartClientXRef.current === null) return;
+            dragMaxOffsetXRef.current = Math.max(
+              dragMaxOffsetXRef.current,
+              event.clientX - dragStartClientXRef.current,
+            );
+          }}
+          onPointerCancel={() => {
+            dragStartClientXRef.current = null;
+            dragMaxOffsetXRef.current = 0;
           }}
           data-slot="drawer-handle"
         >

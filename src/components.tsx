@@ -158,7 +158,9 @@ export function ProductToggleGroup<T extends string>({
       className={cn(
         "grid",
         compactRoomProductControls
-          ? "w-fit grid-cols-[repeat(2,70px)] gap-x-2 gap-y-2.5 sm:grid-cols-[repeat(2,90px)]"
+          ? tone === "factory"
+            ? "w-full grid-cols-3 gap-x-2 gap-y-2.5 sm:w-fit sm:grid-cols-[repeat(2,90px)]"
+            : "w-fit grid-cols-[repeat(2,70px)] gap-x-2 gap-y-2.5 sm:grid-cols-[repeat(2,90px)]"
           : cn(
               "w-full",
               fillRoomProductControls && "gap-x-2 gap-y-2.5",
@@ -182,6 +184,7 @@ export function ProductToggleGroup<T extends string>({
               surface === "room" && "infra-room-control border-white/20 bg-[#3C3C3C]/70 px-1.5 text-xs text-white hover:bg-[#4B4B4B] hover:text-white sm:px-2",
               surface === "default" && "min-h-10",
               compactRoomProductControls && "max-w-[90px] max-sm:max-w-[70px]",
+              compactRoomProductControls && tone === "factory" && "w-full",
               fillRoomProductControls && "w-full",
               tone === "trade" &&
                 "aria-pressed:border-[#22BBFF] aria-pressed:bg-[#22BBFF] aria-pressed:text-[#313131] data-[state=on]:border-[#22BBFF] data-[state=on]:bg-[#22BBFF] data-[state=on]:text-[#313131]",
