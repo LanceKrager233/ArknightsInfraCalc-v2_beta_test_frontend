@@ -1,10 +1,12 @@
 "use client";
 
-import { Download, FileJson, FlaskConical, HeartPulse, Keyboard, Loader2, Settings2, Terminal } from "lucide-react";
-import { useState } from "react";
+import { Download, FileJson, FlaskConical, HeartPulse, Keyboard, Loader2, Search, Settings2, Terminal, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Textarea } from "@/components/ui/textarea";
 
 import type { FactoryRecipe, TradeOrder } from "@/blueprint";
@@ -15,7 +17,6 @@ import {
   RunButton,
   ScheduleBoard,
   ShiftTabs,
-  StatusBar,
 } from "@/components";
 import { PlanResultSummary } from "@/components/PlanResultSummary";
 import type { ShiftDirection } from "@/motion";
@@ -23,7 +24,6 @@ import { operatorPortraitFor } from "@/operatorPortraits";
 import type { RoomRow } from "@/schedule";
 import type {
   BaseBlueprint,
-  DisplayError,
   FeedbackData,
   IssueReport,
   MaaPlan,
@@ -52,14 +52,11 @@ interface InfraCalculatorProps {
   loading: boolean;
   canRun: boolean;
   plannerReady: boolean;
-  statusError: DisplayError | null;
   onLoadSample: () => Promise<boolean>;
   onOpenSetup: () => void;
   onRun: () => void;
   onCancelRun: () => void;
   onRestorePlan: (entry: { savedAt: string; result: PublicPlanData }) => void;
-  onRetry: () => void;
-  onCopyDiagnostic: () => void;
   onSetActiveShift: (shift: number) => void;
   onMarkIssue: (row: RoomRow) => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
@@ -78,8 +75,8 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     activePlan, closestComparison,
     resultClearNotice,
     issueForPanel, issueReport, feedbackResult, feedbackError,
-    sampleLoading, loading, canRun, plannerReady, statusError,
-    onLoadSample, onOpenSetup, onRun, onCancelRun, onRestorePlan, onRetry, onCopyDiagnostic,
+    sampleLoading, loading, canRun, plannerReady,
+    onLoadSample, onOpenSetup, onRun, onCancelRun, onRestorePlan,
     onSetActiveShift, onMarkIssue,
     onFactoryRecipeChange, onTradeOrderChange,
     onDownloadMaa, onDownloadBundle, onCopyCommand,
@@ -87,6 +84,8 @@ export function InfraCalculator(props: InfraCalculatorProps) {
   } = props;
   const [scheduleViewMode, setScheduleViewMode] = useState<"list" | "compact">("list");
   const [shortcutGuideOpen, setShortcutGuideOpen] = useState(false);
+  const [operatorQuery, setOperatorQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [shiftDirection, setShiftDirection] = useState<ShiftDirection>(0);
   const showBetaSidebar = showBetaPanels && scheduleViewMode === "list";
   const fiammettaTarget = activePlan?.Fiammetta?.enable
@@ -97,6 +96,20 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     setShiftDirection(nextShift === activeShift ? 0 : nextShift > activeShift ? 1 : -1);
     onSetActiveShift(nextShift);
   };
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "k") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      } else if (event.key === "Escape" && document.activeElement === searchInputRef.current) {
+        setOperatorQuery("");
+        searchInputRef.current?.blur();
+      }
+    };
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, []);
 
   return (
     <>
@@ -109,23 +122,35 @@ export function InfraCalculator(props: InfraCalculatorProps) {
             className="min-h-[calc(100vh-112px)]"
             action={(
               <div
-                className="grid w-full grid-cols-[minmax(12rem,1fr)_auto_auto_auto] items-center gap-2 max-sm:grid-cols-2"
+                className="grid w-full grid-cols-[minmax(14rem,1fr)_auto_auto_auto] items-center gap-2 max-sm:grid-cols-2"
                 data-calculator-controls
               >
-                <StatusBar
-                  loading={loading}
-                  result={result}
-                  error={statusError}
-                  ready={plannerReady}
-                  onRetry={onRetry}
-                  onCopyDiagnostic={onCopyDiagnostic}
-                  className="max-sm:col-span-2"
-                />
+                <label className="relative block min-w-0 max-sm:col-span-2">
+                  <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                  <Input
+                    ref={searchInputRef}
+                    value={operatorQuery}
+                    onChange={(event) => setOperatorQuery(event.target.value)}
+                    placeholder="搜索排班中的干员或房间"
+                    aria-label="搜索排班中的干员或房间"
+                    className="h-9 pr-10 pl-9 max-sm:h-11"
+                  />
+                  {operatorQuery ? (
+                    <button
+                      type="button"
+                      onClick={() => { setOperatorQuery(""); searchInputRef.current?.focus(); }}
+                      className="absolute top-1/2 right-0 grid size-9 -translate-y-1/2 place-items-center text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FFD800] max-sm:size-11"
+                      aria-label="清空排班搜索"
+                    >
+                      <X className="size-4" aria-hidden="true" />
+                    </button>
+                  ) : null}
+                </label>
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="max-sm:col-span-2 max-sm:h-11 max-sm:justify-start"
+                  className="h-9 max-sm:col-span-2 max-sm:h-11 max-sm:justify-start"
                   aria-label="配置Box与布局"
                   onClick={onOpenSetup}
                 >
@@ -135,7 +160,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                 <Button
                   type="button"
                   size="sm"
-                  className="max-sm:h-11 max-sm:text-xs"
+                  className="h-9 max-sm:h-11 max-sm:text-xs"
                   disabled={sampleLoading}
                   aria-label="全角色导入"
                   onClick={() => void onLoadSample()}
@@ -145,11 +170,11 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                   {sampleLoading ? "正在载入" : "全角色导入"}
                 </Button>
                 {loading ? (
-                  <Button type="button" variant="destructive" onClick={onCancelRun} aria-label="取消计算">
+                  <Button type="button" variant="destructive" className="h-9 max-sm:h-11" onClick={onCancelRun} aria-label="取消计算">
                     <Loader2 className="animate-spin" />
                     取消计算
                   </Button>
-                ) : <RunButton canRun={canRun} loading={false} onRun={onRun} />}
+                ) : <RunButton canRun={canRun} loading={false} plannerReady={plannerReady} onRun={onRun} />}
               </div>
             )}
           >
@@ -182,6 +207,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               activeShift={activeShift}
               shiftDirection={shiftDirection}
               activePlan={activePlan}
+              searchQuery={operatorQuery}
               shiftInfoSlot={(
                 <div className="flex flex-wrap items-center justify-end gap-2 max-sm:w-full max-sm:justify-between">
                   {fiammettaTarget ? (
@@ -237,7 +263,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
       </section>
 
       {resultClearNotice ? (
-        <aside className="fixed left-1/2 top-4 z-[70] w-[min(720px,calc(100vw-2rem))] -translate-x-1/2 border border-[#FFD800]/70 bg-[#313131] px-4 py-3 text-white shadow-[0_16px_44px_rgba(0,0,0,0.35)]" aria-live="polite">
+        <aside className="fixed left-1/2 top-[max(5rem,calc(env(safe-area-inset-top)+5rem))] z-[70] w-[min(720px,calc(100vw-2rem))] -translate-x-1/2 border border-[#FFD800]/70 bg-[#313131] px-4 py-3 text-white shadow-[0_16px_44px_rgba(0,0,0,0.35)]" aria-live="polite">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
               <strong className="block text-sm font-semibold text-[#FFD800]">已清空旧求解结果</strong>
@@ -251,15 +277,24 @@ export function InfraCalculator(props: InfraCalculatorProps) {
         </aside>
       ) : null}
       <Dialog open={shortcutGuideOpen} onOpenChange={setShortcutGuideOpen}>
-        <DialogContent className="gap-5 sm:max-w-lg">
-          <DialogHeader className="gap-1.5">
+        <DialogContent className="gap-8 sm:max-w-2xl sm:p-8">
+          <DialogHeader className="gap-2 px-1 sm:px-2">
             <DialogTitle className="text-xl font-semibold">快捷键</DialogTitle>
-            <DialogDescription className="text-sm leading-6">排班主界面的全局快捷操作</DialogDescription>
+            <DialogDescription className="max-w-lg text-sm leading-6">在排班主界面快速定位搜索、关闭临时状态或切换导航。</DialogDescription>
           </DialogHeader>
-          <div className="divide-y divide-border border-y border-border px-3 sm:px-4">
-            <div className="flex min-h-14 items-center justify-between gap-5 py-3 max-sm:flex-wrap max-sm:gap-2"><span className="text-[15px] font-medium leading-6">展开并聚焦排班搜索</span><kbd className="shrink-0 border border-border bg-muted px-3 py-1.5 font-mono text-sm font-semibold">Ctrl + K</kbd></div>
-            <div className="flex min-h-14 items-center justify-between gap-5 py-3 max-sm:flex-wrap max-sm:gap-2"><span className="text-[15px] font-medium leading-6">关闭搜索；计算中取消请求</span><kbd className="shrink-0 border border-border bg-muted px-3 py-1.5 font-mono text-sm font-semibold">Esc</kbd></div>
-            <div className="flex min-h-14 items-center justify-between gap-5 py-3 max-sm:flex-wrap max-sm:gap-2"><span className="text-[15px] font-medium leading-6">展开或收起侧边栏</span><kbd className="shrink-0 border border-border bg-muted px-3 py-1.5 font-mono text-sm font-semibold">Ctrl + B</kbd></div>
+          <div className="divide-y divide-border/70 border-y border-border/70 px-1 sm:px-2">
+            <div className="flex min-h-20 items-center justify-between gap-8 py-5 max-sm:flex-wrap max-sm:gap-3">
+              <span className="text-[15px] font-medium leading-6">聚焦排班搜索</span>
+              <KbdGroup className="shrink-0" aria-label="Control 加 K"><Kbd>Ctrl</Kbd><span aria-hidden="true">+</span><Kbd>K</Kbd></KbdGroup>
+            </div>
+            <div className="flex min-h-20 items-center justify-between gap-8 py-5 max-sm:flex-wrap max-sm:gap-3">
+              <span className="text-[15px] font-medium leading-6">清空搜索；计算中取消请求</span>
+              <Kbd className="shrink-0">Esc</Kbd>
+            </div>
+            <div className="flex min-h-20 items-center justify-between gap-8 py-5 max-sm:flex-wrap max-sm:gap-3">
+              <span className="text-[15px] font-medium leading-6">展开或收起侧边栏</span>
+              <KbdGroup className="shrink-0" aria-label="Control 加 B"><Kbd>Ctrl</Kbd><span aria-hidden="true">+</span><Kbd>B</Kbd></KbdGroup>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

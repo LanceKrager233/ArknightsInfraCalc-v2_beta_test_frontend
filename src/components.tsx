@@ -5,22 +5,17 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  CircleHelp,
-  Copy,
   Download,
   FileWarning,
   Loader2,
   Play,
   RotateCcw,
   Save,
-  Search,
   Smile,
   Upload,
-  X,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { CSSProperties, ChangeEvent, ReactElement, ReactNode, useEffect, useRef, useState } from "react";
-import { ThinkingOrb } from "thinking-orbs";
 
 import { AnimatedNumber, AnimatedText } from "@/components/AnimatedText";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -109,7 +104,6 @@ import {
 } from "./schedule-list-layout";
 import {
   BaseBlueprint,
-  DisplayError,
   FeedbackData,
   IssueReport,
   MaaJson,
@@ -575,137 +569,24 @@ export function LayoutEditor({
   );
 }
 
-export function StatusBar({
-  loading,
-  result,
-  error,
-  ready,
-  onRetry,
-  onCopyDiagnostic,
-  className,
-}: {
-  loading: boolean;
-  result: PublicPlanData | null;
-  error: DisplayError | null;
-  ready: boolean;
-  onRetry: () => void;
-  onCopyDiagnostic: () => void;
-  className?: string;
-}) {
-  const content = (() => {
-    if (loading) {
-      return {
-        state: "loading" as const,
-        icon: (
-          <ThinkingOrb
-            state="solving"
-            size={20}
-            theme="light"
-            aria-hidden="true"
-            className="shrink-0"
-            data-slot="solving-orb"
-          />
-        ),
-        text: "正在生成排班",
-        className: "border-blue-200 bg-blue-50 text-blue-700",
-      };
-    }
-    if (error) {
-      return {
-        state: "error" as const,
-        icon: <AlertTriangle className="size-4" />,
-        text: `${error.message}（${error.code}）`,
-        className: "border-destructive/30 bg-destructive/10 text-destructive",
-      };
-    }
-    if (result) {
-      return {
-        state: "success" as const,
-        icon: <CheckCircle2 className="size-4" />,
-        text: "排班已生成",
-        className: "border-emerald-200 bg-emerald-50 text-emerald-700",
-      };
-    }
-    return {
-      state: "ready" as const,
-      icon: <CircleHelp className="size-4" />,
-      text: ready ? "排班服务已就绪" : "排班暂不可用",
-      className: ready
-        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-        : "border-border bg-background text-muted-foreground",
-    };
-  })();
-
-  return (
-    <div
-      data-slot="plan-status"
-      data-status-state={content.state}
-      className={cn(
-        "plan-status-bar surface-shadow flex h-7 min-w-0 items-center gap-2 overflow-hidden rounded-lg px-3 py-0 text-sm max-sm:h-11 max-sm:px-2",
-        content.className,
-        className
-      )}
-      role={error ? "alert" : "status"}
-      aria-live={error ? "assertive" : "polite"}
-    >
-      <AnimatePresence initial={false} mode="wait">
-        <motion.span
-          key={content.state}
-          className="flex min-w-0 flex-1 items-center gap-2"
-          data-slot="status-content"
-          initial={{ opacity: 0, scale: 0.98 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.98 }}
-          transition={{ duration: MOTION_DURATION.feedback, ease: MOTION_EASE_OUT }}
-          style={{ transformOrigin: "left center" }}
-        >
-          <span className="flex size-5 shrink-0 items-center justify-center" aria-hidden="true">
-            {content.icon}
-          </span>
-          <span
-            className={cn(
-              "min-w-0 flex-1 truncate",
-              !error && "tabular-nums",
-              loading && "plan-status-shimmer"
-            )}
-            data-slot="status-text"
-            data-text={loading ? content.text : undefined}
-          >
-            {content.text}
-          </span>
-        </motion.span>
-      </AnimatePresence>
-      {error ? (
-        <span className="flex shrink-0 items-center gap-1">
-          {error.retryable ? (
-            <Button type="button" size="icon-sm" variant="ghost" className="max-sm:size-11" aria-label="重试" onClick={onRetry}>
-              <RotateCcw />
-            </Button>
-          ) : null}
-          <Button type="button" size="icon-sm" variant="ghost" className="max-sm:size-11" aria-label="复制诊断编号" onClick={onCopyDiagnostic}>
-            <Copy />
-          </Button>
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
 export function RunButton({
   canRun,
   loading,
+  plannerReady,
   onRun,
 }: {
   canRun: boolean;
   loading: boolean;
+  plannerReady: boolean;
   onRun: () => void;
 }) {
+  const unavailableLabel = plannerReady ? "请先导入干员数据" : "排班服务暂不可用";
   return (
     <Button
       size="sm"
-      className="min-w-0 max-sm:h-11 max-sm:px-3 max-sm:text-xs"
-      aria-label={loading ? "计算中" : canRun ? "生成排班" : "请先导入干员数据"}
-      title={!canRun ? "请先导入干员数据，并等待排班服务就绪。" : undefined}
+      className="h-9 min-w-0 max-sm:h-11 max-sm:px-3 max-sm:text-xs"
+      aria-label={loading ? "计算中" : canRun ? "生成排班" : unavailableLabel}
+      title={!canRun ? (plannerReady ? "请先导入干员数据。" : "排班服务暂不可用，请稍后重试。") : undefined}
       onClick={onRun}
       disabled={!canRun || loading}
     >
@@ -1432,6 +1313,7 @@ export function ScheduleBoard({
   shiftDirection = 0,
   activePlan,
   changedRoomIds = new Set<string>(),
+  searchQuery = "",
   onIssue,
   onFactoryRecipeChange,
   onTradeOrderChange,
@@ -1446,6 +1328,7 @@ export function ScheduleBoard({
   shiftDirection?: ShiftDirection;
   activePlan?: MaaPlan;
   changedRoomIds?: ReadonlySet<string>;
+  searchQuery?: string;
   onIssue: (row: RoomRow) => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
@@ -1454,29 +1337,10 @@ export function ScheduleBoard({
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [hiddenGroups, setHiddenGroups] = useState<Record<string, boolean>>({});
   const [viewMode, setViewMode] = useState<"list" | "compact">("list");
-  const [operatorQuery, setOperatorQuery] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
-  const searchInputRef = useRef<HTMLInputElement>(null);
   const [supportsCompactLayout, setSupportsCompactLayout] = useState(false);
   const [viewModeReady, setViewModeReady] = useState(false);
   const preferredViewMode = useRef<"list" | "compact" | null>(null);
   const shouldReduceMotion = useReducedMotion();
-
-  useEffect(() => {
-    const handleShortcut = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "k") {
-        event.preventDefault();
-        setSearchOpen(true);
-        window.requestAnimationFrame(() => searchInputRef.current?.focus());
-      }
-      if (event.key === "Escape" && searchOpen) {
-        setSearchOpen(false);
-        setOperatorQuery("");
-      }
-    };
-    window.addEventListener("keydown", handleShortcut);
-    return () => window.removeEventListener("keydown", handleShortcut);
-  }, [searchOpen]);
 
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 768px)");
@@ -1504,7 +1368,7 @@ export function ScheduleBoard({
     );
   }
 
-  const normalizedQuery = operatorQuery.trim().toLocaleLowerCase("zh-CN");
+  const normalizedQuery = searchQuery.trim().toLocaleLowerCase("zh-CN");
   const visibleRows = normalizedQuery
     ? rows.filter((row) => row.title.toLocaleLowerCase("zh-CN").includes(normalizedQuery) || row.operators.some((name) => name.toLocaleLowerCase("zh-CN").includes(normalizedQuery)))
     : rows;
@@ -1573,18 +1437,6 @@ export function ScheduleBoard({
               <TabsTrigger value="list">列表式布局</TabsTrigger>
             </TabsList>
           </Tabs>
-          {searchOpen ? (
-            <div className="flex items-center gap-1">
-              <Input ref={searchInputRef} value={operatorQuery} onChange={(event) => setOperatorQuery(event.target.value)} placeholder="搜索干员或房间" aria-label="搜索排班中的干员或房间" className="h-9 w-[min(280px,46vw)]" />
-              <Button type="button" variant="ghost" size="icon-sm" aria-label="关闭搜索" onClick={() => { setSearchOpen(false); setOperatorQuery(""); }}>
-                <X />
-              </Button>
-            </div>
-          ) : (
-            <Button type="button" variant="ghost" size="icon-sm" aria-label="搜索干员或房间" title="搜索（Ctrl+K）" onClick={() => { setSearchOpen(true); window.requestAnimationFrame(() => searchInputRef.current?.focus()); }}>
-              <Search />
-            </Button>
-          )}
           {changedRoomIds.size ? <span className="text-xs text-amber-700">较上次求解变更 {changedRoomIds.size} 个房间</span> : null}
           {viewMode === "list" && auxiliaryGroups.length ? (
             <div className="flex flex-wrap justify-end gap-2">

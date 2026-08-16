@@ -978,9 +978,11 @@ test("restores a v4 schedule without hydration errors and keeps only safe data",
   });
 
   await page.goto("/");
-  await expect(page.getByText("排班已生成")).toBeVisible();
+  await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
+  await expect(page.locator('[data-slot="live-activity"]')).toHaveCount(0);
   await page.reload();
-  await expect(page.getByText("排班已生成")).toBeVisible();
+  await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
+  await expect(page.locator('[data-slot="live-activity"]')).toHaveCount(0);
   expect(consoleErrors.filter((message) => /hydration|did not match/i.test(message))).toEqual([]);
 
   const persisted = await page.evaluate(() => JSON.parse(
@@ -1119,7 +1121,7 @@ test("?beta cannot enable debug tools without the server feature flag", async ({
   await mockApis(page, { debugTools: false });
   await seedPreferences(page);
   await page.goto("/?beta");
-  await expect(page.getByText("排班服务已就绪")).toBeVisible();
+  await expect(page.getByRole("button", { name: "全角色导入" })).toBeVisible();
   await expect(page.getByText("调试输出")).toHaveCount(0);
   await expect(page.getByText("问题上下文")).toHaveCount(0);
   await expect(page.getByText("开启调试工具", { exact: true })).toHaveCount(0);
@@ -1141,7 +1143,7 @@ test("the development debug entry manages the URL and debug panels", async ({ pa
   await expect(page.getByText("开启调试工具", { exact: true })).toBeVisible();
 });
 
-test("shows the solving orb only while a plan request is running", async ({ page }) => {
+test("shows the thinking activity and indeterminate progress only while a plan request is running", async ({ page }) => {
   await mockApis(page);
   let releasePlan!: () => void;
   const planGate = new Promise<void>((resolve) => {
@@ -1159,23 +1161,22 @@ test("shows the solving orb only while a plan request is running", async ({ page
   await page.goto("/");
 
   await page.getByRole("button", { name: "全角色导入" }).click();
-  const status = page.getByRole("status");
-  const statusText = status.locator('[data-slot="status-text"]');
-  const readyTextX = await statusText.evaluate((element) => element.getBoundingClientRect().x);
   await page.getByRole("button", { name: "生成排班" }).click();
 
+  const status = page.locator('[data-slot="live-activity"]');
   const solvingOrb = status.locator('[data-slot="solving-orb"]');
+  const progress = status.locator('[data-slot="activity-progress-indicator"]');
   await expect(status).toContainText("正在生成排班");
+  await expect(status).toHaveCSS("background-color", "rgb(250, 250, 248)");
   await expect(solvingOrb).toBeVisible();
-  await expect(solvingOrb).toHaveAttribute("aria-hidden", "true");
-  const solvingTextX = await statusText.evaluate((element) => element.getBoundingClientRect().x);
-  expect(Math.abs(solvingTextX - readyTextX)).toBeLessThan(1);
+  await expect(status.locator(".live-activity-shimmer")).toBeVisible();
+  await expect(progress).toBeVisible();
+  await expect(progress).toHaveCSS("width", /.+/);
 
   releasePlan();
   await expect(status).toContainText("排班已生成");
   await expect(solvingOrb).toHaveCount(0);
-  const completeTextX = await statusText.evaluate((element) => element.getBoundingClientRect().x);
-  expect(Math.abs(completeTextX - readyTextX)).toBeLessThan(1);
+  await expect(status.locator('[data-slot="activity-progress-indicator"]')).toHaveCSS("width", /.+/);
 });
 
 test("Skland calculator keeps the schedule visible before and after sidebar navigation", async ({ page }) => {
@@ -1204,7 +1205,7 @@ test("Skland calculator keeps the schedule visible before and after sidebar navi
   await expect(waitingBoard).toContainText("控制中枢");
 
   await runButton.click();
-  await expect(page.getByText("排班已生成")).toBeVisible();
+  await expect(page.locator('[data-slot="live-activity"]')).toHaveAttribute("data-activity-phase", "success");
   await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
   await expect(page.getByRole("button", { name: "导出到 MAA" })).toBeEnabled();
   const comparisonTrigger = page.locator('[data-plan-details-trigger="comparison"]');
@@ -1274,7 +1275,6 @@ test("Skland calculator keeps the schedule visible before and after sidebar navi
     await page.getByRole("button", { name: "基建计算器", exact: true }).click();
 
     const returnedBoard = page.locator("[data-plan-board]");
-    await expect(page.getByText("排班已生成")).toBeVisible();
     await expect(returnedBoard).toBeVisible();
     await expect(returnedBoard).toHaveCSS("opacity", "1");
     await expect(returnedBoard).toHaveAttribute("data-plan-revision", diagnosticId);
@@ -1321,16 +1321,16 @@ test("plan completion reveals status, metrics, and schedule once without resetti
   const restoreHidden = page.getByRole("button").filter({ hasText: "恢复已隐藏" });
   await expect(restoreHidden).toBeVisible();
 
-  await page.getByRole("button", { name: "生成排班" }).click();
   await armMotionCapture(
     page,
-    '[data-status-state="loading"] [data-slot="status-content"]',
+    '[data-activity-phase="running"]',
     "loading-status",
-    140
+    260
   );
-  const status = page.locator('[data-slot="plan-status"]');
-  await expect(status).toHaveAttribute("data-status-state", "loading");
-  await expectCapturedMotion(page, "loading-status", 140);
+  await page.getByRole("button", { name: "生成排班" }).click();
+  const status = page.locator('[data-slot="live-activity"]');
+  await expect(status).toHaveAttribute("data-activity-phase", "running");
+  await expectCapturedMotion(page, "loading-status", 260);
 
   const boardBeforePlan = page.locator("[data-plan-board]");
   await boardBeforePlan.evaluate((element) => {
@@ -1345,7 +1345,7 @@ test("plan completion reveals status, metrics, and schedule once without resetti
     await armMotionCollectionCapture(page, "[data-plan-metric]", "plan-metrics", 360);
   }
   releasePlan();
-  await expect(status).toHaveAttribute("data-status-state", "success");
+  await expect(status).toHaveAttribute("data-activity-phase", "success");
   const summary = page.locator("[data-plan-summary]");
   const board = page.locator("[data-plan-board]");
   await expect(summary).toBeVisible();
@@ -1362,13 +1362,7 @@ test("plan completion reveals status, metrics, and schedule once without resetti
     await expectCapturedMotion(page, "plan-summary", 460, 40);
     await expectCapturedMotionDelays(page, "plan-metrics", 360, [100, 150, 215, 280]);
   }
-  const choreography = await page.evaluate(() => {
-    const statusBar = getComputedStyle(document.querySelector<HTMLElement>('[data-slot="plan-status"]')!);
-    return {
-      statusBarDuration: statusBar.transitionDuration,
-    };
-  });
-  expect(choreography.statusBarDuration).toContain("0.16s");
+  await expect(status).toContainText("排班已生成");
 
   const renderingBudget = await page.evaluate(() => {
     const summaryElement = document.querySelector<HTMLElement>("[data-plan-summary]")!;
@@ -1472,8 +1466,8 @@ test("reduced motion keeps feedback timing while removing movement, clipping, an
 
   await page.getByRole("button", { name: "全角色导入" }).click();
   await page.getByRole("button", { name: "生成排班" }).click();
-  await expect(page.locator('[data-slot="plan-status"]')).toHaveAttribute("data-status-state", "loading");
-  await expect(page.locator(".animate-spin").first()).toHaveCSS("animation-duration", "1.6s");
+  await expect(page.locator('[data-slot="live-activity"]')).toHaveAttribute("data-activity-phase", "running");
+  await expect(page.locator('[data-slot="live-activity"] .animate-spin')).toHaveCount(0);
 
   const board = page.locator("[data-plan-board]");
   await board.evaluate((element) => {
@@ -1488,7 +1482,7 @@ test("reduced motion keeps feedback timing while removing movement, clipping, an
     await armMotionCapture(page, "[data-plan-metric]", "reduced-metric", 140);
   }
   releasePlan();
-  await expect(page.locator('[data-slot="plan-status"]')).toHaveAttribute("data-status-state", "success");
+  await expect(page.locator('[data-slot="live-activity"]')).toHaveAttribute("data-activity-phase", "success");
   const summary = page.locator("[data-plan-summary]");
   await expect(summary).toBeVisible();
   await expect(board).toHaveAttribute("data-motion-sentinel", "stable");
@@ -1501,7 +1495,7 @@ test("reduced motion keeps feedback timing while removing movement, clipping, an
     await expectCapturedMotion(page, "reduced-metric", 140);
   }
   const reduced = await page.evaluate(() => {
-    const statusBar = getComputedStyle(document.querySelector<HTMLElement>('[data-slot="plan-status"]')!);
+    const activity = document.querySelector<HTMLElement>('[data-slot="live-activity"]')!;
     const boardElement = document.querySelector<HTMLElement>("[data-plan-board]")!;
     const movingFrames = boardElement.getAnimations({ subtree: true }).flatMap((animation) => {
       const effect = animation.effect;
@@ -1511,16 +1505,121 @@ test("reduced motion keeps feedback timing while removing movement, clipping, an
       || (typeof frame.clipPath === "string" && frame.clipPath !== "none")
     ));
     return {
-      statusProperties: statusBar.transitionProperty,
-      statusDuration: statusBar.transitionDuration,
+      activityAnimationCount: activity.getAnimations({ subtree: true }).filter((animation) => animation.playState === "running").length,
       movingFrameCount: movingFrames.length,
       calligraphCount: boardElement.querySelectorAll("[data-calligraph]").length,
     };
   });
-  expect(reduced.statusProperties).toContain("background-color");
-  expect(reduced.statusDuration).toContain("0.16s");
+  expect(reduced.activityAnimationCount).toBe(0);
   expect(reduced.movingFrameCount).toBe(0);
   expect(reduced.calligraphCount).toBe(0);
+});
+
+test("live activity survives navigation and calculator search occupies the released toolbar space", async ({ page }) => {
+  await mockApis(page);
+  let releasePlan!: () => void;
+  const planGate = new Promise<void>((resolve) => {
+    releasePlan = resolve;
+  });
+  await page.route("**/api/plan", async (route) => {
+    await planGate;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true, data: twoShiftPlanData, requestId }),
+    });
+  });
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  await expect(page.locator('[data-slot="live-activity"]')).toHaveCount(0);
+  await page.getByRole("button", { name: "全角色导入" }).click();
+  await page.getByRole("button", { name: "生成排班" }).click();
+  const activity = page.locator('[data-slot="live-activity"]');
+  await expect(activity).toHaveAttribute("data-activity-phase", "running");
+
+  await page.getByRole("button", { name: "技能查询" }).click();
+  await expect(page.getByRole("heading", { name: "技能查询" })).toBeVisible();
+  await expect(activity).toHaveAttribute("data-activity-phase", "running");
+  releasePlan();
+  await expect(activity).toHaveAttribute("data-activity-phase", "success");
+  await expect(activity).toHaveCount(0, { timeout: 3_000 });
+
+  await expect(page.getByRole("textbox", { name: "搜索干员名称" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "筛选制造站" })).toBeVisible();
+
+  await page.getByRole("button", { name: "基建计算器", exact: true }).click();
+  const search = page.getByRole("textbox", { name: "搜索排班中的干员或房间" });
+  const toolbar = page.locator("[data-calculator-controls]");
+  await expect(search).toBeVisible();
+  for (const buttonName of ["配置Box与布局", "全角色导入", "生成排班"]) {
+    await expect(toolbar.getByRole("button", { name: buttonName })).toHaveCSS("height", "36px");
+  }
+  await page.keyboard.press("Control+k");
+  await expect(search).toBeFocused();
+  await search.fill("阿米娅");
+  await expect(page.locator("[data-plan-board]")).toContainText("阿米娅");
+  await expect(page.getByRole("button", { name: "清空排班搜索" })).toBeVisible();
+  await page.getByRole("button", { name: "清空排班搜索" }).click();
+  await expect(search).toHaveValue("");
+
+  await page.getByRole("button", { name: "查看快捷键" }).click();
+  const shortcutDialog = page.getByRole("dialog");
+  await expect(shortcutDialog).toBeVisible();
+  await expect(shortcutDialog).toHaveCSS("max-width", "672px");
+  await expect(shortcutDialog.locator('[data-slot="kbd"]')).toHaveCount(5);
+  await expect(shortcutDialog.locator('[data-slot="kbd-group"]')).toHaveCount(2);
+  const shortcutRows = shortcutDialog.locator('[data-slot="kbd-group"]').first().locator("xpath=..");
+  await expect(shortcutRows).toHaveCSS("min-height", "80px");
+  await page.keyboard.press("Escape");
+  await expect(shortcutDialog).toBeHidden();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobileToolbar = await toolbar.evaluate((element) => ({ client: element.clientWidth, scroll: element.scrollWidth }));
+  expect(mobileToolbar.scroll).toBeLessThanOrEqual(mobileToolbar.client);
+  await expect(search).toHaveCSS("height", "44px");
+});
+
+test("failed plan remains expanded with retry and diagnostic actions", async ({ page }) => {
+  await mockApis(page);
+  let requestCount = 0;
+  await page.route("**/api/plan", async (route) => {
+    requestCount += 1;
+    if (requestCount === 1) {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: false,
+          error: { code: "AIC-PLAN-3001", message: "排班服务暂不可用，请稍后重试。", retryable: true },
+          requestId,
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true, data: twoShiftPlanData, requestId }),
+    });
+  });
+  await seedPreferences(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "全角色导入" }).click();
+  await page.getByRole("button", { name: "生成排班" }).click();
+
+  const activity = page.locator('[data-slot="live-activity"]');
+  await expect(activity).toHaveAttribute("data-activity-phase", "error");
+  await expect(activity).toHaveAttribute("data-activity-view", "expanded");
+  await page.waitForTimeout(2_800);
+  await expect(activity).toHaveAttribute("data-activity-view", "expanded");
+  await activity.hover();
+  await expect(activity).toHaveAttribute("data-activity-view", "expanded");
+  await activity.getByRole("button", { name: "复制诊断" }).click();
+  await expect(activity.getByRole("button", { name: "已复制" })).toBeVisible();
+  await activity.getByRole("button", { name: "重试" }).click();
+  await expect(page.locator('[data-slot="live-activity"][data-activity-phase="success"]')).toBeVisible();
 });
 
 test("dialog and mobile sheet motion preserve direction, exit timing, and focus", async ({ page }) => {
@@ -1647,7 +1746,7 @@ test("Full E2 stays in place and completes generation, shifts, MAA export, and f
   await mockApis(page);
   await seedPreferences(page);
   await page.goto("/");
-  await expect(page.getByText("排班服务已就绪")).toBeVisible();
+  await expect(page.getByRole("button", { name: "全角色导入" })).toBeVisible();
 
   const fullE2 = page.getByRole("button", { name: "全角色导入" });
   await expect(fullE2).toBeVisible();
@@ -1806,7 +1905,8 @@ test("responsive navigation and the two locked areas keep their current behavior
   ]) {
     await page.setViewportSize(viewport);
     await page.reload();
-    await expect(page.getByText("排班已生成")).toBeVisible();
+    await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
+    await expect(page.locator('[data-slot="live-activity"]')).toHaveCount(0);
     await expect(page.getByRole("button", { name: "全角色导入" })).toBeVisible();
     await expect(compactViewTab).toBeEnabled();
     await expect(compactViewTab).toHaveAttribute("aria-selected", "true");
@@ -2615,7 +2715,7 @@ test("Skland login loads full status by default and deletion preserves non-Sklan
 
   await page.getByRole("button", { name: "Toggle Sidebar" }).click();
   await page.getByRole("button", { name: "基建计算器", exact: true }).click();
-  await expect(page.getByText("排班已生成")).toBeVisible();
+  await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
 });
 
 test("Skland status center keeps profile and recruitment in overview and supports role switching", async ({ page }) => {

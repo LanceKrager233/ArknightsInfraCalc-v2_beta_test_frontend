@@ -11,6 +11,7 @@ import { InfraCalculator } from "@/components/pages/InfraCalculator";
 import { SkillQuery } from "@/components/pages/SkillQuery";
 import { SklandStatus } from "@/components/pages/SklandStatus";
 import { TrainingAdvice } from "@/components/pages/TrainingAdvice";
+import { LiveActivity, usePlanActivity } from "@/components/ui/live-activity";
 
 import {
   deleteAllSklandData,
@@ -1154,6 +1155,7 @@ function WorkbenchApp() {
   const statusError = inputError && !setupOpen
     ? displayError(inputErrorCode, inputError)
     : apiError ?? storageNotice;
+  const activity = usePlanActivity({ loading, result, error: statusError });
 
   if (!hasRestoredSession) {
     return (
@@ -1179,6 +1181,13 @@ function WorkbenchApp() {
             onOpenSkland: () => setPage("skland" as const),
           } : {})}
         />
+        <LiveActivity
+          activity={activity}
+          onRetry={() => void handleRetry()}
+          onCopyDiagnostic={() => {
+            if (activity?.error) void copyText(`${activity.error.code}${activity.error.requestId ? ` · ${activity.error.requestId}` : ""}`);
+          }}
+        />
 
       <div className="app-content-track py-4">
       {page === "calculator" ? (
@@ -1203,16 +1212,11 @@ function WorkbenchApp() {
           loading={loading}
           canRun={canRun}
           plannerReady={cliReady}
-          statusError={statusError}
           onLoadSample={handleLoadSample}
           onOpenSetup={openSetup}
           onRun={handleRun}
           onCancelRun={handleCancelRun}
           onRestorePlan={handleRestorePlan}
-          onRetry={() => void handleRetry()}
-          onCopyDiagnostic={() => {
-            if (statusError) void copyText(`${statusError.code}${statusError.requestId ? ` · ${statusError.requestId}` : ""}`);
-          }}
           onSetActiveShift={setActiveShift}
           onMarkIssue={handleMarkIssue}
           onFactoryRecipeChange={handleScheduleFactoryRecipeChange}
