@@ -204,6 +204,7 @@ function WorkbenchApp() {
   const [rotationProfile, setRotationProfile] = useState<RotationProfile>(DEFAULT_ROTATION_PROFILE);
   const [fiammettaEnabled, setFiammettaEnabled] = useState(false);
   const [fiammettaTarget, setFiammettaTarget] = useState<string | null>(null);
+  const [fiammettaOrder, setFiammettaOrder] = useState<"pre" | "post">("pre");
   const [inputMode, setInputMode] = useState<"skland" | "maa">(CLIENT_SKLAND_ENABLED ? "skland" : "maa");
   const [maaPaste, setMaaPaste] = useState("");
   const [sklandScheduleSnapshot, setSklandScheduleSnapshot] = useState<SklandScheduleSnapshot | null>(null);
@@ -326,6 +327,7 @@ function WorkbenchApp() {
         setRotationProfile(restored.rotationProfile);
         setFiammettaEnabled(Boolean(restored.fiammettaEnabled));
         setFiammettaTarget(restored.fiammettaTarget ?? null);
+        setFiammettaOrder(restored.fiammettaOrder === "post" ? "post" : "pre");
         setResult(restored.result);
         setActiveShift(restored.activeShift);
         initialLayoutForRestore.current = restoredLayout;
@@ -361,6 +363,7 @@ function WorkbenchApp() {
         rotationProfile,
         fiammettaEnabled,
         fiammettaTarget,
+        fiammettaOrder,
         result,
         activeShift,
       });
@@ -368,7 +371,7 @@ function WorkbenchApp() {
     } catch {
       setStorageNotice(displayError("AIC-LOCAL-7001", "浏览器无法保存本地数据，但仍可继续生成排班。"));
     }
-  }, [hasRestoredSession, preset, layout, operbox, fileName, boxSource, layoutDirty, layoutSource, localLayoutBackup, rotationProfile, fiammettaEnabled, fiammettaTarget, result, activeShift]);
+  }, [hasRestoredSession, preset, layout, operbox, fileName, boxSource, layoutDirty, layoutSource, localLayoutBackup, rotationProfile, fiammettaEnabled, fiammettaTarget, fiammettaOrder, result, activeShift]);
 
   useEffect(() => {
     if (!hasRestoredSession || typeof window === "undefined") return;
@@ -624,7 +627,7 @@ function WorkbenchApp() {
           .map((operator) => operator.name)
       );
       const fiammettaError = validateFiammettaExport({
-        settings: { enabled: fiammettaEnabled, target: fiammettaTarget },
+        settings: { enabled: fiammettaEnabled, target: fiammettaTarget, order: fiammettaOrder },
         ownsFiammetta,
         eligibleTargets: responseTargets,
       });
@@ -633,6 +636,7 @@ function WorkbenchApp() {
         maa: applyFiammettaSettings(response.maa, {
           enabled: fiammettaEnabled && !fiammettaError,
           target: fiammettaTarget,
+          order: fiammettaOrder,
         }),
       });
       if (fiammettaError && fiammettaEnabled) {
@@ -694,7 +698,7 @@ function WorkbenchApp() {
   function handleDownloadMaa() {
     if (!result?.maa) return;
     const validationError = validateFiammettaExport({
-      settings: { enabled: fiammettaEnabled, target: fiammettaTarget },
+      settings: { enabled: fiammettaEnabled, target: fiammettaTarget, order: fiammettaOrder },
       ownsFiammetta,
       eligibleTargets: eligibleFiammettaTargets,
     });
@@ -794,6 +798,11 @@ function WorkbenchApp() {
   function handleFiammettaTargetChange(target: string) {
     setFiammettaTarget(target);
     setFiammettaEnabled(true);
+    clearPlanResult();
+  }
+
+  function handleFiammettaOrderChange(order: "pre" | "post") {
+    setFiammettaOrder(order);
     clearPlanResult();
   }
 
@@ -1226,9 +1235,11 @@ function WorkbenchApp() {
         onRotationProfileChange={handleRotationProfileChange}
         fiammettaEnabled={fiammettaEnabled}
         fiammettaTarget={fiammettaTarget}
+        fiammettaOrder={fiammettaOrder}
         scheduledOperators={scheduledOperators}
         onFiammettaEnabledChange={handleFiammettaEnabledChange}
         onFiammettaTargetChange={handleFiammettaTargetChange}
+        onFiammettaOrderChange={handleFiammettaOrderChange}
         onPresetSelect={handlePresetSelect}
         onLayoutFile={handleLayoutFile}
         onDownloadLayout={() => downloadJson(`layout-${layout.template}.json`, layout)}

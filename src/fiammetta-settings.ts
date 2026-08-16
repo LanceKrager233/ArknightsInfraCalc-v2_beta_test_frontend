@@ -3,6 +3,11 @@ import type { MaaJson, MaaOperatorSlot } from "./types";
 export interface FiammettaSettings {
   enabled: boolean;
   target: string | null;
+  order?: "pre" | "post";
+}
+
+export function isFiammettaTargetAvailable(target: string | null, eligibleTargets: ReadonlySet<string>): boolean {
+  return Boolean(target && eligibleTargets.has(target));
 }
 
 function operatorName(value: string | MaaOperatorSlot | null): string | null {
@@ -52,7 +57,7 @@ export function applyFiammettaSettings(maa: MaaJson, settings: FiammettaSettings
         delete next.Fiammetta;
         return next;
       }
-      next.Fiammetta = { enable: true, target, order: "pre" };
+      next.Fiammetta = { enable: true, target, order: settings.order === "post" ? "post" : "pre" };
       return next;
     }),
   };

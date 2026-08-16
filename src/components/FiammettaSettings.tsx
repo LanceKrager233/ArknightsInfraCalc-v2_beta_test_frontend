@@ -7,18 +7,21 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { operatorBuildingSkillList, operatorPortraitFor } from "@/operatorPortraits";
+import { isFiammettaTargetAvailable } from "@/fiammetta-settings";
 import type { OperBoxEntry } from "@/types";
 
 type FiammettaSettingsProps = {
   enabled: boolean;
   target: string | null;
+  order: "pre" | "post";
   operbox: OperBoxEntry[] | null;
   scheduledOperators: ReadonlySet<string>;
   onEnabledChange: (enabled: boolean) => void;
   onTargetChange: (target: string) => void;
+  onOrderChange: (order: "pre" | "post") => void;
 };
 
-export function FiammettaSettings({ enabled, target, operbox, scheduledOperators, onEnabledChange, onTargetChange }: FiammettaSettingsProps) {
+export function FiammettaSettings({ enabled, target, order, operbox, scheduledOperators, onEnabledChange, onTargetChange, onOrderChange }: FiammettaSettingsProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const ownsFiammetta = Boolean(operbox?.some((operator) => operator.own && operator.name === "菲亚梅塔"));
@@ -28,6 +31,7 @@ export function FiammettaSettings({ enabled, target, operbox, scheduledOperators
     .sort((left, right) => left.name.localeCompare(right.name, "zh-Hans-CN")), [operbox, scheduledOperators]);
   const filtered = candidates.filter((operator) => operator.name.includes(query.trim())).slice(0, 120);
   const selected = candidates.find((operator) => operator.name === target);
+  const targetUnavailable = enabled && Boolean(target) && !isFiammettaTargetAvailable(target, new Set(candidates.map((operator) => operator.name)));
   const unavailableReason = !ownsFiammetta
     ? "当前 Box 未拥有菲亚梅塔"
     : !scheduledOperators.size
@@ -65,9 +69,16 @@ export function FiammettaSettings({ enabled, target, operbox, scheduledOperators
       </div>
 
       {unavailableReason ? <p className="text-xs text-amber-700" role="status">{unavailableReason}</p> : null}
+      {targetUnavailable ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="alert">
+          <span>当前目标已不在生成的排班中，请重新选择恢复心情的干员。</span>
+          <Button type="button" size="sm" variant="outline" onClick={() => setOpen(true)}>重新选择</Button>
+        </div>
+      ) : null}
 
       {enabled ? (
-        <div className="flex min-h-20 items-center gap-3 border border-border bg-muted/20 p-3">
+        <div className="grid gap-3 border border-border bg-muted/20 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+          <div className="flex min-w-0 items-center gap-3">
           <div className="size-14 shrink-0 overflow-hidden border border-border bg-[#272A2B]">
             {selected?.portrait ? <img src={selected.portrait} alt="" className="size-full object-cover" /> : <HeartPulse className="m-4 size-6 text-muted-foreground" aria-hidden="true" />}
           </div>
@@ -78,6 +89,11 @@ export function FiammettaSettings({ enabled, target, operbox, scheduledOperators
           <Button type="button" variant="outline" className="h-10 shrink-0" onClick={() => setOpen(true)} disabled={!candidates.length}>
             选择干员
           </Button>
+          </div>
+          <div className="grid grid-cols-2 gap-1" aria-label="菲亚梅塔执行时机">
+            <Button type="button" size="sm" variant={order === "pre" ? "default" : "outline"} onClick={() => onOrderChange("pre")}>换班前</Button>
+            <Button type="button" size="sm" variant={order === "post" ? "default" : "outline"} onClick={() => onOrderChange("post")}>换班后</Button>
+          </div>
         </div>
       ) : null}
 

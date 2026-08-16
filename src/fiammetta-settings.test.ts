@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { applyFiammettaSettings, scheduledOperatorNames, validateFiammettaExport } from "./fiammetta-settings.ts";
+import { applyFiammettaSettings, isFiammettaTargetAvailable, scheduledOperatorNames, validateFiammettaExport } from "./fiammetta-settings.ts";
 import type { MaaJson } from "./types.ts";
 
 const maa: MaaJson = {
@@ -19,6 +19,14 @@ test("writes the selected Fiammetta target to every shift", () => {
     { enable: true, target: "巫恋", order: "pre" },
   ]);
   assert.equal(maa.plans[0].Fiammetta?.target, "旧目标");
+});
+
+test("writes the selected Fiammetta execution order", () => {
+  const result = applyFiammettaSettings(maa, { enabled: true, target: "巫恋", order: "post" });
+  assert.deepEqual(result.plans.map((plan) => plan.Fiammetta), [
+    { enable: true, target: "巫恋", order: "post" },
+    { enable: true, target: "巫恋", order: "post" },
+  ]);
 });
 
 test("removes Fiammetta output when the setting is disabled or incomplete", () => {
@@ -40,4 +48,11 @@ test("blocks invalid Fiammetta exports", () => {
   assert.match(validateFiammettaExport({ settings: { enabled: true, target: null }, ownsFiammetta: true, eligibleTargets: targets }) ?? "", /选择/);
   assert.match(validateFiammettaExport({ settings: { enabled: true, target: "闲置干员" }, ownsFiammetta: true, eligibleTargets: targets }) ?? "", /未参与/);
   assert.equal(validateFiammettaExport({ settings: { enabled: true, target: "巫恋" }, ownsFiammetta: true, eligibleTargets: targets }), null);
+});
+
+test("detects a Fiammetta target removed from the current schedule", () => {
+  const targets = new Set(["巫恋"]);
+  assert.equal(isFiammettaTargetAvailable("巫恋", targets), true);
+  assert.equal(isFiammettaTargetAvailable("龙舌兰", targets), false);
+  assert.equal(isFiammettaTargetAvailable(null, targets), false);
 });
