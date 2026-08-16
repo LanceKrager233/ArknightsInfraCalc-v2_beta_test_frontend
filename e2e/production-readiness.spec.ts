@@ -1629,6 +1629,19 @@ test("Full E2 stays in place and completes generation, shifts, MAA export, and f
     { columns: "90px 90px", columnGap: "8px", rowGap: "10px" },
   ]);
 
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobileFactoryControls = page.getByRole("group", { name: /制造站 1 配方/ }).first();
+  await expect(mobileFactoryControls).toBeVisible();
+  const mobileFactoryLayout = await mobileFactoryControls.evaluate((element) => ({
+    columns: getComputedStyle(element).gridTemplateColumns.split(" ").length,
+    rowPositions: Array.from(element.children).map((child) => child.getBoundingClientRect().y),
+    fits: element.scrollWidth <= element.clientWidth,
+  }));
+  expect(mobileFactoryLayout.columns).toBe(3);
+  expect(new Set(mobileFactoryLayout.rowPositions).size).toBe(1);
+  expect(mobileFactoryLayout.fits).toBe(true);
+  await page.setViewportSize({ width: 1440, height: 900 });
+
   await page.getByRole("button", { name: "生成排班" }).click();
   await expect(page.getByText("排班已生成")).toBeVisible();
   const secondShift = page.getByRole("tab", { name: /第 2 班 · 6h/ });
