@@ -1,12 +1,13 @@
 "use client";
 
 import { Download, FileJson, FlaskConical, HeartPulse, Keyboard, Loader2, Search, Settings2, Terminal, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
 import type { FactoryRecipe, TradeOrder } from "@/blueprint";
@@ -52,6 +53,7 @@ interface InfraCalculatorProps {
   loading: boolean;
   canRun: boolean;
   plannerReady: boolean;
+  accountControl?: ReactNode;
   onLoadSample: () => Promise<boolean>;
   onOpenSetup: () => void;
   onRun: () => void;
@@ -75,7 +77,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     activePlan, closestComparison,
     resultClearNotice,
     issueForPanel, issueReport, feedbackResult, feedbackError,
-    sampleLoading, loading, canRun, plannerReady,
+    sampleLoading, loading, canRun, plannerReady, accountControl,
     onLoadSample, onOpenSetup, onRun, onCancelRun, onRestorePlan,
     onSetActiveShift, onMarkIssue,
     onFactoryRecipeChange, onTradeOrderChange,
@@ -96,6 +98,30 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     setShiftDirection(nextShift === activeShift ? 0 : nextShift > activeShift ? 1 : -1);
     onSetActiveShift(nextShift);
   };
+  const renderExportActions = (placement: "desktop" | "mobile") => (
+    <div
+      className={placement === "desktop"
+        ? "hidden items-center gap-2 md:flex"
+        : "flex min-w-0 items-center justify-end gap-2"}
+      data-calculator-export-actions={placement}
+    >
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={sampleLoading}
+        aria-label="全角色导入"
+        onClick={() => void onLoadSample()}
+        data-full-e2
+      >
+        {sampleLoading ? <Loader2 className="animate-spin" /> : <FlaskConical />}
+        {sampleLoading ? "正在载入" : "全角色导入"}
+      </Button>
+      <Button type="button" size="sm" variant="outline" disabled={!result?.maa} onClick={onDownloadMaa}>
+        <Download />导出到 MAA
+      </Button>
+    </div>
+  );
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -122,53 +148,59 @@ export function InfraCalculator(props: InfraCalculatorProps) {
             className="min-h-[calc(100vh-112px)]"
             action={(
               <div
-                className="grid w-full grid-cols-[minmax(14rem,1fr)_auto_auto_auto] items-center gap-2 max-sm:grid-cols-2"
+                className="grid w-full grid-cols-[minmax(14rem,1fr)_auto_auto] items-center gap-2 max-sm:grid-cols-2"
                 data-calculator-controls
               >
-                <label className="relative block min-w-0 max-sm:col-span-2">
-                  <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                  <Input
-                    ref={searchInputRef}
-                    value={operatorQuery}
-                    onChange={(event) => setOperatorQuery(event.target.value)}
-                    placeholder="搜索排班中的干员或房间"
-                    aria-label="搜索排班中的干员或房间"
-                    className="h-9 pr-10 pl-9 max-sm:h-11"
-                  />
-                  {operatorQuery ? (
-                    <button
-                      type="button"
-                      onClick={() => { setOperatorQuery(""); searchInputRef.current?.focus(); }}
-                      className="absolute top-1/2 right-0 grid size-9 -translate-y-1/2 place-items-center text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FFD800] max-sm:size-11"
-                      aria-label="清空排班搜索"
-                    >
-                      <X className="size-4" aria-hidden="true" />
-                    </button>
-                  ) : null}
-                </label>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-9 max-sm:col-span-2 max-sm:h-11 max-sm:justify-start"
-                  aria-label="配置Box与布局"
-                  onClick={onOpenSetup}
-                >
-                  <Settings2 />
-                  配置Box与布局
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-9 max-sm:h-11 max-sm:text-xs"
-                  disabled={sampleLoading}
-                  aria-label="全角色导入"
-                  onClick={() => void onLoadSample()}
-                  data-full-e2
-                >
-                  {sampleLoading ? <Loader2 className="animate-spin" /> : <FlaskConical />}
-                  {sampleLoading ? "正在载入" : "全角色导入"}
-                </Button>
+                <div className="flex min-w-0 items-center gap-2 max-sm:col-span-2">
+                  <label className="relative block min-w-0 flex-1">
+                    <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                    <Input
+                      ref={searchInputRef}
+                      value={operatorQuery}
+                      onChange={(event) => setOperatorQuery(event.target.value)}
+                      placeholder="搜索排班中的干员或房间"
+                      aria-label="搜索排班中的干员或房间"
+                      className="h-9 pr-10 pl-9 max-sm:h-11"
+                    />
+                    {operatorQuery ? (
+                      <button
+                        type="button"
+                        onClick={() => { setOperatorQuery(""); searchInputRef.current?.focus(); }}
+                        className="absolute top-1/2 right-0 grid size-9 -translate-y-1/2 place-items-center text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FFD800] max-sm:size-11"
+                        aria-label="清空排班搜索"
+                      >
+                        <X className="size-4" aria-hidden="true" />
+                      </button>
+                    ) : null}
+                  </label>
+                  <Button
+                    type="button"
+                    size="icon-lg"
+                    variant="outline"
+                    className="size-9 max-sm:size-11"
+                    aria-label="查看快捷键"
+                    title="查看快捷键"
+                    onClick={() => setShortcutGuideOpen(true)}
+                  >
+                    <Keyboard />
+                  </Button>
+                </div>
+                <div className="inline-flex min-w-0" data-calculator-setup-group>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className={accountControl
+                      ? "h-9 min-w-0 rounded-r-none max-sm:h-11 max-sm:flex-1 max-sm:justify-start"
+                      : "h-9 min-w-0 max-sm:h-11 max-sm:flex-1 max-sm:justify-start"}
+                    aria-label="配置Box与布局"
+                    onClick={onOpenSetup}
+                  >
+                    <Settings2 />
+                    配置Box与布局
+                  </Button>
+                  {accountControl}
+                </div>
                 {loading ? (
                   <Button type="button" variant="destructive" className="h-9 max-sm:h-11" onClick={onCancelRun} aria-label="取消计算">
                     <Loader2 className="animate-spin" />
@@ -188,16 +220,6 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                 planRevision={scheduleResult.diagnosticId}
               />
             ) : null}
-            {planHistory.length > 1 ? (
-              <div className="mb-3 flex items-center gap-2 overflow-x-auto border-y border-border/70 py-2" aria-label="最近求解记录">
-                <span className="shrink-0 text-xs font-medium text-muted-foreground">最近记录</span>
-                {planHistory.map((entry, index) => (
-                  <Button key={entry.result.diagnosticId} type="button" size="sm" variant={entry.result.diagnosticId === result?.diagnosticId ? "default" : "outline"} className="shrink-0" onClick={() => onRestorePlan(entry)}>
-                    {index + 1} · {Math.round(entry.result.durationMs)}ms
-                  </Button>
-                ))}
-              </div>
-            ) : null}
             <ScheduleBoard
               rows={rows}
               changedRoomIds={changedRoomIds}
@@ -208,29 +230,47 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               shiftDirection={shiftDirection}
               activePlan={activePlan}
               searchQuery={operatorQuery}
+              viewControlsSlot={(
+                <ShiftTabs
+                  maaJson={result?.maa}
+                  rotation={result?.rotation}
+                  active={activeShift}
+                  closest={closestComparison?.planIndex}
+                  onChange={handleSetActiveShift}
+                />
+              )}
+              mobileActionsSlot={renderExportActions("mobile")}
               shiftInfoSlot={(
                 <div className="flex flex-wrap items-center justify-end gap-2 max-sm:w-full max-sm:justify-between">
                   {fiammettaTarget ? (
-                    <span className="flex h-9 items-center gap-2 border border-[#A91D2A]/35 bg-[#A91D2A]/10 px-2 text-xs" title={`菲亚梅塔恢复 ${fiammettaTarget}`}>
-                      <span className="size-7 shrink-0 overflow-hidden bg-[#272A2B]">
-                        {fiammettaPortrait ? <img src={fiammettaPortrait} alt="" className="size-full object-cover" /> : <HeartPulse className="m-1.5 size-4 text-[#A91D2A]" />}
+                    <span className="flex h-7 items-center gap-1 rounded-[min(var(--radius-md),12px)] border border-[#016E65]/30 bg-[#016E65]/10 px-2.5 text-[0.8rem] text-[#016E65] shadow-xs max-sm:h-11" title={`菲亚梅塔恢复 ${fiammettaTarget}`}>
+                      <span className="size-5 shrink-0 overflow-hidden rounded-full border border-[#016E65]/25 bg-[#272A2B]">
+                        {fiammettaPortrait ? <img src={fiammettaPortrait} alt="" className="size-full object-cover" /> : <HeartPulse className="m-1 size-3 text-[#016E65]" />}
                       </span>
-                      <span className="whitespace-nowrap"><span className="text-muted-foreground">换心情</span> {fiammettaTarget}</span>
+                      <span className="whitespace-nowrap"><span className="text-[#016E65]/70">换心情</span> {fiammettaTarget}</span>
                     </span>
                   ) : null}
-                  <Button type="button" size="icon-sm" variant="ghost" aria-label="查看快捷键" title="查看快捷键" onClick={() => setShortcutGuideOpen(true)}>
-                    <Keyboard />
-                  </Button>
-                  <ShiftTabs
-                    maaJson={result?.maa}
-                    rotation={result?.rotation}
-                    active={activeShift}
-                    closest={closestComparison?.planIndex}
-                    onChange={handleSetActiveShift}
-                  />
-                  <Button type="button" size="sm" variant="outline" disabled={!result?.maa} onClick={onDownloadMaa}>
-                    <Download />导出到 MAA
-                  </Button>
+                  {planHistory.length > 1 ? (
+                    <div className="flex min-w-0 items-center gap-2" aria-label="最近求解记录">
+                      <span className="shrink-0 text-xs font-medium text-muted-foreground">最近记录</span>
+                      <Tabs
+                        value={result?.diagnosticId ?? ""}
+                        onValueChange={(diagnosticId) => {
+                          const entry = planHistory.find((item) => item.result.diagnosticId === diagnosticId);
+                          if (entry) onRestorePlan(entry);
+                        }}
+                      >
+                        <TabsList>
+                          {planHistory.map((entry, index) => (
+                            <TabsTrigger key={entry.result.diagnosticId} value={entry.result.diagnosticId}>
+                              {index + 1}
+                            </TabsTrigger>
+                          ))}
+                        </TabsList>
+                      </Tabs>
+                    </div>
+                  ) : null}
+                  {renderExportActions("desktop")}
                 </div>
               )}
               onIssue={onMarkIssue}

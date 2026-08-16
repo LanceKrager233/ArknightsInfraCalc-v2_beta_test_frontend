@@ -637,7 +637,7 @@ export function ShiftTabs({
               aria-label={teamSummary ? `${label}，${teamSummary}` : label}
             >
               {label}
-              {closest === index ? <span className="rounded-full bg-primary/10 px-1.5 text-xs text-primary">最接近</span> : null}
+              {closest === index ? <span className="rounded-full bg-primary/10 px-1.5 text-xs text-primary max-md:hidden">最接近</span> : null}
             </TabsTrigger>
           );
         })}
@@ -1308,6 +1308,8 @@ export function ScheduleBoard({
   layout,
   planRevision,
   currentMoraleByOperator,
+  viewControlsSlot,
+  mobileActionsSlot,
   shiftInfoSlot,
   activeShift,
   shiftDirection = 0,
@@ -1323,6 +1325,8 @@ export function ScheduleBoard({
   layout: BaseBlueprint;
   planRevision?: string;
   currentMoraleByOperator?: ReadonlyMap<string, number>;
+  viewControlsSlot?: ReactNode;
+  mobileActionsSlot?: ReactNode;
   shiftInfoSlot?: ReactNode;
   activeShift: number;
   shiftDirection?: ShiftDirection;
@@ -1422,6 +1426,7 @@ export function ScheduleBoard({
       <div className="flex flex-wrap items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch">
         <div className="flex flex-wrap items-center gap-2">
           <Tabs
+            className="max-md:hidden"
             value={viewMode}
             onValueChange={(value) => {
               const nextViewMode = value as "list" | "compact";
@@ -1437,14 +1442,15 @@ export function ScheduleBoard({
               <TabsTrigger value="list">列表式布局</TabsTrigger>
             </TabsList>
           </Tabs>
+          {viewControlsSlot}
           {changedRoomIds.size ? <span className="text-xs text-amber-700">较上次求解变更 {changedRoomIds.size} 个房间</span> : null}
+          {viewMode === "list" && hiddenAuxiliaryCount ? (
+            <Button type="button" variant="ghost" size="sm" onClick={restoreHiddenAuxiliaryGroups}>
+              恢复已隐藏（<span className="font-number">{hiddenAuxiliaryCount}</span>）
+            </Button>
+          ) : null}
           {viewMode === "list" && auxiliaryGroups.length ? (
-            <div className="flex flex-wrap justify-end gap-2">
-              {hiddenAuxiliaryCount ? (
-                <Button type="button" variant="ghost" size="sm" onClick={restoreHiddenAuxiliaryGroups}>
-                  恢复已隐藏（<span className="font-number">{hiddenAuxiliaryCount}</span>）
-                </Button>
-              ) : null}
+            <div className="flex flex-wrap justify-end gap-2 max-md:w-full max-md:flex-nowrap max-md:items-center max-md:justify-between">
               <Button type="button" variant="outline" size="sm" onClick={toggleAuxiliaryGroups}>
                 <motion.span
                   className="flex size-4 items-center justify-center"
@@ -1456,8 +1462,9 @@ export function ScheduleBoard({
                 </motion.span>
                 {allAuxiliaryCollapsed ? "展开辅助设施" : "一键折叠辅助设施"}
               </Button>
+              {mobileActionsSlot ? <div className="min-w-0 flex-1 md:hidden">{mobileActionsSlot}</div> : null}
             </div>
-          ) : null}
+          ) : mobileActionsSlot ? <div className="w-full md:hidden">{mobileActionsSlot}</div> : null}
         </div>
         {shiftInfoSlot ? <div className="min-w-0 max-sm:w-full">{shiftInfoSlot}</div> : null}
       </div>

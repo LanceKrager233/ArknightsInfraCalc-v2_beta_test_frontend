@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronRight, Database, FileJson, ScanLine, Trash2, Upload } from "lucide-react";
+import { Check, Database, FileJson, ScanLine, Trash2, Upload } from "lucide-react";
+import { motion, useReducedMotion } from "motion/react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { RotationSettings } from "@/components/RotationSettings";
 import { FiammettaSettings } from "@/components/FiammettaSettings";
+import { WizardSteps } from "@/components/interior/wizard-steps";
 import { CLIENT_SKLAND_ENABLED } from "@/client-features";
 import { hasSetupConfigurationChanged } from "@/setup-configuration";
 
@@ -21,7 +23,8 @@ import { countOwned } from "./operbox";
 import type { SetupStep } from "./onboarding";
 import type { BaseBlueprint, BoxSource, DisplayError, OperBoxEntry, PresetDef, RotationProfile, SklandScheduleSnapshot } from "./types";
 
-type LayoutSection = "basics" | "facilities";
+const SETUP_STEP_ORDER: SetupStep[] = ["box", "layout", "facilities"];
+const PANEL_TRANSITION = { type: "spring", stiffness: 420, damping: 38, mass: 0.55 } as const;
 
 type SetupDialogProps = {
   open: boolean;
@@ -129,7 +132,7 @@ export function SetupDialog({
   onSkip,
 }: SetupDialogProps) {
   const [step, setStep] = useState<SetupStep>(initialStep);
-  const [layoutSection, setLayoutSection] = useState<LayoutSection>("basics");
+  const [stepDirection, setStepDirection] = useState(0);
   const [needsFacilityReview, setNeedsFacilityReview] = useState(false);
   const [showImportOptions, setShowImportOptions] = useState(false);
   const [showMaaPaste, setShowMaaPaste] = useState(false);
@@ -145,13 +148,14 @@ export function SetupDialog({
   const ownedCount = countOwned(operbox);
   const mustReviewFacilities = needsFacilityReview || !powerBudget.ok;
   const currentDataLabel = fileName || sourceLabel(boxSource);
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
     const justOpened = open && !wasOpenRef.current;
     wasOpenRef.current = open;
     if (!justOpened) return;
     setStep(initialStep);
-    setLayoutSection("basics");
+    setStepDirection(0);
     setNeedsFacilityReview(pendingExternalReviewRef.current);
     pendingExternalReviewRef.current = false;
     setShowImportOptions(!hasBox);
@@ -169,19 +173,23 @@ export function SetupDialog({
     window.requestAnimationFrame(() => ref.current?.focus());
   }
 
+  function moveToStep(nextStep: SetupStep) {
+    setStepDirection(SETUP_STEP_ORDER.indexOf(nextStep) - SETUP_STEP_ORDER.indexOf(step));
+    setStep(nextStep);
+  }
+
   function goToBox() {
-    setStep("box");
+    moveToStep("box");
     focusPanel(boxPanelRef);
   }
 
   function goToBasics() {
-    setStep("layout");
-    setLayoutSection("basics");
+    moveToStep("layout");
     focusPanel(basicsPanelRef);
   }
 
   function reviewFacilities() {
-    setLayoutSection("facilities");
+    moveToStep("facilities");
     setNeedsFacilityReview(false);
     focusPanel(facilitiesPanelRef);
   }
@@ -225,12 +233,6 @@ export function SetupDialog({
     goToBasics();
   }
 
-  function handleLayoutSectionChange(value: string) {
-    if (value !== "basics" && value !== "facilities") return;
-    setLayoutSection(value);
-    if (value === "facilities") setNeedsFacilityReview(false);
-  }
-
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => {
       if (!nextOpen && configurationChanged) {
@@ -241,12 +243,11 @@ export function SetupDialog({
     }}>
       <DialogContent data-setup-dialog className="max-h-[min(820px,calc(100dvh-1rem))] max-w-[calc(100%-1rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-[24px] p-0 sm:max-w-[min(880px,calc(100%-2rem))] sm:rounded-[32px]">
         <Tabs
-          value={step}
+          value={step === "facilities" ? "layout" : step}
           onValueChange={(value) => {
-            if (value === "box") setStep("box");
+            if (value === "box") moveToStep("box");
             if (value === "layout" && hasBox) {
-              setStep("layout");
-              setLayoutSection("basics");
+              moveToStep("layout");
             }
           }}
           className="contents"
@@ -256,38 +257,35 @@ export function SetupDialog({
               <DialogTitle>排班设置</DialogTitle>
               {configurationChanged ? <span className="border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">配置已修改</span> : null}
             </div>
-            <TabsList
-              data-setup-step-list
-              variant="line"
-              aria-label="设置步骤"
-              className="setup-step-list mt-1 flex w-fit max-w-full items-center justify-start gap-0 p-0"
-            >
-              <TabsTrigger
-                value="box"
-                className={`setup-step-trigger h-9 min-h-0 flex-none justify-start rounded-none border-0 px-0.5 py-0 text-base font-semibold after:hidden sm:px-0.5 ${step === "layout" && hasBox ? "text-emerald-700 hover:text-emerald-700" : ""}`}
-              >
-                干员数据
-              </TabsTrigger>
-              <ChevronRight className="mx-1 size-3.5 shrink-0 text-muted-foreground/55" aria-hidden="true" />
-              <TabsTrigger
-                value="layout"
-                disabled={!hasBox}
-                className="setup-step-trigger h-9 min-h-0 flex-none justify-start rounded-none border-0 px-0.5 py-0 text-base font-semibold after:hidden sm:px-0.5"
-              >
-                基建与换班
-              </TabsTrigger>
-            </TabsList>
+            <WizardSteps
+              steps={[
+                { id: "box", label: "干员数据" },
+                { id: "layout", label: "布局" },
+                { id: "facilities", label: "设施" },
+              ]}
+              value={step}
+              onValueChange={(value) => {
+                if (value === "box") goToBox();
+                if (value === "layout" && hasBox) goToBasics();
+                if (value === "facilities" && hasBox) reviewFacilities();
+              }}
+              className="mt-3"
+            />
           </div>
 
           <TabsContent value="box" className="min-h-0 overflow-hidden overscroll-contain">
-            <ScrollArea className="h-full">
-              <div
+            <ScrollArea className="h-full" viewportClassName="overflow-x-hidden">
+              <motion.div
+                key={`box-${step}`}
                 ref={boxPanelRef}
                 data-setup-box-content
                 role="region"
                 aria-label="干员数据"
                 tabIndex={-1}
                 className="grid w-full gap-4 px-4 py-4 outline-none sm:px-7 sm:py-6"
+                initial={reducedMotion ? false : { x: stepDirection * 28, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                transition={reducedMotion ? { duration: 0 } : PANEL_TRANSITION}
               >
                 {hasBox ? (
                   <section className="setup-data-summary flex min-w-0 items-center justify-between gap-4 px-4 py-3.5" aria-labelledby="setup-current-data-title">
@@ -414,32 +412,28 @@ export function SetupDialog({
                     </Button>
                   </div>
                 </details>
-              </div>
+              </motion.div>
             </ScrollArea>
           </TabsContent>
 
           <TabsContent value="layout" className="min-h-0 overflow-hidden overscroll-contain">
             <Tabs
-              value={layoutSection}
-              onValueChange={handleLayoutSectionChange}
-              className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-0"
+              value={step === "facilities" ? "facilities" : "basics"}
+              className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)] gap-0"
             >
-              <div className="px-4 pb-3 pt-1 sm:px-7">
-                <TabsList variant="line" className="w-full justify-start gap-5 p-0 sm:w-fit" aria-label="基建设置内容">
-                  <TabsTrigger value="basics" className="min-h-10 flex-none px-0 text-[13px] sm:px-0">布局与换班</TabsTrigger>
-                  <TabsTrigger value="facilities" className="min-h-10 flex-none px-0 text-[13px] sm:px-0">设施设置</TabsTrigger>
-                </TabsList>
-              </div>
-
               <TabsContent value="basics" className="min-h-0 overflow-hidden">
-                <ScrollArea className="h-full">
-                  <div
+                <ScrollArea className="h-full" viewportClassName="overflow-x-hidden">
+                  <motion.div
+                    key={`layout-${step}`}
                     ref={basicsPanelRef}
                     data-setup-layout-basics
                     role="region"
                     aria-label="布局与换班"
                     tabIndex={-1}
                     className="grid gap-6 px-4 py-5 outline-none sm:px-7 sm:py-6"
+                    initial={reducedMotion ? false : { x: stepDirection * 28, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={reducedMotion ? { duration: 0 } : PANEL_TRANSITION}
                   >
                     <section className="grid gap-3" aria-labelledby="setup-preset-title">
                       <h3 id="setup-preset-title" className="text-sm font-semibold">布局预设</h3>
@@ -490,19 +484,23 @@ export function SetupDialog({
                       </div>
                     </details>
                     {inputError ? <p id="setup-layout-error" className="text-sm text-destructive" role="alert">{inputError}</p> : null}
-                  </div>
+                  </motion.div>
                 </ScrollArea>
               </TabsContent>
 
               <TabsContent value="facilities" className="min-h-0 overflow-hidden">
-                <ScrollArea className="h-full">
-                  <div
+                <ScrollArea className="h-full" viewportClassName="overflow-x-hidden">
+                  <motion.div
+                    key={`facilities-${step}`}
                     ref={facilitiesPanelRef}
                     data-setup-facilities
                     role="region"
                     aria-label="设施设置"
                     tabIndex={-1}
                     className="px-4 py-5 outline-none sm:px-7 sm:py-6"
+                    initial={reducedMotion ? false : { x: stepDirection * 28, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={reducedMotion ? { duration: 0 } : PANEL_TRANSITION}
                   >
                     <LayoutEditor
                       layout={layout}
@@ -511,7 +509,7 @@ export function SetupDialog({
                       onRoomLevelChange={onRoomLevelChange}
                     />
                     {inputError ? <p className="mt-3 text-sm text-destructive" role="alert">{inputError}</p> : null}
-                  </div>
+                  </motion.div>
                 </ScrollArea>
               </TabsContent>
             </Tabs>
@@ -524,23 +522,17 @@ export function SetupDialog({
               <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={onSkip}>稍后</Button>
               <Button size="dialog" type="button" disabled={!hasBox} onClick={goToBasics}>继续</Button>
             </>
-          ) : layoutSection === "basics" ? (
+          ) : step === "layout" ? (
             <>
               <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={goToBox}>返回</Button>
-              {mustReviewFacilities ? (
-                <Button size="dialog" type="button" onClick={reviewFacilities}>检查设施</Button>
-              ) : (
-                <Button size="dialog" type="button" onClick={onFinish}><Check />完成</Button>
-              )}
+              <Button size="dialog" type="button" onClick={reviewFacilities}>
+                {mustReviewFacilities ? "检查设施" : "继续"}
+              </Button>
             </>
           ) : (
             <>
-              <Button className="shrink-0 px-4 max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={goToBasics}>
-                <span className="sm:hidden">返回</span>
-                <span className="max-sm:hidden">返回布局</span>
-              </Button>
               <span
-                className={`min-w-0 flex-1 truncate text-right text-xs tabular-nums sm:text-sm ${powerBudget.ok ? "text-emerald-700" : "text-red-600"}`}
+                className={`mr-auto min-w-0 truncate text-left text-xs tabular-nums sm:text-sm ${powerBudget.ok ? "text-emerald-700" : "text-red-600"}`}
                 role="status"
               >
                 <span className={`sm:hidden ${powerBudget.ok ? "text-emerald-700" : "text-red-600"}`}>
@@ -552,6 +544,7 @@ export function SetupDialog({
                     : `电力不足 ${powerBudget.consumed - powerBudget.generated} · ${powerBudget.generated}/${powerBudget.consumed}`}
                 </span>
               </span>
+              <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={goToBasics}>返回</Button>
               <Button className="shrink-0" size="dialog" type="button" disabled={!powerBudget.ok} onClick={onFinish}><Check />完成</Button>
             </>
           )}

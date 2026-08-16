@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CLIENT_SKLAND_ENABLED } from "@/client-features";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar, type AppPage } from "@/components/layout/AppSidebar";
-import { AppTopBar } from "@/components/layout/AppTopBar";
+import { AppTopBar, SklandAccountControl } from "@/components/layout/AppTopBar";
 import { InfraCalculator } from "@/components/pages/InfraCalculator";
 import { SkillQuery } from "@/components/pages/SkillQuery";
 import { SklandStatus } from "@/components/pages/SklandStatus";
@@ -1173,14 +1173,7 @@ function WorkbenchApp() {
     <SidebarProvider defaultOpen={false}>
       <AppSidebar page={page} onPageChange={setPage} />
       <SidebarInset>
-        <AppTopBar
-          {...(CLIENT_SKLAND_ENABLED ? {
-            account: activeSklandAccount,
-            statusSnapshot: sklandStatusSnapshot,
-            sessionLoading: sklandSessionLoading,
-            onOpenSkland: () => setPage("skland" as const),
-          } : {})}
-        />
+        <AppTopBar />
         <LiveActivity
           activity={activity}
           onRetry={() => void handleRetry()}
@@ -1189,7 +1182,7 @@ function WorkbenchApp() {
           }}
         />
 
-      <div className="app-content-track py-4">
+      <div className="app-content-track py-4" data-app-content>
       {page === "calculator" ? (
         <InfraCalculator
           layout={layout}
@@ -1212,6 +1205,14 @@ function WorkbenchApp() {
           loading={loading}
           canRun={canRun}
           plannerReady={cliReady}
+          accountControl={CLIENT_SKLAND_ENABLED ? (
+            <SklandAccountControl
+              account={activeSklandAccount}
+              statusSnapshot={sklandStatusSnapshot}
+              sessionLoading={sklandSessionLoading}
+              onOpenSkland={() => setPage("skland" as const)}
+            />
+          ) : undefined}
           onLoadSample={handleLoadSample}
           onOpenSetup={openSetup}
           onRun={handleRun}

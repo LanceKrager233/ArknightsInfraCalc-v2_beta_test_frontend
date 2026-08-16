@@ -48,7 +48,7 @@ export function SkillQuery() {
   }
 
   return (
-    <section className="min-w-0" aria-label="技能查询">
+    <section className="min-w-0 pt-5" aria-label="技能查询" data-skill-query-page>
       <div className="mb-2 flex min-w-0 items-center gap-2.5">
         <span className="h-7 w-1.5 shrink-0 bg-[#FFD501]" aria-hidden="true" />
         <h1 className="truncate text-[21px] font-medium leading-none">技能查询</h1>

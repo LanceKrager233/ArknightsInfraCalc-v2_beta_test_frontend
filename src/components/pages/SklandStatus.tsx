@@ -670,7 +670,11 @@ function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
             : "grid flex-1 content-between gap-2"
         }`}
       >
-        <div className={`flex flex-wrap items-start gap-3 ${isPowerRoom ? "justify-end max-sm:justify-start" : ""}`}>
+        <div
+          className={`flex flex-wrap items-start gap-3 max-sm:grid max-sm:w-full max-sm:grid-cols-5 max-sm:gap-1.5 max-sm:[&_.infra-operator-slot]:w-full max-sm:[&_.infra-operator-slot]:[--operator-slot-size:clamp(48px,calc((100vw-72px)/5),64px)] ${
+            isPowerRoom ? "justify-end max-sm:justify-start" : ""
+          }`}
+        >
           {room.operators.length ? room.operators.map((operator) => (
             <OperatorSlot
               key={`${room.key}-${operator.id}`}
@@ -1341,7 +1345,7 @@ export function ProgressTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
 
 function LoadingState() {
   return (
-    <div className="grid gap-5" role="status" aria-label="正在恢复森空岛会话">
+    <div className="grid gap-5 pt-5" role="status" aria-label="正在恢复森空岛会话" data-skland-page>
       <Skeleton className="h-32 w-full rounded-xl" />
       <div className="grid gap-3 md:grid-cols-3">
         <Skeleton className="h-36 rounded-xl" />
@@ -1380,7 +1384,7 @@ export function SklandStatus({
 
   if (!scheduleSnapshot) {
     return (
-      <div className="grid gap-6 py-2 sm:py-5">
+      <div className="grid gap-6 pt-5 pb-2 sm:pb-5" data-skland-page>
         <header className="max-w-2xl">
           <p className="text-xs font-medium tracking-wide text-primary">森空岛状态中心</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight">把当前罗德岛带进排班助手</h2>
@@ -1405,7 +1409,7 @@ export function SklandStatus({
   if (!snapshot && activeAccount) {
     if (!error) return <LoadingState />;
     return (
-      <div className="grid gap-6 py-2 sm:py-5" data-skland-status-load-error>
+      <div className="grid gap-6 pt-5 pb-2 sm:pb-5" data-skland-page data-skland-status-load-error>
         <header className="max-w-2xl">
           <p className="text-xs font-medium tracking-wide text-primary">森空岛状态中心</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight">完整状态暂时无法加载</h2>
@@ -1457,7 +1461,7 @@ export function SklandStatus({
   const selectedItem = selectionItems.find((item) => item.value === selectedValue) ?? null;
 
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-6 pt-5" data-skland-page>
       <header
         className="grid gap-5 border-b border-border/70 pb-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end"
         data-ui-number-font

@@ -6,6 +6,7 @@ import { Check, HeartPulse, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { operatorBuildingSkillList, operatorPortraitFor } from "@/operatorPortraits";
 import { isFiammettaTargetAvailable } from "@/fiammetta-settings";
 import type { OperBoxEntry } from "@/types";
@@ -109,7 +110,8 @@ export function FiammettaSettings({ enabled, target, order, operbox, scheduledOp
               <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索干员" className="h-11 pl-9" autoFocus />
             </div>
           </DialogBody>
-          <div className="min-h-0 overflow-y-auto px-5 sm:px-7">
+          <ScrollArea className="min-h-0" viewportClassName="overflow-x-hidden">
+            <div className="px-5 sm:px-7">
             <div className="grid grid-cols-[repeat(auto-fill,minmax(82px,1fr))] gap-2 pb-2">
               {filtered.map((operator) => (
                 <button
@@ -126,7 +128,8 @@ export function FiammettaSettings({ enabled, target, order, operbox, scheduledOp
               ))}
             </div>
             {!filtered.length ? <p className="py-10 text-center text-sm text-muted-foreground">没有匹配的干员</p> : null}
-          </div>
+            </div>
+          </ScrollArea>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>取消</Button>
           </DialogFooter>
