@@ -55,6 +55,7 @@ import {
 } from "./persistence";
 import { planToRows, RoomRow } from "./schedule";
 import { DEFAULT_ROTATION_PROFILE } from "./rotation-settings";
+import { readPlanHistory, writePlanHistory, type PlanHistoryEntry } from "./plan-history";
 import { SetupDialog } from "./setup-dialog";
 import { closestShift, compareShifts } from "./skland";
 import { setupConfigurationFingerprint } from "./setup-configuration";
@@ -233,6 +234,7 @@ function WorkbenchApp() {
   const [sampleLoading, setSampleLoading] = useState(false);
   const [result, setResult] = useState<PublicPlanData | null>(null);
   const [previousResult, setPreviousResult] = useState<PublicPlanData | null>(null);
+  const [planHistory, setPlanHistory] = useState<PlanHistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const planAbortRef = useRef<AbortController | null>(null);
   const [cliReady, setCliReady] = useState(false);
@@ -317,6 +319,16 @@ function WorkbenchApp() {
     window.addEventListener("popstate", syncBetaPanels);
     return () => window.removeEventListener("popstate", syncBetaPanels);
   }, []);
+
+  useEffect(() => setPlanHistory(readPlanHistory(window.localStorage)), []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && loading) planAbortRef.current?.abort();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [loading]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -651,17 +663,24 @@ function WorkbenchApp() {
         eligibleTargets: responseTargets,
       });
       setPreviousResult(result);
-      setResult({
+      const finalizedResult = {
         ...response,
         maa: applyFiammettaSettings(response.maa, {
           enabled: fiammettaEnabled && !fiammettaError,
           target: fiammettaTarget,
           order: fiammettaOrder,
         }),
-      });
+      };
+      setResult(finalizedResult);
       if (fiammettaError && fiammettaEnabled) {
         setApiError(displayError("AIC-BOX-1101", `${fiammettaError} 本次结果未写入菲亚梅塔换人。`));
       }
+      setPlanHistory((current) => {
+        const compact = { ...finalizedResult, debug: undefined };
+        const next = [{ savedAt: new Date().toISOString(), result: compact }, ...current.filter((entry) => entry.result.diagnosticId !== response.diagnosticId)].slice(0, 5);
+        try { writePlanHistory(window.localStorage, next); } catch { /* Keep history in memory when storage is full. */ }
+        return next;
+      });
       if (response.maa.plans[0]) {
         const plan = response.maa.plans[0];
         const maaFactoryRooms = plan.rooms?.manufacture;
@@ -697,6 +716,12 @@ function WorkbenchApp() {
     planAbortRef.current?.abort();
     planAbortRef.current = null;
     setLoading(false);
+  }
+
+  function handleRestorePlan(entry: PlanHistoryEntry) {
+    setPreviousResult(result);
+    setResult(entry.result);
+    setActiveShift(0);
   }
 
   async function handleRun() {
@@ -1165,6 +1190,7 @@ function WorkbenchApp() {
           activeShift={activeShift}
           rows={rows}
           changedRoomIds={changedRoomIds}
+          planHistory={planHistory}
           currentMoraleByOperator={currentMoraleByOperator}
           activePlan={activePlan}
           closestComparison={closestComparison}
@@ -1182,6 +1208,7 @@ function WorkbenchApp() {
           onOpenSetup={openSetup}
           onRun={handleRun}
           onCancelRun={handleCancelRun}
+          onRestorePlan={handleRestorePlan}
           onRetry={() => void handleRetry()}
           onCopyDiagnostic={() => {
             if (statusError) void copyText(`${statusError.code}${statusError.requestId ? ` · ${statusError.requestId}` : ""}`);

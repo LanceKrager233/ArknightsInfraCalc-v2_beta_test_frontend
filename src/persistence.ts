@@ -108,7 +108,7 @@ function validOperbox(value: unknown): value is OperBoxEntry[] {
     );
 }
 
-function safeResult(value: unknown, fallbackProfile: RotationProfile): PublicPlanData | null {
+export function normalizePersistedPlanData(value: unknown, fallbackProfile: RotationProfile): PublicPlanData | null {
   if (!isObject(value)) return null;
 
   const profile = (value.profile ?? value.profileJson) as UserProfile | undefined;
@@ -167,7 +167,7 @@ function normalizeSession(value: unknown, now: number): PersistedSessionV5 | nul
         : null;
   const hasLegacySklandIdentity = boxSource === "skland" && rawSourceName?.startsWith("skland:");
   const rotationProfile = normalizeRotationProfile(value.rotationProfile);
-  const result = hasLegacySklandIdentity ? null : safeResult(value.result, rotationProfile);
+  const result = hasLegacySklandIdentity ? null : normalizePersistedPlanData(value.result, rotationProfile);
   const layoutDirty = Boolean(value.layoutDirty);
   return {
     version: 5,
@@ -231,7 +231,7 @@ export function persistSession(
 ): PersistedSessionV5 {
   const hasLegacySklandIdentity =
     input.boxSource === "skland" && input.sourceName?.startsWith("skland:");
-  const result = hasLegacySklandIdentity ? null : safeResult(input.result, input.rotationProfile);
+  const result = hasLegacySklandIdentity ? null : normalizePersistedPlanData(input.result, input.rotationProfile);
   const value: PersistedSessionV5 = {
     ...input,
     localLayoutBackup: input.localLayoutBackup ? structuredClone(input.localLayoutBackup) : null,
