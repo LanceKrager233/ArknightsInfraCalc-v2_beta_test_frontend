@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, FileJson, FlaskConical, Loader2, Settings2, Terminal } from "lucide-react";
+import { Download, FileJson, FlaskConical, HeartPulse, Loader2, Settings2, Terminal } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import {
 } from "@/components";
 import { PlanResultSummary } from "@/components/PlanResultSummary";
 import type { ShiftDirection } from "@/motion";
+import { operatorPortraitFor } from "@/operatorPortraits";
 import type { RoomRow } from "@/schedule";
 import type {
   BaseBlueprint,
@@ -82,6 +83,10 @@ export function InfraCalculator(props: InfraCalculatorProps) {
   const [scheduleViewMode, setScheduleViewMode] = useState<"list" | "compact">("list");
   const [shiftDirection, setShiftDirection] = useState<ShiftDirection>(0);
   const showBetaSidebar = showBetaPanels && scheduleViewMode === "list";
+  const fiammettaTarget = activePlan?.Fiammetta?.enable
+    ? (Array.isArray(activePlan.Fiammetta.target) ? activePlan.Fiammetta.target[0] : activePlan.Fiammetta.target)
+    : undefined;
+  const fiammettaPortrait = fiammettaTarget ? operatorPortraitFor(fiammettaTarget) : null;
   const handleSetActiveShift = (nextShift: number) => {
     setShiftDirection(nextShift === activeShift ? 0 : nextShift > activeShift ? 1 : -1);
     onSetActiveShift(nextShift);
@@ -157,6 +162,14 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               activePlan={activePlan}
               shiftInfoSlot={(
                 <div className="flex flex-wrap items-center justify-end gap-2 max-sm:w-full max-sm:justify-between">
+                  {fiammettaTarget ? (
+                    <span className="flex h-9 items-center gap-2 border border-[#A91D2A]/35 bg-[#A91D2A]/10 px-2 text-xs" title={`菲亚梅塔恢复 ${fiammettaTarget}`}>
+                      <span className="size-7 shrink-0 overflow-hidden bg-[#272A2B]">
+                        {fiammettaPortrait ? <img src={fiammettaPortrait} alt="" className="size-full object-cover" /> : <HeartPulse className="m-1.5 size-4 text-[#A91D2A]" />}
+                      </span>
+                      <span className="whitespace-nowrap"><span className="text-muted-foreground">换心情</span> {fiammettaTarget}</span>
+                    </span>
+                  ) : null}
                   <ShiftTabs
                     maaJson={result?.maa}
                     rotation={result?.rotation}
