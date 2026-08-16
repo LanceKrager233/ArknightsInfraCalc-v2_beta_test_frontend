@@ -1213,17 +1213,30 @@ test("Skland calculator keeps the schedule visible before and after sidebar navi
   const comparisonSheet = page.locator('[data-slot="drawer-content"]');
   await expect(comparisonSheet.locator("[data-plan-details-section]")).toHaveAttribute("data-plan-details-section", "comparison");
   await expect(comparisonSheet.locator("[data-shift-comparison-details]")).toBeVisible();
-  const comparisonTable = comparisonSheet.getByRole("table", { name: "干员房间调整" });
-  await expect(comparisonTable).toBeVisible();
-  await expect(comparisonTable.getByRole("columnheader")).toHaveText(["操作", "干员", "当前房间", "目标房间"]);
-  const adjustmentNames = await comparisonTable.locator("tbody tr td:nth-child(2)").allTextContents();
-  expect(new Set(adjustmentNames).size).toBe(adjustmentNames.length);
-  const tableColumnOffsets = await comparisonTable.evaluate((table) => {
-    const headers = Array.from(table.querySelectorAll("th"));
-    const firstRowCells = Array.from(table.querySelectorAll("tbody tr:first-child td"));
-    return headers.map((header, index) => Math.abs(header.getBoundingClientRect().x - firstRowCells[index].getBoundingClientRect().x));
-  });
-  expect(tableColumnOffsets.every((offset) => offset < 0.5)).toBe(true);
+  const desktopAdjustmentGroups = comparisonSheet.locator("[data-desktop-adjustment-groups]");
+  await expect(desktopAdjustmentGroups).toBeVisible();
+  await expect(desktopAdjustmentGroups.getByRole("heading", { level: 4 })).toContainText(["需换出", "需换入", "位置调整"]);
+  const mobileIssueTone = { unexpected: "bg-amber-100", missing: "bg-sky-100", misplaced: "bg-zinc-200" } as const;
+  for (const issue of ["unexpected", "missing", "misplaced"] as const) {
+    const group = desktopAdjustmentGroups.locator(`[data-adjustment-group="${issue}"]`);
+    const declaredCount = Number((await group.locator(".font-number").textContent())?.match(/\d+/)?.[0] ?? 0);
+    const table = group.locator(`[data-desktop-adjustment-table="${issue}"]`);
+    if (declaredCount === 0) {
+      await expect(table).toHaveCount(0);
+      await expect(group.getByText("无", { exact: true })).toBeVisible();
+      continue;
+    }
+    await expect(table.locator("tbody tr")).toHaveCount(declaredCount);
+    const tableColumnOffsets = await table.evaluate((element) => {
+      const headers = Array.from(element.querySelectorAll("th"));
+      const firstRowCells = Array.from(element.querySelectorAll("tbody tr:first-child td"));
+      return headers.map((header, index) => Math.abs(header.getBoundingClientRect().x - firstRowCells[index].getBoundingClientRect().x));
+    });
+    expect(tableColumnOffsets.every((offset) => offset < 0.5)).toBe(true);
+  }
+  const desktopRoomLabels = desktopAdjustmentGroups.locator("[data-room-label]");
+  await expect(desktopRoomLabels.first()).toBeVisible();
+  await expect(desktopRoomLabels.first()).toHaveCSS("border-style", "solid");
 
   await page.setViewportSize({ width: 390, height: 844 });
   const mobileAdjustmentGroups = comparisonSheet.locator("[data-mobile-adjustment-groups]");
@@ -1233,8 +1246,10 @@ test("Skland calculator keeps the schedule visible before and after sidebar navi
     const group = mobileAdjustmentGroups.locator(`[data-adjustment-group="${issue}"]`);
     const declaredCount = Number((await group.locator(".font-number").textContent())?.match(/\d+/)?.[0] ?? 0);
     await expect(group.locator("li strong")).toHaveCount(declaredCount);
+    await expect(group.getByRole("heading", { level: 4 }).locator("span")).toHaveClass(new RegExp(mobileIssueTone[issue]));
     if (declaredCount === 0) await expect(group.getByText("无", { exact: true })).toBeVisible();
   }
+  await expect(mobileAdjustmentGroups.locator("[data-room-label]").first()).toBeVisible();
   const mobileComparisonWidth = await mobileAdjustmentGroups.evaluate((element) => ({ client: element.clientWidth, scroll: element.scrollWidth }));
   expect(mobileComparisonWidth.scroll).toBeLessThanOrEqual(mobileComparisonWidth.client);
   await page.setViewportSize({ width: 1440, height: 900 });
