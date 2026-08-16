@@ -45,26 +45,24 @@ function RoomLabel({ roomKey }: { roomKey: string | null }) {
   const accent = roomLightAccentFor(room.group);
   const style = {
     "--comparison-room-accent": accent,
-    backgroundColor: `color-mix(in srgb, ${accent} 12%, white)`,
-    borderColor: `color-mix(in srgb, ${accent} 48%, #d4d4d8)`,
   } as CSSProperties;
 
   return (
     <span
-      className="inline-flex max-w-full items-center gap-1.5 border px-2 py-1 text-xs font-medium text-zinc-800"
+      className="inline-flex min-w-0 max-w-full items-center gap-1.5 text-xs font-medium text-zinc-800"
       data-room-label
       data-room-group={room.group}
       style={style}
     >
-      <span className="size-1.5 shrink-0 bg-[var(--comparison-room-accent)]" aria-hidden="true" />
+      <span className="h-3 w-1 shrink-0 bg-[var(--comparison-room-accent)]" data-room-indicator aria-hidden="true" />
       <span className="truncate">{room.label}</span>
     </span>
   );
 }
 
-function OperatorName({ adjustment }: { adjustment: ShiftAdjustment }) {
+function OperatorName({ adjustment, className }: { adjustment: ShiftAdjustment; className?: string }) {
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+    <div className={cn("flex min-w-0 flex-wrap items-center gap-1.5", className)}>
       <strong className="min-w-0 truncate">{adjustment.operator}</strong>
       {adjustment.issues.includes("tired") ? <IssueLabel issue="tired" /> : null}
     </div>
@@ -106,13 +104,14 @@ function MobileAdjustmentGroups({ adjustments, reduceMotion }: { adjustments: Sh
                 {items.map((adjustment, index) => (
                   <motion.li
                     key={adjustment.operator}
-                    className="min-w-0 bg-muted/45 px-3 py-3"
+                    className="flex min-w-0 items-center gap-3 bg-muted/45 px-3 py-3"
+                    data-mobile-adjustment-row
                     initial={{ opacity: 0, y: reduceMotion ? 0 : 4 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: reduceMotion ? 0 : MOTION_DURATION.content, delay: reduceMotion ? 0 : index * 0.035, ease: MOTION_EASE_OUT }}
                   >
-                    <OperatorName adjustment={adjustment} />
-                    <div className="mt-2 text-xs text-muted-foreground"><ActionDescription adjustment={adjustment} issue={issue} /></div>
+                    <OperatorName adjustment={adjustment} className="max-w-[38%] shrink-0 text-sm" />
+                    <div className="ml-auto min-w-0 text-xs text-muted-foreground" data-mobile-adjustment-action><ActionDescription adjustment={adjustment} issue={issue} /></div>
                   </motion.li>
                 ))}
               </ul>
