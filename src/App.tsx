@@ -57,6 +57,7 @@ import { planToRows, RoomRow } from "./schedule";
 import { DEFAULT_ROTATION_PROFILE } from "./rotation-settings";
 import { SetupDialog } from "./setup-dialog";
 import { closestShift, compareShifts } from "./skland";
+import { setupConfigurationFingerprint } from "./setup-configuration";
 import { applyFiammettaSettings, scheduledOperatorNames, validateFiammettaExport } from "./fiammetta-settings";
 import { operatorBuildingSkillList } from "./operatorPortraits";
 import {
@@ -231,7 +232,9 @@ function WorkbenchApp() {
   const [inputErrorCode, setInputErrorCode] = useState<DisplayError["code"]>("AIC-BOX-1101");
   const [sampleLoading, setSampleLoading] = useState(false);
   const [result, setResult] = useState<PublicPlanData | null>(null);
+  const [previousResult, setPreviousResult] = useState<PublicPlanData | null>(null);
   const [loading, setLoading] = useState(false);
+  const planAbortRef = useRef<AbortController | null>(null);
   const [cliReady, setCliReady] = useState(false);
   const [apiError, setApiError] = useState<DisplayError | null>(null);
   const [storageNotice, setStorageNotice] = useState<DisplayError | null>(null);
@@ -259,6 +262,19 @@ function WorkbenchApp() {
       .map((operator) => operator.name)
   ), [operbox, scheduledOperators]);
   const ownsFiammetta = Boolean(operbox?.some((operator) => operator.own && operator.name === "菲亚梅塔"));
+  const setupConfigurationKey = useMemo(() => setupConfigurationFingerprint({
+    layout,
+    rotationProfile,
+    fiammettaEnabled,
+    fiammettaTarget,
+    fiammettaOrder,
+  }), [fiammettaEnabled, fiammettaOrder, fiammettaTarget, layout, rotationProfile]);
+  const changedRoomIds = useMemo(() => {
+    const previousPlan = previousResult?.maa.plans?.[activeShift];
+    if (!previousPlan || !activePlan) return new Set<string>();
+    const before = new Map(planToRows(previousPlan, previousResult?.rotation.shifts?.[activeShift], layout).map((row) => [row.roomId, JSON.stringify([row.operators, row.efficiency])]));
+    return new Set(rows.filter((row) => before.get(row.roomId) !== JSON.stringify([row.operators, row.efficiency])).map((row) => row.roomId));
+  }, [activePlan, activeShift, layout, previousResult, rows]);
   const currentMoraleByOperator = useMemo(() => {
     if (!CLIENT_SKLAND_ENABLED || boxSource !== "skland" || !sklandScheduleSnapshot) return undefined;
 
@@ -605,6 +621,9 @@ function WorkbenchApp() {
       return;
     }
     setLoading(true);
+    const controller = new AbortController();
+    planAbortRef.current?.abort();
+    planAbortRef.current = controller;
     setResultClearNotice(null);
     setInputError(null);
     setApiError(null);
@@ -617,7 +636,7 @@ function WorkbenchApp() {
         sourceName: fileName,
         boxSource,
         rotation: rotationProfile,
-      });
+      }, controller.signal);
       setCliReady(true);
       setActiveShift(0);
       const responseScheduledOperators = scheduledOperatorNames(response.maa);
@@ -631,6 +650,7 @@ function WorkbenchApp() {
         ownsFiammetta,
         eligibleTargets: responseTargets,
       });
+      setPreviousResult(result);
       setResult({
         ...response,
         maa: applyFiammettaSettings(response.maa, {
@@ -663,10 +683,20 @@ function WorkbenchApp() {
         }
       }
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
       setApiError(toDisplayError(error, "排班请求失败，请稍后重试。"));
     } finally {
-      setLoading(false);
+      if (planAbortRef.current === controller) {
+        planAbortRef.current = null;
+        setLoading(false);
+      }
     }
+  }
+
+  function handleCancelRun() {
+    planAbortRef.current?.abort();
+    planAbortRef.current = null;
+    setLoading(false);
   }
 
   async function handleRun() {
@@ -742,7 +772,13 @@ function WorkbenchApp() {
       return;
     }
 
-    const issue = { row: issueDraftRow, note: issueDraftNote.trim() };
+    const environment = [
+      `求解耗时：${Math.round(result.durationMs)} ms`,
+      `班次：${activeShift + 1}`,
+      `换班方式：${rotationProfile}`,
+      `布局：${preset.label}`,
+    ].join("；");
+    const issue = { row: issueDraftRow, note: `${issueDraftNote.trim()}\n\n[运行环境] ${environment}` };
 
     setFeedbackSaving(true);
     setFeedbackError(null);
@@ -1128,6 +1164,7 @@ function WorkbenchApp() {
           scheduleResult={scheduleResult}
           activeShift={activeShift}
           rows={rows}
+          changedRoomIds={changedRoomIds}
           currentMoraleByOperator={currentMoraleByOperator}
           activePlan={activePlan}
           closestComparison={closestComparison}
@@ -1144,6 +1181,7 @@ function WorkbenchApp() {
           onLoadSample={handleLoadSample}
           onOpenSetup={openSetup}
           onRun={handleRun}
+          onCancelRun={handleCancelRun}
           onRetry={() => void handleRetry()}
           onCopyDiagnostic={() => {
             if (statusError) void copyText(`${statusError.code}${statusError.requestId ? ` · ${statusError.requestId}` : ""}`);
@@ -1231,6 +1269,7 @@ function WorkbenchApp() {
         presets={PRESETS}
         preset={preset}
         layout={layout}
+        configurationKey={setupConfigurationKey}
         rotationProfile={rotationProfile}
         onRotationProfileChange={handleRotationProfileChange}
         fiammettaEnabled={fiammettaEnabled}

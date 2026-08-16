@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { RotationSettings } from "@/components/RotationSettings";
 import { FiammettaSettings } from "@/components/FiammettaSettings";
 import { CLIENT_SKLAND_ENABLED } from "@/client-features";
+import { hasSetupConfigurationChanged } from "@/setup-configuration";
 
 import type { FactoryRecipe, PowerBudget, TradeOrder } from "./blueprint";
 import { FileDrop, LayoutEditor, PresetSelector } from "./components";
@@ -45,6 +46,7 @@ type SetupDialogProps = {
   presets: PresetDef[];
   preset: PresetDef;
   layout: BaseBlueprint;
+  configurationKey: string;
   rotationProfile: RotationProfile;
   onRotationProfileChange: (value: RotationProfile) => void;
   fiammettaEnabled: boolean;
@@ -103,6 +105,7 @@ export function SetupDialog({
   presets,
   preset,
   layout,
+  configurationKey,
   rotationProfile,
   onRotationProfileChange,
   fiammettaEnabled,
@@ -131,6 +134,8 @@ export function SetupDialog({
   const [showImportOptions, setShowImportOptions] = useState(false);
   const [showMaaPaste, setShowMaaPaste] = useState(false);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
+  const [openingConfigurationKey, setOpeningConfigurationKey] = useState(configurationKey);
   const wasOpenRef = useRef(false);
   const pendingExternalReviewRef = useRef(false);
   const boxPanelRef = useRef<HTMLDivElement>(null);
@@ -151,7 +156,10 @@ export function SetupDialog({
     pendingExternalReviewRef.current = false;
     setShowImportOptions(!hasBox);
     setShowMaaPaste(false);
-  }, [hasBox, initialStep, open]);
+    setOpeningConfigurationKey(configurationKey);
+  }, [configurationKey, hasBox, initialStep, open]);
+
+  const configurationChanged = open && hasSetupConfigurationChanged(openingConfigurationKey, configurationKey);
 
   useEffect(() => {
     if (open && !hasBox) setShowImportOptions(true);
@@ -224,7 +232,13 @@ export function SetupDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(nextOpen) => {
+      if (!nextOpen && configurationChanged) {
+        setCloseConfirmOpen(true);
+        return;
+      }
+      onOpenChange(nextOpen);
+    }}>
       <DialogContent data-setup-dialog className="max-h-[min(820px,calc(100dvh-1rem))] max-w-[calc(100%-1rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-[24px] p-0 sm:max-w-[min(880px,calc(100%-2rem))] sm:rounded-[32px]">
         <Tabs
           value={step}
@@ -238,7 +252,10 @@ export function SetupDialog({
           className="contents"
         >
           <div data-setup-top className="px-4 pb-3 pt-4 sm:px-7 sm:pb-4 sm:pt-6">
-            <DialogTitle className="min-h-9 pr-12">排班设置</DialogTitle>
+            <div className="flex min-h-9 items-center gap-3 pr-12">
+              <DialogTitle>排班设置</DialogTitle>
+              {configurationChanged ? <span className="border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">配置已修改</span> : null}
+            </div>
             <TabsList
               data-setup-step-list
               variant="line"
@@ -564,6 +581,18 @@ export function SetupDialog({
             >
               清除本地数据
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={closeConfirmOpen} onOpenChange={setCloseConfirmOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>关闭排班设置？</DialogTitle>
+            <DialogDescription>配置修改已保存在本地。关闭后需要重新生成排班，结果才会按新配置更新。</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setCloseConfirmOpen(false)}>继续编辑</Button>
+            <Button type="button" onClick={() => { setCloseConfirmOpen(false); onOpenChange(false); }}>关闭设置</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
