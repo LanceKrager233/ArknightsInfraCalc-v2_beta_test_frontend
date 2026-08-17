@@ -13,6 +13,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
 import * as schema from "../db/schema.ts";
+import { websiteAdminAccess } from "./admin-access.ts";
 
 const databaseUrl = process.env.AUTH_INTEGRATION_DATABASE_URL?.trim();
 if (!databaseUrl) throw new Error("AUTH_INTEGRATION_DATABASE_URL is required for the PostgreSQL authentication integration test.");
@@ -94,6 +95,7 @@ test("Better Auth completes the PostgreSQL account lifecycle", async () => {
 
   const suffix = `${Date.now()}-${randomUUID()}`;
   const primaryEmail = `auth-primary-${suffix}@example.test`;
+  const delegatedAdminEmail = `auth-admin-${suffix}@example.test`;
   const bannedEmail = `auth-banned-${suffix}@example.test`;
   const createdUserIds = [];
 
@@ -101,7 +103,8 @@ test("Better Auth completes the PostgreSQL account lifecycle", async () => {
     const registration = await post("/sign-up/email", { name: "Primary user", email: primaryEmail, password, callbackURL: origin });
     assert.equal(registration.status, 200, await registration.clone().text());
     const registrationBody = await registration.json();
-    createdUserIds.push(registrationBody.user.id);
+    const primaryUserId = registrationBody.user.id;
+    createdUserIds.push(primaryUserId);
 
     const unverifiedSignIn = await signIn(primaryEmail);
     assert.equal(unverifiedSignIn.status, 403, "unverified email must not sign in");
@@ -140,6 +143,20 @@ test("Better Auth completes the PostgreSQL account lifecycle", async () => {
     await expectNoSession(passwordResetCookie);
     assert.equal((await signIn(primaryEmail, password)).status, 401, "old password must stop working");
     assert.equal((await signIn(primaryEmail, replacementPassword)).status, 200, "replacement password should sign in");
+
+    const delegatedAdminId = await registerAndVerify(delegatedAdminEmail);
+    createdUserIds.push(delegatedAdminId);
+    const bootstrapIds = new Set([primaryUserId]);
+    const defaultRole = await pool.query('SELECT role FROM "user" WHERE id = $1', [delegatedAdminId]);
+    assert.equal(websiteAdminAccess(delegatedAdminId, defaultRole.rows[0].role, bootstrapIds).isAdmin, false);
+    await pool.query('UPDATE "user" SET role = $1, updated_at = now() WHERE id = $2', ["admin", delegatedAdminId]);
+    const grantedRole = await pool.query('SELECT role FROM "user" WHERE id = $1', [delegatedAdminId]);
+    const delegatedAccess = websiteAdminAccess(delegatedAdminId, grantedRole.rows[0].role, bootstrapIds);
+    assert.equal(delegatedAccess.isAdmin, true, "database admin role should grant administrator access");
+    assert.equal(delegatedAccess.canManageAdminRoles, false, "delegated administrators must not grant roles");
+    await pool.query('UPDATE "user" SET role = $1, updated_at = now() WHERE id = $2', ["user", delegatedAdminId]);
+    const revokedRole = await pool.query('SELECT role FROM "user" WHERE id = $1', [delegatedAdminId]);
+    assert.equal(websiteAdminAccess(delegatedAdminId, revokedRole.rows[0].role, bootstrapIds).isAdmin, false, "revoked role should remove access immediately");
 
     const bannedUserId = await registerAndVerify(bannedEmail);
     createdUserIds.push(bannedUserId);

@@ -3,19 +3,21 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import type { AdminSessionData, AdminUserAction, AdminUserData } from "@/types";
 
-type UserRow = { id: string; name: string; email: string; emailVerified: boolean; banned: boolean | null; banReason: string | null; createdAt: string };
-type SessionRow = { id: string; createdAt: string; updatedAt: string; expiresAt: string; ipAddress: string | null; userAgent: string | null };
-type AdminAction = "ban" | "unban" | "revokeSessions";
+type RoleChange = { userId: string; name: string; email: string; action: "grantAdmin" | "revokeAdmin" };
 
 export function AdminUsers() {
-  const [users, setUsers] = useState<UserRow[]>([]);
+  const [users, setUsers] = useState<AdminUserData[]>([]);
+  const [canManageAdminRoles, setCanManageAdminRoles] = useState<boolean | null>(null);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
-  const [sessionsByUser, setSessionsByUser] = useState<Record<string, SessionRow[] | undefined>>({});
+  const [roleChange, setRoleChange] = useState<RoleChange | null>(null);
+  const [sessionsByUser, setSessionsByUser] = useState<Record<string, AdminSessionData[] | undefined>>({});
 
   const load = useCallback(async (search: string) => {
     setLoading(true);
@@ -24,6 +26,7 @@ export function AdminUsers() {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error?.message ?? "无法读取用户");
       setUsers(body.data.users);
+      setCanManageAdminRoles(body.data.permissions.canManageAdminRoles);
     } finally {
       setLoading(false);
     }
@@ -35,7 +38,7 @@ export function AdminUsers() {
     });
   }, [load]);
 
-  async function act(userId: string, action: AdminAction) {
+  async function act(userId: string, action: AdminUserAction): Promise<boolean> {
     setBusyKey(`${userId}:${action}`);
     setMessage(null);
     try {
@@ -46,13 +49,15 @@ export function AdminUsers() {
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error?.message ?? "操作失败");
-      setMessage("操作已完成。");
+      setMessage(action === "grantAdmin" ? "已设为管理员。" : action === "revokeAdmin" ? "已取消管理员权限。" : "操作已完成。");
       if (action === "revokeSessions" || action === "ban") {
         setSessionsByUser((current) => ({ ...current, [userId]: [] }));
       }
       await load(query.trim());
+      return true;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "操作失败");
+      return false;
     } finally {
       setBusyKey(null);
     }
@@ -82,7 +87,7 @@ export function AdminUsers() {
       <header>
         <a href="/" className="inline-flex min-h-11 items-center text-sm underline underline-offset-4">返回排班助手</a>
         <h1 className="mt-3 text-2xl font-semibold">用户管理</h1>
-        <p className="mt-1 text-sm text-muted-foreground">仅提供搜索、封禁、查看及撤销 Session。</p>
+        <p className="mt-1 text-sm text-muted-foreground">可搜索、封禁、查看及撤销 Session。{canManageAdminRoles === true ? "初始管理员还可以授予或撤销管理员权限。" : canManageAdminRoles === false ? "管理员权限只能由初始管理员调整。" : ""}</p>
       </header>
 
       <form
@@ -112,11 +117,26 @@ export function AdminUsers() {
             <article key={entry.id} className="rounded-xl border p-4">
               <div className="flex flex-wrap justify-between gap-3">
                 <div className="min-w-0">
-                  <h2 className="font-medium">{entry.name}</h2>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="font-medium">{entry.name}</h2>
+                    {entry.isAdmin ? <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{entry.isBootstrapAdmin ? "初始管理员" : "管理员"}</span> : null}
+                  </div>
                   <p className="break-all text-sm text-muted-foreground">{entry.email} · {entry.emailVerified ? "已验证" : "未验证"}{entry.banned ? " · 已封禁" : ""}</p>
                   {entry.banned && entry.banReason ? <p className="mt-1 text-xs text-destructive">原因：{entry.banReason}</p> : null}
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  {canManageAdminRoles && !entry.isBootstrapAdmin ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={entry.isAdmin ? "destructive" : "secondary"}
+                      disabled={actionBusy || (!entry.isAdmin && (!entry.emailVerified || Boolean(entry.banned)))}
+                      title={!entry.isAdmin && (!entry.emailVerified || entry.banned) ? "只能将已验证且未封禁的账号设为管理员" : undefined}
+                      onClick={() => setRoleChange({ userId: entry.id, name: entry.name, email: entry.email, action: entry.isAdmin ? "revokeAdmin" : "grantAdmin" })}
+                    >
+                      {entry.isAdmin ? "取消管理员" : "设为管理员"}
+                    </Button>
+                  ) : null}
                   <Button type="button" size="sm" variant="outline" disabled={actionBusy} onClick={() => void toggleSessions(entry.id)}>{sessions ? "收起 Session" : "查看 Session"}</Button>
                   <Button type="button" size="sm" variant="outline" disabled={actionBusy} onClick={() => void act(entry.id, "revokeSessions")}>撤销 Session</Button>
                   <Button type="button" size="sm" variant={entry.banned ? "outline" : "destructive"} disabled={actionBusy} onClick={() => void act(entry.id, entry.banned ? "unban" : "ban")}>{entry.banned ? "解封" : "封禁"}</Button>
@@ -136,6 +156,42 @@ export function AdminUsers() {
           );
         })}
       </div>
+
+      <Dialog
+        open={Boolean(roleChange)}
+        onOpenChange={(open) => {
+          if (!open && !busyKey) setRoleChange(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{roleChange?.action === "revokeAdmin" ? "取消管理员权限？" : "设为管理员？"}</DialogTitle>
+            <DialogDescription className="break-words">
+              {roleChange?.action === "revokeAdmin"
+                ? `取消后，${roleChange.name}（${roleChange.email}）将立即无法继续访问用户管理功能。`
+                : `${roleChange?.name ?? "该用户"}（${roleChange?.email ?? ""}）将可以搜索、封禁用户和撤销 Session，但不能授予其他人管理员权限。`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogBody>
+            <p className="text-sm text-muted-foreground">此操作不会更改该账号的密码，也不会删除现有业务数据。</p>
+          </DialogBody>
+          <DialogFooter>
+            <Button type="button" size="dialog" variant="ghost" disabled={Boolean(busyKey)} onClick={() => setRoleChange(null)}>取消</Button>
+            <Button
+              type="button"
+              size="dialog"
+              variant={roleChange?.action === "revokeAdmin" ? "destructive" : "default"}
+              disabled={!roleChange || Boolean(busyKey)}
+              onClick={async () => {
+                if (!roleChange) return;
+                if (await act(roleChange.userId, roleChange.action)) setRoleChange(null);
+              }}
+            >
+              {roleChange?.action === "revokeAdmin" ? "确认取消" : "确认设为管理员"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

@@ -100,6 +100,7 @@ UI 控件优先组合 `src/components/ui/*` 中的现有 primitive。不要另�
 
 所有公共响应使用 `ApiSuccess<T> | ApiFailure` 信封并返回 `X-Request-Id`。健康检查的公开就绪字段是 `data.plannerReady`，不是内部 `HealthApiResponse` 的 `ok` / `cliReady`。
 `/api/auth/*` 是唯一明确例外，保持 Better Auth 原生协议；应用自有管理接口仍使用统一信封。
+`BETTER_AUTH_ADMIN_USER_IDS` 中的初始管理员不可由网页降级；只有初始管理员可通过 `/api/admin/users` 授予或撤销数据库管理员角色。受委派管理员不得继续扩权，也不得封禁初始管理员或撤销其 Session；所有管理接口必须按当前数据库角色实时鉴权。
 
 ### 必须保持的安全与契约边界
 
@@ -169,7 +170,7 @@ Worker 能力只由`protocol_version`和`plan_schema_version`判断；`plan_cont
 | `DATABASE_MIGRATION_URL` | 发布 migration 连接串，可对认证 schema 执行 DDL |
 | `BETTER_AUTH_SECRET` | 网站 Session 签名密钥，至少 32 字节且长期稳定 |
 | `BETTER_AUTH_URL` | Better Auth 对外完整 Origin |
-| `BETTER_AUTH_ADMIN_USER_IDS` | 逗号分隔的管理员 Better Auth user ID |
+| `BETTER_AUTH_ADMIN_USER_IDS` | 逗号分隔的初始管理员 Better Auth user ID；作为网页角色委派的信任根 |
 | `RESEND_API_KEY` | 验证与重置邮件的 Resend API key |
 | `AUTH_EMAIL_FROM` | 已验证独立发信子域的 From 地址 |
 

@@ -105,7 +105,7 @@ type ApiFailure = {
 - `GET/POST /api/auth/*`（Better Auth 原生协议，不使用公共响应信封）
 - `GET/POST /api/admin/users`
 
-`/api/auth/*` 是统一响应信封的唯一例外。Better Auth 原生 admin 路由全部返回 404；管理员只能使用应用自有的中文用户管理接口。
+`/api/auth/*` 是统一响应信封的唯一例外。Better Auth 原生 admin 路由全部返回 404；管理员只能使用应用自有的中文用户管理接口。`BETTER_AUTH_ADMIN_USER_IDS` 定义不可由网页降级的初始管理员；只有初始管理员能在该接口中授予或撤销数据库管理员角色，受委派管理员不能继续扩权。
 
 `/api/plan`只返回 `profile`、`maa`、`rotation`、`durationMs`、`diagnosticId`。CLI 路径、命令、stdout、stderr、运行目录和内部协议对象只能进入服务端运行记录；调试模式允许它们位于 `data.debug`，但必须由服务端环境变量开启。
 
@@ -151,7 +151,7 @@ POST 和 DELETE 路由执行同源检查。生产部署在 Nginx 后时启用受
 | `DATABASE_MIGRATION_URL` | release 执行仓库内 migration 的 DDL 连接串 |
 | `BETTER_AUTH_SECRET` | 网站 Session 签名密钥，至少 32 字节且长期稳定 |
 | `BETTER_AUTH_URL` | 浏览器实际访问的完整 HTTPS Origin |
-| `BETTER_AUTH_ADMIN_USER_IDS` | 逗号分隔的管理员 Better Auth user ID |
+| `BETTER_AUTH_ADMIN_USER_IDS` | 逗号分隔的初始管理员 Better Auth user ID；作为网页角色委派的信任根 |
 | `RESEND_API_KEY` | 验证与密码重置邮件的 Resend API key |
 | `AUTH_EMAIL_FROM` | 已验证独立发信子域的 From 地址 |
 
