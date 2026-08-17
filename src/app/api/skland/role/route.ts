@@ -10,6 +10,7 @@ import {
 import { selectSessionRole, SklandServiceError } from "@/server/skland/adapter";
 import {
   assertSklandAvailable,
+  assertSklandFeatureEnabled,
   readSklandAccountStore,
   setSklandAccountStoreCookies,
   sklandAccountSummaries,
@@ -18,6 +19,7 @@ import {
   withUpdatedSklandAccount,
 } from "@/server/skland/http";
 import { removeSklandAccount } from "@/server/skland/session";
+import { requireWebsiteSession } from "@/server/auth/authorization";
 
 export const runtime = "nodejs";
 
@@ -27,6 +29,8 @@ export async function POST(request: Request) {
   let previous: SklandAccountStore | null = null;
   let targetAccountId: string | null = null;
   try {
+    assertSklandFeatureEnabled();
+    await requireWebsiteSession(request);
     assertSklandAvailable(request);
     assertSameOrigin(request);
     enforceRateLimit("skland-action", requestClientIp(request), 30, 60 * 60_000);

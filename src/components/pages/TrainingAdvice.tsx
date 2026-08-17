@@ -10,6 +10,7 @@ type TrainingAdviceProps = {
   operbox?: OperBoxEntry[] | null;
   layout?: BaseBlueprint | null;
   profile?: UserProfile | null;
+  requiresAccount?: boolean;
   onOpenCalculator: () => void;
 };
 
@@ -65,7 +66,7 @@ function actionKey(action: UserProfileAction, index: number) {
 }
 
 
-export function TrainingAdvice({ operbox, layout, profile, onOpenCalculator }: TrainingAdviceProps) {
+export function TrainingAdvice({ operbox, layout, profile, requiresAccount = false, onOpenCalculator }: TrainingAdviceProps) {
   const shouldReduceMotion = useReducedMotion();
   const entries = operbox ?? [];
   const ownedByName = new Map(entries.map((entry) => [entry.name, entry]));
@@ -74,6 +75,27 @@ export function TrainingAdvice({ operbox, layout, profile, onOpenCalculator }: T
   const actions = profile?.actions ?? [];
   const ownedTotal = entries.filter((entry) => entry.own).length;
   const eliteTotal = entries.filter((entry) => entry.own && entry.elite >= 2).length;
+
+  if (requiresAccount) {
+    return (
+      <div className="flex w-full flex-col gap-5 pt-5" data-training-page>
+        <section className="min-w-0" aria-label="训练建议概览">
+          <div className="mb-2 flex min-w-0 items-center gap-2.5">
+            <span className="h-7 w-1.5 shrink-0 bg-[#FFD501]" aria-hidden="true" />
+            <h1 className="truncate text-[21px] font-medium leading-none text-[#313131]">训练建议</h1>
+          </div>
+          <InfraTechnicalCard group="training" className="min-h-[248px]" dataSlot="training-account-required" showEmblem={false}>
+            <div className="grid min-h-[216px] place-content-center text-center">
+              <CircleAlert className="mx-auto size-8 text-[var(--room-accent)]" aria-hidden="true" />
+              <h2 className="mt-4 text-xl font-semibold">登录后查看 MAA 练卡建议</h2>
+              <p className="mt-2 max-w-lg text-sm leading-6 text-white/62">当前数据来自 MAA 或第三方同步。请使用全局网站账号入口登录；匿名状态仍可改用全角色样例生成建议。</p>
+              <Button type="button" className="mx-auto mt-4 h-9 bg-white text-[#272a2b] hover:bg-white/90 max-sm:h-11" onClick={onOpenCalculator}>返回基建计算器</Button>
+            </div>
+          </InfraTechnicalCard>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="flex w-full flex-col gap-5 pt-5" data-training-page>

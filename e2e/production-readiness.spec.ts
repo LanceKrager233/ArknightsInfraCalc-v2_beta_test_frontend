@@ -15,6 +15,17 @@ const layout243 = {
   rooms: [{ id: "workshop", kind: "workshop", level: 3 }],
 };
 
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/auth/get-session", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      session: { id: "test-session", token: "test-token", userId: "test-user", expiresAt: new Date(Date.now() + 3_600_000).toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+      user: { id: "test-user", name: "测试用户", email: "test@example.com", emailVerified: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    }),
+  }));
+});
+
 async function expectUnifiedDialogTypography(dialog: Locator, radius: "24px" | "32px" = "32px") {
   await expect(dialog).toHaveClass(/dialog-acrylic/);
   await expect(dialog).toHaveCSS("border-radius", radius);
@@ -883,9 +894,10 @@ async function seedV4Session(
     rotationProfile?: string;
     layoutDirty?: boolean;
     operbox?: Array<Record<string, unknown>>;
+    boxSource?: "sample" | "maa";
   } = {}
 ) {
-  await page.addInitScript(({ layout, result, savedAt, expiresAt, activeShift, rotationProfile, layoutDirty, operbox }) => {
+  await page.addInitScript(({ layout, result, savedAt, expiresAt, activeShift, rotationProfile, layoutDirty, operbox, boxSource }) => {
     window.localStorage.setItem("arknights-infra-calc-beta-onboarding-v1", "1");
     if (!window.localStorage.getItem("arknights-infra-calc-session-v4")) window.localStorage.setItem("arknights-infra-calc-session-v4", JSON.stringify({
       version: 4,
@@ -903,7 +915,7 @@ async function seedV4Session(
         rarity: 5,
       }],
       sourceName: "243 全精二示例",
-      boxSource: "sample",
+      boxSource,
       layoutDirty,
       rotationProfile,
       result,
@@ -918,8 +930,120 @@ async function seedV4Session(
     rotationProfile: options.rotationProfile ?? "abc_12_6_6",
     layoutDirty: options.layoutDirty ?? false,
     operbox: options.operbox,
+    boxSource: options.boxSource ?? "sample",
   });
 }
+
+for (const viewport of [
+  { width: 390, height: 844 },
+  { width: 768, height: 900 },
+  { width: 1440, height: 900 },
+]) {
+  test(`website account registration is reachable and explains consent at ${viewport.width}px`, async ({ page }) => {
+    await page.unroute("**/api/auth/get-session");
+    await page.route("**/api/auth/get-session", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "null" }));
+    await page.route("**/api/auth/sign-up/email", async (route) => {
+      const body = route.request().postDataJSON() as { email?: string; password?: string };
+      expect(body.email).toBe(`account-${viewport.width}@example.test`);
+      expect(body.password).toBe("secure-password-1");
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ token: null, user: { id: "new-user", name: "测试用户", email: body.email, emailVerified: false } }),
+      });
+    });
+    await mockApis(page);
+    await seedPreferences(page);
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+
+    await page.getByRole("button", { name: "登录网站账号" }).click();
+    const dialog = page.getByRole("dialog", { name: "登录账号" });
+    await dialog.getByRole("button", { name: "注册账号" }).click();
+    await expect(page.getByRole("dialog", { name: "注册账号" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "服务条款" })).toHaveAttribute("href", "/terms");
+    await expect(page.getByRole("link", { name: "隐私政策" })).toHaveAttribute("href", "/privacy");
+    await page.getByPlaceholder("昵称").fill("测试用户");
+    await page.getByPlaceholder("邮箱").fill(`account-${viewport.width}@example.test`);
+    await page.getByPlaceholder("密码（10–128 位）").fill("secure-password-1");
+    await page.getByRole("button", { name: "注册并发送验证邮件" }).click();
+    await expect(page.getByText("注册成功，请查收验证邮件。验证后即可登录。")).toBeVisible();
+  });
+}
+
+test("account settings revokes every session and returns to the app", async ({ page }) => {
+  let revokeRequests = 0;
+  await page.route("**/api/auth/revoke-sessions", (route) => {
+    revokeRequests += 1;
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: true }) });
+  });
+  await page.goto("/account");
+
+  await expect(page.getByRole("heading", { name: "账号与设备" })).toBeVisible();
+  await expect(page.getByText("test@example.com", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "退出全部设备" }).click();
+  await expect.poll(() => revokeRequests).toBe(1);
+  await expect(page).toHaveURL(/\/$/);
+});
+
+test("password reset rejects a link without a token before making a request", async ({ page }) => {
+  let resetRequests = 0;
+  await page.route("**/api/auth/reset-password", (route) => {
+    resetRequests += 1;
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: true }) });
+  });
+  await page.goto("/account/reset-password");
+  await page.getByRole("textbox", { name: "新密码" }).fill("replacement-password");
+  await page.getByRole("button", { name: "确认重置" }).click();
+  await expect(page.getByText("重置链接无效或缺少令牌，请重新申请密码重置邮件。")).toBeVisible();
+  expect(resetRequests).toBe(0);
+});
+
+test("anonymous MAA data cannot drive planning or training advice", async ({ page }) => {
+  await page.unroute("**/api/auth/get-session");
+  await page.route("**/api/auth/get-session", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "null" }));
+  await mockApis(page);
+  await seedV4Session(page, planData, { boxSource: "maa" });
+  await page.goto("/");
+
+  await expect(page.getByRole("button", { name: "请先登录网站账号" })).toBeDisabled();
+  await page.getByRole("button", { name: "练卡建议" }).click();
+  await expect(page.getByRole("heading", { name: "登录后查看 MAA 练卡建议" })).toBeVisible();
+  await expect(page.locator("[data-training-advice-list]")).toHaveCount(0);
+});
+
+test("server auth boundaries reject anonymous planning and every development Skland route", async ({ request }) => {
+  const maaResponse = await request.post("/api/plan", {
+    data: { layout: layout243, operbox: [], sourceName: "anonymous.json", boxSource: "maa", rotation: "abc_12_6_6" },
+  });
+  expect(maaResponse.status()).toBe(401);
+  expect((await maaResponse.json()).error.code).toBe("AIC-AUTH-2008");
+
+  const forgedSample = await request.post("/api/plan", {
+    data: { layout: layout243, operbox: [], sourceName: "forged.json", boxSource: "sample", rotation: "abc_12_6_6" },
+  });
+  expect(forgedSample.status()).toBe(400);
+  expect((await forgedSample.json()).error.code).toBe("AIC-REQ-1001");
+
+  for (const [method, path] of [
+    ["GET", "/api/skland/session"],
+    ["DELETE", "/api/skland/session"],
+    ["POST", "/api/skland/auth/qr"],
+    ["POST", "/api/skland/auth/qr/status"],
+    ["POST", "/api/skland/sync"],
+    ["POST", "/api/skland/role"],
+    ["GET", "/api/skland/status"],
+    ["DELETE", "/api/skland/data"],
+  ] as const) {
+    const response = await request.fetch(path, { method });
+    expect(response.status(), `${method} ${path}`).toBe(401);
+    expect((await response.json()).error.code, `${method} ${path}`).toBe("AIC-AUTH-2008");
+  }
+
+  const nativeAdmin = await request.post("/api/auth/admin/list-users", { data: {} });
+  expect(nativeAdmin.status()).toBe(404);
+  expect((await request.get("/admin/users")).status()).toBe(404);
+});
 
 test("serves versioned WebP portraits with immutable caching only when versioned", async ({ request }) => {
   expect(amiyaPortrait).toMatch(/^\/images\/operator-portraits\/002_amiya\.webp\?v=\d+-[0-9a-f]{12}$/);
@@ -1321,16 +1445,21 @@ test("plan completion reveals status, metrics, and schedule once without resetti
   const restoreHidden = page.getByRole("button").filter({ hasText: "恢复已隐藏" });
   await expect(restoreHidden).toBeVisible();
 
-  await armMotionCapture(
-    page,
-    '[data-activity-phase="running"]',
-    "loading-status",
-    260
-  );
+  if (browserName === "webkit") {
+    await armTransientStyleCapture(page, '[data-activity-phase="running"]', "loading-status");
+  } else {
+    await armMotionCapture(
+      page,
+      '[data-activity-phase="running"]',
+      "loading-status",
+      260,
+    );
+  }
   await page.getByRole("button", { name: "生成排班" }).click();
   const status = page.locator('[data-slot="live-activity"]');
   await expect(status).toHaveAttribute("data-activity-phase", "running");
-  await expectCapturedMotion(page, "loading-status", 260);
+  if (browserName === "webkit") await expectCapturedStyleMotion(page, "loading-status");
+  else await expectCapturedMotion(page, "loading-status", 260);
 
   const boardBeforePlan = page.locator("[data-plan-board]");
   await boardBeforePlan.evaluate((element) => {
@@ -2533,7 +2662,7 @@ test("publishes the site terms and privacy policy with upstream policy links", a
   await page.setViewportSize({ width: 390, height: 844 });
   await gotoStable(page, "/privacy");
   await expect(page.getByRole("heading", { name: "隐私政策", level: 1 })).toBeVisible();
-  await expect(page.getByText("版本与生效日期：2026-08-07")).toBeVisible();
+  await expect(page.getByText("版本与生效日期：2026-08-17")).toBeVisible();
   await expect(page.getByText("可露希尔基建终端项目维护者", { exact: false })).toBeVisible();
   await expect(page.getByRole("link", { name: "森空岛使用许可及服务协议" })).toHaveAttribute(
     "href",
@@ -2546,7 +2675,7 @@ test("publishes the site terms and privacy policy with upstream policy links", a
 
   await gotoStable(page, "/terms");
   await expect(page.getByRole("heading", { name: "服务条款", level: 1 })).toBeVisible();
-  await expect(page.getByText("版本与生效日期：2026-08-07")).toBeVisible();
+  await expect(page.getByText("版本与生效日期：2026-08-17")).toBeVisible();
   await expect(page.getByText(/非官方、非商业工具/)).toBeVisible();
 });
 
@@ -2559,8 +2688,8 @@ test("Skland login shows QR on every viewport and offers a separate mobile app s
       consent: {
         termsAccepted: true,
         privacyAccepted: true,
-        termsVersion: "2026-08-07",
-        privacyVersion: "2026-08-07",
+        termsVersion: "2026-08-17",
+        privacyVersion: "2026-08-17",
       },
     });
     return route.fulfill({

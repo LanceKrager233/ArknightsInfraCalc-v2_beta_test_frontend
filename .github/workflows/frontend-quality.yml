@@ -13,11 +13,32 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636
+        env:
+          POSTGRES_DB: arknights_auth_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres-test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d arknights_auth_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
     env:
       BETA_DEBUG_TOOLS_ENABLED: "0"
       BETA_RATE_LIMIT_ENABLED: "0"
       BETA_TRUST_PROXY_HEADERS: "0"
+      DATABASE_URL: postgresql://postgres:postgres-test-only@127.0.0.1:5432/arknights_auth_test
+      DATABASE_MIGRATION_URL: postgresql://postgres:postgres-test-only@127.0.0.1:5432/arknights_auth_test
+      AUTH_INTEGRATION_DATABASE_URL: postgresql://postgres:postgres-test-only@127.0.0.1:5432/arknights_auth_test
+      BETTER_AUTH_SECRET: integration-test-secret-at-least-32-bytes-long
+      BETTER_AUTH_URL: https://auth.integration.test
+      RESEND_API_KEY: re_test_not_used
+      AUTH_EMAIL_FROM: Authentication Test <auth@example.test>
 
     steps:
       - name: Checkout
@@ -31,6 +52,30 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Validate database deployment files
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp deploy/postgres/example.env deploy/postgres/production.env
+          cp deploy/postgres/example.env deploy/postgres/development.env
+          docker compose -f deploy/postgres/compose.yml config >/dev/null
+          bash -n deploy/postgres/init-roles.sh deploy/postgres/backup.sh
+          rm -f deploy/postgres/production.env deploy/postgres/development.env
+
+      - name: Verify committed database migrations
+        run: |
+          npm run db:generate
+          git diff --exit-code -- drizzle
+
+      - name: Apply committed authentication migrations
+        run: npm run db:migrate
+
+      - name: Authentication runtime readiness
+        run: npm run auth:check
+
+      - name: PostgreSQL authentication integration
+        run: npm run test:auth-integration
 
       - name: Security audit
         run: npm run audit:security
@@ -54,6 +99,12 @@ jobs:
         env:
           APP_DEPLOYMENT_ENV: production
           SKLAND_FEATURE_ENABLED: "0"
+          DATABASE_URL: ""
+          DATABASE_MIGRATION_URL: ""
+          BETTER_AUTH_SECRET: ""
+          BETTER_AUTH_URL: ""
+          RESEND_API_KEY: ""
+          AUTH_EMAIL_FROM: ""
         run: npm run build
 
       - name: Initial bundle budget
@@ -65,14 +116,17 @@ jobs:
       - name: Production client isolation
         run: npm run test:production-client
 
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium webkit
 
       - name: End-to-end tests
         run: npm run test:e2e
 
       - name: Production profile isolation
         run: npm run test:e2e:production-profile
+
+      - name: WebKit end-to-end tests
+        run: npm run test:e2e:webkit
 
   deploy:
     needs: quality

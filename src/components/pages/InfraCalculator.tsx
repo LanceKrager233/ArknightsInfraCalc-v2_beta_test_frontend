@@ -50,8 +50,22 @@ function Panel({ children, className = "", action, title, icon }: {
   );
 }
 
-function RunButton({ canRun, plannerReady, onRun }: { canRun: boolean; plannerReady: boolean; onRun: () => void }) {
-  const unavailableLabel = plannerReady ? "请先导入干员数据" : "排班服务暂不可用";
+function RunButton({
+  canRun,
+  plannerReady,
+  requiresAccount,
+  onRun,
+}: {
+  canRun: boolean;
+  plannerReady: boolean;
+  requiresAccount: boolean;
+  onRun: () => void;
+}) {
+  const unavailableLabel = requiresAccount
+    ? "请先登录网站账号"
+    : plannerReady
+      ? "请先导入干员数据"
+      : "排班服务暂不可用";
   return (
     <Button
       size="sm"
@@ -86,6 +100,7 @@ interface InfraCalculatorProps {
   loading: boolean;
   canRun: boolean;
   plannerReady: boolean;
+  requiresAccount?: boolean;
   accountControl?: ReactNode;
   onLoadSample: () => Promise<boolean>;
   onOpenSetup: () => void;
@@ -109,7 +124,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     activePlan, closestComparison,
     resultClearNotice,
     issueForPanel, issueReport, feedbackResult, feedbackError,
-    sampleLoading, loading, canRun, plannerReady, accountControl,
+    sampleLoading, loading, canRun, plannerReady, requiresAccount = false, accountControl,
     onLoadSample, onOpenSetup, onRun, onCancelRun,
     onSetActiveShift, onMarkIssue,
     onFactoryRecipeChange, onTradeOrderChange,
@@ -249,7 +264,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                     <Loader2 className="animate-spin" />
                     取消计算
                   </Button>
-                ) : <RunButton canRun={canRun} plannerReady={plannerReady} onRun={onRun} />}
+                ) : <RunButton canRun={canRun} plannerReady={plannerReady} requiresAccount={requiresAccount} onRun={onRun} />}
               </div>
             )}
           >

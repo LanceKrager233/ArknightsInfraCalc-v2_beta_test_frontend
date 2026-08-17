@@ -15,6 +15,16 @@ export default function PrivacyPage() {
   const sklandEnabled = isSklandFeatureEnabled();
   return (
     <LegalDocument eyebrow="可露希尔基建终端" title="隐私政策" effectiveDate={LEGAL_EFFECTIVE_DATE}>
+      <section>
+        <h2>网站账号与邮件</h2>
+        <ul>
+          <li>注册网站账号时，我们会处理你提交的昵称、邮箱地址、不可逆密码哈希、邮箱验证状态和账号创建时间。</li>
+          <li>登录后，PostgreSQL 会保存网站账号和数据库 Session。Session 包含随机令牌、有效期以及用于安全判断的 IP 地址和浏览器标识；密码原文不会保存。</li>
+          <li>验证邮箱和重置密码时，邮箱地址、邮件正文及必要投递元数据会发送给邮件服务商 Resend；相关链接固定在一小时后失效。</li>
+          <li>网站账号资料保留至你主动注销或我们依法删除；Session 保留至到期、退出、密码重置、封禁或主动撤销。注销会删除网站账号及其全部 Session。</li>
+          <li>你可以在账号设置中退出其他设备或重新验证密码后永久注销。网站账号数据不会用于保存 MAA Box、布局、排班或第三方游戏凭据。</li>
+        </ul>
+      </section>
       {sklandEnabled ? <>
       <section>
         <h2 className="font-number">1. 适用范围与运营者</h2>

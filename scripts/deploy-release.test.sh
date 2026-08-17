@@ -201,6 +201,22 @@ test -z "$(find "$releases_root" -mindepth 1 -maxdepth 1 -type d -name "*-${new_
 test ! -e "$archive_path"
 assert_fixture_safety
 
+setup_fixture migration-failure
+assert_failure migration
+test "$(readlink -f "$app_root/current")" = "$current_release"
+test "$(count_valid_releases)" -eq 3
+test -z "$(find "$releases_root" -mindepth 1 -maxdepth 1 -type d -name "*-${new_sha:0:12}" -print -quit)"
+test ! -e "$archive_path"
+assert_fixture_safety
+
+setup_fixture auth-readiness-failure
+assert_failure auth-readiness
+test "$(readlink -f "$app_root/current")" = "$current_release"
+test "$(count_valid_releases)" -eq 3
+test -z "$(find "$releases_root" -mindepth 1 -maxdepth 1 -type d -name "*-${new_sha:0:12}" -print -quit)"
+test ! -e "$archive_path"
+assert_fixture_safety
+
 setup_fixture extraction-failure
 tar -cf "$fixture_root/corrupt.tar" -C "$fixture_root/payload" .
 printf X | dd of="$fixture_root/corrupt.tar" bs=1 seek=0 count=1 conv=notrunc status=none

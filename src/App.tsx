@@ -10,6 +10,7 @@ import { AppTopBar, SklandAccountControl } from "@/components/layout/AppTopBar";
 import { InfraCalculator } from "@/components/pages/InfraCalculator";
 import { SklandStatus } from "@/components/pages/SklandStatus";
 import { LiveActivity, usePlanActivity } from "@/components/ui/live-activity";
+import { authClient } from "@/lib/auth-client";
 
 import {
   deleteAllSklandData,
@@ -210,6 +211,7 @@ function buildIssueReport(
 }
 
 function WorkbenchApp() {
+  const { data: websiteSession } = authClient.useSession();
   const defaultPreset = PRESETS[0];
   const defaultLayout = buildBlueprint(defaultPreset);
   const [page, setPage] = useState<AppPage>("calculator");
@@ -315,7 +317,8 @@ function WorkbenchApp() {
       : null,
     [sklandAccounts, sklandActiveAccountId]
   );
-  const canRun = Boolean(operbox && operbox.length > 0 && cliReady);
+  const accountCanUseCurrentBox = boxSource === "sample" || Boolean(websiteSession);
+  const canRun = Boolean(operbox && operbox.length > 0 && cliReady && accountCanUseCurrentBox);
   const showBetaPanels = betaRequested && debugToolsEnabled;
 
   useEffect(() => {
@@ -1161,6 +1164,7 @@ function WorkbenchApp() {
           loading={loading}
           canRun={canRun}
           plannerReady={cliReady}
+          requiresAccount={!accountCanUseCurrentBox}
           accountControl={CLIENT_SKLAND_ENABLED ? (
             <SklandAccountControl
               account={activeSklandAccount}
@@ -1212,7 +1216,13 @@ function WorkbenchApp() {
       ) : page === "skill-query" ? (
         <SkillQuery />
       ) : (
-        <TrainingAdvice operbox={operbox} layout={layout} profile={result?.profile} onOpenCalculator={() => setPage("calculator")} />
+        <TrainingAdvice
+          operbox={accountCanUseCurrentBox ? operbox : null}
+          layout={layout}
+          profile={accountCanUseCurrentBox ? result?.profile : null}
+          requiresAccount={!accountCanUseCurrentBox}
+          onOpenCalculator={() => setPage("calculator")}
+        />
       )}
       </div>
 

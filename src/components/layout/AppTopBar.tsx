@@ -5,6 +5,7 @@ import { UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import type { SklandAccountSummary, SklandStatusSnapshot } from "@/types";
+import { AuthAccountControl } from "@/components/auth/AuthAccountControl";
 
 const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
 
@@ -15,8 +16,9 @@ export function AppTopBar() {
       data-app-topbar
     >
       <h1 className="sr-only">可露希尔基建终端</h1>
-      <div className="app-content-track flex h-14 items-center">
+      <div className="app-content-track flex h-14 items-center justify-between">
         <SidebarTrigger className="size-11 shrink-0" />
+        <AuthAccountControl />
       </div>
     </header>
   );

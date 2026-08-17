@@ -80,7 +80,7 @@ if [[ "$test_mode" == "1" ]]; then
     *) fail_validation "Test mode requires an isolated directory below /tmp." ;;
   esac
   case "$test_fail_stage" in
-    none|install|build|restart|internal-health|solver-version|solver-fingerprint|public-health) ;;
+    none|install|build|migration|auth-readiness|restart|internal-health|solver-version|solver-fingerprint|public-health) ;;
     *) fail_validation "Invalid test failure stage." ;;
   esac
   if [[ -n "$test_available_kib" && ! "$test_available_kib" =~ ^[0-9]+$ ]]; then
@@ -437,6 +437,16 @@ else
     APP_DEPLOYMENT_ENV="$deployment_environment" \
     SKLAND_FEATURE_ENABLED="$skland_enabled" \
     bash -lc "cd '$release_dir' && npm run build"
+fi
+
+simulate_failure migration
+if [[ "$test_mode" == "0" ]]; then
+  runuser -u "$run_user" -- bash -lc "cd '$release_dir' && npm run db:migrate"
+fi
+
+simulate_failure auth-readiness
+if [[ "$test_mode" == "0" ]]; then
+  runuser -u "$run_user" -- bash -lc "cd '$release_dir' && npm run auth:check"
 fi
 
 ln -s "$release_dir" "$next_link"

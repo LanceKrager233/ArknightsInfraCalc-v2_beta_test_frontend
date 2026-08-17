@@ -15,6 +15,7 @@ import { RotationSettings } from "@/components/RotationSettings";
 import { FiammettaSettings } from "@/components/FiammettaSettings";
 import { WizardSteps } from "@/components/interior/wizard-steps";
 import { hasSetupConfigurationChanged } from "@/setup-configuration";
+import { authClient } from "@/lib/auth-client";
 
 import type { FactoryRecipe, PowerBudget, TradeOrder } from "./blueprint";
 import { FileDrop, LayoutEditor, PresetSelector } from "./components";
@@ -122,6 +123,8 @@ export function SetupDialog({
   onFinish,
   onSkip,
 }: SetupDialogProps) {
+  const { data: websiteSession } = authClient.useSession();
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [step, setStep] = useState<SetupStep>(initialStep);
   const [stepDirection, setStepDirection] = useState(0);
   const [needsFacilityReview, setNeedsFacilityReview] = useState(false);
@@ -186,6 +189,10 @@ export function SetupDialog({
   }
 
   async function importMaaFile(file: File) {
+    if (!websiteSession) {
+      setAuthNotice("请先使用全局网站账号入口登录，再导入 MAA 数据。");
+      return;
+    }
     if (await onMaaFile(file)) {
       setNeedsFacilityReview(true);
       setShowImportOptions(false);
@@ -194,6 +201,10 @@ export function SetupDialog({
   }
 
   function importMaaPaste() {
+    if (!websiteSession) {
+      setAuthNotice("请先使用全局网站账号入口登录，再导入 MAA 数据。");
+      return;
+    }
     if (onMaaPaste()) {
       setNeedsFacilityReview(true);
       setShowImportOptions(false);
@@ -212,6 +223,10 @@ export function SetupDialog({
   }
 
   function handleOpenSkland() {
+    if (!websiteSession) {
+      setAuthNotice("请先登录网站账号，再使用第三方同步。");
+      return;
+    }
     pendingExternalReviewRef.current = true;
     onOpenSkland?.();
   }
@@ -352,6 +367,7 @@ export function SetupDialog({
                         ) : null}
                       </TabsContent> : null}
                       <TabsContent value="maa" className="grid gap-3 pt-4">
+                        {!websiteSession ? <Alert><AlertDescription>MAA 导入需要先登录已验证的网站账号；全角色导入和技能查询仍可匿名使用。</AlertDescription></Alert> : null}
                         <FileDrop fileName={boxSource === "maa" ? fileName : null} onFile={(file) => void importMaaFile(file)} />
                         <Button
                           type="button"
@@ -383,6 +399,7 @@ export function SetupDialog({
                       </TabsContent>
                     </Tabs>
                     {inputError ? <p id="setup-box-error" className="mt-3 text-sm text-destructive" role="alert">{inputError}</p> : null}
+                    {authNotice ? <p className="mt-3 text-sm text-destructive" role="alert">{authNotice}</p> : null}
                   </section>
                 ) : null}
 

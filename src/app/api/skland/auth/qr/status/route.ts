@@ -10,12 +10,14 @@ import {
 import { pollScan } from "@/server/skland/adapter";
 import {
   assertSklandAvailable,
+  assertSklandFeatureEnabled,
   readSklandAccountStore,
   setSklandAccountStoreCookies,
   sklandAccountSummaries,
   sklandErrorResponse,
 } from "@/server/skland/http";
 import { SklandAccountLimitError, upsertSklandAccount } from "@/server/skland/session";
+import { requireWebsiteSession } from "@/server/auth/authorization";
 
 export const runtime = "nodejs";
 
@@ -23,6 +25,8 @@ export async function POST(request: Request) {
   const requestId = createRequestId();
   const startedAt = performance.now();
   try {
+    assertSklandFeatureEnabled();
+    await requireWebsiteSession(request);
     assertSklandAvailable(request);
     assertSameOrigin(request);
     enforceRateLimit("skland-poll", requestClientIp(request), 120, 10 * 60_000);
