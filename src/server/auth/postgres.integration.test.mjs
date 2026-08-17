@@ -68,7 +68,7 @@ test("Better Auth completes the PostgreSQL account lifecycle", async () => {
 
   async function registerAndVerify(email) {
     const registration = await post("/sign-up/email", { name: "Integration user", email, password, callbackURL: origin });
-    assert.equal(registration.status, 200, await registration.text());
+    assert.equal(registration.status, 200, await registration.clone().text());
     const registrationBody = await registration.json();
     assert.equal(registrationBody.user.emailVerified, false);
 
@@ -97,7 +97,7 @@ test("Better Auth completes the PostgreSQL account lifecycle", async () => {
 
   try {
     const registration = await post("/sign-up/email", { name: "Primary user", email: primaryEmail, password, callbackURL: origin });
-    assert.equal(registration.status, 200, await registration.text());
+    assert.equal(registration.status, 200, await registration.clone().text());
     const registrationBody = await registration.json();
     createdUserIds.push(registrationBody.user.id);
 
@@ -110,31 +110,31 @@ test("Better Auth completes the PostgreSQL account lifecycle", async () => {
     assert.equal(verification.status, 302);
 
     const firstSignIn = await signIn(primaryEmail);
-    assert.equal(firstSignIn.status, 200, await firstSignIn.text());
+    assert.equal(firstSignIn.status, 200, await firstSignIn.clone().text());
     const firstCookie = cookieHeader(firstSignIn);
     assert.match(firstCookie, /session_token=/);
 
     const secondSignIn = await signIn(primaryEmail);
-    assert.equal(secondSignIn.status, 200, await secondSignIn.text());
+    assert.equal(secondSignIn.status, 200, await secondSignIn.clone().text());
     const secondCookie = cookieHeader(secondSignIn);
 
     const revoke = await post("/revoke-sessions", {}, firstCookie);
-    assert.equal(revoke.status, 200, await revoke.text());
+    assert.equal(revoke.status, 200, await revoke.clone().text());
     await expectNoSession(firstCookie);
     await expectNoSession(secondCookie);
 
     const passwordResetSession = await signIn(primaryEmail);
-    assert.equal(passwordResetSession.status, 200, await passwordResetSession.text());
+    assert.equal(passwordResetSession.status, 200, await passwordResetSession.clone().text());
     const passwordResetCookie = cookieHeader(passwordResetSession);
     const resetRequest = await post("/request-password-reset", { email: primaryEmail, redirectTo: `${origin}/account/reset-password` });
-    assert.equal(resetRequest.status, 200, await resetRequest.text());
+    assert.equal(resetRequest.status, 200, await resetRequest.clone().text());
     const resetEmail = emails.findLast((item) => item.kind === "reset" && item.to === primaryEmail);
     assert.ok(resetEmail, "password reset should capture an email");
     const resetToken = new URL(resetEmail.url).pathname.split("/").at(-1);
     assert.ok(resetToken);
 
     const reset = await post("/reset-password", { token: resetToken, newPassword: replacementPassword });
-    assert.equal(reset.status, 200, await reset.text());
+    assert.equal(reset.status, 200, await reset.clone().text());
     await expectNoSession(passwordResetCookie);
     assert.equal((await signIn(primaryEmail, password)).status, 401, "old password must stop working");
     assert.equal((await signIn(primaryEmail, replacementPassword)).status, 200, "replacement password should sign in");
@@ -142,7 +142,7 @@ test("Better Auth completes the PostgreSQL account lifecycle", async () => {
     const bannedUserId = await registerAndVerify(bannedEmail);
     createdUserIds.push(bannedUserId);
     const bannedSession = await signIn(bannedEmail);
-    assert.equal(bannedSession.status, 200, await bannedSession.text());
+    assert.equal(bannedSession.status, 200, await bannedSession.clone().text());
     const bannedCookie = cookieHeader(bannedSession);
     await pool.query('UPDATE "user" SET banned = true, ban_reason = $1, updated_at = now() WHERE id = $2', ["integration test", bannedUserId]);
     await pool.query('DELETE FROM "session" WHERE user_id = $1', [bannedUserId]);
