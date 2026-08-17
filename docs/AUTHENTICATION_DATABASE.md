@@ -17,10 +17,10 @@ PostgreSQL 只保存网站账号、数据库 Session、验证记录和 Better Au
 
 ## 1. 准备发信域名
 
-在 Resend 中添加独立发信子域，例如 `auth.example.com`，按照 Resend 控制台给出的值在 DNS 服务商配置 SPF 与 DKIM，并为该子域添加 DMARC。等待 Resend 显示域名验证成功后，创建仅供 development 使用的 API key，并确定 From 地址，例如：
+在 Resend 中添加发信域名，按照 Resend 控制台给出的值在 DNS 服务商配置 SPF 与 DKIM，并为该域名添加 DMARC。当前 development 使用已验证的 `yeyouchuan.me`，并创建仅供 development 使用的 API key。From 地址为：
 
 ```text
-基建排班助手 <no-reply@auth.example.com>
+明日方舟基建排班助手 <noreply@yeyouchuan.me>
 ```
 
 development 和 production 使用不同的 API key、发信配置与公开 Origin。验证邮件和密码重置链接一小时后失效。
@@ -68,13 +68,13 @@ sudo ss -ltnp | grep 55433
 DATABASE_URL=postgresql://<dev-runtime-user>:<dev-runtime-password>@127.0.0.1:55433/<dev-db>
 DATABASE_MIGRATION_URL=postgresql://<dev-migration-user>:<dev-migration-password>@127.0.0.1:55433/<dev-db>
 BETTER_AUTH_SECRET=<至少32字节、长期稳定且仅供development使用的随机值>
-BETTER_AUTH_URL=http://127.0.0.1:4274
+BETTER_AUTH_URL=https://instance-pi2ohhfj.tail2dca9.ts.net
 BETTER_AUTH_ADMIN_USER_IDS=
 RESEND_API_KEY=<development Resend API key>
-AUTH_EMAIL_FROM=基建排班助手 <no-reply@已验证发信子域>
+AUTH_EMAIL_FROM=明日方舟基建排班助手 <noreply@yeyouchuan.me>
 ```
 
-同时保留 development 已有的 `APP_DEPLOYMENT_ENV=development`、`BETA_PUBLIC_ORIGIN`、`SKLAND_PUBLIC_ORIGIN`、`SKLAND_SESSION_SECRET` 等配置。当前通过 SSH 隧道访问 development 时，浏览器 Origin 是 `http://127.0.0.1:4274`，三个公开 Origin 都应与它一致，并按既有约定仅在这个可信测试场景启用 `SKLAND_ALLOW_INSECURE_HTTP=1`。以后启用 dev 域名时，将它们一起改为浏览器实际访问的 HTTPS Origin。不要填写内部 Next 端口，也绝不能复用 production 的公网 Origin。
+同时保留 development 已有的 `APP_DEPLOYMENT_ENV=development`、`BETA_PUBLIC_ORIGIN`、`SKLAND_PUBLIC_ORIGIN`、`SKLAND_SESSION_SECRET` 等配置。当前 development 的浏览器 Origin 是 `https://instance-pi2ohhfj.tail2dca9.ts.net`，`BETTER_AUTH_URL`、`BETA_PUBLIC_ORIGIN` 和 `SKLAND_PUBLIC_ORIGIN` 都必须与它一致，并保持 `SKLAND_ALLOW_INSECURE_HTTP=0`。SSH 隧道只用于数据库运维，不改变网站 Origin。以后更换 dev 域名时，将三个 Origin 一起改为浏览器实际访问的 HTTPS Origin；不要填写内部 Next 或 nginx 端口，也绝不能复用 production 的公网 Origin。
 
 `BETTER_AUTH_SECRET` 可以用 `openssl rand -hex 32` 生成。它与 `SKLAND_SESSION_SECRET` 必须不同；两者都要长期稳定，轮换会使现有会话失效。
 
