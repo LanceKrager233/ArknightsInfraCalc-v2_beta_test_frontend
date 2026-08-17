@@ -993,9 +993,8 @@ test("password reset rejects a link without a token before making a request", as
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: true }) });
   });
   await page.goto("/account/reset-password");
-  await page.getByRole("textbox", { name: "新密码" }).fill("replacement-password");
-  await page.getByRole("button", { name: "确认重置" }).click();
   await expect(page.getByText("重置链接无效或缺少令牌，请重新申请密码重置邮件。")).toBeVisible();
+  await expect(page.getByRole("button", { name: "确认重置" })).toBeDisabled();
   expect(resetRequests).toBe(0);
 });
 
@@ -1152,6 +1151,8 @@ test("two-shift output drives labels, teams, metric units, and profile details",
   await expect(detailsTrigger).toBeFocused();
 
   await detailsTrigger.click();
+  await expect(detailsSheet).toBeVisible();
+  await expect.poll(async () => (await detailsSheet.boundingBox())?.x).toBeCloseTo(880, 0);
   const drawerHandle = page.locator('[data-slot="drawer-handle"]');
   const handleBox = await drawerHandle.boundingBox();
   expect(handleBox).not.toBeNull();
@@ -2762,7 +2763,7 @@ test("Skland login shows QR on every viewport and offers a separate mobile app s
   await expect(page.getByRole("link", { name: "本站隐私政策" }).first()).toHaveAttribute("href", "/privacy");
   await expect(page.getByText(/skland-kit/i)).toHaveCount(0);
   const [contentTrackBox, loginPanelBox] = await Promise.all([
-    page.locator(".app-content-track").last().evaluate((element) => {
+    page.locator("[data-app-content]").evaluate((element) => {
       const rect = element.getBoundingClientRect();
       const style = getComputedStyle(element);
       const paddingInlineStart = Number.parseFloat(style.paddingInlineStart);

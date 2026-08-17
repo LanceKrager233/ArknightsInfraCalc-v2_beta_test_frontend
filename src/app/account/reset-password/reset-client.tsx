@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,9 +10,15 @@ export function ResetPassword() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    const resetToken = new URLSearchParams(location.search).get("token")?.trim() ?? "";
+    setToken(resetToken);
+    if (!resetToken) setMessage("重置链接无效或缺少令牌，请重新申请密码重置邮件。");
+  }, []);
 
   async function resetPassword() {
-    const token = new URLSearchParams(location.search).get("token") ?? "";
     if (!token) {
       setMessage("重置链接无效或缺少令牌，请重新申请密码重置邮件。");
       return;
@@ -39,7 +45,7 @@ export function ResetPassword() {
         placeholder="新密码（10–128 位）"
         aria-label="新密码"
       />
-      <Button type="button" disabled={busy || password.length < 10} onClick={() => void resetPassword()}>
+      <Button type="button" disabled={busy || !token || password.length < 10} onClick={() => void resetPassword()}>
         {busy ? "正在重置…" : "确认重置"}
       </Button>
       {message ? <p role="status" className="text-sm text-muted-foreground">{message}</p> : null}
