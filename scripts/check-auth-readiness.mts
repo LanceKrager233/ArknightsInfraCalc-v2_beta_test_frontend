@@ -1,7 +1,9 @@
-import { loadEnvConfig } from "@next/env";
+import nextEnv from "@next/env";
 import { Pool } from "pg";
 
 import { requireAuthBaseUrl, requireAuthSecret } from "../src/server/auth/config.ts";
+
+const { loadEnvConfig } = nextEnv;
 
 loadEnvConfig(process.cwd());
 
