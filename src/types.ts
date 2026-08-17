@@ -747,6 +747,7 @@ export interface PlanComputeParams {
 
 export type RotationProfile =
   | "abc_12_6_6"
+  | "abc_12_12_12"
   | "main_backup_12_12"
   | "fiammetta_8_8_4_4"
   | "abyssal_7_5_7_5";
