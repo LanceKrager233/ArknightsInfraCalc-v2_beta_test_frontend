@@ -9,9 +9,11 @@
 | 技能查询、全角色样例、配置与求解 | 可用 | 可用 |
 | MAA JSON / xlsx 导入及求解 | 返回 `AIC-AUTH-2008` | 可用 |
 | 森空岛登录、同步和求解 | 不可用 | 仅 development 可用 |
-| `/admin/users` | 不可用 | 仅 `BETTER_AUTH_ADMIN_USER_IDS` 中的用户可用 |
+| `/admin/users` | 不可用 | 初始管理员及其通过管理页授予权限的管理员可用 |
 
-`/api/auth/*` 保持 Better Auth 原生响应，是统一 `ApiSuccess | ApiFailure` 信封的唯一例外。应用自有的 `/api/admin/users`、`/api/plan` 和 `/api/skland/*` 继续使用统一信封、请求 ID、同源校验、大小限制和限流。Better Auth 的原生 `/api/auth/admin/*` 全部返回 404，避免开放模拟登录、改密码、删除用户或授予角色等能力。
+`/api/auth/*` 保持 Better Auth 原生响应，是统一 `ApiSuccess | ApiFailure` 信封的唯一例外。应用自有的 `/api/admin/users`、`/api/plan` 和 `/api/skland/*` 继续使用统一信封、请求 ID、同源校验、大小限制和限流。Better Auth 的原生 `/api/auth/admin/*` 全部返回 404，避免开放模拟登录、改密码、删除用户或绕过应用权限边界授予角色等能力。
+
+`BETTER_AUTH_ADMIN_USER_IDS` 中的账号是不可由网页降级的初始管理员。初始管理员可以在中文管理页将已验证、未封禁的账号设为管理员，角色保存于 PostgreSQL 的 `user.role`。受委派管理员可以搜索、封禁用户及查看或撤销 Session，但不能继续授予或撤销管理员权限，也不能封禁初始管理员或撤销其 Session。服务端每次请求都读取当前数据库角色，因此撤销权限后立即生效。
 
 PostgreSQL 只保存网站账号、数据库 Session、验证记录和 Better Auth 限流记录。MAA Box、布局、排班与第三方游戏凭据不会写入 PostgreSQL；后者仍只保存在绑定网站用户的加密 HttpOnly Cookie 中。
 
@@ -101,7 +103,7 @@ psql 'postgresql://<dev-backup-user>:<password>@127.0.0.1:55433/<dev-db>' \
   -c 'select id, email, email_verified, created_at from "user" order by created_at desc;'
 ```
 
-把确认无误的 ID 写入 `BETTER_AUTH_ADMIN_USER_IDS`，多个 ID 用逗号分隔；随后重启 development 服务并访问 `/admin/users`。管理员由服务端环境变量授权，不通过数据库 role 字段或网页授予。
+把确认无误的 ID 写入 `BETTER_AUTH_ADMIN_USER_IDS`，多个 ID 用逗号分隔；随后重启 development 服务并访问 `/admin/users`。这些 ID 是权限恢复与后续委派的信任根，不应删除最后一个可用的初始管理员。日常管理员可由初始管理员在页面中授予，不需要继续修改服务器环境变量。
 
 ## 7. 配置每日加密备份
 
@@ -139,7 +141,7 @@ systemctl list-timers 'arknights-infra-db-backup@*'
 4. 注册、验证邮箱、未验证登录拦截、正常登录、找回密码、重置后旧 Session 失效均正常。
 5. 匿名全角色样例可求解；匿名 MAA 返回 `AIC-AUTH-2008`；登录后 MAA 可求解。
 6. development 森空岛全部入口要求网站账号；退出网站账号、退出全部设备或注销后，原森空岛 Cookie 不能被其他网站用户读取。
-7. 管理页只能由配置的 user ID 访问，可搜索、查看/撤销 Session、封禁和解封；原生 `/api/auth/admin/*` 返回 404。
+7. 管理页只能由初始或受委派管理员访问，可搜索、查看/撤销 Session、封禁和解封；只有初始管理员能授予或撤销管理员角色，受委派管理员不能影响初始管理员；原生 `/api/auth/admin/*` 返回 404。
 8. 390px、768px、1440px 下完成注册、验证提示、权限引导、账号设置与管理页检查。
 9. backup service 成功且本地加密文件存在；配置异地存储时还需确认 restic 快照存在，并在隔离库完成至少一次恢复验证。
 

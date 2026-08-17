@@ -878,6 +878,44 @@ export interface FeedbackData {
   savedAt: string;
 }
 
+export type AdminUserAction = "ban" | "unban" | "revokeSessions" | "grantAdmin" | "revokeAdmin";
+
+export interface AdminUserData {
+  id: string;
+  name: string;
+  email: string;
+  emailVerified: boolean;
+  banned: boolean | null;
+  banReason: string | null;
+  createdAt: string;
+  isAdmin: boolean;
+  isBootstrapAdmin: boolean;
+}
+
+export interface AdminUsersData {
+  users: AdminUserData[];
+  permissions: {
+    canManageAdminRoles: boolean;
+  };
+}
+
+export interface AdminSessionData {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+}
+
+export interface AdminSessionsData {
+  sessions: AdminSessionData[];
+}
+
+export interface AdminUserUpdateData {
+  updated: true;
+}
+
 export interface SklandSessionData {
   authenticated: boolean;
   configured: boolean;
