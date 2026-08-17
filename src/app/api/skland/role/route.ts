@@ -20,7 +20,7 @@ import {
 } from "@/server/skland/http";
 import { removeSklandAccount } from "@/server/skland/session";
 import { requireWebsiteSession } from "@/server/auth/authorization";
-import { countSklandBindings } from "@/server/skland/bindings";
+import { getSklandBindingSummary } from "@/server/skland/bindings";
 
 export const runtime = "nodejs";
 
@@ -45,13 +45,14 @@ export async function POST(request: Request) {
     if (!account.roles.some((role) => role.uid === body.uid)) throw new PublicApiError("AIC-REQ-1001");
     const result = await selectSessionRole(account.session, body.uid);
     const next = withUpdatedSklandAccount(previous, account.accountId, result.session, result.snapshot);
-    const bindingCount = await countSklandBindings(website.user.id);
+    const bindingSummary = await getSklandBindingSummary(website.user.id);
     const response = successResponse({
       authenticated: true,
       configured: true,
       accounts: sklandAccountSummaries(next),
       activeAccountId: next.activeAccountId,
-      bindingCount,
+      bindingCount: bindingSummary.totalCount,
+      bindingSummary,
       scheduleSnapshot: result.snapshot,
       statusSnapshot: result.statusSnapshot,
     }, requestId);

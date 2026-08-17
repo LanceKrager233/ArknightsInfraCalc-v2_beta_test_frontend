@@ -1,8 +1,10 @@
 import "server-only";
 
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { getDatabase } from "@/server/db";
 import { sklandBinding } from "@/server/db/schema";
+import { emptySklandBindingSummary, summarizeSklandBindings } from "@/skland-binding-state";
+import type { SklandBindingSummary } from "@/types";
 import { sklandBindingKey } from "./session";
 
 export class SklandBindingConflictError extends Error {
@@ -12,7 +14,7 @@ export class SklandBindingConflictError extends Error {
   }
 }
 
-export async function bindSklandAccount(websiteUserId: string, sklandUserId: string): Promise<number> {
+export async function bindSklandAccount(websiteUserId: string, sklandUserId: string): Promise<SklandBindingSummary> {
   const bindingKey = sklandBindingKey(sklandUserId);
   const now = new Date();
   await getDatabase().insert(sklandBinding).values({
@@ -33,25 +35,45 @@ export async function bindSklandAccount(websiteUserId: string, sklandUserId: str
     .update(sklandBinding)
     .set({ lastAuthorizedAt: now })
     .where(and(eq(sklandBinding.bindingKey, bindingKey), eq(sklandBinding.userId, websiteUserId)));
-  return countSklandBindings(websiteUserId);
+  return getSklandBindingSummary(websiteUserId);
 }
 
 export async function countSklandBindings(websiteUserId: string): Promise<number> {
-  const [result] = await getDatabase()
-    .select({ count: sql<number>`count(*)::int` })
-    .from(sklandBinding)
-    .where(eq(sklandBinding.userId, websiteUserId));
-  return result?.count ?? 0;
+  return (await getSklandBindingSummary(websiteUserId)).totalCount;
 }
 
-export async function sklandBindingCountsByUserIds(userIds: string[]): Promise<Map<string, number>> {
+export async function getSklandBindingSummary(
+  websiteUserId: string,
+  now = Date.now(),
+): Promise<SklandBindingSummary> {
+  const records = await getDatabase()
+    .select({ lastAuthorizedAt: sklandBinding.lastAuthorizedAt })
+    .from(sklandBinding)
+    .where(eq(sklandBinding.userId, websiteUserId));
+  return summarizeSklandBindings(records.map((record) => record.lastAuthorizedAt.getTime()), now);
+}
+
+export async function sklandBindingSummariesByUserIds(
+  userIds: string[],
+  now = Date.now(),
+): Promise<Map<string, SklandBindingSummary>> {
   if (!userIds.length) return new Map();
   const records = await getDatabase()
-    .select({ userId: sklandBinding.userId, count: sql<number>`count(*)::int` })
+    .select({ userId: sklandBinding.userId, lastAuthorizedAt: sklandBinding.lastAuthorizedAt })
     .from(sklandBinding)
-    .where(inArray(sklandBinding.userId, userIds))
-    .groupBy(sklandBinding.userId);
-  return new Map(records.map((record) => [record.userId, record.count]));
+    .where(inArray(sklandBinding.userId, userIds));
+  const authorizedAtByUser = new Map<string, number[]>();
+  for (const record of records) {
+    const values = authorizedAtByUser.get(record.userId) ?? [];
+    values.push(record.lastAuthorizedAt.getTime());
+    authorizedAtByUser.set(record.userId, values);
+  }
+  return new Map(userIds.map((userId) => [
+    userId,
+    authorizedAtByUser.has(userId)
+      ? summarizeSklandBindings(authorizedAtByUser.get(userId) ?? [], now)
+      : emptySklandBindingSummary(),
+  ]));
 }
 
 export async function removeSklandBindings(websiteUserId: string, sklandUserIds?: string[]): Promise<void> {

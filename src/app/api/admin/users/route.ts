@@ -12,7 +12,7 @@ import { requireWebsiteAdmin } from "@/server/auth/authorization";
 import { configuredAdminIds } from "@/server/auth/config";
 import { getDatabase } from "@/server/db";
 import { session, user } from "@/server/db/schema";
-import { sklandBindingCountsByUserIds } from "@/server/skland/bindings";
+import { sklandBindingSummariesByUserIds } from "@/server/skland/bindings";
 import { assertSameOrigin, createRequestId, enforceRateLimit, failureResponse, PublicApiError, readJsonBody, requestClientIp, successResponse } from "@/server/api-contract";
 import type { AdminSessionsData, AdminUserAction, AdminUsersData, AdminUserUpdateData } from "@/types";
 
@@ -42,9 +42,17 @@ export async function GET(request: Request) {
     const query = searchParams.get("q")?.trim().slice(0, 100);
     const where = query ? or(ilike(user.email, `%${query}%`), ilike(user.name, `%${query}%`)) : undefined;
     const records = await getDatabase().select({ id: user.id, name: user.name, email: user.email, emailVerified: user.emailVerified, role: user.role, banned: user.banned, banReason: user.banReason, createdAt: user.createdAt }).from(user).where(where).orderBy(desc(user.createdAt)).limit(100);
-    const bindingCounts = await sklandBindingCountsByUserIds(records.map((record) => record.id));
+    const bindingSummaries = await sklandBindingSummariesByUserIds(records.map((record) => record.id));
     const bootstrapAdminIds = configuredAdminIds();
-    const users = records.map((record) => toAdminUserData({ ...record, sklandBindingCount: bindingCounts.get(record.id) ?? 0 }, bootstrapAdminIds));
+    const users = records.map((record) => {
+      const bindingSummary = bindingSummaries.get(record.id);
+      return toAdminUserData({
+        ...record,
+        sklandBindingCount: bindingSummary?.totalCount ?? 0,
+        sklandActiveBindingCount: bindingSummary?.activeCount ?? 0,
+        sklandRenewalDueCount: bindingSummary?.renewalDueCount ?? 0,
+      }, bootstrapAdminIds);
+    });
     return successResponse<AdminUsersData>({ users, permissions: { canManageAdminRoles: actor.canManageAdminRoles } }, requestId);
   } catch (error) {
     return failureResponse(error, requestId, "/api/admin/users", startedAt);

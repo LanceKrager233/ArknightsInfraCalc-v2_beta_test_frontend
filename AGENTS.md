@@ -53,8 +53,8 @@
 | --- | --- |
 | `src/app/layout.tsx`、`src/app/page.tsx` | App Router 根布局与应用入口 |
 | `src/App.tsx` | 顶层状态、页面编排、持久化与求解主流程 |
-| `src/components/pages/*` | 基建计算器、练卡建议、森空岛状态三个一级页面 |
-| `src/components/layout/AppSidebar.tsx`、`src/components/layout/AppTopBar.tsx` | 三个一级导航、移动端侧栏行为与全局账号入口 |
+| `src/components/pages/*` | 基建计算器、练卡建议、技能查询、账号状态中心四个一级页面 |
+| `src/components/layout/AppSidebar.tsx`、`src/components/layout/AppTopBar.tsx` | 四个一级导航与移动端侧栏行为 |
 | `src/setup-dialog.tsx` | Box 导入、森空岛入口和布局配置流程 |
 | `src/components.tsx` | 业务 UI 组件 |
 | `src/components/ui/*` | shadcn/Base UI primitives |
@@ -236,7 +236,7 @@ npm run dev
 
 涉及 UI 时至少检查 390px、768px、1440px，并覆盖：
 
-- 基建计算器、练卡建议、森空岛状态三个一级导航。
+- 基建计算器、练卡建议、技能查询、账号状态中心四个一级导航。
 - Full E2、配置流程、生成排班、三班切换和 MAA 下载。
 - 键盘焦点、Dialog 关闭后焦点恢复、`role="status"` / `role="alert"` 和移动端约 44px 触控目标。
 - “一图流布局”仍可见且保持当前禁用状态；加工站“暂不显示”和恢复交互不丢失。

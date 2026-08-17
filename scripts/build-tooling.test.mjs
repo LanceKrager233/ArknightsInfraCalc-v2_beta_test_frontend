@@ -34,14 +34,14 @@ test("CI enforces the initial route JavaScript budget after building", async () 
 test("production injects the client feature flag at every browser boundary", async () => {
   const nextConfig = await readRepoFile("next.config.ts");
   const app = await readRepoFile("src/App.tsx");
-  const sidebar = await readRepoFile("src/components/layout/AppSidebar.tsx");
+  const developmentAccountCenter = await readRepoFile("src/components/pages/DevelopmentAccountStatusCenter.tsx");
   const setupDialog = await readRepoFile("src/setup-dialog.tsx");
   const workflow = await readRepoFile(".github/workflows/frontend-quality.yml");
 
   assert.match(nextConfig, /APP_CLIENT_SKLAND_ENABLED: isSklandFeatureEnabled\(\) \? "1" : "0"/);
-  for (const browserBoundary of [app, sidebar, setupDialog]) {
-    assert.match(browserBoundary, /process\.env\.APP_CLIENT_SKLAND_ENABLED === "1"/);
-  }
+  assert.match(app, /process\.env\.APP_CLIENT_SKLAND_ENABLED === "1"/);
+  assert.match(setupDialog, /process\.env\.APP_CLIENT_SKLAND_ENABLED === "1"/);
+  assert.match(developmentAccountCenter, /SklandStatus/);
   assert.match(workflow, /Production build[\s\S]+APP_DEPLOYMENT_ENV: production/);
 });
 

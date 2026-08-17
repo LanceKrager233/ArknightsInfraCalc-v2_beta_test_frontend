@@ -13,6 +13,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
 import * as schema from "../db/schema.ts";
+import { summarizeSklandBindings } from "../../skland-binding-state.ts";
 import { websiteAdminAccess } from "./admin-access.ts";
 
 const databaseUrl = process.env.AUTH_INTEGRATION_DATABASE_URL?.trim();
@@ -185,12 +186,15 @@ test("Better Auth completes the PostgreSQL account lifecycle", async () => {
     const persistedRateLimits = await pool.query('SELECT count(*)::int AS count FROM "rateLimit"');
     assert.ok(persistedRateLimits.rows[0].count > 0, "Better Auth rate limits should be stored in PostgreSQL");
 
-    await pool.query('INSERT INTO "skland_binding" (binding_key, user_id) VALUES ($1, $2)', [`binding-${suffix}`, primaryUserId]);
-    const binding = await pool.query('SELECT count(*)::int AS count FROM "skland_binding" WHERE user_id = $1', [primaryUserId]);
-    assert.equal(binding.rows[0].count, 1, "website users should persist a non-credential Skland binding marker");
+    await pool.query('INSERT INTO "skland_binding" (binding_key, user_id, last_authorized_at) VALUES ($1, $2, now()), ($3, $2, now() - interval \'8 days\')', [`binding-active-${suffix}`, primaryUserId, `binding-due-${suffix}`]);
+    const bindings = await pool.query('SELECT last_authorized_at FROM "skland_binding" WHERE user_id = $1 ORDER BY binding_key', [primaryUserId]);
+    const bindingSummary = summarizeSklandBindings(bindings.rows.map((row) => new Date(row.last_authorized_at).getTime()));
+    assert.equal(bindingSummary.totalCount, 2, "website users should persist non-credential Skland binding markers");
+    assert.equal(bindingSummary.activeCount, 1, "a binding authorized within seven days should remain active");
+    assert.equal(bindingSummary.renewalDueCount, 1, "an older binding should remain stored and require renewal");
   } finally {
     if (createdUserIds.length > 0) await pool.query('DELETE FROM "user" WHERE id = ANY($1::text[])', [createdUserIds]);
-    const orphanedBindings = await pool.query('SELECT count(*)::int AS count FROM "skland_binding" WHERE binding_key = $1', [`binding-${suffix}`]);
+    const orphanedBindings = await pool.query('SELECT count(*)::int AS count FROM "skland_binding" WHERE binding_key = ANY($1::text[])', [[`binding-active-${suffix}`, `binding-due-${suffix}`]]);
     assert.equal(orphanedBindings.rows[0].count, 0, "deleting a website user should cascade to Skland binding markers");
     await pool.query('DELETE FROM "rateLimit"');
     await pool.end();

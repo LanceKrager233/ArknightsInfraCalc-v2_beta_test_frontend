@@ -132,6 +132,7 @@ export function SklandLoginPanel({
             accounts: result.accounts,
             activeAccountId: result.activeAccountId,
             bindingCount: result.bindingCount ?? result.accounts.length,
+            bindingSummary: result.bindingSummary,
             scheduleSnapshot: result.scheduleSnapshot,
             statusSnapshot: result.statusSnapshot,
           });

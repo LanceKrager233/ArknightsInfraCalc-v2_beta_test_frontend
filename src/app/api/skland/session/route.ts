@@ -19,7 +19,8 @@ import {
 import { removeSklandAccount } from "@/server/skland/session";
 import { isSecureSklandRequest, isSklandConfigured } from "@/server/skland/session";
 import { requireWebsiteSession } from "@/server/auth/authorization";
-import { countSklandBindings, removeSklandBindings } from "@/server/skland/bindings";
+import { getSklandBindingSummary, removeSklandBindings } from "@/server/skland/bindings";
+import type { SklandBindingSummary } from "@/types";
 
 export const runtime = "nodejs";
 const authMethods = { qr: true as const };
@@ -28,12 +29,12 @@ export async function GET(request: Request) {
   const requestId = createRequestId();
   const startedAt = performance.now();
   let websiteUserId: string;
-  let bindingCount: number;
+  let bindingSummary: SklandBindingSummary;
   try {
     assertSklandFeatureEnabled();
     const website = await requireWebsiteSession(request);
     websiteUserId = website.user.id;
-    bindingCount = await countSklandBindings(websiteUserId);
+    bindingSummary = await getSklandBindingSummary(websiteUserId);
   } catch (error) {
     return sklandErrorResponse(error, requestId, "/api/skland/session", startedAt);
   }
@@ -45,7 +46,8 @@ export async function GET(request: Request) {
       disabledReason: "当前未开放森空岛登录，可使用 MAA 导入。",
       accounts: [],
       activeAccountId: null,
-      bindingCount,
+      bindingCount: bindingSummary.totalCount,
+      bindingSummary,
     }, requestId);
   }
   try {
@@ -57,7 +59,8 @@ export async function GET(request: Request) {
       authMethods,
       accounts: sklandAccountSummaries(loaded.store),
       activeAccountId: loaded.store.activeAccountId,
-      bindingCount,
+      bindingCount: bindingSummary.totalCount,
+      bindingSummary,
       ...(loaded.snapshot ? { scheduleSnapshot: loaded.snapshot } : {}),
       ...(loaded.statusSnapshot ? { statusSnapshot: loaded.statusSnapshot } : {}),
     }, requestId);
@@ -95,14 +98,15 @@ export async function DELETE(request: Request) {
     }
     await removeSklandBindings(website.user.id, removedSklandUserIds);
     const loaded = await loadActiveSklandAccount(next);
-    const bindingCount = await countSklandBindings(website.user.id);
+    const bindingSummary = await getSklandBindingSummary(website.user.id);
     const response = successResponse({
       authenticated: Boolean(loaded.snapshot),
       configured: true,
       authMethods,
       accounts: sklandAccountSummaries(loaded.store),
       activeAccountId: loaded.store.activeAccountId,
-      bindingCount,
+      bindingCount: bindingSummary.totalCount,
+      bindingSummary,
       ...(loaded.snapshot ? { scheduleSnapshot: loaded.snapshot } : {}),
       ...(loaded.statusSnapshot ? { statusSnapshot: loaded.statusSnapshot } : {}),
     }, requestId);

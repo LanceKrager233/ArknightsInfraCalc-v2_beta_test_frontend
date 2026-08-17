@@ -5,7 +5,6 @@ import { UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import type { SklandAccountSummary, SklandStatusSnapshot } from "@/types";
-import { AuthAccountControl } from "@/components/auth/AuthAccountControl";
 
 const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
 
@@ -16,9 +15,8 @@ export function AppTopBar() {
       data-app-topbar
     >
       <h1 className="sr-only">可露希尔基建终端</h1>
-      <div className="app-content-track flex h-14 items-center justify-between">
+      <div className="app-content-track flex h-14 items-center">
         <SidebarTrigger className="size-11 shrink-0" />
-        <AuthAccountControl />
       </div>
     </header>
   );
@@ -28,22 +26,22 @@ interface SklandAccountControlProps {
   account?: SklandAccountSummary | null;
   statusSnapshot?: SklandStatusSnapshot | null;
   sessionLoading?: boolean;
-  onOpenSkland?: () => void;
+  onOpenAccountCenter?: () => void;
 }
 
 export function SklandAccountControl({
   account,
   statusSnapshot,
   sessionLoading,
-  onOpenSkland,
+  onOpenAccountCenter,
 }: SklandAccountControlProps) {
   if (!CLIENT_SKLAND_ENABLED) return null;
 
   const selectedRole = account?.roles.find((role) => role.uid === account.selectedUid) ?? account?.roles[0] ?? null;
   const nickname = statusSnapshot?.player.nickname ?? selectedRole?.nickname ?? null;
   const accountLabel = account
-    ? `${nickname ?? "已登录账号"}，进入森空岛状态`
-    : "登录森空岛";
+    ? `${nickname ?? "已登录账号"}，进入账号状态中心`
+    : "进入账号状态中心绑定森空岛";
 
   if (sessionLoading && !account) {
     return (
@@ -62,9 +60,9 @@ export function SklandAccountControl({
       size="icon-lg"
       variant={account ? "default" : "outline"}
       className={`relative -ms-px size-9 overflow-hidden rounded-l-none rounded-r-lg max-sm:size-11 ${account ? "max-sm:border-transparent max-sm:bg-transparent" : ""}`}
-      onClick={onOpenSkland}
+      onClick={onOpenAccountCenter}
       aria-label={accountLabel}
-      title={nickname ?? "登录森空岛"}
+      title={nickname ?? "账号状态中心"}
       data-skland-account-control
     >
       {account ? (

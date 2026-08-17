@@ -8,7 +8,11 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar, type AppPage } from "@/components/layout/AppSidebar";
 import { AppTopBar, SklandAccountControl } from "@/components/layout/AppTopBar";
 import { InfraCalculator } from "@/components/pages/InfraCalculator";
-import { SklandStatus } from "@/components/pages/SklandStatus";
+import { AccountStatusCenter } from "@/components/pages/AccountStatusCenter";
+import {
+  DevelopmentAccountStatusCenter,
+  type AccountCenterView,
+} from "@/components/pages/DevelopmentAccountStatusCenter";
 import { LiveActivity, usePlanActivity } from "@/components/ui/live-activity";
 import { authClient } from "@/lib/auth-client";
 
@@ -52,6 +56,7 @@ import {
 import { planToRows, RoomRow } from "./schedule";
 import { DEFAULT_ROTATION_PROFILE } from "./rotation-settings";
 import { closestShift, compareShifts } from "./skland";
+import { emptySklandBindingSummary } from "./skland-binding-state";
 import { setupConfigurationFingerprint } from "./setup-configuration";
 import {
   BaseBlueprint,
@@ -65,12 +70,27 @@ import {
   PresetDef,
   RotationProfile,
   SklandAccountSummary,
+  SklandBindingSummary,
   SklandSessionData,
   SklandScheduleSnapshot,
   SklandStatusSnapshot,
 } from "./types";
 
 const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
+
+function bindingSummaryFromSession(session: Pick<SklandSessionData, "accounts" | "bindingCount" | "bindingSummary">): SklandBindingSummary {
+  if (session.bindingSummary) return session.bindingSummary;
+  const totalCount = Number.isFinite(session.bindingCount) ? session.bindingCount : session.accounts.length;
+  const activeCount = session.accounts.length > 0 ? Math.min(totalCount, session.accounts.length) : totalCount;
+  const expiries = session.accounts.map((account) => account.credentialExpiresAt).filter(Number.isFinite);
+  return {
+    totalCount,
+    activeCount,
+    renewalDueCount: Math.max(0, totalCount - activeCount),
+    nextExpiresAt: expiries.length ? Math.min(...expiries) : null,
+    latestExpiredAt: null,
+  };
+}
 
 function DeferredPageLoading() {
   return (
@@ -211,10 +231,12 @@ function buildIssueReport(
 }
 
 function WorkbenchApp() {
-  const { data: websiteSession } = authClient.useSession();
+  const { data: websiteSession, isPending: websiteSessionPending, refetch: refetchWebsiteSession } = authClient.useSession();
   const defaultPreset = PRESETS[0];
   const defaultLayout = buildBlueprint(defaultPreset);
   const [page, setPage] = useState<AppPage>("calculator");
+  const [accountView, setAccountView] = useState<AccountCenterView>("account");
+  const [websiteAuthReloadKey, setWebsiteAuthReloadKey] = useState(0);
   const [betaRequested, setBetaRequested] = useState(false);
   const [debugToolsEnabled, setDebugToolsEnabled] = useState(false);
   const [hasRestoredSession, setHasRestoredSession] = useState(false);
@@ -236,7 +258,7 @@ function WorkbenchApp() {
   const [sklandStatusReloadKey, setSklandStatusReloadKey] = useState(0);
   const [sklandAccounts, setSklandAccounts] = useState<SklandAccountSummary[]>([]);
   const [sklandActiveAccountId, setSklandActiveAccountId] = useState<string | null>(null);
-  const [sklandBindingCount, setSklandBindingCount] = useState(0);
+  const [sklandBindingSummary, setSklandBindingSummary] = useState<SklandBindingSummary>(emptySklandBindingSummary);
   const [sklandConfigured, setSklandConfigured] = useState(false);
   const [sklandDisabledReason, setSklandDisabledReason] = useState<string | null>(null);
   const [sklandSessionLoading, setSklandSessionLoading] = useState(CLIENT_SKLAND_ENABLED);
@@ -255,6 +277,7 @@ function WorkbenchApp() {
   const initialLocalLayoutBackup = useRef<BaseBlueprint | null>(null);
   const skipNextPersistence = useRef(false);
   const statusLoadingAccount = useRef<string | null>(null);
+  const pendingPostLoginNavigation = useRef(false);
   const [inputError, setInputError] = useState<string | null>(null);
   const [inputErrorCode, setInputErrorCode] = useState<DisplayError["code"]>("AIC-BOX-1101");
   const [sampleLoading, setSampleLoading] = useState(false);
@@ -324,6 +347,8 @@ function WorkbenchApp() {
   const accountCanUseCurrentBox = boxSource === "sample" || Boolean(websiteSession);
   const canRun = Boolean(operbox && operbox.length > 0 && cliReady && accountCanUseCurrentBox);
   const showBetaPanels = betaRequested && debugToolsEnabled;
+  const sklandBindingCount = sklandBindingSummary.totalCount;
+  const websiteUserId = websiteSession?.user.id ?? null;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -431,12 +456,9 @@ function WorkbenchApp() {
   useEffect(() => {
     let cancelled = false;
     if (!hasRestoredSession) return;
-    setSklandSessionLoading(CLIENT_SKLAND_ENABLED);
-    const sessionRequest = CLIENT_SKLAND_ENABLED ? getSklandSession() : Promise.resolve(null);
-    void Promise.allSettled([getHealth(), sessionRequest]).then(([healthResult, sessionResult]) => {
-      if (cancelled) return;
-      if (healthResult.status === "fulfilled") {
-        const health = healthResult.value;
+    void getHealth()
+      .then((health) => {
+        if (cancelled) return;
         setSklandConfigured(Boolean(CLIENT_SKLAND_ENABLED && health.skland?.available));
         setSklandDisabledReason(CLIENT_SKLAND_ENABLED ? health.skland?.message ?? null : null);
         setDebugToolsEnabled(health.features.debugTools);
@@ -447,19 +469,49 @@ function WorkbenchApp() {
           setCliReady(false);
           setApiError(displayError("AIC-PLAN-3001", "排班服务暂不可用，请稍后重试。", true));
         }
-      } else {
+      })
+      .catch((error) => {
+        if (cancelled) return;
         setCliReady(false);
-        setApiError(toDisplayError(healthResult.reason, "排班服务暂不可用，请稍后重试。"));
-      }
+        setApiError(toDisplayError(error, "排班服务暂不可用，请稍后重试。"));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasRestoredSession]);
 
-      if (CLIENT_SKLAND_ENABLED && sessionResult.status === "fulfilled" && sessionResult.value) {
-        const session = sessionResult.value;
+  useEffect(() => {
+    if (!hasRestoredSession || websiteSessionPending) return;
+    if (!CLIENT_SKLAND_ENABLED) {
+      setSklandSessionLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    statusLoadingAccount.current = null;
+    setSklandAccounts([]);
+    setSklandActiveAccountId(null);
+    setSklandBindingSummary(emptySklandBindingSummary());
+    setSklandScheduleSnapshot(null);
+    setSklandStatusSnapshot(null);
+    setSklandError(null);
+
+    if (!websiteUserId) {
+      setSklandSessionLoading(false);
+      return;
+    }
+
+    setSklandSessionLoading(true);
+    void getSklandSession()
+      .then((session) => {
+        if (cancelled) return;
+        const bindingSummary = bindingSummaryFromSession(session);
         setSklandError(null);
         setSklandConfigured(session.configured);
         setSklandDisabledReason(session.disabledReason ?? null);
         setSklandAccounts(session.accounts);
         setSklandActiveAccountId(session.activeAccountId);
-        setSklandBindingCount(Number.isFinite(session.bindingCount) ? session.bindingCount : session.accounts.length);
+        setSklandBindingSummary(bindingSummary);
         setSklandStatusSnapshot(session.statusSnapshot ?? null);
         if (session.authenticated && session.scheduleSnapshot) {
           setSklandScheduleSnapshot(session.scheduleSnapshot);
@@ -484,20 +536,34 @@ function WorkbenchApp() {
             setPreset(resolvePreset(PRESETS.find((item) => item.label === session.scheduleSnapshot?.infrastructure.layoutLabel)));
           }
         }
-      } else if (CLIENT_SKLAND_ENABLED && sessionResult.status === "rejected") {
-        setSklandError(toDisplayError(sessionResult.reason, "森空岛会话恢复失败，请稍后刷新。"));
-      }
-      setSklandSessionLoading(false);
-    });
+        if (pendingPostLoginNavigation.current) {
+          setPage("account");
+          setAccountView(!session.authenticated || bindingSummary.renewalDueCount > 0 ? "skland-overview" : "account");
+          pendingPostLoginNavigation.current = false;
+        }
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setSklandError(toDisplayError(error, "森空岛会话恢复失败，请稍后刷新。"));
+        if (pendingPostLoginNavigation.current) {
+          setPage("account");
+          setAccountView("skland-overview");
+          pendingPostLoginNavigation.current = false;
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSklandSessionLoading(false);
+      });
     return () => {
       cancelled = true;
     };
-  }, [hasRestoredSession]);
+  }, [hasRestoredSession, websiteAuthReloadKey, websiteSessionPending, websiteUserId]);
 
   useEffect(() => {
     if (
       !CLIENT_SKLAND_ENABLED
-      || page !== "skland"
+      || page !== "account"
+      || accountView === "account"
       || !activeSklandAccount
       || sklandStatusSnapshot
       || statusLoadingAccount.current === activeSklandAccount.accountId
@@ -523,7 +589,7 @@ function WorkbenchApp() {
     return () => {
       cancelled = true;
     };
-  }, [activeSklandAccount, page, sklandStatusReloadKey, sklandStatusSnapshot]);
+  }, [accountView, activeSklandAccount, page, sklandStatusReloadKey, sklandStatusSnapshot]);
 
   async function handleFile(file: File): Promise<boolean> {
     setInputError(null);
@@ -561,7 +627,7 @@ function WorkbenchApp() {
   function applySklandSession(session: SklandSessionData, applyLayoutWhenClean = true) {
     setSklandAccounts(session.accounts);
     setSklandActiveAccountId(session.activeAccountId);
-    setSklandBindingCount(Number.isFinite(session.bindingCount) ? session.bindingCount : session.accounts.length);
+    setSklandBindingSummary(bindingSummaryFromSession(session));
     setSklandStatusSnapshot(session.statusSnapshot ?? null);
     if (session.authenticated && session.scheduleSnapshot) {
       applySklandSnapshot(session.scheduleSnapshot, applyLayoutWhenClean);
@@ -983,7 +1049,33 @@ function WorkbenchApp() {
   function openSklandFromSetup() {
     setInputError(null);
     setSetupOpen(false);
-    setPage("skland");
+    setAccountView("skland-overview");
+    setPage("account");
+  }
+
+  function handleAppPageChange(nextPage: AppPage) {
+    setPage(nextPage);
+    if (nextPage === "account") setAccountView("account");
+  }
+
+  async function handleWebsiteSessionChanged(authenticated: boolean) {
+    setPage("account");
+    if (authenticated && CLIENT_SKLAND_ENABLED) {
+      pendingPostLoginNavigation.current = true;
+    } else {
+      pendingPostLoginNavigation.current = false;
+      setAccountView("account");
+      if (!authenticated) {
+        setSklandAccounts([]);
+        setSklandActiveAccountId(null);
+        setSklandBindingSummary(emptySklandBindingSummary());
+        setSklandScheduleSnapshot(null);
+        setSklandStatusSnapshot(null);
+        setSklandError(null);
+      }
+    }
+    await refetchWebsiteSession();
+    setWebsiteAuthReloadKey((current) => current + 1);
   }
 
   function useSklandSnapshotFromSetup() {
@@ -1038,7 +1130,7 @@ function WorkbenchApp() {
       }
       setSklandAccounts([]);
       setSklandActiveAccountId(null);
-      setSklandBindingCount(0);
+      setSklandBindingSummary(emptySklandBindingSummary());
       setSklandScheduleSnapshot(null);
       setSklandStatusSnapshot(null);
       if (clearsBox) {
@@ -1139,7 +1231,7 @@ function WorkbenchApp() {
 
   return (
     <SidebarProvider defaultOpen={false}>
-      <AppSidebar page={page} onPageChange={setPage} />
+      <AppSidebar page={page} onPageChange={handleAppPageChange} />
       <SidebarInset>
         <AppTopBar />
         <LiveActivity
@@ -1177,7 +1269,10 @@ function WorkbenchApp() {
               account={activeSklandAccount}
               statusSnapshot={sklandStatusSnapshot}
               sessionLoading={sklandSessionLoading}
-              onOpenSkland={() => setPage("skland" as const)}
+              onOpenAccountCenter={() => {
+                setAccountView("skland-overview");
+                setPage("account");
+              }}
             />
           ) : undefined}
           onLoadSample={handleLoadSample}
@@ -1194,33 +1289,45 @@ function WorkbenchApp() {
           onClearResultNotice={() => setResultClearNotice(null)}
           onDismissResultClearWarning={dismissResultClearWarning}
         />
-      ) : CLIENT_SKLAND_ENABLED && page === "skland" ? (
-        <SklandStatus
-          scheduleSnapshot={sklandScheduleSnapshot}
-          snapshot={sklandStatusSnapshot}
-          accounts={sklandAccounts}
-          activeAccountId={sklandActiveAccountId}
-          bindingCount={sklandBindingCount}
-          sessionLoading={sklandSessionLoading}
-          layoutMatches={sklandLayoutMatches ?? false}
-          layoutDirty={layoutDirty}
-          configured={sklandConfigured}
-          disabledReason={sklandDisabledReason}
-          busy={sklandBusy}
-          error={sklandError}
-          onAuthenticated={handleSklandAuthenticated}
-          onRoleChange={handleSklandRole}
-          onLogout={handleSklandLogout}
-          onRetryStatus={handleRetrySklandStatus}
-          onDeleteAllData={handleDeleteAllSklandData}
-          onApplyLayout={handleApplySklandLayout}
-          onContinueSetup={() => {
-            setSetupInitialStep("layout");
-            setSetupOpen(true);
-          }}
-          onOpenCalculator={() => setPage("calculator")}
-          onCopyUid={(uid) => void copyText(uid)}
-        />
+      ) : page === "account" ? (
+        CLIENT_SKLAND_ENABLED ? (
+          <DevelopmentAccountStatusCenter
+            view={accountView}
+            onViewChange={setAccountView}
+            websiteAuthenticated={Boolean(websiteSession)}
+            websiteSessionPending={websiteSessionPending}
+            bindingSummary={sklandBindingSummary}
+            onWebsiteSessionChanged={handleWebsiteSessionChanged}
+            skland={{
+              scheduleSnapshot: sklandScheduleSnapshot,
+              snapshot: sklandStatusSnapshot,
+              accounts: sklandAccounts,
+              activeAccountId: sklandActiveAccountId,
+              bindingCount: sklandBindingCount,
+              sessionLoading: sklandSessionLoading,
+              layoutMatches: sklandLayoutMatches ?? false,
+              layoutDirty,
+              configured: sklandConfigured,
+              disabledReason: sklandDisabledReason,
+              busy: sklandBusy,
+              error: sklandError,
+              onAuthenticated: handleSklandAuthenticated,
+              onRoleChange: handleSklandRole,
+              onLogout: handleSklandLogout,
+              onRetryStatus: handleRetrySklandStatus,
+              onDeleteAllData: handleDeleteAllSklandData,
+              onApplyLayout: handleApplySklandLayout,
+              onContinueSetup: () => {
+                setSetupInitialStep("layout");
+                setSetupOpen(true);
+              },
+              onOpenCalculator: () => setPage("calculator"),
+              onCopyUid: (uid) => void copyText(uid),
+            }}
+          />
+        ) : (
+          <AccountStatusCenter onSessionChanged={handleWebsiteSessionChanged} />
+        )
       ) : page === "skill-query" ? (
         <SkillQuery />
       ) : (
