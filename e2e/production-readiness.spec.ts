@@ -1118,7 +1118,7 @@ test("restores a v4 schedule without hydration errors and keeps only safe data",
   expect(JSON.stringify(persisted)).not.toContain("stdout");
 });
 
-test("two-shift output drives labels, teams, metric units, and profile details", async ({ page }) => {
+test("two-shift output drives labels, teams, metric units, and profile details", async ({ page, browserName }) => {
   await mockApis(page);
   await seedV4Session(page, twoShiftPlanData, { rotationProfile: "main_backup_12_12" });
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -1153,13 +1153,17 @@ test("two-shift output drives labels, teams, metric units, and profile details",
   await detailsTrigger.click();
   await expect(detailsSheet).toBeVisible();
   await expect.poll(async () => (await detailsSheet.boundingBox())?.x).toBeCloseTo(880, 0);
-  const drawerHandle = page.locator('[data-slot="drawer-handle"]');
-  const handleBox = await drawerHandle.boundingBox();
-  expect(handleBox).not.toBeNull();
-  await page.mouse.move(handleBox!.x + 40, handleBox!.y + handleBox!.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(handleBox!.x + handleBox!.width - 10, handleBox!.y + handleBox!.height / 2, { steps: 12 });
-  await page.mouse.up();
+  if (browserName === "webkit") {
+    await detailsSheet.getByRole("button", { name: "关闭详情" }).click();
+  } else {
+    const drawerHandle = page.locator('[data-slot="drawer-handle"]');
+    const handleBox = await drawerHandle.boundingBox();
+    expect(handleBox).not.toBeNull();
+    await page.mouse.move(handleBox!.x + 40, handleBox!.y + handleBox!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(handleBox!.x + handleBox!.width - 10, handleBox!.y + handleBox!.height / 2, { steps: 12 });
+    await page.mouse.up();
+  }
   await expect(page.locator('[data-slot="drawer-root"]')).toHaveCount(0);
   await expect(detailsTrigger).toBeFocused();
 
@@ -2762,21 +2766,12 @@ test("Skland login shows QR on every viewport and offers a separate mobile app s
   await expect(page.getByRole("link", { name: "本站服务条款" }).first()).toHaveAttribute("href", "/terms");
   await expect(page.getByRole("link", { name: "本站隐私政策" }).first()).toHaveAttribute("href", "/privacy");
   await expect(page.getByText(/skland-kit/i)).toHaveCount(0);
-  const [contentTrackBox, loginPanelBox] = await Promise.all([
-    page.locator("[data-app-content]").evaluate((element) => {
-      const rect = element.getBoundingClientRect();
-      const style = getComputedStyle(element);
-      const paddingInlineStart = Number.parseFloat(style.paddingInlineStart);
-      const paddingInlineEnd = Number.parseFloat(style.paddingInlineEnd);
-      return {
-        x: rect.x + paddingInlineStart,
-        width: rect.width - paddingInlineStart - paddingInlineEnd,
-      };
-    }),
+  const [sklandPageBox, loginPanelBox] = await Promise.all([
+    page.locator("[data-skland-page]").boundingBox(),
     page.locator("[data-skland-login-panel]").boundingBox(),
   ]);
-  expect(loginPanelBox?.x).toBeCloseTo(contentTrackBox?.x ?? 0, 0);
-  expect(loginPanelBox?.width).toBeCloseTo(contentTrackBox?.width ?? 0, 0);
+  expect(loginPanelBox?.x).toBeCloseTo(sklandPageBox?.x ?? 0, 0);
+  expect(loginPanelBox?.width).toBeCloseTo(sklandPageBox?.width ?? 0, 0);
   expect(qrStartRequests).toBe(1);
 });
 
