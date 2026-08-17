@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
 import type { FactoryRecipe, TradeOrder } from "@/blueprint";
@@ -75,8 +74,6 @@ interface InfraCalculatorProps {
   scheduleResult: PublicPlanData | null;
   activeShift: number;
   rows: RoomRow[];
-  changedRoomIds: ReadonlySet<string>;
-  planHistory: Array<{ savedAt: string; result: PublicPlanData }>;
   currentMoraleByOperator: Map<string, number> | undefined;
   activePlan: MaaPlan | undefined;
   closestComparison: ShiftComparison | null;
@@ -94,7 +91,6 @@ interface InfraCalculatorProps {
   onOpenSetup: () => void;
   onRun: () => void;
   onCancelRun: () => void;
-  onRestorePlan: (entry: { savedAt: string; result: PublicPlanData }) => void;
   onSetActiveShift: (shift: number) => void;
   onMarkIssue: (row: RoomRow) => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
@@ -109,12 +105,12 @@ interface InfraCalculatorProps {
 export function InfraCalculator(props: InfraCalculatorProps) {
   const {
     layout, showBetaPanels,
-    result, scheduleResult, activeShift, rows, changedRoomIds, planHistory, currentMoraleByOperator,
+    result, scheduleResult, activeShift, rows, currentMoraleByOperator,
     activePlan, closestComparison,
     resultClearNotice,
     issueForPanel, issueReport, feedbackResult, feedbackError,
     sampleLoading, loading, canRun, plannerReady, accountControl,
-    onLoadSample, onOpenSetup, onRun, onCancelRun, onRestorePlan,
+    onLoadSample, onOpenSetup, onRun, onCancelRun,
     onSetActiveShift, onMarkIssue,
     onFactoryRecipeChange, onTradeOrderChange,
     onDownloadMaa, onDownloadBundle, onCopyCommand,
@@ -269,7 +265,6 @@ export function InfraCalculator(props: InfraCalculatorProps) {
             ) : null}
             {rows.length > 0 ? <ScheduleBoard
               rows={rows}
-              changedRoomIds={changedRoomIds}
               layout={layout}
               planRevision={result?.diagnosticId}
               currentMoraleByOperator={currentMoraleByOperator}
@@ -277,18 +272,9 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               shiftDirection={shiftDirection}
               activePlan={activePlan}
               searchQuery={operatorQuery}
-              viewControlsSlot={(
-                <ShiftTabs
-                  maaJson={result?.maa}
-                  rotation={result?.rotation}
-                  active={activeShift}
-                  closest={closestComparison?.planIndex}
-                  onChange={handleSetActiveShift}
-                />
-              )}
               mobileActionsSlot={renderExportActions("mobile")}
               shiftInfoSlot={(
-                <div className="flex flex-wrap items-center justify-end gap-2 max-sm:w-full max-sm:justify-between">
+                <div className="flex flex-wrap items-center justify-end gap-2 max-sm:w-full max-sm:justify-between" data-shift-actions>
                   {fiammettaTarget ? (
                     <span className="flex h-7 items-center gap-1 rounded-[min(var(--radius-md),12px)] border border-[#016E65]/30 bg-[#016E65]/10 px-2.5 text-[0.8rem] text-[#016E65] shadow-xs max-sm:h-11" title={`菲亚梅塔恢复 ${fiammettaTarget}`}>
                       <span className="size-5 shrink-0 overflow-hidden rounded-full border border-[#016E65]/25 bg-[#272A2B]">
@@ -297,26 +283,13 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                       <span className="whitespace-nowrap"><span className="text-[#016E65]/70">换心情</span> {fiammettaTarget}</span>
                     </span>
                   ) : null}
-                  {planHistory.length > 1 ? (
-                    <div className="flex min-w-0 items-center gap-2" aria-label="最近求解记录">
-                      <span className="shrink-0 text-xs font-medium text-muted-foreground">最近记录</span>
-                      <Tabs
-                        value={result?.diagnosticId ?? ""}
-                        onValueChange={(diagnosticId) => {
-                          const entry = planHistory.find((item) => item.result.diagnosticId === diagnosticId);
-                          if (entry) onRestorePlan(entry);
-                        }}
-                      >
-                        <TabsList>
-                          {planHistory.map((entry, index) => (
-                            <TabsTrigger key={entry.result.diagnosticId} value={entry.result.diagnosticId}>
-                              {index + 1}
-                            </TabsTrigger>
-                          ))}
-                        </TabsList>
-                      </Tabs>
-                    </div>
-                  ) : null}
+                  <ShiftTabs
+                    maaJson={result?.maa}
+                    rotation={result?.rotation}
+                    active={activeShift}
+                    closest={closestComparison?.planIndex}
+                    onChange={handleSetActiveShift}
+                  />
                   {renderExportActions("desktop")}
                 </div>
               )}

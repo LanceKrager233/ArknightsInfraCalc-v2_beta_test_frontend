@@ -50,7 +50,6 @@ import {
 } from "./persistence";
 import { planToRows, RoomRow } from "./schedule";
 import { DEFAULT_ROTATION_PROFILE } from "./rotation-settings";
-import { readPlanHistory, writePlanHistory, type PlanHistoryEntry } from "./plan-history";
 import { closestShift, compareShifts } from "./skland";
 import { setupConfigurationFingerprint } from "./setup-configuration";
 import { applyFiammettaSettings, scheduledOperatorNames, validateFiammettaExport } from "./fiammetta-settings";
@@ -273,8 +272,6 @@ function WorkbenchApp() {
   const [inputErrorCode, setInputErrorCode] = useState<DisplayError["code"]>("AIC-BOX-1101");
   const [sampleLoading, setSampleLoading] = useState(false);
   const [result, setResult] = useState<PublicPlanData | null>(null);
-  const [previousResult, setPreviousResult] = useState<PublicPlanData | null>(null);
-  const [planHistory, setPlanHistory] = useState<PlanHistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const planAbortRef = useRef<AbortController | null>(null);
   const [cliReady, setCliReady] = useState(false);
@@ -306,12 +303,6 @@ function WorkbenchApp() {
     fiammettaTarget,
     fiammettaOrder,
   }), [fiammettaEnabled, fiammettaOrder, fiammettaTarget, layout, rotationProfile]);
-  const changedRoomIds = useMemo(() => {
-    const previousPlan = previousResult?.maa.plans?.[activeShift];
-    if (!previousPlan || !activePlan) return new Set<string>();
-    const before = new Map(planToRows(previousPlan, previousResult?.rotation.shifts?.[activeShift], layout).map((row) => [row.roomId, JSON.stringify([row.operators, row.efficiency])]));
-    return new Set(rows.filter((row) => before.get(row.roomId) !== JSON.stringify([row.operators, row.efficiency])).map((row) => row.roomId));
-  }, [activePlan, activeShift, layout, previousResult, rows]);
   const currentMoraleByOperator = useMemo(() => {
     if (!CLIENT_SKLAND_ENABLED || boxSource !== "skland" || !sklandScheduleSnapshot) return undefined;
 
@@ -354,8 +345,6 @@ function WorkbenchApp() {
     window.addEventListener("popstate", syncBetaPanels);
     return () => window.removeEventListener("popstate", syncBetaPanels);
   }, []);
-
-  useEffect(() => setPlanHistory(readPlanHistory(window.localStorage)), []);
 
   useEffect(() => {
     if (setupOpen) setSetupMounted(true);
@@ -704,7 +693,6 @@ function WorkbenchApp() {
         ownsFiammetta,
         eligibleTargets: responseTargets,
       });
-      setPreviousResult(result);
       const finalizedResult = {
         ...response,
         maa: applyFiammettaSettings(response.maa, {
@@ -717,12 +705,6 @@ function WorkbenchApp() {
       if (fiammettaError && fiammettaEnabled) {
         setApiError(displayError("AIC-BOX-1101", `${fiammettaError} 本次结果未写入菲亚梅塔换人。`));
       }
-      setPlanHistory((current) => {
-        const compact = { ...finalizedResult, debug: undefined };
-        const next = [{ savedAt: new Date().toISOString(), result: compact }, ...current.filter((entry) => entry.result.diagnosticId !== response.diagnosticId)].slice(0, 5);
-        try { writePlanHistory(window.localStorage, next); } catch { /* Keep history in memory when storage is full. */ }
-        return next;
-      });
       if (response.maa.plans[0]) {
         const plan = response.maa.plans[0];
         const maaFactoryRooms = plan.rooms?.manufacture;
@@ -758,12 +740,6 @@ function WorkbenchApp() {
     planAbortRef.current?.abort();
     planAbortRef.current = null;
     setLoading(false);
-  }
-
-  function handleRestorePlan(entry: PlanHistoryEntry) {
-    setPreviousResult(result);
-    setResult(entry.result);
-    setActiveShift(0);
   }
 
   async function handleRun() {
@@ -1233,8 +1209,6 @@ function WorkbenchApp() {
           scheduleResult={scheduleResult}
           activeShift={activeShift}
           rows={rows}
-          changedRoomIds={changedRoomIds}
-          planHistory={planHistory}
           currentMoraleByOperator={currentMoraleByOperator}
           activePlan={activePlan}
           closestComparison={closestComparison}
@@ -1259,7 +1233,6 @@ function WorkbenchApp() {
           onOpenSetup={openSetup}
           onRun={handleRun}
           onCancelRun={handleCancelRun}
-          onRestorePlan={handleRestorePlan}
           onSetActiveShift={setActiveShift}
           onMarkIssue={handleMarkIssue}
           onFactoryRecipeChange={handleScheduleFactoryRecipeChange}
