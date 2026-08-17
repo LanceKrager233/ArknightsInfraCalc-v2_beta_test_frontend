@@ -66,6 +66,20 @@ setup_fixture() {
   tar -czf "$archive_path" -C "$fixture_root/payload" .
 }
 
+enable_auth_hooks() {
+  printf '%s\n' \
+    '{"name":"deploy-fixture","private":true,"scripts":{"db:migrate":"test-migration","auth:check":"test-readiness"}}' \
+    > "$fixture_root/payload/package.json"
+  tar -czf "$archive_path" -C "$fixture_root/payload" .
+}
+
+enable_incomplete_auth_hooks() {
+  printf '%s\n' \
+    '{"name":"deploy-fixture","private":true,"scripts":{"db:migrate":"test-migration"}}' \
+    > "$fixture_root/payload/package.json"
+  tar -czf "$archive_path" -C "$fixture_root/payload" .
+}
+
 run_deploy() {
   local legacy_hash="${4:-}"
   local -a legacy_arg=()
@@ -156,7 +170,8 @@ assert_failure none 4194304 "" "${legacy_caller_sha256%?}0"
 test "$(readlink -f "$app_root/current")" = "$current_release"
 
 setup_fixture success
-run_deploy none 4194304
+legacy_release_output="$(run_deploy none 4194304)"
+grep -q 'Skipping authentication database hooks for a legacy release without either script' <<<"$legacy_release_output"
 test "$(cat "$app_root/current/.release-sha")" = "$new_sha"
 test "$(count_valid_releases)" -eq 3
 test ! -e "$incomplete_release"
@@ -170,6 +185,13 @@ if [[ "$(awk -F= '$1 == "BETA_TRUST_PROXY_HEADERS" { print $2 }' "$app_root/curr
 fi
 test ! -e "$app_root/current/bin/data"
 test -f "$shared_root/bin-data/operator_instances.json"
+assert_fixture_safety
+
+setup_fixture auth-hooks-success
+enable_auth_hooks
+auth_release_output="$(run_deploy none 4194304)"
+grep -q 'Authentication database migration and readiness hooks completed' <<<"$auth_release_output"
+test "$(cat "$app_root/current/.release-sha")" = "$new_sha"
 assert_fixture_safety
 
 setup_fixture complete-runtime-data
@@ -202,6 +224,7 @@ test ! -e "$archive_path"
 assert_fixture_safety
 
 setup_fixture migration-failure
+enable_auth_hooks
 assert_failure migration
 test "$(readlink -f "$app_root/current")" = "$current_release"
 test "$(count_valid_releases)" -eq 3
@@ -210,7 +233,17 @@ test ! -e "$archive_path"
 assert_fixture_safety
 
 setup_fixture auth-readiness-failure
+enable_auth_hooks
 assert_failure auth-readiness
+test "$(readlink -f "$app_root/current")" = "$current_release"
+test "$(count_valid_releases)" -eq 3
+test -z "$(find "$releases_root" -mindepth 1 -maxdepth 1 -type d -name "*-${new_sha:0:12}" -print -quit)"
+test ! -e "$archive_path"
+assert_fixture_safety
+
+setup_fixture incomplete-auth-hooks
+enable_incomplete_auth_hooks
+assert_failure none
 test "$(readlink -f "$app_root/current")" = "$current_release"
 test "$(count_valid_releases)" -eq 3
 test -z "$(find "$releases_root" -mindepth 1 -maxdepth 1 -type d -name "*-${new_sha:0:12}" -print -quit)"
