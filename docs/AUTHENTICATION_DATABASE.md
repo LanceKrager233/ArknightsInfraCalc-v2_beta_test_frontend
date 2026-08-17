@@ -116,7 +116,7 @@ sudo install -o root -g root -m 0644 deploy/postgres/arknights-infra-db-backup@.
 sudo install -o root -g root -m 0644 deploy/postgres/arknights-infra-db-backup@.timer /etc/systemd/system/
 ```
 
-development 的 `BACKUP_LOCAL_DIR` 固定填写 `/var/backups/arknights-infra/development`。在 `/etc/arknights-infra/db-backup-development.env` 配置 `DATABASE_BACKUP_URL`、`BACKUP_AGE_RECIPIENT`、`BACKUP_LOCAL_DIR`、`RESTIC_REPOSITORY`、`RESTIC_PASSWORD_FILE` 及对象存储凭据，权限设为 `root:arkbackup 0640`；restic 密码文件也必须只允许 `arkbackup` 读取。初始化 restic 后先手动运行一次，再启用定时器：
+development 的 `BACKUP_LOCAL_DIR` 固定填写 `/var/backups/arknights-infra/development`。在 `/etc/arknights-infra/db-backup-development.env` 配置不含密码的 `DATABASE_BACKUP_URL`（例如 `postgresql://arknights_dev_backup@127.0.0.1:55433/arknights_infra_auth`）、独立的 `PGPASSWORD`、`BACKUP_AGE_RECIPIENT`、`BACKUP_LOCAL_DIR`、`RESTIC_REPOSITORY`、`RESTIC_PASSWORD_FILE` 及对象存储凭据。不要把密码嵌入连接 URL，否则会暴露在 `pg_dump` 的进程参数中。环境文件权限设为 `root:arkbackup 0640`；restic 密码文件也必须只允许 `arkbackup` 读取。初始化 restic 后先手动运行一次，再启用定时器：
 
 ```bash
 sudo systemctl daemon-reload

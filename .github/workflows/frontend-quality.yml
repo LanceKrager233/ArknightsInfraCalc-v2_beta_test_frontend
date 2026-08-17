@@ -32,9 +32,9 @@ jobs:
       BETA_DEBUG_TOOLS_ENABLED: "0"
       BETA_RATE_LIMIT_ENABLED: "0"
       BETA_TRUST_PROXY_HEADERS: "0"
-      DATABASE_URL: postgresql://postgres:postgres-test-only@127.0.0.1:5432/arknights_auth_test
-      DATABASE_MIGRATION_URL: postgresql://postgres:postgres-test-only@127.0.0.1:5432/arknights_auth_test
-      AUTH_INTEGRATION_DATABASE_URL: postgresql://postgres:postgres-test-only@127.0.0.1:5432/arknights_auth_test
+      DATABASE_URL: postgresql://arknights_test_runtime:runtime-test-only@127.0.0.1:5432/arknights_auth_test
+      DATABASE_MIGRATION_URL: postgresql://arknights_test_migration:migration-test-only@127.0.0.1:5432/arknights_auth_test
+      AUTH_INTEGRATION_DATABASE_URL: postgresql://arknights_test_runtime:runtime-test-only@127.0.0.1:5432/arknights_auth_test
       BETTER_AUTH_SECRET: integration-test-secret-at-least-32-bytes-long
       BETTER_AUTH_URL: https://auth.integration.test
       RESEND_API_KEY: re_test_not_used
@@ -63,6 +63,24 @@ jobs:
           bash -n deploy/postgres/init-roles.sh deploy/postgres/backup.sh
           rm -f deploy/postgres/production.env deploy/postgres/development.env
 
+      - name: Initialize limited database roles
+        run: |
+          docker run --rm --network host \
+            -v "$PWD/deploy/postgres/init-roles.sh:/init-roles.sh:ro" \
+            -e PGHOST=127.0.0.1 \
+            -e PGPORT=5432 \
+            -e PGPASSWORD=postgres-test-only \
+            -e POSTGRES_DB=arknights_auth_test \
+            -e POSTGRES_USER=postgres \
+            -e AUTH_RUNTIME_USER=arknights_test_runtime \
+            -e AUTH_RUNTIME_PASSWORD=runtime-test-only \
+            -e AUTH_MIGRATION_USER=arknights_test_migration \
+            -e AUTH_MIGRATION_PASSWORD=migration-test-only \
+            -e AUTH_BACKUP_USER=arknights_test_backup \
+            -e AUTH_BACKUP_PASSWORD=backup-test-only \
+            postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636 \
+            sh /init-roles.sh
+
       - name: Verify committed database migrations
         run: |
           npm run db:generate
@@ -73,6 +91,30 @@ jobs:
 
       - name: Authentication runtime readiness
         run: npm run auth:check
+
+      - name: Verify limited database grants and backup access
+        shell: bash
+        run: |
+          set -euo pipefail
+          backup_url='postgresql://arknights_test_backup@127.0.0.1:5432/arknights_auth_test'
+          runtime_url='postgresql://arknights_test_runtime@127.0.0.1:5432/arknights_auth_test'
+          image='postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636'
+          docker run --rm --network host -e PGPASSWORD=backup-test-only "$image" \
+            psql "$backup_url" -v ON_ERROR_STOP=1 -c 'SELECT count(*) FROM drizzle.__drizzle_migrations;'
+          if docker run --rm --network host -e PGPASSWORD=backup-test-only "$image" \
+            psql "$backup_url" -v ON_ERROR_STOP=1 -c 'DELETE FROM "user" WHERE false;'; then
+            echo 'backup role unexpectedly has write access' >&2
+            exit 1
+          fi
+          if docker run --rm --network host -e PGPASSWORD=runtime-test-only "$image" \
+            psql "$runtime_url" -v ON_ERROR_STOP=1 -c 'CREATE TABLE public.runtime_must_not_create (id integer);'; then
+            echo 'runtime role unexpectedly has DDL access' >&2
+            exit 1
+          fi
+          docker run --rm --network host \
+            -e PGPASSWORD=backup-test-only \
+            "$image" \
+            pg_dump --format=custom --no-owner --no-acl "$backup_url" >/dev/null
 
       - name: PostgreSQL authentication integration
         run: npm run test:auth-integration
