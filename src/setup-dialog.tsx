@@ -14,7 +14,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { RotationSettings } from "@/components/RotationSettings";
 import { FiammettaSettings } from "@/components/FiammettaSettings";
 import { WizardSteps } from "@/components/interior/wizard-steps";
-import { CLIENT_SKLAND_ENABLED } from "@/client-features";
 import { hasSetupConfigurationChanged } from "@/setup-configuration";
 
 import type { FactoryRecipe, PowerBudget, TradeOrder } from "./blueprint";
@@ -22,6 +21,8 @@ import { FileDrop, LayoutEditor, PresetSelector } from "./components";
 import { countOwned } from "./operbox";
 import type { SetupStep } from "./onboarding";
 import type { BaseBlueprint, BoxSource, DisplayError, OperBoxEntry, PresetDef, RotationProfile, SklandScheduleSnapshot } from "./types";
+
+const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
 
 const SETUP_STEP_ORDER: SetupStep[] = ["box", "layout", "facilities"];
 const PANEL_TRANSITION = { type: "spring", stiffness: 420, damping: 38, mass: 0.55 } as const;

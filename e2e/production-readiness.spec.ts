@@ -1410,6 +1410,9 @@ test("plan completion reveals status, metrics, and schedule once without resetti
   const firstShift = page.getByRole("tab", { name: /第 1 班 · 12h/ });
   const secondShift = page.getByRole("tab", { name: /第 2 班 · 6h/ });
   const thirdShift = page.getByRole("tab", { name: /第 3 班 · 6h/ });
+  await expect(page.getByText("最近记录", { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/较上次求解变更/)).toHaveCount(0);
+  await expect(page.locator("[data-shift-actions] [data-shift-tabs]")).toBeVisible();
   await secondShift.click();
   await expect(secondShift).toHaveAttribute("aria-selected", "true");
   await expect(board).toHaveAttribute("data-motion-sentinel", "stable");
@@ -1630,10 +1633,11 @@ test("dialog and mobile sheet motion preserve direction, exit timing, and focus"
   await page.goto("/");
 
   const setupTrigger = page.getByRole("button", { name: "配置Box与布局" }).first();
+  await armMotionCapture(page, '[role="dialog"]', "setup-dialog", 300);
   await setupTrigger.click();
   const setupDialog = page.getByRole("dialog");
   await expect(setupDialog).toHaveCSS("transform-origin", /.+/);
-  await expectMotionDuration(setupDialog, 300);
+  await expectCapturedMotion(page, "setup-dialog", 300);
   await page.setViewportSize({ width: 768, height: 900 });
   await armEndingTransitionCapture(setupDialog, "setup");
   await setupDialog.getByRole("button", { name: "Close" }).click();
@@ -1643,9 +1647,10 @@ test("dialog and mobile sheet motion preserve direction, exit timing, and focus"
 
   await page.getByRole("tab", { name: "列表式布局" }).click();
   const issueTrigger = page.getByRole("button", { name: /反馈排班问题/ }).first();
+  await armMotionCapture(page, '[role="dialog"]', "feedback-dialog", 300);
   await issueTrigger.click();
   const feedbackDialog = page.getByRole("dialog");
-  await expectMotionDuration(feedbackDialog, 300);
+  await expectCapturedMotion(page, "feedback-dialog", 300);
   await armEndingTransitionCapture(feedbackDialog, "feedback");
   await feedbackDialog.getByRole("button", { name: "取消" }).click();
   await expectCapturedExitDuration(page, "feedback", 180);
@@ -2400,7 +2405,8 @@ test("schedule visuals use a stable technical canvas and responsive level marker
       emblemBlendMode: emblemStyle.mixBlendMode,
     };
   });
-  expect(visualStyles.bodyFont).toContain("Noto Sans SC");
+  expect(visualStyles.bodyFont).toContain("Microsoft YaHei");
+  expect(visualStyles.bodyFont).toContain("PingFang SC");
   expect(visualStyles.bodyFont).not.toContain("Segoe UI");
   expect(visualStyles.backdropFilter).toBe("none");
   expect(visualStyles.surfaceBackground).toBe("rgb(39, 42, 43)");

@@ -1,16 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { CLIENT_SKLAND_ENABLED } from "@/client-features";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar, type AppPage } from "@/components/layout/AppSidebar";
 import { AppTopBar, SklandAccountControl } from "@/components/layout/AppTopBar";
 import { InfraCalculator } from "@/components/pages/InfraCalculator";
-import { SkillQuery } from "@/components/pages/SkillQuery";
 import { SklandStatus } from "@/components/pages/SklandStatus";
-import { TrainingAdvice } from "@/components/pages/TrainingAdvice";
 import { LiveActivity, usePlanActivity } from "@/components/ui/live-activity";
 
 import {
@@ -39,10 +37,6 @@ import {
   updateRoomLevel,
   updateTradeOrder,
 } from "./blueprint";
-import {
-  IssueNoteModal,
-  ProductChangeConfirmModal,
-} from "./components";
 import { copyText, downloadJson } from "./download";
 import { ONBOARDING_STORAGE_KEY, initialSetupStep, shouldAutoOpenSetup, type SetupStep } from "./onboarding";
 import { readOperboxFile, readOperboxText } from "./operbox";
@@ -56,8 +50,6 @@ import {
 } from "./persistence";
 import { planToRows, RoomRow } from "./schedule";
 import { DEFAULT_ROTATION_PROFILE } from "./rotation-settings";
-import { readPlanHistory, writePlanHistory, type PlanHistoryEntry } from "./plan-history";
-import { SetupDialog } from "./setup-dialog";
 import { closestShift, compareShifts } from "./skland";
 import { setupConfigurationFingerprint } from "./setup-configuration";
 import {
@@ -76,6 +68,37 @@ import {
   SklandScheduleSnapshot,
   SklandStatusSnapshot,
 } from "./types";
+
+const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
+
+function DeferredPageLoading() {
+  return (
+    <div className="grid min-h-64 place-items-center" role="status" aria-live="polite">
+      <span className="text-sm text-muted-foreground">正在加载页面…</span>
+    </div>
+  );
+}
+
+const TrainingAdvice = dynamic(
+  () => import("@/components/pages/TrainingAdvice").then((module) => module.TrainingAdvice),
+  { loading: DeferredPageLoading, ssr: false },
+);
+const SkillQuery = dynamic(
+  () => import("@/components/pages/SkillQuery").then((module) => module.SkillQuery),
+  { loading: DeferredPageLoading, ssr: false },
+);
+const SetupDialog = dynamic(
+  () => import("./setup-dialog").then((module) => module.SetupDialog),
+  { ssr: false },
+);
+const IssueNoteModal = dynamic(
+  () => import("./components").then((module) => module.IssueNoteModal),
+  { ssr: false },
+);
+const ProductChangeConfirmModal = dynamic(
+  () => import("./components").then((module) => module.ProductChangeConfirmModal),
+  { ssr: false },
+);
 
 type ProductChange =
   | { type: "factory"; roomId: string; recipe: FactoryRecipe }
@@ -217,6 +240,9 @@ function WorkbenchApp() {
   const [sklandError, setSklandError] = useState<DisplayError | null>(null);
   const [sklandBusy, setSklandBusy] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
+  const [setupMounted, setSetupMounted] = useState(false);
+  const [issueModalMounted, setIssueModalMounted] = useState(false);
+  const [productModalMounted, setProductModalMounted] = useState(false);
   const [setupInitialStep, setSetupInitialStep] = useState<SetupStep>("box");
   const initialLayoutForRestore = useRef(defaultLayout);
   const initialBoxSource = useRef(boxSource);
@@ -230,8 +256,6 @@ function WorkbenchApp() {
   const [inputErrorCode, setInputErrorCode] = useState<DisplayError["code"]>("AIC-BOX-1101");
   const [sampleLoading, setSampleLoading] = useState(false);
   const [result, setResult] = useState<PublicPlanData | null>(null);
-  const [previousResult, setPreviousResult] = useState<PublicPlanData | null>(null);
-  const [planHistory, setPlanHistory] = useState<PlanHistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const planAbortRef = useRef<AbortController | null>(null);
   const [cliReady, setCliReady] = useState(false);
@@ -259,12 +283,6 @@ function WorkbenchApp() {
     rotationProfile,
     fiammettaEnabled,
   }), [fiammettaEnabled, layout, rotationProfile]);
-  const changedRoomIds = useMemo(() => {
-    const previousPlan = previousResult?.maa.plans?.[activeShift];
-    if (!previousPlan || !activePlan) return new Set<string>();
-    const before = new Map(planToRows(previousPlan, previousResult?.rotation.shifts?.[activeShift], layout).map((row) => [row.roomId, JSON.stringify([row.operators, row.efficiency])]));
-    return new Set(rows.filter((row) => before.get(row.roomId) !== JSON.stringify([row.operators, row.efficiency])).map((row) => row.roomId));
-  }, [activePlan, activeShift, layout, previousResult, rows]);
   const currentMoraleByOperator = useMemo(() => {
     if (!CLIENT_SKLAND_ENABLED || boxSource !== "skland" || !sklandScheduleSnapshot) return undefined;
 
@@ -308,7 +326,17 @@ function WorkbenchApp() {
     return () => window.removeEventListener("popstate", syncBetaPanels);
   }, []);
 
-  useEffect(() => setPlanHistory(readPlanHistory(window.localStorage)), []);
+  useEffect(() => {
+    if (setupOpen) setSetupMounted(true);
+  }, [setupOpen]);
+
+  useEffect(() => {
+    if (issueOpen) setIssueModalMounted(true);
+  }, [issueOpen]);
+
+  useEffect(() => {
+    if (pendingProductChange) setProductModalMounted(true);
+  }, [pendingProductChange]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -636,15 +664,8 @@ function WorkbenchApp() {
       }, controller.signal);
       setCliReady(true);
       setActiveShift(0);
-      setPreviousResult(result);
       const finalizedResult = response;
       setResult(finalizedResult);
-      setPlanHistory((current) => {
-        const compact = { ...finalizedResult, debug: undefined };
-        const next = [{ savedAt: new Date().toISOString(), result: compact }, ...current.filter((entry) => entry.result.diagnosticId !== response.diagnosticId)].slice(0, 5);
-        try { writePlanHistory(window.localStorage, next); } catch { /* Keep history in memory when storage is full. */ }
-        return next;
-      });
       if (response.maa.plans[0]) {
         const plan = response.maa.plans[0];
         const maaFactoryRooms = plan.rooms?.manufacture;
@@ -680,12 +701,6 @@ function WorkbenchApp() {
     planAbortRef.current?.abort();
     planAbortRef.current = null;
     setLoading(false);
-  }
-
-  function handleRestorePlan(entry: PlanHistoryEntry) {
-    setPreviousResult(result);
-    setResult(entry.result);
-    setActiveShift(0);
   }
 
   async function handleRun() {
@@ -1134,8 +1149,6 @@ function WorkbenchApp() {
           scheduleResult={scheduleResult}
           activeShift={activeShift}
           rows={rows}
-          changedRoomIds={changedRoomIds}
-          planHistory={planHistory}
           currentMoraleByOperator={currentMoraleByOperator}
           activePlan={activePlan}
           closestComparison={closestComparison}
@@ -1160,7 +1173,6 @@ function WorkbenchApp() {
           onOpenSetup={openSetup}
           onRun={handleRun}
           onCancelRun={handleCancelRun}
-          onRestorePlan={handleRestorePlan}
           onSetActiveShift={setActiveShift}
           onMarkIssue={handleMarkIssue}
           onFactoryRecipeChange={handleScheduleFactoryRecipeChange}
@@ -1219,7 +1231,7 @@ function WorkbenchApp() {
         ) : null}
       </footer>
 
-      <SetupDialog
+      {setupMounted ? <SetupDialog
         {...(CLIENT_SKLAND_ENABLED ? {
           sklandSnapshot: sklandScheduleSnapshot,
           sklandConfigured,
@@ -1261,9 +1273,9 @@ function WorkbenchApp() {
         powerBudget={powerBudget}
         onFinish={closeSetup}
         onSkip={closeSetup}
-      />
+      /> : null}
 
-      <IssueNoteModal
+      {issueModalMounted ? <IssueNoteModal
         open={issueOpen}
         row={issueDraftRow}
         note={issueDraftNote}
@@ -1271,8 +1283,8 @@ function WorkbenchApp() {
         onNoteChange={setIssueDraftNote}
         onSave={handleSaveIssue}
         onCancel={handleCancelIssue}
-      />
-      <ProductChangeConfirmModal
+      /> : null}
+      {productModalMounted ? <ProductChangeConfirmModal
         open={Boolean(pendingProductChange)}
         roomLabel={rows.find((row) => row.roomId === pendingProductChange?.roomId)?.title ?? pendingProductChange?.roomId ?? "当前设施"}
         changeKind={pendingProductChange?.type === "trade" ? "贸易策略" : "制造配方"}
@@ -1280,7 +1292,7 @@ function WorkbenchApp() {
         busy={loading && Boolean(pendingProductChange)}
         onConfirm={() => void confirmScheduleProductChange()}
         onCancel={() => setPendingProductChange(null)}
-      />
+      /> : null}
       </SidebarInset>
     </SidebarProvider>
   );

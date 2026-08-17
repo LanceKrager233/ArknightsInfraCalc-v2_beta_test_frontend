@@ -1314,7 +1314,6 @@ export function ScheduleBoard({
   activeShift,
   shiftDirection = 0,
   activePlan,
-  changedRoomIds = new Set<string>(),
   searchQuery = "",
   onIssue,
   onFactoryRecipeChange,
@@ -1331,7 +1330,6 @@ export function ScheduleBoard({
   activeShift: number;
   shiftDirection?: ShiftDirection;
   activePlan?: MaaPlan;
-  changedRoomIds?: ReadonlySet<string>;
   searchQuery?: string;
   onIssue: (row: RoomRow) => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
@@ -1443,7 +1441,6 @@ export function ScheduleBoard({
             </TabsList>
           </Tabs>
           {viewControlsSlot}
-          {changedRoomIds.size ? <span className="text-xs text-amber-700">较上次求解变更 {changedRoomIds.size} 个房间</span> : null}
           {viewMode === "list" && hiddenAuxiliaryCount ? (
             <Button type="button" variant="ghost" size="sm" onClick={restoreHiddenAuxiliaryGroups}>
               恢复已隐藏（<span className="font-number">{hiddenAuxiliaryCount}</span>）
@@ -1578,7 +1575,6 @@ export function ScheduleBoard({
                       compactInlineRoom && "[container-type:inline-size]",
                       listFunctionalRoomSpanClass(row.group),
                       row.suspicious && "ring-2 ring-destructive ring-offset-2",
-                      changedRoomIds.has(row.roomId) && "ring-2 ring-amber-400 ring-offset-2"
                     )}
                     data-room-group={row.group}
                     data-room-title={row.title}
