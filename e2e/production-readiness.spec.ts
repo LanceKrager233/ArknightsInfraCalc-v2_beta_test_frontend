@@ -2400,7 +2400,8 @@ test("schedule visuals use a stable technical canvas and responsive level marker
       emblemBlendMode: emblemStyle.mixBlendMode,
     };
   });
-  expect(visualStyles.bodyFont).toContain("Noto Sans SC");
+  expect(visualStyles.bodyFont).toContain("Microsoft YaHei");
+  expect(visualStyles.bodyFont).toContain("PingFang SC");
   expect(visualStyles.bodyFont).not.toContain("Segoe UI");
   expect(visualStyles.backdropFilter).toBe("none");
   expect(visualStyles.surfaceBackground).toBe("rgb(39, 42, 43)");

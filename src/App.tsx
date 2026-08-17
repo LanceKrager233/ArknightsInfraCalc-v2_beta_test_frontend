@@ -1,16 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { CLIENT_SKLAND_ENABLED } from "@/client-features";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar, type AppPage } from "@/components/layout/AppSidebar";
 import { AppTopBar, SklandAccountControl } from "@/components/layout/AppTopBar";
 import { InfraCalculator } from "@/components/pages/InfraCalculator";
-import { SkillQuery } from "@/components/pages/SkillQuery";
 import { SklandStatus } from "@/components/pages/SklandStatus";
-import { TrainingAdvice } from "@/components/pages/TrainingAdvice";
 import { LiveActivity, usePlanActivity } from "@/components/ui/live-activity";
 
 import {
@@ -39,10 +37,6 @@ import {
   updateRoomLevel,
   updateTradeOrder,
 } from "./blueprint";
-import {
-  IssueNoteModal,
-  ProductChangeConfirmModal,
-} from "./components";
 import { copyText, downloadJson } from "./download";
 import { ONBOARDING_STORAGE_KEY, initialSetupStep, shouldAutoOpenSetup, type SetupStep } from "./onboarding";
 import { readOperboxFile, readOperboxText } from "./operbox";
@@ -57,11 +51,9 @@ import {
 import { planToRows, RoomRow } from "./schedule";
 import { DEFAULT_ROTATION_PROFILE } from "./rotation-settings";
 import { readPlanHistory, writePlanHistory, type PlanHistoryEntry } from "./plan-history";
-import { SetupDialog } from "./setup-dialog";
 import { closestShift, compareShifts } from "./skland";
 import { setupConfigurationFingerprint } from "./setup-configuration";
 import { applyFiammettaSettings, scheduledOperatorNames, validateFiammettaExport } from "./fiammetta-settings";
-import { operatorBuildingSkillList } from "./operatorPortraits";
 import {
   BaseBlueprint,
   BoxSource,
@@ -79,6 +71,37 @@ import {
   SklandStatusSnapshot,
 } from "./types";
 
+const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
+
+function DeferredPageLoading() {
+  return (
+    <div className="grid min-h-64 place-items-center" role="status" aria-live="polite">
+      <span className="text-sm text-muted-foreground">正在加载页面…</span>
+    </div>
+  );
+}
+
+const TrainingAdvice = dynamic(
+  () => import("@/components/pages/TrainingAdvice").then((module) => module.TrainingAdvice),
+  { loading: DeferredPageLoading, ssr: false },
+);
+const SkillQuery = dynamic(
+  () => import("@/components/pages/SkillQuery").then((module) => module.SkillQuery),
+  { loading: DeferredPageLoading, ssr: false },
+);
+const SetupDialog = dynamic(
+  () => import("./setup-dialog").then((module) => module.SetupDialog),
+  { ssr: false },
+);
+const IssueNoteModal = dynamic(
+  () => import("./components").then((module) => module.IssueNoteModal),
+  { ssr: false },
+);
+const ProductChangeConfirmModal = dynamic(
+  () => import("./components").then((module) => module.ProductChangeConfirmModal),
+  { ssr: false },
+);
+
 type ProductChange =
   | { type: "factory"; roomId: string; recipe: FactoryRecipe }
   | { type: "trade"; roomId: string; order: TradeOrder };
@@ -91,6 +114,19 @@ function layoutWithProductChange(layout: BaseBlueprint, change: ProductChange): 
 
 function displayError(code: DisplayError["code"], message: string, retryable = false): DisplayError {
   return { code, message, retryable };
+}
+
+async function eligibleFiammettaTargetsFor(
+  operbox: OperBoxEntry[],
+  maa: PublicPlanData["maa"],
+): Promise<ReadonlySet<string>> {
+  const { operatorBuildingSkillList } = await import("./operatorPortraits");
+  const scheduled = scheduledOperatorNames(maa);
+  return new Set(
+    operbox
+      .filter((operator) => operator.own && scheduled.has(operator.name) && operatorBuildingSkillList(operator.name).length > 0)
+      .map((operator) => operator.name),
+  );
 }
 
 function resolvePreset(value: PresetDef | undefined): PresetDef {
@@ -221,6 +257,9 @@ function WorkbenchApp() {
   const [sklandError, setSklandError] = useState<DisplayError | null>(null);
   const [sklandBusy, setSklandBusy] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
+  const [setupMounted, setSetupMounted] = useState(false);
+  const [issueModalMounted, setIssueModalMounted] = useState(false);
+  const [productModalMounted, setProductModalMounted] = useState(false);
   const [setupInitialStep, setSetupInitialStep] = useState<SetupStep>("box");
   const initialLayoutForRestore = useRef(defaultLayout);
   const initialBoxSource = useRef(boxSource);
@@ -259,11 +298,6 @@ function WorkbenchApp() {
   const activeRotationShift = scheduleResult?.rotation.shifts?.[activeShift];
   const rows = useMemo(() => planToRows(activePlan, activeRotationShift, layout), [activePlan, activeRotationShift, layout]);
   const scheduledOperators = useMemo(() => scheduledOperatorNames(scheduleResult?.maa), [scheduleResult?.maa]);
-  const eligibleFiammettaTargets = useMemo(() => new Set(
-    (operbox ?? [])
-      .filter((operator) => operator.own && scheduledOperators.has(operator.name) && operatorBuildingSkillList(operator.name).length > 0)
-      .map((operator) => operator.name)
-  ), [operbox, scheduledOperators]);
   const ownsFiammetta = Boolean(operbox?.some((operator) => operator.own && operator.name === "菲亚梅塔"));
   const setupConfigurationKey = useMemo(() => setupConfigurationFingerprint({
     layout,
@@ -322,6 +356,18 @@ function WorkbenchApp() {
   }, []);
 
   useEffect(() => setPlanHistory(readPlanHistory(window.localStorage)), []);
+
+  useEffect(() => {
+    if (setupOpen) setSetupMounted(true);
+  }, [setupOpen]);
+
+  useEffect(() => {
+    if (issueOpen) setIssueModalMounted(true);
+  }, [issueOpen]);
+
+  useEffect(() => {
+    if (pendingProductChange) setProductModalMounted(true);
+  }, [pendingProductChange]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -652,12 +698,7 @@ function WorkbenchApp() {
       }, controller.signal);
       setCliReady(true);
       setActiveShift(0);
-      const responseScheduledOperators = scheduledOperatorNames(response.maa);
-      const responseTargets = new Set(
-        operbox
-          .filter((operator) => operator.own && responseScheduledOperators.has(operator.name) && operatorBuildingSkillList(operator.name).length > 0)
-          .map((operator) => operator.name)
-      );
+      const responseTargets = await eligibleFiammettaTargetsFor(operbox, response.maa);
       const fiammettaError = validateFiammettaExport({
         settings: { enabled: fiammettaEnabled, target: fiammettaTarget, order: fiammettaOrder },
         ownsFiammetta,
@@ -751,12 +792,13 @@ function WorkbenchApp() {
     }
   }
 
-  function handleDownloadMaa() {
-    if (!result?.maa) return;
+  async function handleDownloadMaa() {
+    if (!result?.maa || !operbox) return;
+    const eligibleTargets = await eligibleFiammettaTargetsFor(operbox, result.maa);
     const validationError = validateFiammettaExport({
       settings: { enabled: fiammettaEnabled, target: fiammettaTarget, order: fiammettaOrder },
       ownsFiammetta,
-      eligibleTargets: eligibleFiammettaTargets,
+      eligibleTargets,
     });
     if (validationError) {
       setApiError(displayError("AIC-BOX-1101", validationError));
@@ -1276,7 +1318,7 @@ function WorkbenchApp() {
         ) : null}
       </footer>
 
-      <SetupDialog
+      {setupMounted ? <SetupDialog
         {...(CLIENT_SKLAND_ENABLED ? {
           sklandSnapshot: sklandScheduleSnapshot,
           sklandConfigured,
@@ -1323,9 +1365,9 @@ function WorkbenchApp() {
         powerBudget={powerBudget}
         onFinish={closeSetup}
         onSkip={closeSetup}
-      />
+      /> : null}
 
-      <IssueNoteModal
+      {issueModalMounted ? <IssueNoteModal
         open={issueOpen}
         row={issueDraftRow}
         note={issueDraftNote}
@@ -1333,8 +1375,8 @@ function WorkbenchApp() {
         onNoteChange={setIssueDraftNote}
         onSave={handleSaveIssue}
         onCancel={handleCancelIssue}
-      />
-      <ProductChangeConfirmModal
+      /> : null}
+      {productModalMounted ? <ProductChangeConfirmModal
         open={Boolean(pendingProductChange)}
         roomLabel={rows.find((row) => row.roomId === pendingProductChange?.roomId)?.title ?? pendingProductChange?.roomId ?? "当前设施"}
         changeKind={pendingProductChange?.type === "trade" ? "贸易策略" : "制造配方"}
@@ -1342,7 +1384,7 @@ function WorkbenchApp() {
         busy={loading && Boolean(pendingProductChange)}
         onConfirm={() => void confirmScheduleProductChange()}
         onCancel={() => setPendingProductChange(null)}
-      />
+      /> : null}
       </SidebarInset>
     </SidebarProvider>
   );

@@ -2,7 +2,6 @@
 
 import { Calculator, Cloud, GraduationCap, Search } from "lucide-react";
 
-import { CLIENT_SKLAND_ENABLED } from "@/client-features";
 import {
   Sidebar,
   SidebarContent,
@@ -14,6 +13,8 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
+
+const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
 export type AppPage = "calculator" | "training" | "skland" | "skill-query";
 
 interface AppSidebarProps {
