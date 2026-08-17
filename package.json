@@ -15,7 +15,7 @@
     "test:api-contract": "node --test --experimental-strip-types src/server/api-contract.test.ts src/server/auth/config.test.ts src/server/auth/native-route-policy.test.ts src/server/auth/session-cookie-cleanup.test.ts src/server/plan-access.test.ts src/server/public-plan.test.ts",
     "test:auth-integration": "node --test --experimental-strip-types src/server/auth/postgres.integration.test.mjs",
     "test:shift-comparison": "node --test --experimental-strip-types src/skland.test.ts",
-    "test:deploy": "bash scripts/prepare-release.test.sh && bash scripts/deploy-release.test.sh",
+    "test:deploy": "bash scripts/postgres-backup.test.sh && bash scripts/prepare-release.test.sh && bash scripts/deploy-release.test.sh",
     "test:solver-contract": "node scripts/solver-contract-smoke.mjs",
     "audit:security": "npm audit --audit-level=high",
     "test:e2e": "playwright test --project=chromium",

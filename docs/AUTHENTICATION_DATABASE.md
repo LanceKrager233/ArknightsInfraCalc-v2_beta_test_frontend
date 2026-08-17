@@ -103,9 +103,9 @@ psql 'postgresql://<dev-backup-user>:<password>@127.0.0.1:55433/<dev-db>' \
 
 把确认无误的 ID 写入 `BETTER_AUTH_ADMIN_USER_IDS`，多个 ID 用逗号分隔；随后重启 development 服务并访问 `/admin/users`。管理员由服务端环境变量授权，不通过数据库 role 字段或网页授予。
 
-## 7. 配置每日加密异地备份
+## 7. 配置每日加密备份
 
-服务器需要 `pg_dump`、`age`、`restic` 和 S3 兼容对象存储。创建专用 `arkbackup` 用户、age 接收者密钥和 restic 仓库；私钥离线保存，服务器只需 age 公钥。将脚本与 systemd 模板安装为 root 所有：
+服务器至少需要 `pg_dump` 和 `age`。创建专用 `arkbackup` 用户与 age 接收者密钥；私钥离线保存，服务器只需 age 公钥。将脚本与 systemd 模板安装为 root 所有：
 
 ```bash
 id -u arkbackup >/dev/null 2>&1 || sudo useradd --system --home-dir /var/lib/arkbackup --shell /usr/sbin/nologin arkbackup
@@ -116,7 +116,9 @@ sudo install -o root -g root -m 0644 deploy/postgres/arknights-infra-db-backup@.
 sudo install -o root -g root -m 0644 deploy/postgres/arknights-infra-db-backup@.timer /etc/systemd/system/
 ```
 
-development 的 `BACKUP_LOCAL_DIR` 固定填写 `/var/backups/arknights-infra/development`。在 `/etc/arknights-infra/db-backup-development.env` 配置不含密码的 `DATABASE_BACKUP_URL`（例如 `postgresql://arknights_dev_backup@127.0.0.1:55433/arknights_infra_auth`）、独立的 `PGPASSWORD`、`BACKUP_AGE_RECIPIENT`、`BACKUP_LOCAL_DIR`、`RESTIC_REPOSITORY`、`RESTIC_PASSWORD_FILE` 及对象存储凭据。不要把密码嵌入连接 URL，否则会暴露在 `pg_dump` 的进程参数中。环境文件权限设为 `root:arkbackup 0640`；restic 密码文件也必须只允许 `arkbackup` 读取。初始化 restic 后先手动运行一次，再启用定时器：
+development 的 `BACKUP_LOCAL_DIR` 固定填写 `/var/backups/arknights-infra/development`。在 `/etc/arknights-infra/db-backup-development.env` 配置不含密码的 `DATABASE_BACKUP_URL`（例如 `postgresql://arknights_dev_backup@127.0.0.1:55433/arknights_infra_auth`）、独立的 `PGPASSWORD`、`BACKUP_AGE_RECIPIENT` 与 `BACKUP_LOCAL_DIR`。不要把密码嵌入连接 URL，否则会暴露在 `pg_dump` 的进程参数中。环境文件权限设为 `root:arkbackup 0640`。
+
+development 测试期可以省略异地存储；此时脚本只保留最近 14 天的本地加密文件。配置异地存储时，必须同时设置 `RESTIC_REPOSITORY` 与 `RESTIC_PASSWORD_FILE`，并提供对象存储凭据；两个变量只设置一个会使任务失败。restic 密码文件必须只允许 `arkbackup` 读取。production 必须使用与 development 分离的异地仓库。先手动运行一次，再启用定时器：
 
 ```bash
 sudo systemctl daemon-reload
@@ -125,7 +127,7 @@ sudo systemctl enable --now arknights-infra-db-backup@development.timer
 systemctl list-timers 'arknights-infra-db-backup@*'
 ```
 
-脚本保留 14 个日备份和 8 个周备份。每季度必须在隔离 PostgreSQL 中执行一次解密恢复，并验证迁移版本、账号行数以及注册/验证/登录链路；“备份任务成功”不能代替恢复演练。
+本地模式保留最近 14 天的加密文件；异地模式另由 restic 保留 14 个日快照和 8 个周快照。每季度必须在隔离 PostgreSQL 中执行一次解密恢复，并验证迁移版本、账号行数以及注册/验证/登录链路；“备份任务成功”不能代替恢复演练。仅有本地备份无法抵御服务器磁盘损坏或整机丢失，只适合作为 development 测试期的临时方案。
 
 ## 8. development 上线验收
 
@@ -139,6 +141,6 @@ systemctl list-timers 'arknights-infra-db-backup@*'
 6. development 森空岛全部入口要求网站账号；退出网站账号、退出全部设备或注销后，原森空岛 Cookie 不能被其他网站用户读取。
 7. 管理页只能由配置的 user ID 访问，可搜索、查看/撤销 Session、封禁和解封；原生 `/api/auth/admin/*` 返回 404。
 8. 390px、768px、1440px 下完成注册、验证提示、权限引导、账号设置与管理页检查。
-9. backup service 成功，restic 快照存在；在隔离库完成至少一次恢复验证。
+9. backup service 成功且本地加密文件存在；配置异地存储时还需确认 restic 快照存在，并在隔离库完成至少一次恢复验证。
 
 production 仍必须保持森空岛代码、文案和 API 从浏览器制品及公开访问面移除。production 数据库、密钥、Resend Key、发信配置和备份路径不得复用 development 的值。

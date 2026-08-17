@@ -204,7 +204,7 @@ npm start
 
 - `npm run check` 依次运行 lint、单元测试和 API 契约测试。
 - `npm run audit:security` 阻止 high / critical npm 漏洞进入受保护分支；依赖安全修复交付时仍应运行完整`npm audit`并清零已知漏洞。
-- `npm run test:deploy`验证发布包准备、release 淘汰、失败清理、回滚和磁盘空间保护。
+- `npm run test:deploy`验证数据库备份模式、发布包准备、release 淘汰、失败清理、回滚和磁盘空间保护。
 - `npm run test:solver-contract` 仅在 Linux 执行，验证仓库内 ELF 制品指纹并用 Full E2 真实调用 `plan.compute`。
 - `npm run build` 进行 Next 生产构建并覆盖 TypeScript 集成检查。
 - `npm run test:production-client` checks the production browser build for forbidden Skland login content.

@@ -60,7 +60,7 @@ jobs:
           cp deploy/postgres/example.env deploy/postgres/production.env
           cp deploy/postgres/example.env deploy/postgres/development.env
           docker compose -f deploy/postgres/compose.yml config >/dev/null
-          bash -n deploy/postgres/init-roles.sh deploy/postgres/backup.sh
+          bash -n deploy/postgres/init-roles.sh deploy/postgres/backup.sh scripts/postgres-backup.test.sh
           rm -f deploy/postgres/production.env deploy/postgres/development.env
 
       - name: Initialize limited database roles
