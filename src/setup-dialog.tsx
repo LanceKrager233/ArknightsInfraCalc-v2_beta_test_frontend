@@ -462,6 +462,7 @@ export function SetupDialog({
                       <FiammettaSettings
                         enabled={fiammettaEnabled}
                         operbox={operbox}
+                        rotation={rotationProfile}
                         onEnabledChange={onFiammettaEnabledChange}
                       />
                     </div>

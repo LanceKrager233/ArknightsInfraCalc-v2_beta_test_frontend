@@ -3,11 +3,13 @@ import { validateLayoutJson } from "@/layout-validation";
 import { assertOperbox } from "@/operbox";
 import {
   acquirePlanSlot,
+  assertFiammettaEnableCompatible,
   assertPlanCollectionLimits,
   assertSameOrigin,
   createRequestId,
   enforceRateLimit,
   failureResponse,
+  normalizeFiammettaEnable,
   PublicApiError,
   readJsonBody,
   requestClientIp,
@@ -40,6 +42,7 @@ export async function POST(request: Request) {
       sourceName?: unknown;
       rotation?: unknown;
       boxSource?: unknown;
+      fiammetta_enable?: unknown;
     };
     if (planAccessMode(body.boxSource, body.operbox !== undefined) === "trusted-sample") {
       const sample = await (await import("@/server/infra")).getSampleOperbox();
@@ -80,6 +83,8 @@ export async function POST(request: Request) {
       }
       rotation = body.rotation;
     }
+    const fiammettaEnable = normalizeFiammettaEnable(body.fiammetta_enable);
+    assertFiammettaEnableCompatible(fiammettaEnable, rotation);
     assertPlanCollectionLimits(body.operbox.length, body.layout.rooms.length, body.sourceName);
     let operbox: OperBoxEntry[];
     try {
@@ -100,7 +105,7 @@ export async function POST(request: Request) {
       const account = activeSklandAccount(await readSklandAccountStore());
       if (account) dataOwnerTag = sklandDataOwnerTag(account.session.userId);
     }
-    const result = await runPlan({ layout: body.layout, operbox, sourceName, rotation, dataOwnerTag });
+    const result = await runPlan({ layout: body.layout, operbox, sourceName, rotation, fiammettaEnable, dataOwnerTag });
     return successResponse(
       toPublicPlanData(result, { layoutLabel: body.layout.template, sourceName }, requestId),
       requestId

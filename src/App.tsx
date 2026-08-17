@@ -281,6 +281,9 @@ function WorkbenchApp() {
   const activePlan = scheduleResult?.maa.plans?.[activeShift];
   const activeRotationShift = scheduleResult?.rotation.shifts?.[activeShift];
   const rows = useMemo(() => planToRows(activePlan, activeRotationShift, layout), [activePlan, activeRotationShift, layout]);
+  const ownsFiammetta = Boolean(operbox?.some((operator) => operator.own && operator.name === "菲亚梅塔"));
+  const fiammettaForcedByRotation = rotationProfile === "fiammetta_8_8_4_4";
+  const effectiveFiammettaEnabled = ownsFiammetta && (fiammettaForcedByRotation || fiammettaEnabled);
   const setupConfigurationKey = useMemo(() => setupConfigurationFingerprint({
     layout,
     rotationProfile,
@@ -666,7 +669,7 @@ function WorkbenchApp() {
         sourceName: fileName,
         boxSource,
         rotation: rotationProfile,
-        // TODO(fiammetta): 是否启用菲亚梅塔恢复心情的请求参数，参数名待与服务端契约确认后接入。
+        fiammetta_enable: effectiveFiammettaEnabled,
       }, controller.signal);
       setCliReady(true);
       setActiveShift(0);
@@ -1275,7 +1278,7 @@ function WorkbenchApp() {
         configurationKey={setupConfigurationKey}
         rotationProfile={rotationProfile}
         onRotationProfileChange={handleRotationProfileChange}
-        fiammettaEnabled={fiammettaEnabled}
+        fiammettaEnabled={effectiveFiammettaEnabled}
         onFiammettaEnabledChange={handleFiammettaEnabledChange}
         onPresetSelect={handlePresetSelect}
         onLayoutFile={handleLayoutFile}

@@ -5,12 +5,14 @@ import {
   __resetRequestGuardsForTests,
   acquirePlanSlot,
   assertEmptyBody,
+  assertFiammettaEnableCompatible,
   assertPlanCollectionLimits,
   assertSameOrigin,
   enforceRateLimit,
   ERROR_DEFINITIONS,
   failureResponse,
   healthHttpStatus,
+  normalizeFiammettaEnable,
   PublicApiError,
   readJsonBody,
   successResponse,
@@ -191,6 +193,25 @@ test("plan collection limits enforce operators, rooms, and source length", () =>
   assert.throws(
     () => assertPlanCollectionLimits(1, 1, "x".repeat(81)),
     (error: unknown) => error instanceof PublicApiError && error.code === "AIC-BOX-1101"
+  );
+});
+
+test("fiammetta enable normalizes to true by default and rejects non-boolean values", () => {
+  assert.equal(normalizeFiammettaEnable(undefined), true);
+  assert.equal(normalizeFiammettaEnable(true), true);
+  assert.equal(normalizeFiammettaEnable(false), false);
+  assert.throws(
+    () => normalizeFiammettaEnable("yes"),
+    (error: unknown) => error instanceof PublicApiError && error.code === "AIC-REQ-1001"
+  );
+});
+
+test("fiammetta enable conflicts with the dedicated Fiammetta rotation", () => {
+  assert.doesNotThrow(() => assertFiammettaEnableCompatible(true, "fiammetta_8_8_4_4"));
+  assert.doesNotThrow(() => assertFiammettaEnableCompatible(false, "abc_12_6_6"));
+  assert.throws(
+    () => assertFiammettaEnableCompatible(false, "fiammetta_8_8_4_4"),
+    (error: unknown) => error instanceof PublicApiError && error.code === "AIC-REQ-1001"
   );
 });
 

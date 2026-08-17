@@ -63,6 +63,7 @@ type PlanRequestBody = {
   operbox: OperBoxEntry[];
   sourceName?: string | null;
   rotation: RotationProfile;
+  fiammettaEnable?: boolean;
   dataOwnerTag?: string | null;
 };
 
@@ -209,6 +210,9 @@ function assertPlanBody(body: unknown): asserts body is PlanRequestBody {
   }
   if (!isRotationProfile(body.rotation)) {
     throw new Error("请求缺少受支持的 rotation 参数。");
+  }
+  if (body.fiammettaEnable != null && typeof body.fiammettaEnable !== "boolean") {
+    throw new Error("请求的 fiammetta_enable 参数无效。");
   }
   if (body.dataOwnerTag != null && (typeof body.dataOwnerTag !== "string" || !/^[a-f0-9]{64}$/.test(body.dataOwnerTag))) {
     throw new Error("内部数据归属标识无效。");
@@ -1003,6 +1007,7 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
           top: 20,
           system_preferences: {},
           maa_title: `${body.sourceName ?? "Arknights InfraCalc"} · ${String(body.layout.template ?? "layout")}`,
+          fiammetta_enable: body.fiammettaEnable ?? true,
         },
       });
 

@@ -3,7 +3,7 @@ import type { OperBoxEntry, SolverObservation } from "../types";
 export type ProtocolRecord = Record<string, unknown>;
 
 export const PLAN_PROTOCOL_VERSION = 1;
-export const PLAN_SCHEMA_VERSION = 2;
+export const PLAN_SCHEMA_VERSION = 3;
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
