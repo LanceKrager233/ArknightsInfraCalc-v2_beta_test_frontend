@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Barlow_Condensed, Noto_Sans_SC } from "next/font/google";
+import { Barlow_Condensed } from "next/font/google";
 import localFont from "next/font/local";
 import "overlayscrollbars/overlayscrollbars.css";
 
@@ -8,14 +8,6 @@ import { PageScrollbar } from "@/components/ui/page-scrollbar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 import "./globals.css";
-
-const uiFont = Noto_Sans_SC({
-  variable: "--font-ui-source",
-  subsets: ["latin"],
-  weight: "variable",
-  display: "swap",
-  fallback: ["Microsoft YaHei", "PingFang SC", "sans-serif"],
-});
 
 const technicalFont = Barlow_Condensed({
   variable: "--font-technical-source",
@@ -51,7 +43,7 @@ export default function RootLayout({
   return (
     <html
       lang="zh-CN"
-      className={`${uiFont.variable} ${technicalFont.variable} ${numberFont.variable} antialiased`}
+      className={`${technicalFont.variable} ${numberFont.variable} antialiased`}
       suppressHydrationWarning
     >
       <body>
@@ -63,4 +55,3 @@ export default function RootLayout({
     </html>
   );
 }
-

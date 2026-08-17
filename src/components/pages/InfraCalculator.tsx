@@ -1,6 +1,7 @@
 "use client";
 
-import { Download, FileJson, FlaskConical, HeartPulse, Keyboard, Loader2, Search, Settings2, Terminal, X } from "lucide-react";
+import dynamic from "next/dynamic";
+import { Download, FileJson, FlaskConical, HeartPulse, Keyboard, Loader2, Play, Search, Settings2, Terminal, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -11,17 +12,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
 import type { FactoryRecipe, TradeOrder } from "@/blueprint";
-import {
-  DebugActions,
-  IssuePanel,
-  Panel,
-  RunButton,
-  ScheduleBoard,
-  ShiftTabs,
-} from "@/components";
-import { PlanResultSummary } from "@/components/PlanResultSummary";
+import { cn } from "@/lib/utils";
 import type { ShiftDirection } from "@/motion";
-import { operatorPortraitFor } from "@/operatorPortraits";
 import type { RoomRow } from "@/schedule";
 import type {
   BaseBlueprint,
@@ -31,6 +23,50 @@ import type {
   PublicPlanData,
   ShiftComparison,
 } from "@/types";
+
+const ScheduleBoard = dynamic(() => import("@/components").then((module) => module.ScheduleBoard), { ssr: false });
+const ShiftTabs = dynamic(() => import("@/components").then((module) => module.ShiftTabs), { ssr: false });
+const PlanResultSummary = dynamic(
+  () => import("@/components/PlanResultSummary").then((module) => module.PlanResultSummary),
+  { ssr: false },
+);
+const DebugActions = dynamic(() => import("@/components").then((module) => module.DebugActions), { ssr: false });
+const IssuePanel = dynamic(() => import("@/components").then((module) => module.IssuePanel), { ssr: false });
+
+function Panel({ children, className = "", action, title, icon }: {
+  children: ReactNode;
+  className?: string;
+  action?: ReactNode;
+  title?: string;
+  icon?: ReactNode;
+}) {
+  return (
+    <section className={cn("min-w-0 py-5", className)}>
+      <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        {title || icon ? <div className="flex min-w-0 items-start gap-2">{icon}<h2 className="text-sm font-semibold tracking-tight">{title}</h2></div> : null}
+        {action ? <div className={cn("ms-auto min-w-0 max-sm:w-full", !title && !icon && "w-full")}>{action}</div> : null}
+      </header>
+      <div>{children}</div>
+    </section>
+  );
+}
+
+function RunButton({ canRun, plannerReady, onRun }: { canRun: boolean; plannerReady: boolean; onRun: () => void }) {
+  const unavailableLabel = plannerReady ? "请先导入干员数据" : "排班服务暂不可用";
+  return (
+    <Button
+      size="sm"
+      className="h-9 min-w-0 max-sm:h-11 max-sm:px-3 max-sm:text-xs"
+      aria-label={canRun ? "生成排班" : unavailableLabel}
+      title={!canRun ? unavailableLabel : undefined}
+      onClick={onRun}
+      disabled={!canRun}
+    >
+      <Play />
+      <span>{canRun ? "生成排班" : "导入后生成"}</span>
+    </Button>
+  );
+}
 
 interface InfraCalculatorProps {
   layout: BaseBlueprint;
@@ -89,11 +125,22 @@ export function InfraCalculator(props: InfraCalculatorProps) {
   const [operatorQuery, setOperatorQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [shiftDirection, setShiftDirection] = useState<ShiftDirection>(0);
+  const [fiammettaPortrait, setFiammettaPortrait] = useState<string | null>(null);
   const showBetaSidebar = showBetaPanels && scheduleViewMode === "list";
   const fiammettaTarget = activePlan?.Fiammetta?.enable
     ? (Array.isArray(activePlan.Fiammetta.target) ? activePlan.Fiammetta.target[0] : activePlan.Fiammetta.target)
     : undefined;
-  const fiammettaPortrait = fiammettaTarget ? operatorPortraitFor(fiammettaTarget) : null;
+  useEffect(() => {
+    let cancelled = false;
+    if (!fiammettaTarget) {
+      setFiammettaPortrait(null);
+      return;
+    }
+    void import("@/operatorPortraits").then(({ operatorPortraitFor }) => {
+      if (!cancelled) setFiammettaPortrait(operatorPortraitFor(fiammettaTarget) ?? null);
+    });
+    return () => { cancelled = true; };
+  }, [fiammettaTarget]);
   const handleSetActiveShift = (nextShift: number) => {
     setShiftDirection(nextShift === activeShift ? 0 : nextShift > activeShift ? 1 : -1);
     onSetActiveShift(nextShift);
@@ -206,7 +253,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                     <Loader2 className="animate-spin" />
                     取消计算
                   </Button>
-                ) : <RunButton canRun={canRun} loading={false} plannerReady={plannerReady} onRun={onRun} />}
+                ) : <RunButton canRun={canRun} plannerReady={plannerReady} onRun={onRun} />}
               </div>
             )}
           >
@@ -220,7 +267,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                 planRevision={scheduleResult.diagnosticId}
               />
             ) : null}
-            <ScheduleBoard
+            {rows.length > 0 ? <ScheduleBoard
               rows={rows}
               changedRoomIds={changedRoomIds}
               layout={layout}
@@ -277,7 +324,11 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               onFactoryRecipeChange={onFactoryRecipeChange}
               onTradeOrderChange={onTradeOrderChange}
               onViewModeChange={setScheduleViewMode}
-            />
+            /> : (
+              <div className="flex min-h-[420px] items-center justify-center border-y border-dashed border-border/70 py-6 text-center text-sm text-muted-foreground">
+                没有可展示的布局房间。
+              </div>
+            )}
           </Panel>
           {feedbackResult ? (
             <div className="mt-3 border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700" role="status">

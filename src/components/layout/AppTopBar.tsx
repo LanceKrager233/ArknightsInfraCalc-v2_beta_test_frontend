@@ -2,10 +2,11 @@
 
 import { UserPlus } from "lucide-react";
 
-import { CLIENT_SKLAND_ENABLED } from "@/client-features";
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import type { SklandAccountSummary, SklandStatusSnapshot } from "@/types";
+
+const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
 
 export function AppTopBar() {
   return (
