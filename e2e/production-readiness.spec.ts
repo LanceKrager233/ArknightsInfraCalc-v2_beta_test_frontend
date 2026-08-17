@@ -2175,19 +2175,19 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   expect(popupBox?.width).toBeCloseTo(triggerBox?.width ?? 0, 0);
   await expect(dialog.locator('[data-slot="select-trigger"]')).toHaveCount(0);
   await expect(page.getByRole("option", { name: /自动轮换/ })).toHaveCount(0);
-  await expect(page.getByRole("option", { name: /一天两换/ })).toHaveCount(0);
+  await expect(page.getByRole("option", { name: /一天两换/ })).toHaveCount(1);
   await expect(page.getByRole("option", { name: /自定义/ })).toHaveCount(0);
-  await expect(page.getByRole("option")).toHaveCount(4);
-  await rotationTrigger.fill("菲亚梅塔");
+  await expect(page.getByRole("option")).toHaveCount(3);
+  await rotationTrigger.fill("一天两换");
   await expect(page.getByRole("option")).toHaveCount(1);
   await rotationTrigger.press("Enter");
-  await expect(rotationTrigger).toHaveValue("菲亚梅塔轮换 · 8/8/4/4");
+  await expect(rotationTrigger).toHaveValue("一天两换 · 12/12/12");
   await rotationTrigger.click();
   await expect(page.locator('[data-slot="combobox-content"]')).toBeVisible();
   await rotationTrigger.fill("不存在的方案");
   await expect(page.getByText("没有匹配的换班方式", { exact: true })).toBeVisible();
   await rotationTrigger.press("Escape");
-  await expect(rotationTrigger).toHaveValue("菲亚梅塔轮换 · 8/8/4/4");
+  await expect(rotationTrigger).toHaveValue("一天两换 · 12/12/12");
   await expect(dialog.getByText("完整循环 24 小时")).toHaveCount(0);
   await expect(dialog.getByText("第 4 班 4h")).toHaveCount(0);
   await dialog.getByRole("button", { name: "继续", exact: true }).click();
@@ -2195,11 +2195,11 @@ test("setup exposes and persists only worker-supported rotation profiles", async
 
   await page.getByRole("button", { name: "生成排班" }).click();
   await expect.poll(() => planRequests).toBe(1);
-  expect(requestedRotation).toBe("fiammetta_8_8_4_4");
+  expect(requestedRotation).toBe("abc_12_12_12");
   const persisted = await page.evaluate(() => JSON.parse(
     window.localStorage.getItem("arknights-infra-calc-session-v5") ?? "{}"
   ));
-  expect(persisted.rotationProfile).toBe("fiammetta_8_8_4_4");
+  expect(persisted.rotationProfile).toBe("abc_12_12_12");
 });
 
 test("layout level controls clamp edits and expose the power-safe 342 defaults", async ({ page }) => {

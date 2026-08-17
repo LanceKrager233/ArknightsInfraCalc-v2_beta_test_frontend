@@ -20,6 +20,7 @@ import type {
 import { isSklandConfigured, sklandDisabledReason } from "@/server/skland/session";
 import { PublicApiError } from "./api-contract";
 import {
+  PLAN_SCHEMA_VERSION,
   createSolverObservation,
   inspectPlanComputeCapability,
   inspectSolverDeploymentReadiness,
@@ -990,7 +991,7 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
 
     if (planCompute.supported) {
       serveResult = await getServeClient().send("plan.compute", {
-        schema_version: 1,
+        schema_version: PLAN_SCHEMA_VERSION,
         layout: body.layout,
         operbox: body.operbox,
         labels: {

@@ -35,8 +35,6 @@ export interface PersistedSessionV5 {
   localLayoutBackup: BaseBlueprint | null;
   rotationProfile: RotationProfile;
   fiammettaEnabled?: boolean;
-  fiammettaTarget?: string | null;
-  fiammettaOrder?: "pre" | "post";
   result: PublicPlanData | null;
   activeShift: number;
 }
@@ -193,8 +191,6 @@ function normalizeSession(value: unknown, now: number): PersistedSessionV5 | nul
     localLayoutBackup: localLayoutBackup ? structuredClone(localLayoutBackup) : null,
     rotationProfile,
     fiammettaEnabled: Boolean(value.fiammettaEnabled),
-    fiammettaTarget: typeof value.fiammettaTarget === "string" ? value.fiammettaTarget.slice(0, 64) : null,
-    fiammettaOrder: value.fiammettaOrder === "post" ? "post" : "pre",
     result,
     activeShift: clampActiveShift(value.activeShift, result),
   };
