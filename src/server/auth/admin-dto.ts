@@ -10,6 +10,7 @@ type AdminUserRecord = {
   banned: boolean | null;
   banReason: string | null;
   createdAt: Date;
+  sklandBindingCount: number;
 };
 
 type AdminSessionRecord = {
@@ -33,6 +34,7 @@ export function toAdminUserData(record: AdminUserRecord, bootstrapAdminIds: Set<
     createdAt: record.createdAt.toISOString(),
     isAdmin: access.isAdmin,
     isBootstrapAdmin: access.isBootstrapAdmin,
+    sklandBindingCount: record.sklandBindingCount,
   };
 }
 

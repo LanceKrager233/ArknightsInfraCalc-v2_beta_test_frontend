@@ -2,7 +2,7 @@ import "server-only";
 
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { betterAuth } from "better-auth";
-import { admin } from "better-auth/plugins";
+import { admin, emailOTP } from "better-auth/plugins";
 import { getDatabase } from "@/server/db";
 import { sendAuthEmail } from "./email";
 import { configuredAdminIds, requireAuthBaseUrl, requireAuthSecret } from "./config";
@@ -25,12 +25,24 @@ function createAuth() {
     emailVerification: {
       sendOnSignUp: true,
       autoSignInAfterVerification: false,
-      expiresIn: 60 * 60,
-      sendVerificationEmail: ({ user, url }) => sendAuthEmail({ to: user.email, url, kind: "verify" }),
+      expiresIn: 10 * 60,
     },
     rateLimit: { enabled: true, storage: "database" },
     user: { deleteUser: { enabled: true } },
-    plugins: [admin({ adminUserIds: [...configuredAdminIds()], defaultRole: "user" })],
+    plugins: [
+      emailOTP({
+        otpLength: 6,
+        expiresIn: 10 * 60,
+        allowedAttempts: 5,
+        storeOTP: "hashed",
+        overrideDefaultEmailVerification: true,
+        sendVerificationOTP: ({ email, otp, type }) => {
+          if (type !== "email-verification") throw new Error("Only email verification OTP delivery is enabled.");
+          return sendAuthEmail({ to: email, code: otp, kind: "verify-code" });
+        },
+      }),
+      admin({ adminUserIds: [...configuredAdminIds()], defaultRole: "user" }),
+    ],
   });
 }
 

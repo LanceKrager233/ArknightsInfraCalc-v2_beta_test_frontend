@@ -7,6 +7,8 @@ import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, Dia
 import { Input } from "@/components/ui/input";
 import type { AdminSessionData, AdminUserAction, AdminUserData } from "@/types";
 
+const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
+
 type RoleChange = { userId: string; name: string; email: string; action: "grantAdmin" | "revokeAdmin" };
 
 export function AdminUsers() {
@@ -120,6 +122,11 @@ export function AdminUsers() {
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="font-medium">{entry.name}</h2>
                     {entry.isAdmin ? <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{entry.isBootstrapAdmin ? "初始管理员" : "管理员"}</span> : null}
+                    {CLIENT_SKLAND_ENABLED ? (
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${entry.sklandBindingCount > 0 ? "bg-emerald-50 text-emerald-700" : "bg-muted text-muted-foreground"}`}>
+                        {entry.sklandBindingCount > 0 ? `已绑定森空岛 · ${entry.sklandBindingCount}` : "未绑定森空岛"}
+                      </span>
+                    ) : null}
                   </div>
                   <p className="break-all text-sm text-muted-foreground">{entry.email} · {entry.emailVerified ? "已验证" : "未验证"}{entry.banned ? " · 已封禁" : ""}</p>
                   {entry.banned && entry.banReason ? <p className="mt-1 text-xs text-destructive">原因：{entry.banReason}</p> : null}

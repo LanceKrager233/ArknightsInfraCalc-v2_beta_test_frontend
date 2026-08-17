@@ -5,6 +5,7 @@ import { isSklandFeatureEnabled } from "../../deployment.ts";
 import type { SklandAccountSummary, SklandScheduleSnapshot, SklandStatusSnapshot } from "../../types.ts";
 import { failureResponse, PublicApiError } from "../api-contract";
 import { websiteSession } from "../auth";
+import { SklandBindingConflictError } from "./bindings";
 import { loadSessionSnapshot, SklandServiceError } from "./adapter";
 import {
   createSklandStoredAccount,
@@ -267,6 +268,9 @@ export function sklandErrorResponse(
 ): NextResponse {
   if (error instanceof PublicApiError) {
     return failureResponse(error, requestId, route, startedAt);
+  }
+  if (error instanceof SklandBindingConflictError) {
+    return failureResponse(new PublicApiError("AIC-AUTH-2006"), requestId, route, startedAt);
   }
   if (error instanceof Error && error.message === "请求来源无效。") {
     return failureResponse(new PublicApiError("AIC-AUTH-2002"), requestId, route, startedAt);

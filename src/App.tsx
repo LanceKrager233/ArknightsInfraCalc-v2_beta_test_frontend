@@ -236,6 +236,7 @@ function WorkbenchApp() {
   const [sklandStatusReloadKey, setSklandStatusReloadKey] = useState(0);
   const [sklandAccounts, setSklandAccounts] = useState<SklandAccountSummary[]>([]);
   const [sklandActiveAccountId, setSklandActiveAccountId] = useState<string | null>(null);
+  const [sklandBindingCount, setSklandBindingCount] = useState(0);
   const [sklandConfigured, setSklandConfigured] = useState(false);
   const [sklandDisabledReason, setSklandDisabledReason] = useState<string | null>(null);
   const [sklandSessionLoading, setSklandSessionLoading] = useState(CLIENT_SKLAND_ENABLED);
@@ -455,6 +456,7 @@ function WorkbenchApp() {
         setSklandDisabledReason(session.disabledReason ?? null);
         setSklandAccounts(session.accounts);
         setSklandActiveAccountId(session.activeAccountId);
+        setSklandBindingCount(Number.isFinite(session.bindingCount) ? session.bindingCount : session.accounts.length);
         setSklandStatusSnapshot(session.statusSnapshot ?? null);
         if (session.authenticated && session.scheduleSnapshot) {
           setSklandScheduleSnapshot(session.scheduleSnapshot);
@@ -556,6 +558,7 @@ function WorkbenchApp() {
   function applySklandSession(session: SklandSessionData, applyLayoutWhenClean = true) {
     setSklandAccounts(session.accounts);
     setSklandActiveAccountId(session.activeAccountId);
+    setSklandBindingCount(Number.isFinite(session.bindingCount) ? session.bindingCount : session.accounts.length);
     setSklandStatusSnapshot(session.statusSnapshot ?? null);
     if (session.authenticated && session.scheduleSnapshot) {
       applySklandSnapshot(session.scheduleSnapshot, applyLayoutWhenClean);
@@ -1032,6 +1035,7 @@ function WorkbenchApp() {
       }
       setSklandAccounts([]);
       setSklandActiveAccountId(null);
+      setSklandBindingCount(0);
       setSklandScheduleSnapshot(null);
       setSklandStatusSnapshot(null);
       if (clearsBox) {
@@ -1193,6 +1197,7 @@ function WorkbenchApp() {
           snapshot={sklandStatusSnapshot}
           accounts={sklandAccounts}
           activeAccountId={sklandActiveAccountId}
+          bindingCount={sklandBindingCount}
           sessionLoading={sklandSessionLoading}
           layoutMatches={sklandLayoutMatches ?? false}
           layoutDirty={layoutDirty}
@@ -1244,6 +1249,7 @@ function WorkbenchApp() {
       {setupMounted ? <SetupDialog
         {...(CLIENT_SKLAND_ENABLED ? {
           sklandSnapshot: sklandScheduleSnapshot,
+          sklandBindingCount,
           sklandConfigured,
           sklandDisabledReason,
           onOpenSkland: openSklandFromSetup,

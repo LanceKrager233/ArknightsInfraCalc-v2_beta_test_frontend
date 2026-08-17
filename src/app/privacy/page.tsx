@@ -20,9 +20,9 @@ export default function PrivacyPage() {
         <ul>
           <li>注册网站账号时，我们会处理你提交的昵称、邮箱地址、不可逆密码哈希、邮箱验证状态和账号创建时间。</li>
           <li>登录后，PostgreSQL 会保存网站账号和数据库 Session。Session 包含随机令牌、有效期以及用于安全判断的 IP 地址和浏览器标识；密码原文不会保存。</li>
-          <li>验证邮箱和重置密码时，邮箱地址、邮件正文及必要投递元数据会发送给邮件服务商 Resend；相关链接固定在一小时后失效。</li>
+          <li>验证邮箱和重置密码时，邮箱地址、邮件正文及必要投递元数据会发送给邮件服务商 Resend；邮箱验证码在 <span className="font-number">10</span> 分钟后失效，密码重置链接在一小时后失效。</li>
           <li>网站账号资料保留至你主动注销或我们依法删除；Session 保留至到期、退出、密码重置、封禁或主动撤销。注销会删除网站账号及其全部 Session。</li>
-          <li>你可以在账号设置中退出其他设备或重新验证密码后永久注销。网站账号数据不会用于保存 MAA Box、布局、排班或第三方游戏凭据。</li>
+          <li>你可以在账号设置中退出其他设备或重新验证密码后永久注销。网站账号数据不会保存 MAA Box、布局、排班或第三方游戏凭据{sklandEnabled ? "；使用森空岛时只额外保存不可逆的绑定标识和授权时间" : ""}。</li>
         </ul>
       </section>
       {sklandEnabled ? <>
@@ -50,6 +50,7 @@ export default function PrivacyPage() {
         <h2 className="font-number">3. 处理方式与目的</h2>
         <ul>
           <li>登录凭证经 AES-<span className="font-number">256</span>-GCM 加密后存入此浏览器的 HttpOnly Cookie，请求期间由本站服务端解密使用，不写入业务数据库。</li>
+          <li>为区分“账号已绑定”和“当前浏览器仍有有效凭证”，PostgreSQL 会保存由森空岛上游账号标识经 HMAC 生成的不可逆绑定值、对应网站用户及授权时间；不会保存森空岛 UID、昵称、Box 或令牌。</li>
           <li>凭证仅用于同步角色数据、切换角色和刷新森空岛会话；本站不会自动签到或操作社区内容。</li>
           <li>森空岛的玩家信息接口会一次返回组合数据。登录后，服务端分别生成最小排班快照和完整状态白名单；原始响应不会返回浏览器，完整状态快照只保留在页面内存，不写入浏览器持久化或服务端运行记录。</li>
           <li>干员和布局数据会发送给本站部署的排班求解器，以生成轮班、效率概览和 MAA 导出。</li>
@@ -60,6 +61,7 @@ export default function PrivacyPage() {
         <h2 className="font-number">4. 保存期限</h2>
         <ul>
           <li>森空岛登录凭证自扫码成功起固定保存 <span className="font-number">7</span> 天，刷新页面或 token 不会延长期限。</li>
+          <li>森空岛绑定记录保留至你退出对应森空岛账号、删除全部森空岛数据或注销网站账号。</li>
           <li>服务端 CLI 运行记录最多保存 <span className="font-number">7</span> 天，你也可以随时提前删除。</li>
           <li>浏览器中的布局、干员 Box 和最近排班通常最多保存 <span className="font-number">30</span> 天；“删除全部森空岛数据”会立即移除其中的森空岛来源内容。</li>
           <li>未完成的二维码登录记录最多保留 <span className="font-number">10</span> 分钟。</li>
@@ -75,7 +77,7 @@ export default function PrivacyPage() {
         <h2 className="font-number">6. 你的选择与权利</h2>
         <ul>
           <li>你可以不使用森空岛登录，改用 MAA JSON 或兼容文件。</li>
-          <li>你可以随时退出当前森空岛账号。</li>
+          <li>你可以随时退出当前森空岛账号并解除对应的网站账号绑定。</li>
           <li>你可以使用“一键删除全部森空岛数据”，删除全部登录凭证、同步数据和可关联的服务端记录；该操作不会删除你的森空岛官方账号。</li>
           <li>如需查询、更正或处理无法通过页面删除的信息，请通过本政策列明的联系渠道提交请求。</li>
         </ul>

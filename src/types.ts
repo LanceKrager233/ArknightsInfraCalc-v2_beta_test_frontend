@@ -535,6 +535,7 @@ export interface SklandSessionResponse {
   disabledReason?: string | null;
   accounts: SklandAccountSummary[];
   activeAccountId: string | null;
+  bindingCount: number;
   scheduleSnapshot?: SklandScheduleSnapshot;
   statusSnapshot?: SklandStatusSnapshot;
   error?: string;
@@ -554,6 +555,7 @@ export interface SklandQrStatusResponse {
   status: "waiting" | "scanned" | "expired" | "authenticated";
   scheduleSnapshot?: SklandScheduleSnapshot;
   statusSnapshot?: SklandStatusSnapshot;
+  bindingCount?: number;
   error?: string;
   code?: string;
 }
@@ -785,6 +787,7 @@ export type AppErrorCode =
   | "AIC-AUTH-2003"
   | "AIC-AUTH-2004"
   | "AIC-AUTH-2005"
+  | "AIC-AUTH-2006"
   | "AIC-AUTH-2007"
   | "AIC-AUTH-2008"
   | "AIC-AUTH-2009"
@@ -890,6 +893,7 @@ export interface AdminUserData {
   createdAt: string;
   isAdmin: boolean;
   isBootstrapAdmin: boolean;
+  sklandBindingCount: number;
 }
 
 export interface AdminUsersData {
@@ -923,6 +927,7 @@ export interface SklandSessionData {
   disabledReason?: string | null;
   accounts: SklandAccountSummary[];
   activeAccountId: string | null;
+  bindingCount: number;
   scheduleSnapshot?: SklandScheduleSnapshot;
   statusSnapshot?: SklandStatusSnapshot;
 }
@@ -943,6 +948,7 @@ export interface SklandQrStatusData {
   status: "waiting" | "scanned" | "expired" | "authenticated";
   accounts?: SklandAccountSummary[];
   activeAccountId?: string | null;
+  bindingCount?: number;
   scheduleSnapshot?: SklandScheduleSnapshot;
   statusSnapshot?: SklandStatusSnapshot;
 }

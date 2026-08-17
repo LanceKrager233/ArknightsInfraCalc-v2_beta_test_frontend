@@ -8,7 +8,7 @@ import { URL } from "node:url";
 
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { betterAuth } from "better-auth";
-import { admin } from "better-auth/plugins";
+import { admin, emailOTP } from "better-auth/plugins";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
@@ -48,11 +48,23 @@ test("Better Auth completes the PostgreSQL account lifecycle", async () => {
     emailVerification: {
       sendOnSignUp: true,
       autoSignInAfterVerification: false,
-      expiresIn: 60 * 60,
-      sendVerificationEmail: ({ user, url }) => { emails.push({ kind: "verify", to: user.email, url }); },
+      expiresIn: 10 * 60,
     },
     rateLimit: { enabled: true, storage: "database" },
-    plugins: [admin({ defaultRole: "user" })],
+    plugins: [
+      emailOTP({
+        otpLength: 6,
+        expiresIn: 10 * 60,
+        allowedAttempts: 5,
+        storeOTP: "hashed",
+        overrideDefaultEmailVerification: true,
+        sendVerificationOTP: ({ email, otp, type }) => {
+          assert.equal(type, "email-verification");
+          emails.push({ kind: "verify-code", to: email, otp });
+        },
+      }),
+      admin({ defaultRole: "user" }),
+    ],
   });
 
   let requestAddress = 1;
@@ -75,11 +87,11 @@ test("Better Auth completes the PostgreSQL account lifecycle", async () => {
     const registrationBody = await registration.json();
     assert.equal(registrationBody.user.emailVerified, false);
 
-    const verificationEmail = emails.findLast((item) => item.kind === "verify" && item.to === email);
+    const verificationEmail = emails.findLast((item) => item.kind === "verify-code" && item.to === email);
     assert.ok(verificationEmail, "registration should capture a verification email");
-    const verification = await request(verificationEmail.url);
-    assert.equal(verification.status, 302);
-    assert.equal(verification.headers.get("location"), origin);
+    const verification = await post("/email-otp/verify-email", { email, otp: verificationEmail.otp });
+    assert.equal(verification.status, 200, await verification.clone().text());
+    assert.equal((await verification.json()).status, true);
     return registrationBody.user.id;
   }
 
@@ -109,10 +121,13 @@ test("Better Auth completes the PostgreSQL account lifecycle", async () => {
     const unverifiedSignIn = await signIn(primaryEmail);
     assert.equal(unverifiedSignIn.status, 403, "unverified email must not sign in");
 
-    const verificationEmail = emails.findLast((item) => item.kind === "verify" && item.to === primaryEmail);
+    const verificationEmail = emails.findLast((item) => item.kind === "verify-code" && item.to === primaryEmail);
     assert.ok(verificationEmail, "registration should capture a verification email");
-    const verification = await request(verificationEmail.url);
-    assert.equal(verification.status, 302);
+    const verification = await post("/email-otp/verify-email", { email: primaryEmail, otp: verificationEmail.otp });
+    assert.equal(verification.status, 200, await verification.clone().text());
+
+    const reusedOtp = await post("/email-otp/verify-email", { email: primaryEmail, otp: verificationEmail.otp });
+    assert.equal(reusedOtp.status, 400, "an email verification OTP must be single-use");
 
     const firstSignIn = await signIn(primaryEmail);
     assert.equal(firstSignIn.status, 200, await firstSignIn.clone().text());
@@ -169,8 +184,14 @@ test("Better Auth completes the PostgreSQL account lifecycle", async () => {
     assert.equal((await signIn(bannedEmail)).status, 403, "banned user must not create a session");
     const persistedRateLimits = await pool.query('SELECT count(*)::int AS count FROM "rateLimit"');
     assert.ok(persistedRateLimits.rows[0].count > 0, "Better Auth rate limits should be stored in PostgreSQL");
+
+    await pool.query('INSERT INTO "skland_binding" (binding_key, user_id) VALUES ($1, $2)', [`binding-${suffix}`, primaryUserId]);
+    const binding = await pool.query('SELECT count(*)::int AS count FROM "skland_binding" WHERE user_id = $1', [primaryUserId]);
+    assert.equal(binding.rows[0].count, 1, "website users should persist a non-credential Skland binding marker");
   } finally {
     if (createdUserIds.length > 0) await pool.query('DELETE FROM "user" WHERE id = ANY($1::text[])', [createdUserIds]);
+    const orphanedBindings = await pool.query('SELECT count(*)::int AS count FROM "skland_binding" WHERE binding_key = $1', [`binding-${suffix}`]);
+    assert.equal(orphanedBindings.rows[0].count, 0, "deleting a website user should cascade to Skland binding markers");
     await pool.query('DELETE FROM "rateLimit"');
     await pool.end();
   }

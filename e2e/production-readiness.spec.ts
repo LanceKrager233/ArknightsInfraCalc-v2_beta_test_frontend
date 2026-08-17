@@ -753,6 +753,7 @@ async function mockApis(
     sklandSnapshot?: MockSklandSnapshot;
     sklandAccounts?: typeof primarySklandAccount[];
     activeAccountId?: string | null;
+    sklandBindingCount?: number;
     sklandSessionDelayMs?: number;
   } = {}
 ) {
@@ -800,6 +801,7 @@ async function mockApis(
               authMethods: { qr: true },
               accounts: [],
               activeAccountId: null,
+              bindingCount: 0,
             }
           : {
               authenticated: Boolean(options.sklandSnapshot),
@@ -807,6 +809,7 @@ async function mockApis(
               authMethods: { qr: true },
               accounts,
               activeAccountId,
+              bindingCount: options.sklandBindingCount ?? accounts.length,
               disabledReason: options.sklandConfigured
                 ? null
                 : "当前未开放森空岛登录，可使用 MAA 导入。",
@@ -894,7 +897,7 @@ async function seedV4Session(
     rotationProfile?: string;
     layoutDirty?: boolean;
     operbox?: Array<Record<string, unknown>>;
-    boxSource?: "sample" | "maa";
+    boxSource?: "sample" | "maa" | "skland";
   } = {}
 ) {
   await page.addInitScript(({ layout, result, savedAt, expiresAt, activeShift, rotationProfile, layoutDirty, operbox, boxSource }) => {
@@ -952,24 +955,59 @@ for (const viewport of [
         body: JSON.stringify({ token: null, user: { id: "new-user", name: "测试用户", email: body.email, emailVerified: false } }),
       });
     });
+    await page.route("**/api/auth/email-otp/verify-email", async (route) => {
+      const body = route.request().postDataJSON() as { email?: string; otp?: string };
+      expect(body).toEqual({ email: `account-${viewport.width}@example.test`, otp: "123456" });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ status: true, token: null, user: { id: "new-user", name: "测试用户", email: body.email, emailVerified: true } }),
+      });
+    });
     await mockApis(page);
     await seedPreferences(page);
     await page.setViewportSize(viewport);
     await page.goto("/");
 
     await page.getByRole("button", { name: "登录网站账号" }).click();
-    const dialog = page.getByRole("dialog", { name: "登录账号" });
-    await dialog.getByRole("button", { name: "注册账号" }).click();
-    await expect(page.getByRole("dialog", { name: "注册账号" })).toBeVisible();
+    const dialog = page.getByRole("dialog", { name: "登录网站账号" });
+    await expect(dialog.locator("[data-wizard-steps]")).toBeVisible();
+    await dialog.getByRole("button", { name: "创建账号" }).click();
+    const signupDialog = page.getByRole("dialog", { name: "创建网站账号" });
+    await expect(signupDialog).toBeVisible();
     await expect(page.getByRole("link", { name: "服务条款" })).toHaveAttribute("href", "/terms");
     await expect(page.getByRole("link", { name: "隐私政策" })).toHaveAttribute("href", "/privacy");
-    await page.getByPlaceholder("昵称").fill("测试用户");
-    await page.getByPlaceholder("邮箱").fill(`account-${viewport.width}@example.test`);
-    await page.getByPlaceholder("密码（10–128 位）").fill("secure-password-1");
-    await page.getByRole("button", { name: "注册并发送验证邮件" }).click();
-    await expect(page.getByText("注册成功，请查收验证邮件。验证后即可登录。")).toBeVisible();
+    await page.getByLabel("昵称").fill("测试用户");
+    await signupDialog.getByRole("textbox", { name: "邮箱", exact: true }).fill(`account-${viewport.width}@example.test`);
+    await page.getByLabel("密码", { exact: true }).fill("secure-password-1");
+    await expect(signupDialog.getByRole("meter", { name: "密码强度" })).toHaveAttribute("aria-valuetext", "强");
+    await page.getByRole("button", { name: "创建账号并发送验证码" }).click();
+    await expect(signupDialog.getByRole("button", { name: /第 2 步，共 3 步：验证邮箱/ })).toHaveAttribute("aria-current", "step");
+    for (const [index, digit] of [..."123456"].entries()) {
+      await signupDialog.getByRole("textbox", { name: `邮箱验证码第 ${index + 1} 位，共 6 位` }).fill(digit);
+    }
+    await signupDialog.getByRole("button", { name: "验证邮箱", exact: true }).click();
+    await expect(signupDialog.getByText("邮箱验证完成", { exact: true })).toBeVisible();
+    await expect(signupDialog.getByText("邮箱验证完成，现在可以登录网站账号。")).toBeVisible();
   });
 }
+
+test("a cached Skland box is labeled separately when the website binding needs browser reauthorization", async ({ page }) => {
+  await mockApis(page, { sklandConfigured: true, sklandBindingCount: 1 });
+  await seedV4Session(page, planData, { boxSource: "skland" });
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "森空岛状态", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "森空岛已绑定，请重新授权当前浏览器" })).toBeVisible();
+  await expect(page.getByText(/网站账号仍记录着 1 个森空岛绑定/)).toBeVisible();
+
+  await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+  await page.getByRole("button", { name: "基建计算器", exact: true }).click();
+  await page.getByRole("button", { name: "配置Box与布局" }).first().click();
+  const setupDialog = page.getByRole("dialog");
+  await setupDialog.getByRole("button", { name: /第 1 步，共 3 步：干员数据/ }).click();
+  await expect(setupDialog.getByText("上次同步的森空岛数据", { exact: true })).toBeVisible();
+});
 
 test("account settings revokes every session and returns to the app", async ({ page }) => {
   let revokeRequests = 0;
@@ -2704,7 +2742,7 @@ test("Skland login shows QR on every viewport and offers a separate mobile app s
         termsAccepted: true,
         privacyAccepted: true,
         termsVersion: "2026-08-17",
-        privacyVersion: "2026-08-17",
+        privacyVersion: "2026-08-17-skland-binding",
       },
     });
     return route.fulfill({

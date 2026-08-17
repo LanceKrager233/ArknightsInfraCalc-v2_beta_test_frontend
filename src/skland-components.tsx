@@ -131,6 +131,7 @@ export function SklandLoginPanel({
             configured: true,
             accounts: result.accounts,
             activeAccountId: result.activeAccountId,
+            bindingCount: result.bindingCount ?? result.accounts.length,
             scheduleSnapshot: result.scheduleSnapshot,
             statusSnapshot: result.statusSnapshot,
           });
