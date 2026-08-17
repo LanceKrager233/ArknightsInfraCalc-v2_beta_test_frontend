@@ -2,16 +2,18 @@
 
 import { Check } from "lucide-react";
 
-import type { OperBoxEntry } from "@/types";
+import type { OperBoxEntry, RotationProfile } from "@/types";
 
 type FiammettaSettingsProps = {
   enabled: boolean;
   operbox: OperBoxEntry[] | null;
+  rotation: RotationProfile;
   onEnabledChange: (enabled: boolean) => void;
 };
 
-export function FiammettaSettings({ enabled, operbox, onEnabledChange }: FiammettaSettingsProps) {
+export function FiammettaSettings({ enabled, operbox, rotation, onEnabledChange }: FiammettaSettingsProps) {
   const ownsFiammetta = Boolean(operbox?.some((operator) => operator.own && operator.name === "菲亚梅塔"));
+  const rotationForcesEnabled = rotation === "fiammetta_8_8_4_4";
   const checked = enabled && ownsFiammetta;
 
   return (
@@ -25,7 +27,7 @@ export function FiammettaSettings({ enabled, operbox, onEnabledChange }: Fiammet
           type="button"
           role="checkbox"
           aria-checked={checked}
-          disabled={!ownsFiammetta}
+          disabled={!ownsFiammetta || rotationForcesEnabled}
           className="flex min-h-11 shrink-0 items-center gap-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-45"
           onClick={() => onEnabledChange(!checked)}
         >

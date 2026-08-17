@@ -355,6 +355,32 @@ export function assertPlanCollectionLimits(
   }
 }
 
+export function normalizeFiammettaEnable(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (typeof value !== "boolean") {
+    throw new PublicApiError("AIC-REQ-1001", {
+      fieldErrors: [{
+        path: "fiammetta_enable",
+        code: "invalid_fiammetta_enable",
+        message: "fiammetta_enable 必须是布尔值。",
+      }],
+    });
+  }
+  return value;
+}
+
+export function assertFiammettaEnableCompatible(fiammettaEnable: boolean, rotation: string): void {
+  if (!fiammettaEnable && rotation === "fiammetta_8_8_4_4") {
+    throw new PublicApiError("AIC-REQ-1001", {
+      fieldErrors: [{
+        path: "fiammetta_enable",
+        code: "fiammetta_enable_conflicts_with_rotation",
+        message: "未启用菲亚梅塔时不能使用菲亚梅塔轮换。",
+      }],
+    });
+  }
+}
+
 export function __resetRequestGuardsForTests(): void {
   guardState.rates.clear();
   guardState.planIps.clear();
