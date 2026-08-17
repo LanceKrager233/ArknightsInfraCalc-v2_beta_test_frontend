@@ -61,7 +61,7 @@ export default function PrivacyPage() {
         <h2 className="font-number">4. 保存期限</h2>
         <ul>
           <li>森空岛登录凭证自扫码成功起固定保存 <span className="font-number">7</span> 天，刷新页面或 token 不会延长期限。</li>
-          <li>森空岛绑定记录保留至你退出对应森空岛账号、删除全部森空岛数据或注销网站账号。</li>
+          <li>森空岛绑定记录保留至你退出对应森空岛账号、删除全部森空岛数据或注销网站账号；最近授权满 <span className="font-number">7</span> 天后会标记为“待续期”，必须重新扫码才能继续同步。</li>
           <li>服务端 CLI 运行记录最多保存 <span className="font-number">7</span> 天，你也可以随时提前删除。</li>
           <li>浏览器中的布局、干员 Box 和最近排班通常最多保存 <span className="font-number">30</span> 天；“删除全部森空岛数据”会立即移除其中的森空岛来源内容。</li>
           <li>未完成的二维码登录记录最多保留 <span className="font-number">10</span> 分钟。</li>

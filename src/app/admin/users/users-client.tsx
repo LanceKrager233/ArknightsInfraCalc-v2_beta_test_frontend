@@ -123,8 +123,13 @@ export function AdminUsers() {
                     <h2 className="font-medium">{entry.name}</h2>
                     {entry.isAdmin ? <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{entry.isBootstrapAdmin ? "初始管理员" : "管理员"}</span> : null}
                     {CLIENT_SKLAND_ENABLED ? (
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${entry.sklandBindingCount > 0 ? "bg-emerald-50 text-emerald-700" : "bg-muted text-muted-foreground"}`}>
-                        {entry.sklandBindingCount > 0 ? `已绑定森空岛 · ${entry.sklandBindingCount}` : "未绑定森空岛"}
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${entry.sklandActiveBindingCount > 0 ? "bg-emerald-50 text-emerald-700" : "bg-muted text-muted-foreground"}`}>
+                        {entry.sklandActiveBindingCount > 0 ? `森空岛有效 · ${entry.sklandActiveBindingCount}` : "森空岛无有效授权"}
+                      </span>
+                    ) : null}
+                    {CLIENT_SKLAND_ENABLED && entry.sklandRenewalDueCount > 0 ? (
+                      <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
+                        待续期 · {entry.sklandRenewalDueCount}
                       </span>
                     ) : null}
                   </div>

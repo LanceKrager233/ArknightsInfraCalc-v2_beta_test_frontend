@@ -45,7 +45,7 @@ export async function POST(request: Request) {
         if (error instanceof SklandAccountLimitError) throw new PublicApiError("AIC-AUTH-2004");
         throw error;
       }
-      const bindingCount = await bindSklandAccount(website.user.id, result.session.userId);
+      const bindingSummary = await bindSklandAccount(website.user.id, result.session.userId);
       const next = {
         ...previous,
         accounts: upserted.accounts,
@@ -58,7 +58,8 @@ export async function POST(request: Request) {
         statusSnapshot: result.response.statusSnapshot,
         accounts: sklandAccountSummaries(next),
         activeAccountId: next.activeAccountId,
-        bindingCount,
+        bindingCount: bindingSummary.totalCount,
+        bindingSummary,
       }, requestId);
       setSklandAccountStoreCookies(response, request, next, previous);
       return response;

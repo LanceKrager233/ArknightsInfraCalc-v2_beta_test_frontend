@@ -15,7 +15,7 @@
 
 `BETTER_AUTH_ADMIN_USER_IDS` 中的账号是不可由网页降级的初始管理员。初始管理员可以在中文管理页将已验证、未封禁的账号设为管理员，角色保存于 PostgreSQL 的 `user.role`。受委派管理员可以搜索、封禁用户及查看或撤销 Session，但不能继续授予或撤销管理员权限，也不能封禁初始管理员或撤销其 Session。服务端每次请求都读取当前数据库角色，因此撤销权限后立即生效。
 
-PostgreSQL 保存网站账号、数据库 Session、验证记录、Better Auth 限流记录，以及 HMAC 化的森空岛绑定标识、对应网站用户和授权时间。MAA Box、布局、排班、森空岛 UID/昵称与第三方游戏凭据不会写入 PostgreSQL；凭据仍只保存在绑定网站用户的加密 HttpOnly Cookie 中。
+PostgreSQL 保存网站账号、数据库 Session、验证记录、Better Auth 限流记录，以及 HMAC 化的森空岛绑定标识、对应网站用户和授权时间。账号状态中心根据最近授权时间区分七天内有效与待续期绑定，管理后台分别显示两类数量；到期不会删除绑定记录。MAA Box、布局、排班、森空岛 UID/昵称与第三方游戏凭据不会写入 PostgreSQL；凭据仍只保存在绑定网站用户的加密 HttpOnly Cookie 中。
 
 ## 1. 准备发信域名
 
@@ -142,7 +142,7 @@ systemctl list-timers 'arknights-infra-db-backup@*'
 5. 匿名全角色样例可求解；匿名 MAA 返回 `AIC-AUTH-2008`；登录后 MAA 可求解。
 6. development 森空岛全部入口要求网站账号；退出网站账号、退出全部设备或注销后，原森空岛 Cookie 不能被其他网站用户读取。
 7. 管理页只能由初始或受委派管理员访问，可搜索、查看/撤销 Session、封禁和解封；只有初始管理员能授予或撤销管理员角色，受委派管理员不能影响初始管理员；原生 `/api/auth/admin/*` 返回 404。
-8. 390px、768px、1440px 下完成注册、验证提示、权限引导、账号设置与管理页检查。
+8. 390px、768px、1440px 下完成账号状态中心的注册、验证提示、权限引导、账号设置、七天扫码续期与管理页检查。
 9. backup service 成功且本地加密文件存在；配置异地存储时还需确认 restic 快照存在，并在隔离库完成至少一次恢复验证。
 
 production 仍必须保持森空岛代码、文案和 API 从浏览器制品及公开访问面移除。production 数据库、密钥、Resend Key、发信配置和备份路径不得复用 development 的值。

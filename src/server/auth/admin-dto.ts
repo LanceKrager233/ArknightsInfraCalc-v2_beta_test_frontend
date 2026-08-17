@@ -11,6 +11,8 @@ type AdminUserRecord = {
   banReason: string | null;
   createdAt: Date;
   sklandBindingCount: number;
+  sklandActiveBindingCount: number;
+  sklandRenewalDueCount: number;
 };
 
 type AdminSessionRecord = {
@@ -35,6 +37,8 @@ export function toAdminUserData(record: AdminUserRecord, bootstrapAdminIds: Set<
     isAdmin: access.isAdmin,
     isBootstrapAdmin: access.isBootstrapAdmin,
     sklandBindingCount: record.sklandBindingCount,
+    sklandActiveBindingCount: record.sklandActiveBindingCount,
+    sklandRenewalDueCount: record.sklandRenewalDueCount,
   };
 }
 

@@ -13,6 +13,8 @@ test("admin user DTO exposes role decisions without returning the raw database r
     banReason: null,
     createdAt: new Date("2026-08-17T00:00:00.000Z"),
     sklandBindingCount: 2,
+    sklandActiveBindingCount: 1,
+    sklandRenewalDueCount: 1,
   }, new Set());
 
   assert.deepEqual(data, {
@@ -26,6 +28,8 @@ test("admin user DTO exposes role decisions without returning the raw database r
     isAdmin: true,
     isBootstrapAdmin: false,
     sklandBindingCount: 2,
+    sklandActiveBindingCount: 1,
+    sklandRenewalDueCount: 1,
   });
   assert.equal("role" in data, false);
 });

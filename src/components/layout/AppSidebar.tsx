@@ -1,6 +1,6 @@
 "use client";
 
-import { Calculator, Cloud, GraduationCap, Search } from "lucide-react";
+import { Calculator, CircleUserRound, GraduationCap, Search } from "lucide-react";
 
 import {
   Sidebar,
@@ -13,10 +13,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { AuthAccountControl } from "@/components/auth/AuthAccountControl";
-
-const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
-export type AppPage = "calculator" | "training" | "skland" | "skill-query";
+export type AppPage = "calculator" | "training" | "account" | "skill-query";
 
 interface AppSidebarProps {
   page: AppPage;
@@ -69,27 +66,18 @@ export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
                 <span>技能查询</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
-            {CLIENT_SKLAND_ENABLED ? (
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  isActive={page === "skland"}
-                  onClick={() => handlePageChange("skland")}
-                  tooltip="森空岛状态"
-                >
-                  <Cloud className="size-5" />
-                  <span>森空岛状态</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ) : null}
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                isActive={page === "account"}
+                onClick={() => handlePageChange("account")}
+                tooltip="账号状态中心"
+              >
+                <CircleUserRound className="size-5" />
+                <span>账号状态中心</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
           </SidebarMenu>
         </SidebarGroup>
-        {!isMobile ? (
-          <SidebarGroup className="pt-0">
-            <div className="flex justify-center">
-              <AuthAccountControl />
-            </div>
-          </SidebarGroup>
-        ) : null}
       </SidebarContent>
     </Sidebar>
   );

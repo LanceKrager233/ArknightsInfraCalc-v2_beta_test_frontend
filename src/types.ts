@@ -528,6 +528,14 @@ export interface SklandAuthMethods {
   qr: true;
 }
 
+export interface SklandBindingSummary {
+  totalCount: number;
+  activeCount: number;
+  renewalDueCount: number;
+  nextExpiresAt: number | null;
+  latestExpiredAt: number | null;
+}
+
 export interface SklandSessionResponse {
   authenticated: boolean;
   configured: boolean;
@@ -536,6 +544,7 @@ export interface SklandSessionResponse {
   accounts: SklandAccountSummary[];
   activeAccountId: string | null;
   bindingCount: number;
+  bindingSummary?: SklandBindingSummary;
   scheduleSnapshot?: SklandScheduleSnapshot;
   statusSnapshot?: SklandStatusSnapshot;
   error?: string;
@@ -556,6 +565,7 @@ export interface SklandQrStatusResponse {
   scheduleSnapshot?: SklandScheduleSnapshot;
   statusSnapshot?: SklandStatusSnapshot;
   bindingCount?: number;
+  bindingSummary?: SklandBindingSummary;
   error?: string;
   code?: string;
 }
@@ -894,6 +904,8 @@ export interface AdminUserData {
   isAdmin: boolean;
   isBootstrapAdmin: boolean;
   sklandBindingCount: number;
+  sklandActiveBindingCount: number;
+  sklandRenewalDueCount: number;
 }
 
 export interface AdminUsersData {
@@ -928,6 +940,7 @@ export interface SklandSessionData {
   accounts: SklandAccountSummary[];
   activeAccountId: string | null;
   bindingCount: number;
+  bindingSummary?: SklandBindingSummary;
   scheduleSnapshot?: SklandScheduleSnapshot;
   statusSnapshot?: SklandStatusSnapshot;
 }
@@ -949,6 +962,7 @@ export interface SklandQrStatusData {
   accounts?: SklandAccountSummary[];
   activeAccountId?: string | null;
   bindingCount?: number;
+  bindingSummary?: SklandBindingSummary;
   scheduleSnapshot?: SklandScheduleSnapshot;
   statusSnapshot?: SklandStatusSnapshot;
 }
