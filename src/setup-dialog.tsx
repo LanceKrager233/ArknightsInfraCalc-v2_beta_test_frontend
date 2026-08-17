@@ -53,12 +53,7 @@ type SetupDialogProps = {
   rotationProfile: RotationProfile;
   onRotationProfileChange: (value: RotationProfile) => void;
   fiammettaEnabled: boolean;
-  fiammettaTarget: string | null;
-  fiammettaOrder: "pre" | "post";
-  scheduledOperators: ReadonlySet<string>;
   onFiammettaEnabledChange: (enabled: boolean) => void;
-  onFiammettaTargetChange: (target: string) => void;
-  onFiammettaOrderChange: (order: "pre" | "post") => void;
   onPresetSelect: (preset: PresetDef) => void;
   onLayoutFile: (file: File) => Promise<void>;
   onDownloadLayout: () => void;
@@ -112,12 +107,7 @@ export function SetupDialog({
   rotationProfile,
   onRotationProfileChange,
   fiammettaEnabled,
-  fiammettaTarget,
-  fiammettaOrder,
-  scheduledOperators,
   onFiammettaEnabledChange,
-  onFiammettaTargetChange,
-  onFiammettaOrderChange,
   onPresetSelect,
   onLayoutFile,
   onDownloadLayout,
@@ -447,13 +437,8 @@ export function SetupDialog({
                     <div className="border-t border-border/70 pt-5">
                       <FiammettaSettings
                         enabled={fiammettaEnabled}
-                        target={fiammettaTarget}
-                        order={fiammettaOrder}
                         operbox={operbox}
-                        scheduledOperators={scheduledOperators}
                         onEnabledChange={onFiammettaEnabledChange}
-                        onTargetChange={onFiammettaTargetChange}
-                        onOrderChange={onFiammettaOrderChange}
                       />
                     </div>
 

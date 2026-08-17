@@ -86,6 +86,7 @@ export function runPlan(payload: {
   sourceName: string | null;
   boxSource: "skland" | "maa" | "sample";
   rotation: RotationProfile;
+  // TODO(fiammetta): 是否启用菲亚梅塔恢复心情的请求参数，参数名待与服务端契约确认后接入。
 }, signal?: AbortSignal): Promise<PublicPlanData> {
   return requestData("/api/plan", {
     method: "POST",
