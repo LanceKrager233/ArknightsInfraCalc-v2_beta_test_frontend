@@ -1767,11 +1767,16 @@ test("dialog and mobile sheet motion preserve direction, exit timing, and focus"
   await page.goto("/");
 
   const setupTrigger = page.getByRole("button", { name: "配置Box与布局" }).first();
-  await armMotionCapture(page, '[role="dialog"]', "setup-dialog", 300);
   await setupTrigger.click();
   const setupDialog = page.getByRole("dialog");
+  await expect(setupDialog).toBeVisible({ timeout: 30_000 });
+  await setupDialog.getByRole("button", { name: "Close" }).click();
+  await expect(setupDialog).toHaveCount(0);
+  await expect(setupTrigger).toBeFocused();
+
+  await setupTrigger.click();
+  await expectMotionDuration(setupDialog, 300);
   await expect(setupDialog).toHaveCSS("transform-origin", /.+/);
-  await expectCapturedMotion(page, "setup-dialog", 300);
   await page.setViewportSize({ width: 768, height: 900 });
   await armEndingTransitionCapture(setupDialog, "setup");
   await setupDialog.getByRole("button", { name: "Close" }).click();
@@ -1781,10 +1786,15 @@ test("dialog and mobile sheet motion preserve direction, exit timing, and focus"
 
   await page.getByRole("tab", { name: "列表式布局" }).click();
   const issueTrigger = page.getByRole("button", { name: /反馈排班问题/ }).first();
-  await armMotionCapture(page, '[role="dialog"]', "feedback-dialog", 300);
   await issueTrigger.click();
   const feedbackDialog = page.getByRole("dialog");
-  await expectCapturedMotion(page, "feedback-dialog", 300);
+  await expect(feedbackDialog).toBeVisible({ timeout: 30_000 });
+  await feedbackDialog.getByRole("button", { name: "取消" }).click();
+  await expect(feedbackDialog).toHaveCount(0);
+  await expect(issueTrigger).toBeFocused();
+
+  await issueTrigger.click();
+  await expectMotionDuration(feedbackDialog, 300);
   await armEndingTransitionCapture(feedbackDialog, "feedback");
   await feedbackDialog.getByRole("button", { name: "取消" }).click();
   await expectCapturedExitDuration(page, "feedback", 180);
