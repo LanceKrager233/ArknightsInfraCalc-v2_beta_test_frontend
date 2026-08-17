@@ -54,9 +54,11 @@ test("Better Auth completes the PostgreSQL account lifecycle", async () => {
     plugins: [admin({ defaultRole: "user" })],
   });
 
+  let requestAddress = 1;
   async function request(pathOrUrl, init = {}) {
     const headers = new Headers(init.headers);
     headers.set("origin", origin);
+    headers.set("x-forwarded-for", `192.0.2.${requestAddress++}`);
     if (init.body) headers.set("content-type", "application/json");
     const url = pathOrUrl.startsWith("http") ? pathOrUrl : `${baseURL}${pathOrUrl}`;
     return auth.handler(new Request(url, { ...init, headers }));
