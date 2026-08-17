@@ -12,6 +12,7 @@ type FiammettaSettingsProps = {
 
 export function FiammettaSettings({ enabled, operbox, onEnabledChange }: FiammettaSettingsProps) {
   const ownsFiammetta = Boolean(operbox?.some((operator) => operator.own && operator.name === "菲亚梅塔"));
+  const checked = enabled && ownsFiammetta;
 
   return (
     <section className="grid gap-3" aria-labelledby="fiammetta-settings-title">
@@ -23,15 +24,15 @@ export function FiammettaSettings({ enabled, operbox, onEnabledChange }: Fiammet
         <button
           type="button"
           role="checkbox"
-          aria-checked={enabled}
+          aria-checked={checked}
           disabled={!ownsFiammetta}
           className="flex min-h-11 shrink-0 items-center gap-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-45"
-          onClick={() => onEnabledChange(!enabled)}
+          onClick={() => onEnabledChange(!checked)}
         >
-          <span className={`grid size-5 place-items-center border transition-colors ${enabled ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background"}`}>
-            {enabled ? <Check className="size-3.5" aria-hidden="true" /> : null}
+          <span className={`grid size-5 place-items-center border transition-colors ${checked ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background"}`}>
+            {checked ? <Check className="size-3.5" aria-hidden="true" /> : null}
           </span>
-          {enabled ? "已启用" : "未启用"}
+          {checked ? "已启用" : "未启用"}
         </button>
       </div>
 
