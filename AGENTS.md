@@ -95,8 +95,11 @@ UI 控件优先组合 `src/components/ui/*` 中的现有 primitive。不要另�
 - `POST /api/skland/role`
 - `GET /api/skland/status`
 - `DELETE /api/skland/data`
+- `GET`、`POST /api/auth/*`（Better Auth 原生协议，不使用公共响应信封）
+- `GET`、`POST /api/admin/users`
 
 所有公共响应使用 `ApiSuccess<T> | ApiFailure` 信封并返回 `X-Request-Id`。健康检查的公开就绪字段是 `data.plannerReady`，不是内部 `HealthApiResponse` 的 `ok` / `cliReady`。
+`/api/auth/*` 是唯一明确例外，保持 Better Auth 原生协议；应用自有管理接口仍使用统一信封。
 
 ### 必须保持的安全与契约边界
 
@@ -162,6 +165,13 @@ Worker 能力只由`protocol_version`和`plan_schema_version`判断；`plan_cont
 | `BETA_DEBUG_TOOLS_ENABLED` | 为 `1` 时允许服务端生成公开调试字段 |
 | `BETA_RATE_LIMIT_ENABLED` | `0` 关闭、`1` 开启；生产默认开启 |
 | `PLAYWRIGHT_BASE_URL` | E2E 地址，默认 `http://127.0.0.1:5184` |
+| `DATABASE_URL` | 网站认证 runtime PostgreSQL 连接串，仅授予认证表 DML |
+| `DATABASE_MIGRATION_URL` | 发布 migration 连接串，可对认证 schema 执行 DDL |
+| `BETTER_AUTH_SECRET` | 网站 Session 签名密钥，至少 32 字节且长期稳定 |
+| `BETTER_AUTH_URL` | Better Auth 对外完整 Origin |
+| `BETTER_AUTH_ADMIN_USER_IDS` | 逗号分隔的管理员 Better Auth user ID |
+| `RESEND_API_KEY` | 验证与重置邮件的 Resend API key |
+| `AUTH_EMAIL_FROM` | 已验证独立发信子域的 From 地址 |
 
 反向代理生产环境应明确设置两个公开 Origin，并启用可信代理头；生产保持调试关闭、限流开启。
 
@@ -194,7 +204,7 @@ npm start
 
 - `npm run check` 依次运行 lint、单元测试和 API 契约测试。
 - `npm run audit:security` 阻止 high / critical npm 漏洞进入受保护分支；依赖安全修复交付时仍应运行完整`npm audit`并清零已知漏洞。
-- `npm run test:deploy`验证发布包准备、release 淘汰、失败清理、回滚和磁盘空间保护。
+- `npm run test:deploy`验证数据库备份模式、发布包准备、release 淘汰、失败清理、回滚和磁盘空间保护。
 - `npm run test:solver-contract` 仅在 Linux 执行，验证仓库内 ELF 制品指纹并用 Full E2 真实调用 `plan.compute`。
 - `npm run build` 进行 Next 生产构建并覆盖 TypeScript 集成检查。
 - `npm run test:production-client` checks the production browser build for forbidden Skland login content.

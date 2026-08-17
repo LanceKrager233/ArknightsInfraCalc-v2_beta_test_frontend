@@ -9,6 +9,7 @@ import { SklandServiceError, syncSessionSnapshot } from "@/server/skland/adapter
 import {
   activeSklandAccount,
   assertSklandAvailable,
+  assertSklandFeatureEnabled,
   readSklandAccountStore,
   setSklandAccountStoreCookies,
   sklandAccountSummaries,
@@ -17,6 +18,7 @@ import {
   withUpdatedSklandAccount,
 } from "@/server/skland/http";
 import { removeSklandAccount } from "@/server/skland/session";
+import { requireWebsiteSession } from "@/server/auth/authorization";
 
 export const runtime = "nodejs";
 
@@ -25,6 +27,8 @@ export async function POST(request: Request) {
   const startedAt = performance.now();
   let previous: SklandAccountStore | null = null;
   try {
+    assertSklandFeatureEnabled();
+    await requireWebsiteSession(request);
     assertSklandAvailable(request);
     assertSameOrigin(request);
     enforceRateLimit("skland-action", requestClientIp(request), 30, 60 * 60_000);

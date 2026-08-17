@@ -85,6 +85,12 @@ $env:BETA_TRUST_PROXY_HEADERS = "1"
 `APP_DEPLOYMENT_ENV=production`会强制关闭森空岛，不能被`SKLAND_FEATURE_ENABLED=1`覆盖。线上构建不会渲染相关入口、不会发起会话请求，公开健康检查不含相关能力字段，`/api/skland/*`统一返回 404。未声明部署目标的`next build`同样按 production 关闭；本地`next dev`默认保持兼容。
 Production compilation also removes Skland copy, API URLs, and the app scheme from browser assets. `npm run test:production-client` scans static JavaScript and public HTML/RSC to prevent regressions.
 
+## 网站账号与数据库
+
+MAA JSON / xlsx 与 development 森空岛能力要求先登录已验证的网站账号；全角色样例、技能查询、配置和样例求解仍可匿名使用。网站账号使用 Better Auth、PostgreSQL 和 Resend，数据库与认证实例在真实请求时惰性初始化，因此没有数据库或认证密钥时仍可完成 production build。`/api/auth/*` 使用 Better Auth 原生协议，不套公共 API 信封；应用自有 `/api/admin/users` 仍使用统一信封。
+
+数据库容器、runtime/migration/backup 最小权限账号、邮件域名、固定 deploy helper、管理员初始化、加密备份和 development 验收顺序见[网站账号与 PostgreSQL 上线手册](./docs/AUTHENTICATION_DATABASE.md)。
+
 法律页面默认以“明日方舟基建排班助手项目维护者”署名并链接仓库 Issues，可通过 `LEGAL_OPERATOR_NAME`、`LEGAL_CONTACT_EMAIL`、`LEGAL_CONTACT_URL` 覆盖。修改政策正文时还应同步更新 `src/legal-policy.ts` 中的政策版本，使旧同意失效并要求重新确认。
 
 ## CLI 设置

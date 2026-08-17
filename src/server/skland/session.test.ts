@@ -6,6 +6,7 @@ import {
   createSklandStoredAccount,
   removeSklandAccount,
   sealSklandAccount,
+  sealOwnedSklandAccount,
   sealSklandAccountIndex,
   sealSklandSession,
   sklandDataOwnerTag,
@@ -17,9 +18,11 @@ import {
   type SklandStoredAccount,
   toPublicSklandAccount,
   unsealSklandAccount,
+  unsealOwnedSklandAccount,
   unsealSklandAccountIndex,
   unsealSklandSession,
   upsertSklandAccount,
+  websiteUserOwnerTag,
 } from "./session.ts";
 import { isCurrentPolicyConsent, PRIVACY_VERSION, TERMS_VERSION } from "../../legal-policy.ts";
 
@@ -128,6 +131,16 @@ test("data owner tags are deterministic, account-specific, and do not reveal the
   assert.equal(first, sklandDataOwnerTag("upstream-user-one", secret));
   assert.notEqual(first, sklandDataOwnerTag("upstream-user-two", secret));
   assert.equal(first.includes("upstream-user-one"), false);
+});
+
+test("Skland account cookies are bound to one website user", () => {
+  const account = createSklandStoredAccount(sessionFor("skland-user"), rolesFor("skland-user"), "account_owned");
+  const firstOwner = websiteUserOwnerTag("website-user-one", secret);
+  const secondOwner = websiteUserOwnerTag("website-user-two", secret);
+  const sealed = sealOwnedSklandAccount(account, firstOwner, secret);
+  assert.deepEqual(unsealOwnedSklandAccount(sealed, firstOwner, secret, now), account);
+  assert.equal(unsealOwnedSklandAccount(sealed, secondOwner, secret, now), null);
+  assert.equal(sealed.includes("website-user-one"), false);
 });
 
 test("QR consent requires both current policy versions", () => {

@@ -18,6 +18,8 @@ import { isRotationProfile } from "@/rotation-settings";
 import type { BaseBlueprint, OperBoxEntry, RotationProfile } from "@/types";
 import { activeSklandAccount, readSklandAccountStore } from "@/server/skland/http";
 import { sklandDataOwnerTag } from "@/server/skland/session";
+import { requireWebsiteSession } from "@/server/auth/authorization";
+import { planAccessMode } from "@/server/plan-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,6 +41,13 @@ export async function POST(request: Request) {
       rotation?: unknown;
       boxSource?: unknown;
     };
+    if (planAccessMode(body.boxSource, body.operbox !== undefined) === "trusted-sample") {
+      const sample = await (await import("@/server/infra")).getSampleOperbox();
+      body.operbox = sample.operbox as OperBoxEntry[];
+      body.sourceName = "243 全精二示例";
+    } else {
+      await requireWebsiteSession(request);
+    }
     const layoutErrors = validateLayoutJson(body?.layout);
     if (layoutErrors.length || !body.layout) {
       throw new PublicApiError("AIC-LAYOUT-1201", {
@@ -86,9 +95,6 @@ export async function POST(request: Request) {
       });
     }
     const sourceName = safeDisplayName(body.sourceName, "已导入的干员数据");
-    if (body.boxSource !== undefined && !["skland", "maa", "sample"].includes(String(body.boxSource))) {
-      throw new PublicApiError("AIC-REQ-1001");
-    }
     let dataOwnerTag: string | null = null;
     if (body.boxSource === "skland") {
       const account = activeSklandAccount(await readSklandAccountStore());

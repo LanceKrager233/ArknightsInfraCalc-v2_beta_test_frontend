@@ -80,7 +80,7 @@ if [[ "$test_mode" == "1" ]]; then
     *) fail_validation "Test mode requires an isolated directory below /tmp." ;;
   esac
   case "$test_fail_stage" in
-    none|install|build|restart|internal-health|solver-version|solver-fingerprint|public-health) ;;
+    none|install|build|migration|auth-readiness|restart|internal-health|solver-version|solver-fingerprint|public-health) ;;
     *) fail_validation "Invalid test failure stage." ;;
   esac
   if [[ -n "$test_available_kib" && ! "$test_available_kib" =~ ^[0-9]+$ ]]; then
@@ -438,6 +438,41 @@ else
     SKLAND_FEATURE_ENABLED="$skland_enabled" \
     bash -lc "cd '$release_dir' && npm run build"
 fi
+
+auth_hook_state="$(node -e "
+const fs = require('node:fs');
+const packageJson = JSON.parse(fs.readFileSync(0, 'utf8'));
+const scripts = packageJson.scripts ?? {};
+const hasMigration = typeof scripts['db:migrate'] === 'string' && scripts['db:migrate'].trim().length > 0;
+const hasReadiness = typeof scripts['auth:check'] === 'string' && scripts['auth:check'].trim().length > 0;
+process.stdout.write(hasMigration && hasReadiness ? 'complete' : hasMigration || hasReadiness ? 'partial' : 'none');
+" < "$release_dir/package.json")"
+
+case "$auth_hook_state" in
+  complete)
+    simulate_failure migration
+    if [[ "$test_mode" == "0" ]]; then
+      runuser -u "$run_user" -- bash -lc "cd '$release_dir' && npm run db:migrate"
+    fi
+
+    simulate_failure auth-readiness
+    if [[ "$test_mode" == "0" ]]; then
+      runuser -u "$run_user" -- bash -lc "cd '$release_dir' && npm run auth:check"
+    fi
+    echo "Authentication database migration and readiness hooks completed."
+    ;;
+  none)
+    echo "Skipping authentication database hooks for a legacy release without either script."
+    ;;
+  partial)
+    echo "Release must define both db:migrate and auth:check scripts, or neither." >&2
+    exit 1
+    ;;
+  *)
+    echo "Unable to determine authentication database hook state." >&2
+    exit 1
+    ;;
+esac
 
 ln -s "$release_dir" "$next_link"
 mv -Tf "$next_link" "$current_link"

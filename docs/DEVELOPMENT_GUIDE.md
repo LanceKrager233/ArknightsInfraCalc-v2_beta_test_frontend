@@ -102,6 +102,10 @@ type ApiFailure = {
 - `POST /api/skland/auth/qr/status`
 - `POST /api/skland/sync`
 - `POST /api/skland/role`
+- `GET/POST /api/auth/*`（Better Auth 原生协议，不使用公共响应信封）
+- `GET/POST /api/admin/users`
+
+`/api/auth/*` 是统一响应信封的唯一例外。Better Auth 原生 admin 路由全部返回 404；管理员只能使用应用自有的中文用户管理接口。
 
 `/api/plan`只返回 `profile`、`maa`、`rotation`、`durationMs`、`diagnosticId`。CLI 路径、命令、stdout、stderr、运行目录和内部协议对象只能进入服务端运行记录；调试模式允许它们位于 `data.debug`，但必须由服务端环境变量开启。
 
@@ -143,6 +147,13 @@ POST 和 DELETE 路由执行同源检查。生产部署在 Nginx 后时启用受
 | `SKLAND_ALLOW_INSECURE_HTTP` | 仅限可信临时环境；允许非 localhost 使用不安全 HTTP |
 | `APP_DEPLOYMENT_ENV` | `production`或`development`；production 强制移除森空岛访问面 |
 | `SKLAND_FEATURE_ENABLED` | dev/local 可设为`0`主动关闭；不能在 production 开启 |
+| `DATABASE_URL` | 网站认证 runtime PostgreSQL 连接串，仅授予认证表 DML |
+| `DATABASE_MIGRATION_URL` | release 执行仓库内 migration 的 DDL 连接串 |
+| `BETTER_AUTH_SECRET` | 网站 Session 签名密钥，至少 32 字节且长期稳定 |
+| `BETTER_AUTH_URL` | 浏览器实际访问的完整 HTTPS Origin |
+| `BETTER_AUTH_ADMIN_USER_IDS` | 逗号分隔的管理员 Better Auth user ID |
+| `RESEND_API_KEY` | 验证与密码重置邮件的 Resend API key |
+| `AUTH_EMAIL_FROM` | 已验证独立发信子域的 From 地址 |
 
 建议的生产配置：
 
@@ -156,6 +167,8 @@ SKLAND_FEATURE_ENABLED=0
 ```
 
 dev 站点使用`APP_DEPLOYMENT_ENV=development`与`SKLAND_FEATURE_ENABLED=1`，并额外配置`SKLAND_SESSION_SECRET`、`SKLAND_PUBLIC_ORIGIN`。两个站点必须使用不同的应用根目录、systemd 服务、内部端口、公开 Origin 和持久化目录。
+
+认证与数据库的首次上线、最小权限和恢复演练见[网站账号与 PostgreSQL 上线手册](./AUTHENTICATION_DATABASE.md)。CI 使用临时 PostgreSQL 先执行已提交 migration，再运行注册、验证、登录、密码重置、Session 撤销与封禁集成测试；邮件由测试回调捕获，不发送真实邮件。
 
 ## 调试模式
 

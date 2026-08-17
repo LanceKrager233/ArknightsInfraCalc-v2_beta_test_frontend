@@ -88,10 +88,13 @@ export function runPlan(payload: {
   rotation: RotationProfile;
   // TODO(fiammetta): 是否启用菲亚梅塔恢复心情的请求参数，参数名待与服务端契约确认后接入。
 }, signal?: AbortSignal): Promise<PublicPlanData> {
+  const requestPayload = payload.boxSource === "sample"
+    ? { layout: payload.layout, sourceName: payload.sourceName, boxSource: payload.boxSource, rotation: payload.rotation }
+    : payload;
   return requestData("/api/plan", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(requestPayload),
     signal,
   });
 }

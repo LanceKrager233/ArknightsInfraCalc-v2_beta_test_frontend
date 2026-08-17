@@ -13,6 +13,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { AuthAccountControl } from "@/components/auth/AuthAccountControl";
 
 const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
 export type AppPage = "calculator" | "training" | "skland" | "skill-query";
@@ -82,6 +83,13 @@ export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
             ) : null}
           </SidebarMenu>
         </SidebarGroup>
+        {!isMobile ? (
+          <SidebarGroup className="pt-0">
+            <div className="flex justify-center">
+              <AuthAccountControl />
+            </div>
+          </SidebarGroup>
+        ) : null}
       </SidebarContent>
     </Sidebar>
   );
