@@ -11,7 +11,7 @@
 | 森空岛登录、同步和求解 | 不可用 | 仅 development 可用 |
 | `/admin/users` | 不可用 | 初始管理员及其通过管理页授予权限的管理员可用 |
 
-`/api/auth/*` 保持 Better Auth 原生响应，是统一 `ApiSuccess | ApiFailure` 信封的唯一例外。应用自有的 `/api/admin/users`、`/api/plan` 和 `/api/skland/*` 继续使用统一信封、请求 ID、同源校验、大小限制和限流。Better Auth 的原生 `/api/auth/admin/*` 全部返回 404，避免开放模拟登录、改密码、删除用户或绕过应用权限边界授予角色等能力。
+`/api/auth/*` 保持 Better Auth 原生响应，是统一 `ApiSuccess | ApiFailure` 信封的唯一例外。应用自有的 `/api/admin/users`、`/api/plan` 和 `/api/skland/*` 继续使用统一信封、请求 ID、同源校验、大小限制和限流。Better Auth 的原生 `/api/auth/admin/*` 全部返回 404，避免开放模拟登录、改密码、删除用户或绕过应用权限边界授予角色等能力。网站昵称为 2–20 个字符，只允许中文、英文字母、数字、空格、下划线和短横线，且不能包含连续空格；页面与 Better Auth 数据库钩子执行同一规则。
 
 `BETTER_AUTH_ADMIN_USER_IDS` 中的账号是不可由网页降级的初始管理员。初始管理员可以在中文管理页将已验证、未封禁的账号设为管理员，角色保存于 PostgreSQL 的 `user.role`。受委派管理员可以搜索、封禁用户及查看或撤销 Session，但不能继续授予或撤销管理员权限，也不能封禁初始管理员或撤销其 Session。服务端每次请求都读取当前数据库角色，因此撤销权限后立即生效。
 
@@ -22,7 +22,7 @@ PostgreSQL 保存网站账号、数据库 Session、验证记录、Better Auth �
 在 Resend 中添加发信域名，按照 Resend 控制台给出的值在 DNS 服务商配置 SPF 与 DKIM，并为该域名添加 DMARC。当前 development 使用已验证的 `yeyouchuan.me`，并创建仅供 development 使用的 API key。From 地址为：
 
 ```text
-明日方舟基建排班助手 <noreply@yeyouchuan.me>
+可露希尔基建终端 <noreply@yeyouchuan.me>
 ```
 
 development 和 production 使用不同的 API key、发信配置与公开 Origin。注册邮箱验证码 10 分钟后失效且数据库只保存哈希，密码重置链接一小时后失效。
@@ -73,7 +73,7 @@ BETTER_AUTH_SECRET=<至少32字节、长期稳定且仅供development使用的�
 BETTER_AUTH_URL=https://instance-pi2ohhfj.tail2dca9.ts.net
 BETTER_AUTH_ADMIN_USER_IDS=
 RESEND_API_KEY=<development Resend API key>
-AUTH_EMAIL_FROM=明日方舟基建排班助手 <noreply@yeyouchuan.me>
+AUTH_EMAIL_FROM=可露希尔基建终端 <noreply@yeyouchuan.me>
 ```
 
 同时保留 development 已有的 `APP_DEPLOYMENT_ENV=development`、`BETA_PUBLIC_ORIGIN`、`SKLAND_PUBLIC_ORIGIN`、`SKLAND_SESSION_SECRET` 等配置。当前 development 的浏览器 Origin 是 `https://instance-pi2ohhfj.tail2dca9.ts.net`，`BETTER_AUTH_URL`、`BETA_PUBLIC_ORIGIN` 和 `SKLAND_PUBLIC_ORIGIN` 都必须与它一致，并保持 `SKLAND_ALLOW_INSECURE_HTTP=0`。SSH 隧道只用于数据库运维，不改变网站 Origin。以后更换 dev 域名时，将三个 Origin 一起改为浏览器实际访问的 HTTPS Origin；不要填写内部 Next 或 nginx 端口，也绝不能复用 production 的公网 Origin。

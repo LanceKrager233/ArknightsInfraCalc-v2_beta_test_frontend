@@ -31,18 +31,16 @@ function formatExpiry(timestamp: number | null): string | null {
 
 function SklandBindingStrip({
   summary,
-  onOpen,
 }: {
   summary: SklandBindingSummary;
-  onOpen: () => void;
 }) {
   const nextExpiry = formatExpiry(summary.nextExpiresAt);
   return (
-    <section className="grid gap-4 border-y border-border/70 py-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center" aria-labelledby="skland-binding-title" data-skland-binding-summary>
+    <section className="border-y border-border/70 py-5" aria-labelledby="skland-binding-title" data-skland-binding-summary>
       <div>
         <div className="flex flex-wrap items-center gap-2">
           <h3 id="skland-binding-title" className="font-semibold">森空岛绑定</h3>
-          {summary.activeCount > 0 ? <Badge variant="secondary"><ShieldCheck />有效 {summary.activeCount}</Badge> : null}
+          {summary.activeCount > 0 ? <Badge variant="secondary" className="font-number"><ShieldCheck />有效 {summary.activeCount}</Badge> : null}
           {summary.renewalDueCount > 0 ? <Badge variant="outline"><RefreshCw />待续期 {summary.renewalDueCount}</Badge> : null}
           {summary.totalCount === 0 ? <Badge variant="outline">未绑定</Badge> : null}
         </div>
@@ -54,9 +52,6 @@ function SklandBindingStrip({
               : "尚未关联森空岛账号。扫码后，绑定状态会显示在这里。"}
         </p>
       </div>
-      <Button type="button" variant="outline" className="min-h-11" onClick={onOpen}>
-        <Cloud />{summary.totalCount > 0 ? "管理森空岛" : "绑定森空岛"}
-      </Button>
     </section>
   );
 }
@@ -85,22 +80,19 @@ export function DevelopmentAccountStatusCenter({
 }: DevelopmentAccountStatusCenterProps) {
   return (
     <div className="grid gap-6 pb-3 pt-5 sm:pb-6" data-account-status-center>
-      <AccountCenterHeader description="统一管理网站账号、登录设备和森空岛授权。森空岛凭据固定七天失效，到期后需要重新扫码。" />
+      <AccountCenterHeader />
 
       <Tabs value={view} onValueChange={(value) => onViewChange(value as AccountCenterView)}>
         <div className="-mx-3 min-w-0 overflow-x-auto overflow-y-hidden px-3 pb-1">
           <TabsList variant="line" className="min-w-max" aria-label="账号状态中心内容" data-skland-view-tabs>
-            <TabsTrigger value="account"><UserRound />账号</TabsTrigger>
             <TabsTrigger value="skland-overview"><Cloud />森空岛概览</TabsTrigger>
             <TabsTrigger value="skland-infrastructure"><Building2 />基建</TabsTrigger>
+            <TabsTrigger value="account"><UserRound />账号</TabsTrigger>
           </TabsList>
         </div>
 
         <TabsContent value="account" className="pt-5">
-          <div className="grid gap-7">
-            <WebsiteAccountPanel onSessionChanged={onWebsiteSessionChanged} />
-            {websiteAuthenticated ? <SklandBindingStrip summary={bindingSummary} onOpen={() => onViewChange("skland-overview")} /> : null}
-          </div>
+          <WebsiteAccountPanel onSessionChanged={onWebsiteSessionChanged} />
         </TabsContent>
 
         {(["skland-overview", "skland-infrastructure"] as const).map((tab) => (
@@ -114,6 +106,7 @@ export function DevelopmentAccountStatusCenter({
               <WebsiteLoginRequired onOpenAccount={() => onViewChange("account")} />
             ) : (
               <>
+                {tab === "skland-overview" ? <SklandBindingStrip summary={bindingSummary} /> : null}
                 {bindingSummary.renewalDueCount > 0 && skland.accounts.length === 0 ? (
                   <Alert className="mt-5">
                     <AlertDescription>森空岛授权已满七天。下方扫码完成后，绑定记录会恢复为有效状态。</AlertDescription>

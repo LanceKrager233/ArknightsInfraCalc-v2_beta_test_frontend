@@ -14,6 +14,12 @@ import {
   UserRound,
 } from "lucide-react";
 
+import {
+  WEBSITE_ACCOUNT_NAME_HINT,
+  WEBSITE_ACCOUNT_NAME_MAX_LENGTH,
+  WEBSITE_ACCOUNT_NAME_MIN_LENGTH,
+  validateWebsiteAccountName,
+} from "@/account-name";
 import { OtpInput, type OtpInputHandle, type OtpStatus } from "@/components/interior/otp-input";
 import { PasswordStrength } from "@/components/interior/password-strength";
 import { WizardSteps } from "@/components/interior/wizard-steps";
@@ -55,6 +61,7 @@ export function WebsiteAccountPanel({ onSessionChanged }: WebsiteAccountPanelPro
   const [mode, setMode] = useState<AuthMode>("signin");
   const [step, setStep] = useState<AuthStep>("details");
   const [name, setName] = useState("");
+  const [nameError, setNameError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [deletePassword, setDeletePassword] = useState("");
@@ -78,6 +85,7 @@ export function WebsiteAccountPanel({ onSessionChanged }: WebsiteAccountPanelPro
     setMode(nextMode);
     setStep("details");
     setPassword("");
+    setNameError(null);
     setOtp("");
     setOtpStatus("idle");
     setMessage(null);
@@ -118,6 +126,11 @@ export function WebsiteAccountPanel({ onSessionChanged }: WebsiteAccountPanelPro
 
   async function submitDetails(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const validatedName = mode === "signup" ? validateWebsiteAccountName(name) : null;
+    if (validatedName?.error) {
+      setNameError(validatedName.error);
+      return;
+    }
     setBusy(true);
     setError(null);
     setMessage(null);
@@ -132,7 +145,7 @@ export function WebsiteAccountPanel({ onSessionChanged }: WebsiteAccountPanelPro
         setMessage("如果这个邮箱已注册，重置邮件会很快送达。");
       } else if (mode === "signup") {
         const result = await authClient.signUp.email({
-          name: name.trim(),
+          name: validatedName?.name ?? name.trim(),
           email: email.trim(),
           password,
           callbackURL: location.origin,
@@ -275,11 +288,18 @@ export function WebsiteAccountPanel({ onSessionChanged }: WebsiteAccountPanelPro
     );
   }
 
-  const steps = [
-    { id: "details", label: mode === "forgot" ? "确认邮箱" : "账号信息" },
-    { id: "verify", label: mode === "forgot" ? "查收邮件" : "验证邮箱" },
-    { id: "complete", label: "完成" },
-  ];
+  const steps = mode === "signin"
+    ? [{ id: "details", label: "登录" }]
+    : mode === "signup"
+      ? [
+          { id: "details", label: "账号信息" },
+          { id: "verify", label: "验证邮箱" },
+          { id: "complete", label: "完成" },
+        ]
+      : [
+          { id: "details", label: "确认邮箱" },
+          { id: "complete", label: "查收邮件" },
+        ];
 
   return (
     <Card className="surface-shadow overflow-hidden rounded-none ring-0" data-website-account-panel data-auth-wizard>
@@ -311,7 +331,24 @@ export function WebsiteAccountPanel({ onSessionChanged }: WebsiteAccountPanelPro
                 {mode === "signup" ? (
                   <div className="grid gap-1.5">
                     <Label htmlFor={`${fieldId}-name`}>昵称</Label>
-                    <Input id={`${fieldId}-name`} value={name} onChange={(event) => setName(event.target.value)} required maxLength={80} placeholder="用于网站内显示" autoComplete="name" />
+                    <Input
+                      id={`${fieldId}-name`}
+                      value={name}
+                      onChange={(event) => {
+                        setName(event.target.value);
+                        if (nameError) setNameError(validateWebsiteAccountName(event.target.value).error);
+                      }}
+                      required
+                      minLength={WEBSITE_ACCOUNT_NAME_MIN_LENGTH}
+                      maxLength={WEBSITE_ACCOUNT_NAME_MAX_LENGTH}
+                      placeholder="用于网站内显示"
+                      autoComplete="name"
+                      aria-invalid={Boolean(nameError)}
+                      aria-describedby={`${fieldId}-name-hint`}
+                    />
+                    <p id={`${fieldId}-name-hint`} role={nameError ? "alert" : undefined} className={`text-xs leading-5 ${nameError ? "text-destructive" : "text-muted-foreground"}`}>
+                      {nameError ?? WEBSITE_ACCOUNT_NAME_HINT}
+                    </p>
                   </div>
                 ) : null}
                 <div className="grid gap-1.5">

@@ -1,6 +1,6 @@
 "use client";
 
-import { Calculator, CircleUserRound, GraduationCap, Search } from "lucide-react";
+import { Calculator, Cloud, GraduationCap, Search } from "lucide-react";
 
 import {
   Sidebar,
@@ -72,7 +72,7 @@ export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
                 onClick={() => handlePageChange("account")}
                 tooltip="账号状态中心"
               >
-                <CircleUserRound className="size-5" />
+                <Cloud className="size-5" />
                 <span>账号状态中心</span>
               </SidebarMenuButton>
             </SidebarMenuItem>

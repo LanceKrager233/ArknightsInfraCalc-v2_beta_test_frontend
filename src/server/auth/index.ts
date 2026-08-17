@@ -4,15 +4,17 @@ import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { betterAuth } from "better-auth";
 import { admin, emailOTP } from "better-auth/plugins";
 import { getDatabase } from "@/server/db";
+import { websiteAccountNameDatabaseHooks } from "./account-name-hooks";
 import { sendAuthEmail } from "./email";
 import { configuredAdminIds, requireAuthBaseUrl, requireAuthSecret } from "./config";
 
 function createAuth() {
   return betterAuth({
-    appName: "明日方舟基建排班助手",
+    appName: "可露希尔基建终端",
     baseURL: requireAuthBaseUrl(),
     secret: requireAuthSecret(),
     database: drizzleAdapter(getDatabase(), { provider: "pg" }),
+    databaseHooks: websiteAccountNameDatabaseHooks,
     emailAndPassword: {
       enabled: true,
       minPasswordLength: 10,

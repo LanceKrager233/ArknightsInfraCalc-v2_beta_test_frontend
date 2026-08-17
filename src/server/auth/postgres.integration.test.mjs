@@ -14,6 +14,7 @@ import { Pool } from "pg";
 
 import * as schema from "../db/schema.ts";
 import { summarizeSklandBindings } from "../../skland-binding-state.ts";
+import { websiteAccountNameDatabaseHooks } from "./account-name-hooks.ts";
 import { websiteAdminAccess } from "./admin-access.ts";
 
 const databaseUrl = process.env.AUTH_INTEGRATION_DATABASE_URL?.trim();
@@ -37,6 +38,7 @@ test("Better Auth completes the PostgreSQL account lifecycle", async () => {
     baseURL,
     secret: "integration-test-secret-at-least-32-bytes-long",
     database: drizzleAdapter(drizzle({ client: pool, schema }), { provider: "pg" }),
+    databaseHooks: websiteAccountNameDatabaseHooks,
     emailAndPassword: {
       enabled: true,
       minPasswordLength: 10,
@@ -110,9 +112,14 @@ test("Better Auth completes the PostgreSQL account lifecycle", async () => {
   const primaryEmail = `auth-primary-${suffix}@example.test`;
   const delegatedAdminEmail = `auth-admin-${suffix}@example.test`;
   const bannedEmail = `auth-banned-${suffix}@example.test`;
+  const invalidNameEmail = `auth-invalid-name-${suffix}@example.test`;
   const createdUserIds = [];
 
   try {
+    const invalidNameRegistration = await post("/sign-up/email", { name: "博士😀", email: invalidNameEmail, password, callbackURL: origin });
+    assert.equal(invalidNameRegistration.status, 400, await invalidNameRegistration.clone().text());
+    assert.match((await invalidNameRegistration.json()).message, /昵称只能使用/);
+
     const registration = await post("/sign-up/email", { name: "Primary user", email: primaryEmail, password, callbackURL: origin });
     assert.equal(registration.status, 200, await registration.clone().text());
     const registrationBody = await registration.json();
