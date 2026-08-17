@@ -42,6 +42,7 @@ type SetupDialogProps = {
   inputError: string | null;
   resultClearWarningDismissed: boolean;
   sklandSnapshot?: SklandScheduleSnapshot | null;
+  sklandBindingCount?: number;
   sklandConfigured?: boolean;
   sklandDisabledReason?: string | null;
   onOpenSkland?: () => void;
@@ -96,6 +97,7 @@ export function SetupDialog({
   inputError,
   resultClearWarningDismissed,
   sklandSnapshot,
+  sklandBindingCount = 0,
   sklandConfigured,
   sklandDisabledReason,
   onOpenSkland,
@@ -141,7 +143,9 @@ export function SetupDialog({
   const hasBox = Boolean(operbox?.length);
   const ownedCount = countOwned(operbox);
   const mustReviewFacilities = needsFacilityReview || !powerBudget.ok;
-  const currentDataLabel = fileName || sourceLabel(boxSource);
+  const currentDataLabel = CLIENT_SKLAND_ENABLED && boxSource === "skland" && !sklandSnapshot
+    ? "上次同步的森空岛数据"
+    : fileName || sourceLabel(boxSource);
   const reducedMotion = useReducedMotion();
 
   useEffect(() => {
@@ -343,6 +347,8 @@ export function SetupDialog({
                               </span>
                             ) : !sklandConfigured && sklandDisabledReason ? (
                               <span className="mt-0.5 block text-xs text-muted-foreground">{sklandDisabledReason}</span>
+                            ) : sklandBindingCount > 0 ? (
+                              <span className="mt-0.5 block text-xs text-muted-foreground">网站账号已绑定，当前浏览器需要重新扫码授权</span>
                             ) : null}
                           </div>
                           {sklandSnapshot && boxSource !== "skland" ? (

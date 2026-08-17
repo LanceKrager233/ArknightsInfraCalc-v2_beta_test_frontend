@@ -74,6 +74,7 @@ import type {
   SklandScheduleSnapshot,
   SklandStatusSnapshot,
 } from "@/types";
+import { deriveSklandBindingState } from "@/skland-binding-state";
 
 const PRODUCT_LABELS: Record<string, string> = {
   gold: "贵金属 / 赤金",
@@ -170,6 +171,7 @@ interface SklandStatusProps {
   snapshot: SklandStatusSnapshot | null;
   accounts: SklandAccountSummary[];
   activeAccountId: string | null;
+  bindingCount: number;
   sessionLoading: boolean;
   layoutMatches: boolean;
   layoutDirty: boolean;
@@ -1361,6 +1363,7 @@ export function SklandStatus({
   snapshot,
   accounts,
   activeAccountId,
+  bindingCount,
   sessionLoading,
   layoutMatches,
   layoutDirty,
@@ -1380,6 +1383,7 @@ export function SklandStatus({
 }: SklandStatusProps) {
   const [addAccountOpen, setAddAccountOpen] = useState(false);
   const [accountQuery, setAccountQuery] = useState<string | null>(null);
+  const bindingState = deriveSklandBindingState(bindingCount, accounts.length);
   if (sessionLoading) return <LoadingState />;
 
   if (!scheduleSnapshot) {
@@ -1387,7 +1391,14 @@ export function SklandStatus({
       <div className="grid gap-6 pt-5 pb-2 sm:pb-5" data-skland-page>
         <header className="max-w-2xl">
           <p className="text-xs font-medium tracking-wide text-primary">森空岛状态中心</p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight">把当前罗德岛带进排班助手</h2>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight">
+            {bindingState === "reauthorize" ? "森空岛已绑定，请重新授权当前浏览器" : "把当前罗德岛带进排班助手"}
+          </h2>
+          {bindingState === "reauthorize" ? (
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              网站账号仍记录着 <span className="font-number">{bindingCount}</span> 个森空岛绑定；加密登录凭证已到期、被清除或来自其他浏览器。重新扫码不会删除排班设置中保留的上次同步数据。
+            </p>
+          ) : null}
         </header>
         {error ? (
           <Alert variant="destructive">

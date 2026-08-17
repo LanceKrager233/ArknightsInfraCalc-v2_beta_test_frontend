@@ -80,14 +80,14 @@ $env:SKLAND_PUBLIC_ORIGIN = "https://infra.example.com"
 $env:BETA_TRUST_PROXY_HEADERS = "1"
 ```
 
-`BETA_PUBLIC_ORIGIN`保护全部公开写接口，`SKLAND_PUBLIC_ORIGIN`继续保护森空岛会话流。每个森空岛账号的凭证会使用 AES-256-GCM 加密后写入独立的 HttpOnly Cookie，另有一个加密索引 Cookie 记录当前账号；凭证从扫码成功起固定保存 7 天，刷新、读取会话或切换角色不会续期。扫码临时凭据和登录凭证都不会写入浏览器存储、运行记录或反馈包，完整状态快照也只停留在页面内存。状态中心提供退出当前账号和“删除全部森空岛数据”，后者同时清除可关联的服务端运行记录与反馈，并保留独立导入的 MAA 数据和手动布局。localhost 可使用 HTTP 开发；非 localhost 环境默认必须通过 HTTPS 访问，否则只禁用森空岛入口，MAA 导入和求解仍可使用。仅在临时、可信的 HTTP 测试环境中可以显式设置 `SKLAND_ALLOW_INSECURE_HTTP=1`；此时登录流量不会受到 HTTPS 保护。
+`BETA_PUBLIC_ORIGIN`保护全部公开写接口，`SKLAND_PUBLIC_ORIGIN`继续保护森空岛会话流。每个森空岛账号的凭证会使用 AES-256-GCM 加密后写入独立的 HttpOnly Cookie，另有一个加密索引 Cookie 记录当前账号；凭证从扫码成功起固定保存 7 天，刷新、读取会话或切换角色不会续期。PostgreSQL 只额外保存 HMAC 化的森空岛绑定标识、对应网站用户和授权时间，让页面与管理后台区分“账号已绑定”和“当前浏览器仍有有效凭证”；不保存森空岛 UID、昵称、Box 或令牌。扫码临时凭据和登录凭证都不会写入浏览器存储、运行记录或反馈包，完整状态快照也只停留在页面内存。状态中心提供退出当前账号和“删除全部森空岛数据”，两者会解除相应绑定，后者还会清除可关联的服务端运行记录与反馈，并保留独立导入的 MAA 数据和手动布局。localhost 可使用 HTTP 开发；非 localhost 环境默认必须通过 HTTPS 访问，否则只禁用森空岛入口，MAA 导入和求解仍可使用。仅在临时、可信的 HTTP 测试环境中可以显式设置 `SKLAND_ALLOW_INSECURE_HTTP=1`；此时登录流量不会受到 HTTPS 保护。
 
 `APP_DEPLOYMENT_ENV=production`会强制关闭森空岛，不能被`SKLAND_FEATURE_ENABLED=1`覆盖。线上构建不会渲染相关入口、不会发起会话请求，公开健康检查不含相关能力字段，`/api/skland/*`统一返回 404。未声明部署目标的`next build`同样按 production 关闭；本地`next dev`默认保持兼容。
 Production compilation also removes Skland copy, API URLs, and the app scheme from browser assets. `npm run test:production-client` scans static JavaScript and public HTML/RSC to prevent regressions.
 
 ## 网站账号与数据库
 
-MAA JSON / xlsx 与 development 森空岛能力要求先登录已验证的网站账号；全角色样例、技能查询、配置和样例求解仍可匿名使用。网站账号使用 Better Auth、PostgreSQL 和 Resend，数据库与认证实例在真实请求时惰性初始化，因此没有数据库或认证密钥时仍可完成 production build。`/api/auth/*` 使用 Better Auth 原生协议，不套公共 API 信封；应用自有 `/api/admin/users` 仍使用统一信封。
+MAA JSON / xlsx 与 development 森空岛能力要求先登录已验证的网站账号；全角色样例、技能查询、配置和样例求解仍可匿名使用。网站账号使用 Better Auth、PostgreSQL 和 Resend；注册邮箱使用 6 位验证码验证，验证码 10 分钟过期且只保存哈希，密码重置继续使用一小时有效链接。数据库与认证实例在真实请求时惰性初始化，因此没有数据库或认证密钥时仍可完成 production build。`/api/auth/*` 使用 Better Auth 原生协议，不套公共 API 信封；应用自有 `/api/admin/users` 仍使用统一信封。
 
 数据库容器、runtime/migration/backup 最小权限账号、邮件域名、固定 deploy helper、管理员初始化、加密备份和 development 验收顺序见[网站账号与 PostgreSQL 上线手册](./docs/AUTHENTICATION_DATABASE.md)。
 

@@ -57,3 +57,10 @@ export const rateLimit = pgTable("rateLimit", {
   count: integer("count").notNull(),
   lastRequest: bigint("last_request", { mode: "number" }).notNull(),
 });
+
+export const sklandBinding = pgTable("skland_binding", {
+  bindingKey: text("binding_key").primaryKey(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  lastAuthorizedAt: timestamp("last_authorized_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [index("skland_binding_user_id_idx").on(table.userId)]);

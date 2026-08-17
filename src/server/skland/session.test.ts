@@ -10,6 +10,7 @@ import {
   sealSklandAccountIndex,
   sealSklandSession,
   sklandDataOwnerTag,
+  sklandBindingKey,
   SKLAND_ACCOUNT_COOKIE_PREFIX,
   SKLAND_ACCOUNT_INDEX_COOKIE,
   SKLAND_ACCOUNT_LIMIT,
@@ -131,6 +132,13 @@ test("data owner tags are deterministic, account-specific, and do not reveal the
   assert.equal(first, sklandDataOwnerTag("upstream-user-one", secret));
   assert.notEqual(first, sklandDataOwnerTag("upstream-user-two", secret));
   assert.equal(first.includes("upstream-user-one"), false);
+});
+
+test("database binding keys use a separate HMAC domain from private run ownership", () => {
+  const binding = sklandBindingKey("upstream-user", secret);
+  assert.equal(binding, sklandBindingKey("upstream-user", secret));
+  assert.notEqual(binding, sklandDataOwnerTag("upstream-user", secret));
+  assert.equal(binding.includes("upstream-user"), false);
 });
 
 test("Skland account cookies are bound to one website user", () => {

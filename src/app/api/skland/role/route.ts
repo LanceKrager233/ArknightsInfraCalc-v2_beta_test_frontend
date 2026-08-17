@@ -20,6 +20,7 @@ import {
 } from "@/server/skland/http";
 import { removeSklandAccount } from "@/server/skland/session";
 import { requireWebsiteSession } from "@/server/auth/authorization";
+import { countSklandBindings } from "@/server/skland/bindings";
 
 export const runtime = "nodejs";
 
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
   let targetAccountId: string | null = null;
   try {
     assertSklandFeatureEnabled();
-    await requireWebsiteSession(request);
+    const website = await requireWebsiteSession(request);
     assertSklandAvailable(request);
     assertSameOrigin(request);
     enforceRateLimit("skland-action", requestClientIp(request), 30, 60 * 60_000);
@@ -44,11 +45,13 @@ export async function POST(request: Request) {
     if (!account.roles.some((role) => role.uid === body.uid)) throw new PublicApiError("AIC-REQ-1001");
     const result = await selectSessionRole(account.session, body.uid);
     const next = withUpdatedSklandAccount(previous, account.accountId, result.session, result.snapshot);
+    const bindingCount = await countSklandBindings(website.user.id);
     const response = successResponse({
       authenticated: true,
       configured: true,
       accounts: sklandAccountSummaries(next),
       activeAccountId: next.activeAccountId,
+      bindingCount,
       scheduleSnapshot: result.snapshot,
       statusSnapshot: result.statusSnapshot,
     }, requestId);

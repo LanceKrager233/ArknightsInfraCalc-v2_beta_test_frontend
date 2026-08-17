@@ -15,7 +15,7 @@
 
 `BETTER_AUTH_ADMIN_USER_IDS` 中的账号是不可由网页降级的初始管理员。初始管理员可以在中文管理页将已验证、未封禁的账号设为管理员，角色保存于 PostgreSQL 的 `user.role`。受委派管理员可以搜索、封禁用户及查看或撤销 Session，但不能继续授予或撤销管理员权限，也不能封禁初始管理员或撤销其 Session。服务端每次请求都读取当前数据库角色，因此撤销权限后立即生效。
 
-PostgreSQL 只保存网站账号、数据库 Session、验证记录和 Better Auth 限流记录。MAA Box、布局、排班与第三方游戏凭据不会写入 PostgreSQL；后者仍只保存在绑定网站用户的加密 HttpOnly Cookie 中。
+PostgreSQL 保存网站账号、数据库 Session、验证记录、Better Auth 限流记录，以及 HMAC 化的森空岛绑定标识、对应网站用户和授权时间。MAA Box、布局、排班、森空岛 UID/昵称与第三方游戏凭据不会写入 PostgreSQL；凭据仍只保存在绑定网站用户的加密 HttpOnly Cookie 中。
 
 ## 1. 准备发信域名
 
@@ -25,7 +25,7 @@ PostgreSQL 只保存网站账号、数据库 Session、验证记录和 Better Au
 明日方舟基建排班助手 <noreply@yeyouchuan.me>
 ```
 
-development 和 production 使用不同的 API key、发信配置与公开 Origin。验证邮件和密码重置链接一小时后失效。
+development 和 production 使用不同的 API key、发信配置与公开 Origin。注册邮箱验证码 10 分钟后失效且数据库只保存哈希，密码重置链接一小时后失效。
 
 ## 2. 准备服务器数据库目录
 

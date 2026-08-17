@@ -240,6 +240,10 @@ export function sklandDataOwnerTag(userId: string, secret?: string): string {
   return createHmac("sha256", keyFor(secret)).update(`skland:${userId}`).digest("hex");
 }
 
+export function sklandBindingKey(userId: string, secret?: string): string {
+  return createHmac("sha256", keyFor(secret)).update(`binding:${userId}`).digest("hex");
+}
+
 export function upsertSklandAccount(
   accounts: SklandStoredAccount[],
   session: SklandSessionPayload,

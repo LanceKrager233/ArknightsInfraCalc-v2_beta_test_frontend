@@ -118,6 +118,7 @@ UI 控件优先组合 `src/components/ui/*` 中的现有 primitive。不要另�
 - `SKLAND_SESSION_SECRET` 必须至少 32 字节且长期稳定。森空岛会话使用 AES-256-GCM 封装在 HttpOnly Cookie 中；凭据不得进入 localStorage、CLI 运行记录、反馈包、console 或公开响应。
 - 非 localhost 的森空岛请求默认要求 HTTPS。`SKLAND_ALLOW_INSECURE_HTTP=1` 仅允许临时、可信的本地或内网测试，绝不能作为生产默认值。
 - 森空岛凭证从扫码成功起固定 7 天到期，刷新 token、读取会话和切换角色都不得续期；用户同意当前条款与隐私政策并登录后，状态中心默认返回完整状态白名单，排班链路仍只使用最小排班字段。
+- PostgreSQL 只允许保存 HMAC 化的森空岛绑定标识、网站用户关联和授权时间；不得保存森空岛 UID、昵称、Box 或凭据。退出对应森空岛账号、删除全部森空岛数据和注销网站账号必须清除相应绑定。
 - 浏览器 v5 持久化可以保存布局、Box、来源标记和经过清理的最近排班，但必须继续剔除 debug、路径、stdout、stderr、请求/响应内部字段和森空岛凭据。
 
 ## 环境变量
