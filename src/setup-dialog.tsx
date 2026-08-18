@@ -550,8 +550,8 @@ export function SetupDialog({
                 </span>
                 <span className={`max-sm:hidden ${powerBudget.ok ? "text-emerald-700" : "text-red-600"}`}>
                   {powerBudget.ok
-                    ? `电力正常 · ${powerBudget.generated}/${powerBudget.consumed}`
-                    : `电力不足 ${powerBudget.consumed - powerBudget.generated} · ${powerBudget.generated}/${powerBudget.consumed}`}
+                    ? `电力正常 · ${powerBudget.consumed}/${powerBudget.generated}`
+                    : `电力不足 ${powerBudget.consumed - powerBudget.generated} · ${powerBudget.consumed}/${powerBudget.generated}`}
                 </span>
               </span>
               <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={goToBasics}>返回</Button>
