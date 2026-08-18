@@ -1531,6 +1531,8 @@ test("Skland calculator keeps the schedule visible before and after sidebar navi
     await page.getByRole("button", { name: destination, exact: true }).click();
     await expect(page.locator(marker)).toBeVisible();
     await armMotionCapture(page, "[data-plan-board]", label, 320);
+    await armMotionCapture(page, "[data-plan-result-summary]", `${label}-summary`, 460);
+    await armMotionCapture(page, "[data-plan-result-summary] [data-plan-metric]", `${label}-metrics`, 360);
     await page.getByRole("button", { name: "基建计算器", exact: true }).click();
 
     const returnedBoard = page.locator("[data-plan-board]");
@@ -1540,11 +1542,57 @@ test("Skland calculator keeps the schedule visible before and after sidebar navi
     await expect(page.getByRole("button", { name: "导出到 MAA" })).toBeEnabled();
     await page.waitForTimeout(650);
     expect(await page.locator("html").getAttribute(`data-motion-enter-${label}`)).toBeNull();
+    expect(await page.locator("html").getAttribute(`data-motion-enter-${label}-summary`)).toBeNull();
+    expect(await page.locator("html").getAttribute(`data-motion-enter-${label}-metrics`)).toBeNull();
   };
 
   await returnToCalculator("练卡建议", '[data-slot="training-summary"]', "calculator-return-training");
   await page.emulateMedia({ reducedMotion: "reduce" });
   await returnToCalculator("森空岛状态中心", "[data-skland-view-tabs]", "calculator-return-skland-reduced");
+});
+
+test("empty calculator returns directly to the compact view with one coherent entrance", async ({ page, browserName }) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await mockApis(page);
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  await expect(page.locator('[data-schedule-view="compact"]')).toBeVisible();
+  await expect(page.locator("[data-compact-schedule-skeleton]")).toHaveCount(0);
+  await page.getByRole("button", { name: "练卡建议", exact: true }).click();
+  await expect(page.locator("[data-training-page]")).toBeVisible({ timeout: 15_000 });
+
+  await page.evaluate(() => {
+    const root = document.documentElement;
+    root.setAttribute("data-compact-skeleton-seen", "false");
+    const observer = new MutationObserver((records) => {
+      const skeletonWasAdded = records.some((record) => Array.from(record.addedNodes).some((node) => (
+        node instanceof Element
+        && (node.matches("[data-compact-schedule-skeleton]") || node.querySelector("[data-compact-schedule-skeleton]"))
+      )));
+      if (!skeletonWasAdded) return;
+      root.setAttribute("data-compact-skeleton-seen", "true");
+      observer.disconnect();
+    });
+    const content = document.querySelector("[data-app-content]");
+    if (content) observer.observe(content, { childList: true, subtree: true });
+    window.setTimeout(() => observer.disconnect(), 5_000);
+  });
+
+  if (browserName === "webkit") {
+    await armTransientStyleCapture(page, '[data-schedule-view="compact"]', "empty-compact-return");
+  } else {
+    await armMotionCapture(page, '[data-schedule-view="compact"]', "empty-compact-return", 280);
+  }
+  await page.getByRole("button", { name: "基建计算器", exact: true }).click();
+
+  const compactView = page.locator('[data-schedule-view="compact"]');
+  await expect(compactView).toBeVisible();
+  await expect(page.locator("[data-compact-schedule-skeleton]")).toHaveCount(0);
+  await expect(page.locator("html")).toHaveAttribute("data-compact-skeleton-seen", "false");
+  if (browserName === "webkit") await expectCapturedStyleMotion(page, "empty-compact-return");
+  else await expectCapturedMotion(page, "empty-compact-return", 280);
 });
 
 test("plan completion reveals status, metrics, and schedule once without resetting board state", async ({ page, browserName }) => {
@@ -1613,6 +1661,7 @@ test("plan completion reveals status, metrics, and schedule once without resetti
   const summary = page.locator("[data-plan-summary]");
   const board = page.locator("[data-plan-board]");
   await expect(summary).toBeVisible();
+  await expect(summary).toHaveAttribute("data-plan-entrance", "animated");
   await expect(board).toHaveAttribute("data-plan-revision", diagnosticId);
   await expect(board).toHaveAttribute("data-motion-sentinel", "stable");
   expect(await board.evaluate((element) => element.getAnimations().filter((animation) => animation.playState === "running").length)).toBe(0);
@@ -1752,6 +1801,7 @@ test("reduced motion keeps feedback timing while removing movement, clipping, an
   await expect(page.locator('[data-slot="live-activity"]')).toHaveAttribute("data-activity-phase", "success");
   const summary = page.locator("[data-plan-summary]");
   await expect(summary).toBeVisible();
+  await expect(summary).toHaveAttribute("data-plan-entrance", "animated");
   await expect(board).toHaveAttribute("data-motion-sentinel", "stable");
   expect(await board.evaluate((element) => element.getAnimations().filter((animation) => animation.playState === "running").length)).toBe(0);
   if (browserName === "webkit") {
@@ -2256,10 +2306,10 @@ test("all primary pages share the calculator top content offset", async ({ page 
     const calculatorTop = (await page.locator("[data-calculator-controls]").boundingBox())?.y ?? -1;
 
     for (const destination of [
-      { name: "练卡建议", root: "[data-training-page]" },
-      { name: "技能查询", root: "[data-skill-query-page]" },
-      { name: "森空岛状态中心", root: "[data-skland-page]" },
-      { name: "账号管理", root: "[data-account-management]" },
+      { name: "练卡建议", pageKey: "training", root: "[data-training-page]" },
+      { name: "技能查询", pageKey: "skill-query", root: "[data-skill-query-page]" },
+      { name: "森空岛状态中心", pageKey: "skland", root: "[data-skland-page]" },
+      { name: "账号管理", pageKey: "account", root: "[data-account-management]" },
     ]) {
       if (viewport.width < 768) {
         await page.locator("[data-app-topbar]").getByRole("button", { name: "Toggle Sidebar" }).click();
@@ -2268,9 +2318,65 @@ test("all primary pages share the calculator top content offset", async ({ page 
       await page.evaluate(() => window.scrollTo(0, 0));
       const pageRoot = page.locator(destination.root);
       await expect(pageRoot).toBeVisible();
+      await waitForOwnAnimations(page.locator(`[data-primary-page="${destination.pageKey}"]`));
       const pageTop = (await pageRoot.locator(":scope > :first-child").boundingBox())?.y ?? -1;
       expect(pageTop, `${viewport.width}px ${destination.name}`).toBeCloseTo(calculatorTop, 0);
     }
+  }
+});
+
+test("Skland and account centers share header geometry and account actions use technical cards", async ({ page }) => {
+  await mockApis(page, { sklandConfigured: true, sklandSnapshot: authenticatedSklandSnapshot });
+  await seedPreferences(page);
+
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 768, height: 900 },
+    { width: 1440, height: 900 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+
+    if (viewport.width < 768) {
+      await page.locator("[data-app-topbar]").getByRole("button", { name: "Toggle Sidebar" }).click();
+    }
+    await page.getByRole("button", { name: "森空岛状态中心", exact: true }).click();
+    const sklandRoot = page.locator("[data-skland-page]");
+    await waitForOwnAnimations(page.locator('[data-primary-page="skland"]'));
+    const sklandHeader = sklandRoot.locator(":scope > header");
+    const sklandLogout = sklandRoot.locator("[data-skland-logout]");
+    await expect(sklandLogout).toBeVisible();
+    const sklandGeometry = await Promise.all([
+      sklandHeader.boundingBox(),
+      sklandLogout.boundingBox(),
+    ]);
+
+    if (viewport.width < 768) {
+      await page.locator("[data-app-topbar]").getByRole("button", { name: "Toggle Sidebar" }).click();
+    }
+    await page.getByRole("button", { name: "账号管理", exact: true }).click();
+    const accountRoot = page.locator("[data-account-management]");
+    await waitForOwnAnimations(page.locator('[data-primary-page="account"]'));
+    const accountHeader = accountRoot.locator("header").first();
+    const accountLogout = accountRoot.locator("[data-account-logout]");
+    await expect(accountLogout).toBeVisible();
+    const accountGeometry = await Promise.all([
+      accountHeader.boundingBox(),
+      accountLogout.boundingBox(),
+    ]);
+
+    expect(accountGeometry[0]?.y).toBeCloseTo(sklandGeometry[0]?.y ?? 0, 0);
+    expect(accountGeometry[0]?.height).toBeCloseTo(sklandGeometry[0]?.height ?? 0, 0);
+    expect(accountGeometry[1]?.y).toBeCloseTo(sklandGeometry[1]?.y ?? 0, 0);
+    expect(accountGeometry[1]?.height).toBeCloseTo(sklandGeometry[1]?.height ?? 0, 0);
+    expect((accountGeometry[1]?.x ?? 0) + (accountGeometry[1]?.width ?? 0))
+      .toBeCloseTo((sklandGeometry[1]?.x ?? 0) + (sklandGeometry[1]?.width ?? 0), 0);
+
+    const actionCards = accountRoot.locator("[data-account-action-cards] [data-infra-technical-card]");
+    await expect(actionCards).toHaveCount(2);
+    await expect(actionCards.nth(0).getByRole("heading", { name: "登录设备" })).toBeVisible();
+    await expect(actionCards.nth(1).getByRole("heading", { name: "永久注销账号" })).toBeVisible();
+    await expect(accountRoot.getByRole("button", { name: "退出全部设备" })).toHaveCSS("height", "44px");
   }
 });
 
@@ -3507,7 +3613,7 @@ test("Skland supports adding, switching, and individually logging out multiple a
     addAccount.evaluate((element) => element.getBoundingClientRect().height),
     logout.evaluate((element) => element.getBoundingClientRect().height),
   ]);
-  expect(new Set(controlHeights)).toEqual(new Set([36]));
+  expect(new Set(controlHeights)).toEqual(new Set([44]));
   await expect(logout).toHaveClass(/text-destructive/);
 
   await page.setViewportSize({ width: 390, height: 844 });

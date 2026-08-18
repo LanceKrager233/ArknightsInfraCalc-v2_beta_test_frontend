@@ -1,6 +1,7 @@
 "use client";
 
 import { WebsiteAccountPanel } from "@/components/auth/WebsiteAccountPanel";
+import { StatusCenterPage } from "@/components/pages/StatusCenterShell";
 
 interface AccountStatusCenterProps {
   onSessionChanged?: (authenticated: boolean) => void | Promise<void>;
@@ -8,8 +9,8 @@ interface AccountStatusCenterProps {
 
 export function AccountStatusCenter({ onSessionChanged }: AccountStatusCenterProps) {
   return (
-    <div className="grid gap-6 pb-2 pt-5 sm:pb-5" data-account-management>
+    <StatusCenterPage data-account-management>
       <WebsiteAccountPanel onSessionChanged={onSessionChanged} />
-    </div>
+    </StatusCenterPage>
   );
 }

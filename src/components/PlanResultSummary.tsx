@@ -2,7 +2,7 @@
 
 import { Activity, ArrowUpRight, BarChart3, ChevronRight } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { AnimatedNumber, AnimatedText } from "@/components/AnimatedText";
 import { ShiftComparisonDetails } from "@/components/ShiftComparisonCard";
@@ -36,6 +36,8 @@ export function PlanResultSummary({
   activeShift,
   comparison,
   planRevision,
+  animateEntrance = true,
+  onEntranceConsumed,
 }: {
   profile?: UserProfile;
   rotation?: RotationJson;
@@ -43,10 +45,16 @@ export function PlanResultSummary({
   activeShift: number;
   comparison: ShiftComparison | null;
   planRevision?: string;
+  animateEntrance?: boolean;
+  onEntranceConsumed?: (revision: string) => void;
 }) {
   const shouldReduceMotion = useReducedMotion();
+  const [animateOnMount] = useState(animateEntrance);
   const [detailSection, setDetailSection] = useState<DetailSection>("efficiency");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  useEffect(() => {
+    if (animateOnMount && planRevision) onEntranceConsumed?.(planRevision);
+  }, [animateOnMount, onEntranceConsumed, planRevision]);
   if (!profile && !rotation) return null;
 
   const currentRotation = profile?.rotation;
@@ -71,16 +79,21 @@ export function PlanResultSummary({
         data-plan-summary
         data-plan-result-summary
         data-plan-revision={planRevision}
+        data-plan-entrance={animateOnMount ? "animated" : "steady"}
         data-active-shift={activeShift}
-        initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 14, scale: shouldReduceMotion ? 1 : 0.992 }}
+        initial={animateOnMount
+          ? { opacity: 0, y: shouldReduceMotion ? 0 : 14, scale: shouldReduceMotion ? 1 : 0.992 }
+          : false}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: shouldReduceMotion ? 0 : -4 }}
         transition={{ duration: shouldReduceMotion ? MOTION_DURATION.feedback : 0.46, delay: shouldReduceMotion ? 0 : 0.04, ease: MOTION_EASE_OUT }}
       >
-        <motion.span key={`accent-${planRevision}`} className="pointer-events-none absolute inset-x-0 top-0 z-20 h-0.5 origin-left bg-[#FFD501]" aria-hidden="true" initial={{ scaleX: 0, opacity: 0 }} animate={{ scaleX: 1, opacity: [0, 1, 1, 0] }} transition={{ duration: shouldReduceMotion ? 0 : 0.62, delay: shouldReduceMotion ? 0 : 0.08, times: [0, 0.15, 0.82, 1], ease: MOTION_EASE_OUT }} />
+        {animateOnMount ? (
+          <motion.span key={`accent-${planRevision}`} className="pointer-events-none absolute inset-x-0 top-0 z-20 h-0.5 origin-left bg-[#FFD501]" aria-hidden="true" initial={{ scaleX: 0, opacity: 0 }} animate={{ scaleX: 1, opacity: [0, 1, 1, 0] }} transition={{ duration: shouldReduceMotion ? 0 : 0.62, delay: shouldReduceMotion ? 0 : 0.08, times: [0, 0.15, 0.82, 1], ease: MOTION_EASE_OUT }} />
+        ) : null}
         <div key={planRevision} className="grid min-h-[84px] grid-cols-[minmax(10rem,1.15fr)_repeat(3,minmax(7.5rem,.82fr))_minmax(15rem,1.35fr)_auto] items-stretch max-[1120px]:grid-cols-[minmax(10rem,1fr)_repeat(3,minmax(7rem,.8fr))_auto] max-[820px]:grid-cols-4 max-sm:grid-cols-2">
           <motion.button type="button" className="group relative flex min-w-0 items-center justify-between gap-3 overflow-hidden bg-[#272A2B] px-5 py-3 text-left text-white focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-[#FFD800] max-sm:col-span-2 max-sm:min-h-16" data-plan-details-trigger="efficiency" whileHover={shouldReduceMotion ? undefined : { x: 2 }} whileTap={shouldReduceMotion ? undefined : { scale: 0.985 }} onClick={() => openDetails("efficiency")}>
-            <motion.span className="min-w-0" data-plan-metric initial={{ opacity: 0, x: shouldReduceMotion ? 0 : -10 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: shouldReduceMotion ? MOTION_DURATION.feedback : 0.36, delay: shouldReduceMotion ? 0 : 0.1, ease: MOTION_EASE_OUT }}>
+            <motion.span className="min-w-0" data-plan-metric initial={animateOnMount ? { opacity: 0, x: shouldReduceMotion ? 0 : -10 } : false} animate={{ opacity: 1, x: 0 }} transition={{ duration: shouldReduceMotion ? MOTION_DURATION.feedback : 0.36, delay: shouldReduceMotion ? 0 : 0.1, ease: MOTION_EASE_OUT }}>
               <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/52"><Activity className="size-3 text-[#FFD501]" aria-hidden="true" />PLAN ONLINE</span>
               <strong className="mt-1 block truncate text-lg font-medium"><span className="font-number">{layout.template}</span> 基建方案</strong>
               <span className="mt-1 block text-[10px] text-white/45">点击查看完整效率诊断</span>
@@ -104,7 +117,7 @@ export function PlanResultSummary({
                 <motion.span
                   className="block"
                   data-plan-metric
-                  initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 10 }}
+                  initial={animateOnMount ? { opacity: 0, y: shouldReduceMotion ? 0 : 10 } : false}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: shouldReduceMotion ? MOTION_DURATION.feedback : 0.36, delay: shouldReduceMotion ? 0 : 0.15 + index * 0.065, ease: MOTION_EASE_OUT }}
                 >
@@ -114,7 +127,7 @@ export function PlanResultSummary({
                     {delta === undefined ? "暂无参考" : <><ArrowUpRight className={cn("size-3", delta < 0 && "rotate-90")} aria-hidden="true" />{delta >= 0 ? "+" : ""}{compactNumber(delta)}%</>}
                   </span>
                 </motion.span>
-                <motion.span className={cn("absolute inset-x-0 bottom-0 h-0.5 origin-left", delta === undefined ? "bg-[#313131]/18" : delta >= 0 ? "bg-emerald-500" : "bg-red-500")} aria-hidden="true" initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.42, delay: shouldReduceMotion ? 0 : 0.2 + index * 0.065, ease: MOTION_EASE_OUT }} />
+                <motion.span className={cn("absolute inset-x-0 bottom-0 h-0.5 origin-left", delta === undefined ? "bg-[#313131]/18" : delta >= 0 ? "bg-emerald-500" : "bg-red-500")} aria-hidden="true" initial={animateOnMount ? { scaleX: 0 } : false} animate={{ scaleX: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.42, delay: shouldReduceMotion ? 0 : 0.2 + index * 0.065, ease: MOTION_EASE_OUT }} />
               </motion.button>
             );
           })}
@@ -128,7 +141,9 @@ export function PlanResultSummary({
               <span className="mt-1 block h-1 overflow-hidden bg-[#313131]/10" role="progressbar" aria-label="房间匹配百分比" aria-valuemin={0} aria-valuemax={100} aria-valuenow={comparison.score}>
                 <motion.span
                   className="block h-full bg-primary"
-                  initial={{ scaleX: shouldReduceMotion ? Math.max(0, Math.min(100, comparison.score)) / 100 : 0 }}
+                  initial={animateOnMount
+                    ? { scaleX: shouldReduceMotion ? Math.max(0, Math.min(100, comparison.score)) / 100 : 0 }
+                    : false}
                   animate={{ scaleX: Math.max(0, Math.min(100, comparison.score)) / 100 }}
                   transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.content, ease: MOTION_EASE_OUT }}
                   style={{ transformOrigin: "left center" }}

@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar, type AppPage } from "@/components/layout/AppSidebar";
 import { AppTopBar, SklandAccountControl } from "@/components/layout/AppTopBar";
+import { PrimaryPageTransition } from "@/components/layout/PrimaryPageTransition";
 import { InfraCalculator } from "@/components/pages/InfraCalculator";
 import { AccountStatusCenter } from "@/components/pages/AccountStatusCenter";
 import { DevelopmentSklandStatusCenter } from "@/components/pages/DevelopmentSklandStatusCenter";
@@ -233,6 +234,7 @@ function WorkbenchApp() {
   const defaultPreset = PRESETS[0];
   const defaultLayout = buildBlueprint(defaultPreset);
   const [page, setPage] = useState<AppPage>("calculator");
+  const revealedPlanRevisions = useRef(new Set<string>());
   const [websiteAuthReloadKey, setWebsiteAuthReloadKey] = useState(0);
   const [websiteAuthDialogOpen, setWebsiteAuthDialogOpen] = useState(false);
   const [betaRequested, setBetaRequested] = useState(false);
@@ -1211,6 +1213,12 @@ function WorkbenchApp() {
     ? displayError(inputErrorCode, inputError)
     : apiError ?? storageNotice;
   const activity = usePlanActivity({ loading, result, error: statusError });
+  const visiblePlanRevision = scheduleResult?.diagnosticId;
+  const animatePlanEntrance = Boolean(
+    page === "calculator"
+    && visiblePlanRevision
+    && !revealedPlanRevisions.current.has(visiblePlanRevision)
+  );
 
   if (!hasRestoredSession) {
     return (
@@ -1238,6 +1246,7 @@ function WorkbenchApp() {
         />
 
       <div className="app-content-track py-4" data-app-content>
+      <PrimaryPageTransition pageKey={page}>
       {page === "calculator" ? (
         <InfraCalculator
           layout={layout}
@@ -1258,6 +1267,8 @@ function WorkbenchApp() {
           loading={loading}
           canRun={canRun}
           plannerReady={cliReady}
+          animatePlanEntrance={animatePlanEntrance}
+          onPlanEntranceConsumed={(revision) => revealedPlanRevisions.current.add(revision)}
           requiresAccount={!accountCanUseCurrentBox}
           accountControl={CLIENT_SKLAND_ENABLED ? (
             <SklandAccountControl
@@ -1333,6 +1344,7 @@ function WorkbenchApp() {
           onOpenCalculator={() => setPage("calculator")}
         />
       )}
+      </PrimaryPageTransition>
       </div>
 
       <footer className="app-content-track mt-auto flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border/70 py-5 text-xs text-muted-foreground">

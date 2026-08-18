@@ -49,13 +49,17 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { HoldToConfirm } from "@/components/ui/hold-to-confirm";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LevelDiamonds, OperatorSlot, roomVisualFor } from "@/components";
 import {
   InfraTechnicalCard as OverviewTechnicalCard,
   InfraTechnicalHeading as OverviewTechnicalHeading,
 } from "@/components/InfraTechnicalCard";
+import {
+  StatusCenterHeader,
+  StatusCenterLoading,
+  StatusCenterPage,
+} from "@/components/pages/StatusCenterShell";
 import { cn } from "@/lib/utils";
 import { operatorPortraitFor } from "@/operatorPortraits";
 import { roomGridTone } from "@/schedule-view-presentation";
@@ -1349,14 +1353,9 @@ export function ProgressTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
 
 function LoadingState() {
   return (
-    <div className="grid gap-5 pt-5" role="status" aria-label="正在恢复森空岛会话" data-skland-page>
-      <Skeleton className="h-32 w-full rounded-xl" />
-      <div className="grid gap-3 md:grid-cols-3">
-        <Skeleton className="h-36 rounded-xl" />
-        <Skeleton className="h-36 rounded-xl" />
-        <Skeleton className="h-36 rounded-xl" />
-      </div>
-    </div>
+    <StatusCenterPage data-skland-page>
+      <StatusCenterLoading label="正在恢复森空岛会话" />
+    </StatusCenterPage>
   );
 }
 
@@ -1391,7 +1390,7 @@ export function SklandStatus({
 
   if (!scheduleSnapshot) {
     return (
-      <div className="grid gap-6 pt-5 pb-2 sm:pb-5" data-skland-page>
+      <StatusCenterPage data-skland-page>
         <header className="max-w-2xl">
           <p className="text-xs font-medium tracking-wide text-primary">森空岛状态中心</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight">
@@ -1421,7 +1420,7 @@ export function SklandStatus({
           disabledReason={disabledReason}
           onAuthenticated={onAuthenticated}
         />
-      </div>
+      </StatusCenterPage>
     );
   }
 
@@ -1431,7 +1430,7 @@ export function SklandStatus({
   if (!snapshot && activeAccount) {
     if (!error) return <LoadingState />;
     return (
-      <div className="grid gap-6 pt-5 pb-2 sm:pb-5" data-skland-page data-skland-status-load-error>
+      <StatusCenterPage data-skland-page data-skland-status-load-error>
         <header className="max-w-2xl">
           <p className="text-xs font-medium tracking-wide text-primary">森空岛状态中心</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight">完整状态暂时无法加载</h2>
@@ -1459,7 +1458,7 @@ export function SklandStatus({
           busy={busy}
           onDeleteAllData={onDeleteAllData}
         />
-      </div>
+      </StatusCenterPage>
     );
   }
 
@@ -1483,51 +1482,51 @@ export function SklandStatus({
   const selectedItem = selectionItems.find((item) => item.value === selectedValue) ?? null;
 
   return (
-    <div className="grid gap-6 pt-5" data-skland-page>
-      <header
-        className="grid gap-5 border-b border-border/70 pb-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end"
+    <StatusCenterPage className="pb-0 sm:pb-0" data-skland-page>
+      <StatusCenterHeader
         data-ui-number-font
-      >
-        <div className="flex min-w-0 items-center gap-4">
-          {snapshot.player.avatarUrl ? (
-            <img
-              src={snapshot.player.avatarUrl}
-              alt={`${snapshot.player.nickname}的森空岛头像`}
-              referrerPolicy="no-referrer"
-              className="size-14 shrink-0 rounded-xl object-cover ring-1 ring-foreground/10"
-            />
-          ) : (
-            <div
-              className="grid size-14 shrink-0 place-items-center rounded-xl bg-primary text-lg font-semibold text-primary-foreground"
-              role="img"
-              aria-label={`${snapshot.player.nickname}的森空岛头像`}
-            >
-              {snapshot.player.nickname.slice(0, 1)}
-            </div>
-          )}
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="truncate text-2xl font-semibold tracking-tight">{snapshot.player.nickname}</h2>
-              {snapshot.player.level !== null ? <Badge variant="secondary">Lv.{snapshot.player.level}</Badge> : null}
-            </div>
-            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-              <span>{snapshot.player.channelName}</span>
-              <button
-                type="button"
-                className="inline-flex items-center gap-1 rounded-sm hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                onClick={() => onCopyUid(snapshot.player.uid)}
-                aria-label="复制完整 UID"
+        identity={(
+          <div className="flex min-w-0 items-center gap-4">
+            {snapshot.player.avatarUrl ? (
+              <img
+                src={snapshot.player.avatarUrl}
+                alt={`${snapshot.player.nickname}的森空岛头像`}
+                referrerPolicy="no-referrer"
+                className="size-14 shrink-0 rounded-xl object-cover ring-1 ring-foreground/10"
+              />
+            ) : (
+              <div
+                className="grid size-14 shrink-0 place-items-center rounded-xl bg-primary text-lg font-semibold text-primary-foreground"
+                role="img"
+                aria-label={`${snapshot.player.nickname}的森空岛头像`}
               >
-                UID {maskedUid(snapshot.player.uid)} <Clipboard className="size-3" />
-              </button>
-              <span>同步于 {formatDateTime(snapshot.infrastructure.storeTs)}</span>
+                {snapshot.player.nickname.slice(0, 1)}
+              </div>
+            )}
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="truncate text-2xl font-semibold tracking-tight">{snapshot.player.nickname}</h2>
+                {snapshot.player.level !== null ? <Badge variant="secondary">Lv.{snapshot.player.level}</Badge> : null}
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                <span>{snapshot.player.channelName}</span>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 rounded-sm hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  onClick={() => onCopyUid(snapshot.player.uid)}
+                  aria-label="复制完整 UID"
+                >
+                  UID {maskedUid(snapshot.player.uid)} <Clipboard className="size-3" />
+                </button>
+                <span>同步于 {formatDateTime(snapshot.infrastructure.storeTs)}</span>
+              </div>
             </div>
           </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+        )}
+        actions={(
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
           <div
-            className="col-span-2 h-9 w-full max-sm:h-11 sm:w-56"
+              className="col-span-2 h-11 w-full sm:w-56"
             data-skland-account-select
           >
             <Combobox
@@ -1575,9 +1574,9 @@ export function SklandStatus({
               </ComboboxContent>
             </Combobox>
           </div>
-          <Button
-            type="button"
-            className="h-9 max-sm:h-11"
+            <Button
+              type="button"
+              className="h-11"
             variant="outline"
             disabled={busy || accounts.length >= 5}
             title={accounts.length >= 5 ? "最多可登录 5 个森空岛账号" : undefined}
@@ -1585,19 +1584,20 @@ export function SklandStatus({
             data-skland-add-account
           >
             <UserPlus />添加账号
-          </Button>
-          <Button
-            type="button"
-            className="h-9 max-sm:h-11"
+            </Button>
+            <Button
+              type="button"
+              className="h-11"
             variant="destructive"
             disabled={busy}
             onClick={() => void onLogout()}
             data-skland-logout
           >
             <LogOut />退出
-          </Button>
-        </div>
-      </header>
+            </Button>
+          </div>
+        )}
+      />
 
       <Dialog open={addAccountOpen} onOpenChange={setAddAccountOpen}>
         <DialogContent className="max-h-[calc(100dvh-1rem)] grid-rows-[auto_minmax(0,1fr)] sm:max-w-[min(880px,calc(100vw-2rem))]">
@@ -1674,6 +1674,6 @@ export function SklandStatus({
         busy={busy}
         onDeleteAllData={onDeleteAllData}
       />
-    </div>
+    </StatusCenterPage>
   );
 }

@@ -3,8 +3,8 @@
 import { LogIn, UserRound } from "lucide-react";
 
 import { SklandStatus, type SklandStatusProps } from "@/components/pages/SklandStatus";
+import { StatusCenterLoading, StatusCenterPage } from "@/components/pages/StatusCenterShell";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import type { SklandBindingSummary } from "@/types";
 
 interface DevelopmentSklandStatusCenterProps {
@@ -17,7 +17,7 @@ interface DevelopmentSklandStatusCenterProps {
 
 function WebsiteLoginRequired({ onOpenAccount }: { onOpenAccount: () => void }) {
   return (
-    <div className="grid gap-6 pb-2 pt-5 sm:pb-5" data-skland-page data-skland-login-required>
+    <StatusCenterPage data-skland-page data-skland-login-required>
       <header className="max-w-2xl">
         <p className="text-xs font-medium tracking-wide text-primary">森空岛状态中心</p>
         <h2 className="mt-2 text-2xl font-semibold tracking-tight">先登录网站账号</h2>
@@ -39,7 +39,7 @@ function WebsiteLoginRequired({ onOpenAccount }: { onOpenAccount: () => void }) 
           </Button>
         </div>
       </div>
-    </div>
+    </StatusCenterPage>
   );
 }
 
@@ -52,10 +52,9 @@ export function DevelopmentSklandStatusCenter({
 }: DevelopmentSklandStatusCenterProps) {
   if (websiteSessionPending) {
     return (
-      <div className="grid gap-4 pb-2 pt-5 sm:pb-5" role="status" aria-label="正在恢复网站账号" data-skland-page>
-        <Skeleton className="h-28 rounded-xl" />
-        <Skeleton className="h-64 rounded-xl" />
-      </div>
+      <StatusCenterPage data-skland-page>
+        <StatusCenterLoading label="正在恢复网站账号" />
+      </StatusCenterPage>
     );
   }
 

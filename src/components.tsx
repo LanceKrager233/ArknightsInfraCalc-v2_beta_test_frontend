@@ -15,7 +15,7 @@ import {
   Upload,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { CSSProperties, ChangeEvent, ReactElement, ReactNode, useEffect, useRef, useState } from "react";
+import { CSSProperties, ChangeEvent, ReactElement, ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { AnimatedNumber, AnimatedText } from "@/components/AnimatedText";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -72,7 +72,7 @@ import {
   roomKindLabel,
   tradeOrderFor,
 } from "./blueprint";
-import { CompactScheduleSkeleton, CompactScheduleView } from "@/components/CompactScheduleView";
+import { CompactScheduleView } from "@/components/CompactScheduleView";
 import { manufacturePoolReady, presentRoomEfficiency, profileEfficiency, RoomEfficiencyPresentation } from "./efficiency";
 import {
   relativeMetricDelta,
@@ -1315,6 +1315,7 @@ export function ScheduleBoard({
   shiftDirection = 0,
   activePlan,
   searchQuery = "",
+  animateInitialView = false,
   onIssue,
   onFactoryRecipeChange,
   onTradeOrderChange,
@@ -1331,6 +1332,7 @@ export function ScheduleBoard({
   shiftDirection?: ShiftDirection;
   activePlan?: MaaPlan;
   searchQuery?: string;
+  animateInitialView?: boolean;
   onIssue: (row: RoomRow) => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
@@ -1338,13 +1340,16 @@ export function ScheduleBoard({
 }) {
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [hiddenGroups, setHiddenGroups] = useState<Record<string, boolean>>({});
-  const [viewMode, setViewMode] = useState<"list" | "compact">("list");
-  const [supportsCompactLayout, setSupportsCompactLayout] = useState(false);
-  const [viewModeReady, setViewModeReady] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "compact">(() => (
+    typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches
+      ? "compact"
+      : "list"
+  ));
+  const [supportsCompactLayout, setSupportsCompactLayout] = useState(viewMode === "compact");
   const preferredViewMode = useRef<"list" | "compact" | null>(null);
   const shouldReduceMotion = useReducedMotion();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const mq = window.matchMedia("(min-width: 768px)");
     const syncViewMode = (canUseCompactLayout: boolean) => {
       setSupportsCompactLayout(canUseCompactLayout);
@@ -1353,7 +1358,6 @@ export function ScheduleBoard({
         : "list";
       setViewMode(nextViewMode);
       onViewModeChange?.(nextViewMode);
-      setViewModeReady(true);
     };
 
     syncViewMode(mq.matches);
@@ -1469,7 +1473,7 @@ export function ScheduleBoard({
         data-plan-board
         data-plan-revision={planRevision || undefined}
       >
-          <AnimatePresence initial={false} mode="wait">
+          <AnimatePresence initial={animateInitialView && !shouldReduceMotion} mode="wait">
             <motion.div
               key={viewMode}
               data-schedule-view={viewMode}
@@ -1492,9 +1496,7 @@ export function ScheduleBoard({
                 ease: MOTION_EASE_OUT,
               }}
             >
-        {!viewModeReady ? (
-          <CompactScheduleSkeleton />
-        ) : viewMode === "list" ? (
+        {viewMode === "list" ? (
           <>
           {rowGroups.map((group) => {
         const visual = roomVisualFor(group.rows[0]?.group ?? "default");
