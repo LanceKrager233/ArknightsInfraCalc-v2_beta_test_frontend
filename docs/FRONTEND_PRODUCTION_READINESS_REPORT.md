@@ -238,15 +238,7 @@ flowchart TD
 
 公共 DTO 变更必须同时更新 mapper 与泄露测试。错误码新增或修改必须同步更新类型、映射测试和本报告目录。UI 修改必须检查三个一级导航和两处锁定区域，不得把“一图流布局”在手机端隐藏，也不得替换加工站“暂不显示”。
 
-GitHub Actions 工作流位于 `.github/workflows/frontend-quality.yml`，使用 Node 22，并按以下顺序执行：
-
-1. `npm ci`
-2. `npm run lint`
-3. `npm test`
-4. `npm run test:api-contract`
-5. `npm run build`
-6. 安装 Playwright Chromium
-7. `npm run test:e2e`
+GitHub Actions 工作流位于 `.github/workflows/frontend-quality.yml`，使用 Node 22。核心检查与生产构建、Chromium E2E、WebKit E2E 分成三个隔离 Job 并行执行，再由保持原状态名称的 `quality` Job 汇总结果；受保护分支 push 只有在同一 SHA 的三个 Job 全部成功后才进入部署。PR 的新提交会取消同一 PR 的过期运行，分支 push 和已开始的部署不会被取消。
 
 ## 开发调试环境使用指南
 

@@ -213,7 +213,7 @@ npm start
 - `npm run test:e2e` 默认在 5184 端口自动启动 Next，并用 Playwright 拦截外部 API；通常不需要真实 CLI 或森空岛凭据。
 - `npm run test:e2e:webkit` 使用同一套 E2E 场景执行独立 WebKit 兼容性门禁。
 - `npm start` 默认监听 `0.0.0.0:5174`。
-- CI 依次执行 `npm ci`、lint、单元测试、契约测试、build 和 Chromium E2E。
+- CI 将核心检查、Chromium E2E 和 WebKit E2E 拆成隔离 Job 并行执行，再由受保护的 `quality` 汇总门禁统一放行；push 只有在同一 SHA 的全部 Job 成功后才进入部署。
 
 开发调试模式仅在本地这样开启：
 

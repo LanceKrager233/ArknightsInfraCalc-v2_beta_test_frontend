@@ -31,6 +31,15 @@ test("CI enforces the initial route JavaScript budget after building", async () 
   assert.match(budgetCheck, /firstLoadUncompressedJsBytes/);
 });
 
+test("CI runs browser suites in parallel behind the protected quality gate", async () => {
+  const workflow = await readRepoFile(".github/workflows/frontend-quality.yml");
+
+  assert.match(workflow, /browser_e2e:[\s\S]+browser: \[chromium, webkit\]/);
+  assert.match(workflow, /quality:[\s\S]+needs: \[checks, browser_e2e\]/);
+  assert.match(workflow, /deploy:[\s\S]+needs: quality/);
+  assert.match(workflow, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/);
+});
+
 test("production injects the client feature flag at every browser boundary", async () => {
   const nextConfig = await readRepoFile("next.config.ts");
   const app = await readRepoFile("src/App.tsx");
