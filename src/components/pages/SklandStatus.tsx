@@ -15,7 +15,6 @@ import {
   PackageCheck,
   Search,
   Shirt,
-  Sparkles,
   Trash2,
   UserPlus,
   UsersRound,
@@ -383,10 +382,10 @@ function OverviewTab({
   return (
     <div className="grid gap-3">
       <section
-        className="grid gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]"
+        className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3"
         aria-label="现在值得处理"
       >
-        <OverviewTechnicalCard group="manufacture" className="min-h-40">
+        <OverviewTechnicalCard group="manufacture" className="min-h-40 xl:col-span-2">
           <div className="flex h-full flex-col">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -433,14 +432,14 @@ function OverviewTab({
                 当前布局 · {infrastructure.layoutLabel ?? "未识别"}
               </p>
             </div>
-            <div className="flex flex-wrap justify-end gap-2">
+            <div className="flex flex-wrap justify-start gap-2">
               <Button
                 type="button"
                 size="dialog"
                 className="bg-white text-[#272a2b] hover:bg-white/90"
                 onClick={onOpenCalculator}
               >
-                <Sparkles /> 前往生成排班
+                前往生成排班
               </Button>
               <Button
                 type="button"
@@ -449,7 +448,7 @@ function OverviewTab({
                 variant="outline"
                 onClick={onContinueSetup}
               >
-                <Building2 /> 继续配置布局
+                继续配置布局
               </Button>
             </div>
           </div>
@@ -1391,37 +1390,44 @@ export function SklandStatus({
   if (sessionLoading) return <LoadingState />;
 
   if (!scheduleSnapshot) {
+    const loginTitle = bindingState === "renewal-due"
+      ? "七天授权期已结束，请扫码续期"
+      : bindingState === "reauthorize"
+        ? "森空岛已绑定，请授权当前浏览器"
+        : "把当前罗德岛带进排班助手";
+    const loginDescription = bindingState === "renewal-due"
+      ? `最近一次授权${bindingSummary.latestExpiredAt
+        ? `已于 ${credentialExpiryLabel(bindingSummary.latestExpiredAt)} 到期`
+        : "已经到期"}。重新扫码即可继续同步，现有排班设置不会被清除。`
+      : bindingState === "reauthorize"
+        ? `网站账号仍保留 ${bindingCount} 个森空岛绑定，但当前浏览器没有可用凭证。重新扫码即可继续同步。`
+        : "使用森空岛 App 扫描二维码，同步当前角色的干员与基建数据。";
     return (
-      <StatusCenterPage data-skland-page>
-        <header className="max-w-2xl">
-          <p className="text-xs font-medium tracking-wide text-primary">森空岛状态中心</p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight">
-            {bindingState === "renewal-due"
-              ? "七天授权期已结束，请扫码续期"
-              : bindingState === "reauthorize"
-                ? "森空岛已绑定，请授权当前浏览器"
-                : "把当前罗德岛带进排班助手"}
-          </h2>
-          {bindingState === "reauthorize" || bindingState === "renewal-due" ? (
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              网站账号仍记录着 <span className="font-number">{bindingCount}</span> 个森空岛绑定；
-              {bindingState === "renewal-due" && bindingSummary.latestExpiredAt
-                ? `最近一次授权已于 ${credentialExpiryLabel(bindingSummary.latestExpiredAt)} 到期。`
-                : "当前浏览器没有可用的加密登录凭证。"}
-              重新扫码不会删除排班设置中保留的上次同步数据。
+      <StatusCenterPage
+        className="min-h-[calc(100dvh-7rem)] place-items-center py-8 sm:py-12"
+        data-skland-page
+      >
+        <div className="grid w-full max-w-xl justify-items-center gap-7 text-center">
+          <header className="grid max-w-lg gap-3" data-skland-login-copy>
+            <p className="text-xs font-medium tracking-wide text-primary">森空岛状态中心</p>
+            <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">{loginTitle}</h2>
+            <p className="text-pretty text-sm leading-6 text-muted-foreground">{loginDescription}</p>
+            <p className="text-xs leading-5 text-muted-foreground/80">
+              登录凭证只保存在当前浏览器，7 天后失效。
             </p>
+          </header>
+          {error ? (
+            <Alert className="w-full max-w-lg text-start" variant="destructive">
+              <AlertDescription>{error.message}（{error.code}）</AlertDescription>
+            </Alert>
           ) : null}
-        </header>
-        {error ? (
-          <Alert variant="destructive">
-            <AlertDescription>{error.message}（{error.code}）</AlertDescription>
-          </Alert>
-        ) : null}
-        <SklandLoginPanel
-          configured={configured}
-          disabledReason={disabledReason}
-          onAuthenticated={onAuthenticated}
-        />
+          <SklandLoginPanel
+            className="max-w-lg"
+            configured={configured}
+            disabledReason={disabledReason}
+            onAuthenticated={onAuthenticated}
+          />
+        </div>
       </StatusCenterPage>
     );
   }
