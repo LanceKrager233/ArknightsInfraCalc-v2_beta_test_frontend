@@ -2306,10 +2306,10 @@ test("all primary pages share the calculator top content offset", async ({ page 
     const calculatorTop = (await page.locator("[data-calculator-controls]").boundingBox())?.y ?? -1;
 
     for (const destination of [
-      { name: "练卡建议", root: "[data-training-page]" },
-      { name: "技能查询", root: "[data-skill-query-page]" },
-      { name: "森空岛状态中心", root: "[data-skland-page]" },
-      { name: "账号管理", root: "[data-account-management]" },
+      { name: "练卡建议", pageKey: "training", root: "[data-training-page]" },
+      { name: "技能查询", pageKey: "skill-query", root: "[data-skill-query-page]" },
+      { name: "森空岛状态中心", pageKey: "skland", root: "[data-skland-page]" },
+      { name: "账号管理", pageKey: "account", root: "[data-account-management]" },
     ]) {
       if (viewport.width < 768) {
         await page.locator("[data-app-topbar]").getByRole("button", { name: "Toggle Sidebar" }).click();
@@ -2318,6 +2318,7 @@ test("all primary pages share the calculator top content offset", async ({ page 
       await page.evaluate(() => window.scrollTo(0, 0));
       const pageRoot = page.locator(destination.root);
       await expect(pageRoot).toBeVisible();
+      await waitForOwnAnimations(page.locator(`[data-primary-page="${destination.pageKey}"]`));
       const pageTop = (await pageRoot.locator(":scope > :first-child").boundingBox())?.y ?? -1;
       expect(pageTop, `${viewport.width}px ${destination.name}`).toBeCloseTo(calculatorTop, 0);
     }
@@ -2341,6 +2342,7 @@ test("Skland and account centers share header geometry and account actions use t
     }
     await page.getByRole("button", { name: "森空岛状态中心", exact: true }).click();
     const sklandRoot = page.locator("[data-skland-page]");
+    await waitForOwnAnimations(page.locator('[data-primary-page="skland"]'));
     const sklandHeader = sklandRoot.locator(":scope > header");
     const sklandLogout = sklandRoot.locator("[data-skland-logout]");
     await expect(sklandLogout).toBeVisible();
@@ -2354,6 +2356,7 @@ test("Skland and account centers share header geometry and account actions use t
     }
     await page.getByRole("button", { name: "账号管理", exact: true }).click();
     const accountRoot = page.locator("[data-account-management]");
+    await waitForOwnAnimations(page.locator('[data-primary-page="account"]'));
     const accountHeader = accountRoot.locator("header").first();
     const accountLogout = accountRoot.locator("[data-account-logout]");
     await expect(accountLogout).toBeVisible();
