@@ -251,7 +251,7 @@ export function SetupDialog({
       }
       onOpenChange(nextOpen);
     }}>
-      <DialogContent data-setup-dialog className="max-h-[min(820px,calc(100dvh-1rem))] max-w-[calc(100%-1rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-[24px] p-0 sm:max-w-[min(880px,calc(100%-2rem))] sm:rounded-[32px]">
+      <DialogContent data-setup-dialog className="h-[min(660px,calc(100dvh-1rem))] max-w-[calc(100%-1rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-[24px] p-0 sm:max-w-[min(880px,calc(100%-2rem))] sm:rounded-[32px]">
         <Tabs
           value={step === "facilities" ? "layout" : step}
           onValueChange={(value) => {
@@ -526,7 +526,7 @@ export function SetupDialog({
           </TabsContent>
         </Tabs>
 
-        <footer data-setup-footer className="setup-dialog-footer flex min-h-14 w-full min-w-0 flex-nowrap items-center justify-end gap-1.5 px-2 py-1.5 sm:min-h-16 sm:gap-2 sm:px-7">
+        <footer data-setup-footer className="setup-dialog-footer flex w-full min-w-0 flex-nowrap items-center justify-end gap-1.5 px-4 pb-4 pt-2 sm:gap-2 sm:px-7 sm:pb-7 sm:pt-3">
           {step === "box" ? (
             <>
               <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={onSkip}>稍后</Button>

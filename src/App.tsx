@@ -10,6 +10,7 @@ import { AppTopBar, SklandAccountControl } from "@/components/layout/AppTopBar";
 import { InfraCalculator } from "@/components/pages/InfraCalculator";
 import { AccountStatusCenter } from "@/components/pages/AccountStatusCenter";
 import { DevelopmentSklandStatusCenter } from "@/components/pages/DevelopmentSklandStatusCenter";
+import { WebsiteAccountDialog } from "@/components/auth/WebsiteAccountDialog";
 import { LiveActivity, usePlanActivity } from "@/components/ui/live-activity";
 import { authClient } from "@/lib/auth-client";
 
@@ -233,6 +234,7 @@ function WorkbenchApp() {
   const defaultLayout = buildBlueprint(defaultPreset);
   const [page, setPage] = useState<AppPage>("calculator");
   const [websiteAuthReloadKey, setWebsiteAuthReloadKey] = useState(0);
+  const [websiteAuthDialogOpen, setWebsiteAuthDialogOpen] = useState(false);
   const [betaRequested, setBetaRequested] = useState(false);
   const [debugToolsEnabled, setDebugToolsEnabled] = useState(false);
   const [hasRestoredSession, setHasRestoredSession] = useState(false);
@@ -273,7 +275,6 @@ function WorkbenchApp() {
   const initialLocalLayoutBackup = useRef<BaseBlueprint | null>(null);
   const skipNextPersistence = useRef(false);
   const statusLoadingAccount = useRef<string | null>(null);
-  const pendingPostLoginNavigation = useRef(false);
   const [inputError, setInputError] = useState<string | null>(null);
   const [inputErrorCode, setInputErrorCode] = useState<DisplayError["code"]>("AIC-BOX-1101");
   const [sampleLoading, setSampleLoading] = useState(false);
@@ -532,18 +533,10 @@ function WorkbenchApp() {
             setPreset(resolvePreset(PRESETS.find((item) => item.label === session.scheduleSnapshot?.infrastructure.layoutLabel)));
           }
         }
-        if (pendingPostLoginNavigation.current) {
-          setPage(!session.authenticated || bindingSummary.renewalDueCount > 0 ? "skland" : "account");
-          pendingPostLoginNavigation.current = false;
-        }
       })
       .catch((error) => {
         if (cancelled) return;
         setSklandError(toDisplayError(error, "森空岛会话恢复失败，请稍后刷新。"));
-        if (pendingPostLoginNavigation.current) {
-          setPage("skland");
-          pendingPostLoginNavigation.current = false;
-        }
       })
       .finally(() => {
         if (!cancelled) setSklandSessionLoading(false);
@@ -552,6 +545,18 @@ function WorkbenchApp() {
       cancelled = true;
     };
   }, [hasRestoredSession, websiteAuthReloadKey, websiteSessionPending, websiteUserId]);
+
+  useEffect(() => {
+    if (websiteSessionPending) return;
+    if (websiteSession) {
+      if (websiteAuthDialogOpen) {
+        setWebsiteAuthDialogOpen(false);
+        setPage("account");
+      }
+      return;
+    }
+    if (page === "account") setPage("calculator");
+  }, [page, websiteAuthDialogOpen, websiteSession, websiteSessionPending]);
 
   useEffect(() => {
     if (
@@ -1045,20 +1050,24 @@ function WorkbenchApp() {
     setPage("skland");
   }
 
+  function handleAppPageChange(nextPage: AppPage) {
+    if (nextPage === "account" && !websiteSession) {
+      setWebsiteAuthDialogOpen(true);
+      return;
+    }
+    setPage(nextPage);
+  }
+
   async function handleWebsiteSessionChanged(authenticated: boolean) {
-    setPage("account");
-    if (authenticated && CLIENT_SKLAND_ENABLED) {
-      pendingPostLoginNavigation.current = true;
-    } else {
-      pendingPostLoginNavigation.current = false;
-      if (!authenticated) {
-        setSklandAccounts([]);
-        setSklandActiveAccountId(null);
-        setSklandBindingSummary(emptySklandBindingSummary());
-        setSklandScheduleSnapshot(null);
-        setSklandStatusSnapshot(null);
-        setSklandError(null);
-      }
+    setWebsiteAuthDialogOpen(false);
+    setPage(authenticated ? "account" : "calculator");
+    if (!authenticated) {
+      setSklandAccounts([]);
+      setSklandActiveAccountId(null);
+      setSklandBindingSummary(emptySklandBindingSummary());
+      setSklandScheduleSnapshot(null);
+      setSklandStatusSnapshot(null);
+      setSklandError(null);
     }
     await refetchWebsiteSession();
     setWebsiteAuthReloadKey((current) => current + 1);
@@ -1217,7 +1226,7 @@ function WorkbenchApp() {
 
   return (
     <SidebarProvider defaultOpen={false}>
-      <AppSidebar page={page} onPageChange={setPage} />
+      <AppSidebar page={page} onPageChange={handleAppPageChange} />
       <SidebarInset>
         <AppTopBar />
         <LiveActivity
@@ -1277,7 +1286,7 @@ function WorkbenchApp() {
           websiteAuthenticated={Boolean(websiteSession)}
           websiteSessionPending={websiteSessionPending}
           bindingSummary={sklandBindingSummary}
-          onOpenAccount={() => setPage("account")}
+          onOpenAccount={() => handleAppPageChange("account")}
           skland={{
             scheduleSnapshot: sklandScheduleSnapshot,
             snapshot: sklandStatusSnapshot,
@@ -1306,7 +1315,13 @@ function WorkbenchApp() {
           }}
         />
       ) : page === "account" ? (
-        <AccountStatusCenter onSessionChanged={handleWebsiteSessionChanged} />
+        websiteSession ? (
+          <AccountStatusCenter onSessionChanged={handleWebsiteSessionChanged} />
+        ) : (
+          <div className="grid min-h-64 place-items-center" role="status" aria-live="polite">
+            <span className="text-sm text-muted-foreground">正在确认网站账号…</span>
+          </div>
+        )
       ) : page === "skill-query" ? (
         <SkillQuery />
       ) : (
@@ -1334,6 +1349,12 @@ function WorkbenchApp() {
           </Link>
         ) : null}
       </footer>
+
+      <WebsiteAccountDialog
+        open={websiteAuthDialogOpen}
+        onOpenChange={setWebsiteAuthDialogOpen}
+        onSessionChanged={handleWebsiteSessionChanged}
+      />
 
       {setupMounted ? <SetupDialog
         {...(CLIENT_SKLAND_ENABLED ? {

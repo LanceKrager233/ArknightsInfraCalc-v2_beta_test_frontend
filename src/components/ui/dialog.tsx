@@ -50,8 +50,8 @@ function DialogOverlay({
       className={cn(
         "fixed inset-0 isolate z-50",
         layer === "nested"
-          ? "bg-black/[0.08] supports-backdrop-filter:max-sm:backdrop-blur-[1px] supports-backdrop-filter:sm:backdrop-blur-[2px]"
-          : "bg-black/20 supports-backdrop-filter:max-sm:backdrop-blur-[3px] supports-backdrop-filter:sm:backdrop-blur-[6px]",
+          ? "bg-black/[0.08] supports-backdrop-filter:max-sm:backdrop-blur-[2px] supports-backdrop-filter:sm:backdrop-blur-[3px]"
+          : "bg-black/20 supports-backdrop-filter:max-sm:backdrop-blur-[4px] supports-backdrop-filter:sm:backdrop-blur-[8px]",
         className
       )}
       {...props}
