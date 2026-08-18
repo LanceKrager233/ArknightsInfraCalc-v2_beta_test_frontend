@@ -356,21 +356,21 @@ export function InfraCalculator(props: InfraCalculatorProps) {
         </aside>
       ) : null}
       <Dialog open={shortcutGuideOpen} onOpenChange={setShortcutGuideOpen}>
-        <DialogContent className="gap-8 sm:max-w-2xl sm:p-8">
-          <DialogHeader className="gap-2 px-1 sm:px-2">
+        <DialogContent className="gap-5 sm:max-w-2xl sm:p-6">
+          <DialogHeader className="gap-1.5 px-1 sm:px-2">
             <DialogTitle className="text-xl font-semibold">快捷键</DialogTitle>
             <DialogDescription className="max-w-lg text-sm leading-6">在排班主界面快速定位搜索、关闭临时状态或切换导航。</DialogDescription>
           </DialogHeader>
           <div className="divide-y divide-border/70 border-y border-border/70 px-1 sm:px-2">
-            <div className="flex min-h-20 items-center justify-between gap-8 py-5 max-sm:flex-wrap max-sm:gap-3">
+            <div className="flex min-h-14 items-center justify-between gap-8 py-3 max-sm:flex-wrap max-sm:gap-2">
               <span className="text-[15px] font-medium leading-6">聚焦排班搜索</span>
               <KbdGroup className="shrink-0" aria-label="Control 加 K"><Kbd>Ctrl</Kbd><span aria-hidden="true">+</span><Kbd>K</Kbd></KbdGroup>
             </div>
-            <div className="flex min-h-20 items-center justify-between gap-8 py-5 max-sm:flex-wrap max-sm:gap-3">
+            <div className="flex min-h-14 items-center justify-between gap-8 py-3 max-sm:flex-wrap max-sm:gap-2">
               <span className="text-[15px] font-medium leading-6">清空搜索；计算中取消请求</span>
               <Kbd className="shrink-0">Esc</Kbd>
             </div>
-            <div className="flex min-h-20 items-center justify-between gap-8 py-5 max-sm:flex-wrap max-sm:gap-3">
+            <div className="flex min-h-14 items-center justify-between gap-8 py-3 max-sm:flex-wrap max-sm:gap-2">
               <span className="text-[15px] font-medium leading-6">展开或收起侧边栏</span>
               <KbdGroup className="shrink-0" aria-label="Control 加 B"><Kbd>Ctrl</Kbd><span aria-hidden="true">+</span><Kbd>B</Kbd></KbdGroup>
             </div>

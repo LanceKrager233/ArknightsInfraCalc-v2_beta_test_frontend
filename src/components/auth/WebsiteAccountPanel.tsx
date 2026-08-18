@@ -41,6 +41,8 @@ const MODE_COPY: Record<AuthMode, { title: string; description: string }> = {
   forgot: { title: "找回密码", description: "输入注册邮箱，我们会发送一封 1 小时内有效的重置邮件。" },
 };
 
+const AUTH_INPUT_CLASS = "border-[#d5d7da] bg-white shadow-none dark:border-[#d5d7da] dark:bg-white dark:text-[#242424] dark:placeholder:text-[#737373]";
+
 interface WebsiteAccountPanelProps {
   onSessionChanged?: (authenticated: boolean) => void | Promise<void>;
 }
@@ -288,18 +290,10 @@ export function WebsiteAccountPanel({ onSessionChanged }: WebsiteAccountPanelPro
     );
   }
 
-  const steps = mode === "signin"
-    ? [{ id: "details", label: "登录" }]
-    : mode === "signup"
-      ? [
-          { id: "details", label: "账号信息" },
-          { id: "verify", label: "验证邮箱" },
-          { id: "complete", label: "完成" },
-        ]
-      : [
-          { id: "details", label: "确认邮箱" },
-          { id: "complete", label: "查收邮件" },
-        ];
+  const recoverySteps = [
+    { id: "details", label: "确认邮箱" },
+    { id: "complete", label: "查收邮件" },
+  ];
 
   return (
     <Card className="surface-shadow overflow-hidden rounded-none ring-0" data-website-account-panel data-auth-wizard>
@@ -311,28 +305,31 @@ export function WebsiteAccountPanel({ onSessionChanged }: WebsiteAccountPanelPro
           <p className="text-xs font-medium tracking-wide text-primary">账号管理</p>
           <h3 className="mt-2 text-2xl font-semibold tracking-tight">{MODE_COPY[mode].title}</h3>
           <p className="mt-3 max-w-sm text-sm leading-6 text-muted-foreground">{MODE_COPY[mode].description}</p>
-          <WizardSteps
-            key={mode}
-            steps={steps}
-            value={step}
-            onValueChange={(value) => {
-              if (value === "details") setStep("details");
-              if (value === "verify" && mode === "signup") setStep("verify");
-            }}
-            label="网站账号步骤"
-            className="mt-7"
-          />
         </div>
 
-        <CardContent className="p-0">
+        <CardContent className={mode === "forgot" ? "grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] p-0" : "p-0"}>
+          {mode === "forgot" ? (
+            <div className="border-b border-border/70 px-5 pb-4 pt-5 sm:px-8 sm:pb-5 sm:pt-7">
+              <WizardSteps
+                key={mode}
+                steps={recoverySteps}
+                value={step}
+                onValueChange={(value) => {
+                  if (value === "details") setStep("details");
+                }}
+                label="找回密码步骤"
+              />
+            </div>
+          ) : null}
           {step === "details" ? (
-            <form onSubmit={submitDetails} className="grid min-h-full grid-rows-[1fr_auto]">
+            <form onSubmit={submitDetails} className={`grid grid-rows-[1fr_auto] ${mode === "forgot" ? "h-full min-h-0" : "min-h-full"}`}>
               <div className="grid content-start gap-4 px-5 py-6 sm:px-8 sm:py-8">
                 {mode === "signup" ? (
                   <div className="grid gap-1.5">
                     <Label htmlFor={`${fieldId}-name`}>昵称</Label>
                     <Input
                       id={`${fieldId}-name`}
+                      className={AUTH_INPUT_CLASS}
                       value={name}
                       onChange={(event) => {
                         setName(event.target.value);
@@ -353,12 +350,12 @@ export function WebsiteAccountPanel({ onSessionChanged }: WebsiteAccountPanelPro
                 ) : null}
                 <div className="grid gap-1.5">
                   <Label htmlFor={`${fieldId}-email`}>邮箱</Label>
-                  <Input id={`${fieldId}-email`} value={email} onChange={(event) => setEmail(event.target.value)} required type="email" placeholder="name@example.com" autoComplete="email" />
+                  <Input className={AUTH_INPUT_CLASS} id={`${fieldId}-email`} value={email} onChange={(event) => setEmail(event.target.value)} required type="email" placeholder="name@example.com" autoComplete="email" />
                 </div>
                 {mode !== "forgot" ? (
                   <div className="grid gap-1.5">
                     <Label htmlFor={`${fieldId}-password`}>密码</Label>
-                    <Input id={`${fieldId}-password`} value={password} onChange={(event) => setPassword(event.target.value)} required type="password" minLength={10} maxLength={128} placeholder="10–128 位" autoComplete={mode === "signup" ? "new-password" : "current-password"} />
+                    <Input className={AUTH_INPUT_CLASS} id={`${fieldId}-password`} value={password} onChange={(event) => setPassword(event.target.value)} required type="password" minLength={10} maxLength={128} placeholder="10–128 位" autoComplete={mode === "signup" ? "new-password" : "current-password"} />
                     {mode === "signup" ? <PasswordStrength value={password} className="mt-1.5" /> : null}
                   </div>
                 ) : null}

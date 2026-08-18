@@ -990,16 +990,17 @@ for (const viewport of [
     const accountNavigation = page.getByRole("button", { name: "账号管理", exact: true });
     await expect(accountNavigation.locator(".lucide-user-round")).toBeVisible();
     await accountNavigation.click();
-    await expect(page.locator("[data-account-management]")).toBeVisible();
-    const accountPanel = page.locator("[data-website-account-panel]");
-    await expect(accountPanel.locator("[data-wizard-steps]")).toBeVisible();
-    await expect(accountPanel.getByRole("button", { name: /第 1 步，共 1 步：登录/ })).toHaveAttribute("aria-current", "step");
-    await expect(page.getByRole("dialog", { name: "登录网站账号" })).toHaveCount(0);
+    await expect(page.locator("[data-account-management]")).toHaveCount(0);
+    const accountDialog = page.getByRole("dialog", { name: "登录网站账号" });
+    await expect(accountDialog).toBeVisible();
+    const accountPanel = accountDialog.locator("[data-website-account-panel]");
+    await expect(accountPanel.locator("[data-wizard-steps]")).toHaveCount(0);
     await accountPanel.getByRole("button", { name: "忘记密码" }).click();
     await expect(accountPanel.getByRole("button", { name: /第 1 步，共 2 步：确认邮箱/ })).toHaveAttribute("aria-current", "step");
     await accountPanel.getByRole("button", { name: "返回登录" }).click();
+    await expect(accountPanel.locator("[data-wizard-steps]")).toHaveCount(0);
     await accountPanel.getByRole("button", { name: "创建账号" }).click();
-    await expect(accountPanel.getByRole("button", { name: /第 1 步，共 3 步：账号信息/ })).toHaveAttribute("aria-current", "step");
+    await expect(accountPanel.locator("[data-wizard-steps]")).toHaveCount(0);
     await expect(accountPanel.getByRole("heading", { name: "创建网站账号" })).toBeVisible();
     await expect(accountPanel.getByRole("link", { name: "服务条款", exact: true })).toHaveAttribute("href", "/terms");
     await expect(accountPanel.getByRole("link", { name: "隐私政策", exact: true })).toHaveAttribute("href", "/privacy");
@@ -1012,7 +1013,7 @@ for (const viewport of [
     await page.getByLabel("昵称").fill("测试用户");
     await expect(accountPanel.getByRole("meter", { name: "密码强度" })).toHaveAttribute("aria-valuetext", "强");
     await page.getByRole("button", { name: "创建账号并发送验证码" }).click();
-    await expect(accountPanel.getByRole("button", { name: /第 2 步，共 3 步：验证邮箱/ })).toHaveAttribute("aria-current", "step");
+    await expect(accountPanel.locator("[data-wizard-steps]")).toHaveCount(0);
     for (const [index, digit] of [..."123456"].entries()) {
       await accountPanel.getByRole("textbox", { name: `邮箱验证码第 ${index + 1} 位，共 6 位` }).fill(digit);
     }
@@ -1022,7 +1023,7 @@ for (const viewport of [
   });
 }
 
-test("website login opens the separate Skland status center when the account still needs a QR", async ({ page }) => {
+test("website login opens account management after the gated navigation dialog", async ({ page }) => {
   let authenticated = false;
   await page.unroute("**/api/auth/get-session");
   await page.route("**/api/auth/get-session", (route) => route.fulfill({
@@ -1046,9 +1047,10 @@ test("website login opens the separate Skland status center when the account sti
   await accountPanel.getByLabel("密码", { exact: true }).fill("secure-password-1");
   await accountPanel.getByRole("button", { name: "登录", exact: true }).click();
 
-  await expect(page.getByRole("button", { name: "森空岛状态中心", exact: true })).toHaveAttribute("data-active", "");
-  await expect(page.getByRole("heading", { name: "把当前罗德岛带进排班助手" })).toBeVisible();
-  await expect(page.locator("[data-skland-login-panel]")).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "登录网站账号" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "账号管理", exact: true })).toHaveAttribute("data-active", "");
+  await expect(page.locator("[data-account-management]")).toBeVisible();
+  await expect(page.getByText("signed-in@example.test", { exact: true })).toBeVisible();
 });
 
 test("seven-day bindings stay visible and require QR renewal", async ({ page }) => {
@@ -1108,7 +1110,9 @@ test("account settings revokes every session and returns to the app", async ({ p
   await expect(page.getByText("test@example.com", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "退出全部设备" }).click();
   await expect.poll(() => revokeRequests).toBe(1);
-  await expect(page.getByRole("heading", { name: "登录网站账号" })).toBeVisible();
+  await expect(page.locator("[data-account-management]")).toHaveCount(0);
+  await expect(page.locator("[data-calculator-controls]")).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "登录网站账号" })).toHaveCount(0);
   expect((await page.request.get("/account")).status()).toBe(404);
 });
 
@@ -1835,7 +1839,7 @@ test("live activity survives navigation and calculator search occupies the relea
   await expect(shortcutDialog.locator('[data-slot="kbd"]')).toHaveCount(5);
   await expect(shortcutDialog.locator('[data-slot="kbd-group"]')).toHaveCount(2);
   const shortcutRows = shortcutDialog.locator('[data-slot="kbd-group"]').first().locator("xpath=..");
-  await expect(shortcutRows).toHaveCSS("min-height", "80px");
+  await expect(shortcutRows).toHaveCSS("min-height", "56px");
   await page.keyboard.press("Escape");
   await expect(shortcutDialog).toBeHidden();
 
@@ -2413,15 +2417,16 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   const stepList = dialog.getByRole("list", { name: "设置步骤" });
   await expect(stepList.locator(":scope > *")).toHaveCount(3);
   expect((await stepList.boundingBox())?.width ?? 0).toBeGreaterThan(600);
+  await expect(dialog).toHaveCSS("height", "660px");
+  const initialStepListBox = await stepList.boundingBox();
   await dialog.getByRole("button", { name: /第 1 步，共 3 步：干员数据/ }).click();
-  await expect.poll(async () => (await dialog.boundingBox())?.height ?? Infinity).toBeLessThan(480);
-  const collapsedDialogHeight = (await dialog.boundingBox())?.height ?? 0;
   await dialog.getByRole("button", { name: "更换", exact: true }).click();
   await expect(dialog.locator("#setup-import-options")).toBeVisible();
-  await expect.poll(async () => (await dialog.boundingBox())?.height ?? Infinity).toBeLessThan(700);
-  expect((await dialog.boundingBox())?.height ?? 0).toBeGreaterThan(collapsedDialogHeight);
+  await expect(dialog).toHaveCSS("height", "660px");
   await dialog.getByRole("button", { name: "收起", exact: true }).click();
   await dialog.getByRole("button", { name: /第 2 步，共 3 步：布局/ }).click();
+  const layoutStepListBox = await stepList.boundingBox();
+  expect(layoutStepListBox?.y ?? -1).toBeCloseTo(initialStepListBox?.y ?? -1, 0);
   const completedDataStep = dialog.getByRole("button", { name: /第 1 步，共 3 步：干员数据/ });
   await expect(completedDataStep.locator("svg")).toHaveCount(1);
 
