@@ -271,14 +271,15 @@ export function WebsiteAccountPanel({ onSessionChanged }: WebsiteAccountPanelPro
               <p className="mt-4 max-w-xl text-sm leading-6 text-white/64">
                 当前会话{expiresAt ? `将在 ${expiresAt} 到期` : "处于有效状态"}。退出全部设备会撤销数据库 Session，并清除当前浏览器保存的第三方账号凭据。
               </p>
-              <div className="mt-auto pt-5">
+              <div className="mt-auto flex justify-end pt-5">
                 <Button
                   type="button"
-                  className="h-11 w-full justify-between bg-white text-[#272a2b] hover:bg-white/90"
+                  size="dialog"
+                  className="bg-white text-[#272a2b] hover:bg-white/90"
                   disabled={busyAction !== null}
                   onClick={() => void runAccountAction("sessions")}
                 >
-                  {busyAction === "sessions" ? "正在撤销 Session…" : "退出全部设备"}<KeyRound />
+                  <KeyRound />{busyAction === "sessions" ? "正在撤销 Session…" : "退出全部设备"}
                 </Button>
               </div>
             </section>
@@ -308,15 +309,15 @@ export function WebsiteAccountPanel({ onSessionChanged }: WebsiteAccountPanelPro
                   autoComplete="current-password"
                 />
               </div>
-              <div className="mt-auto pt-5">
+              <div className="mt-auto flex justify-end pt-5">
                 <Button
                   type="button"
                   variant="destructive"
-                  className="h-11 w-full justify-between"
+                  size="dialog"
                   disabled={deletePassword.length < 10 || busyAction !== null}
                   onClick={() => void runAccountAction("delete")}
                 >
-                  {busyAction === "delete" ? "正在注销…" : "永久注销账号"}<Trash2 />
+                  <Trash2 />{busyAction === "delete" ? "正在注销…" : "永久注销账号"}
                 </Button>
               </div>
             </section>

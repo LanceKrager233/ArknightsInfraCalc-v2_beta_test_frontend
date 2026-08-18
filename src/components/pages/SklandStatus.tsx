@@ -433,21 +433,23 @@ function OverviewTab({
                 当前布局 · {infrastructure.layoutLabel ?? "未识别"}
               </p>
             </div>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+            <div className="flex flex-wrap justify-end gap-2">
               <Button
                 type="button"
-                className="h-11 justify-between bg-white text-[#272a2b] hover:bg-white/90"
+                size="dialog"
+                className="bg-white text-[#272a2b] hover:bg-white/90"
                 onClick={onOpenCalculator}
               >
-                前往生成排班 <Sparkles />
+                <Sparkles /> 前往生成排班
               </Button>
               <Button
                 type="button"
-                className="h-11 justify-between border-white/22 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                size="dialog"
+                className="border-white/22 bg-white/5 text-white hover:bg-white/10 hover:text-white"
                 variant="outline"
                 onClick={onContinueSetup}
               >
-                继续配置布局 <Building2 />
+                <Building2 /> 继续配置布局
               </Button>
             </div>
           </div>

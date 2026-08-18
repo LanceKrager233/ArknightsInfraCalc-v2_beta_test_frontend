@@ -1,4 +1,4 @@
-import { ArrowUpRight, CircleAlert, ClipboardCheck, GraduationCap } from "lucide-react";
+import { CircleAlert, ClipboardCheck, GraduationCap } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 
 import { InfraTechnicalCard, InfraTechnicalHeading } from "@/components/InfraTechnicalCard";
@@ -189,8 +189,7 @@ export function TrainingAdvice({ operbox, layout, profile, requiresAccount = fal
           >
             <div className="grid min-h-[216px] gap-6 sm:grid-cols-[minmax(0,1fr)_15rem] sm:items-center">
               <motion.div className="max-w-xl" initial={{ opacity: 0, x: shouldReduceMotion ? 0 : -12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: shouldReduceMotion ? 0 : 0.38, ease: [0.23, 1, 0.32, 1] }}>
-                <div className="flex items-center gap-2 text-[var(--room-accent)]"><ArrowUpRight className="size-6" aria-hidden="true" /><span className="font-number text-[10px] font-semibold uppercase tracking-[0.16em]">ADVICE QUEUE · 00</span></div>
-                <h3 className="mt-4 text-xl font-semibold">
+                <h3 className="text-xl font-semibold">
                   {profile ? "本次排班暂无培养建议" : "尚无培养建议"}
                 </h3>
                 <p className="mt-2 max-w-lg text-sm leading-6 text-white/62">
@@ -198,9 +197,11 @@ export function TrainingAdvice({ operbox, layout, profile, requiresAccount = fal
                     ? "当前干员与布局没有需要优先培养的项目，可以继续使用现有排班。"
                     : "先导入干员数据、确认基建布局并生成一次排班。"}
                 </p>
-                <Button type="button" className="mt-4 h-9 bg-white text-[#272a2b] hover:bg-white/90 max-sm:h-11" onClick={onOpenCalculator}>
-                  {profile ? "查看当前排班" : "前往生成排班"}
-                </Button>
+                <div className="mt-5 flex justify-end">
+                  <Button type="button" size="dialog" className="bg-white text-[#272a2b] hover:bg-white/90" onClick={onOpenCalculator}>
+                    {profile ? "查看当前排班" : "前往生成排班"}
+                  </Button>
+                </div>
               </motion.div>
               <motion.div className="hidden border-y border-white/12 py-3 sm:block" aria-hidden="true" initial={{ opacity: 0, x: shouldReduceMotion ? 0 : 12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: shouldReduceMotion ? 0 : 0.38, delay: shouldReduceMotion ? 0 : 0.08, ease: [0.23, 1, 0.32, 1] }}>
                 {["干员练度扫描", "设施领域分析", "优先级队列"].map((label, index) => <div key={label} className="grid grid-cols-[auto_1fr_auto] items-center gap-2 border-b border-white/8 py-2.5 last:border-0"><span className="font-number text-[10px] text-white/35">0{index + 1}</span><span className="text-xs text-white/65">{label}</span><span className="font-number text-[10px] text-emerald-300/80">CLEAR</span></div>)}
