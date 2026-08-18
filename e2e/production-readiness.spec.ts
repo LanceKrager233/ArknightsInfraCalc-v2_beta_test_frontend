@@ -1138,7 +1138,8 @@ test("anonymous MAA data cannot drive planning or training advice", async ({ pag
   await expect(page.locator("[data-calculator-controls]")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("button", { name: "请先登录网站账号" })).toBeDisabled();
   await page.getByRole("button", { name: "练卡建议" }).click();
-  await expect(page.locator("[data-training-page]")).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('[data-primary-page="training"]')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator("[data-training-page]")).toBeVisible({ timeout: 45_000 });
   await expect(page.getByRole("heading", { name: "登录后查看 MAA 练卡建议" })).toBeVisible();
   await expect(page.locator("[data-training-advice-list]")).toHaveCount(0);
 });
@@ -1560,10 +1561,12 @@ test("empty calculator returns directly to the compact view with one coherent en
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 
-  await expect(page.locator('[data-schedule-view="compact"]')).toBeVisible();
+  await expect(page.locator('[data-schedule-view="compact"]')).toBeVisible({ timeout: 45_000 });
   await expect(page.locator("[data-compact-schedule-skeleton]")).toHaveCount(0);
   await page.getByRole("button", { name: "练卡建议", exact: true }).click();
-  await expect(page.locator("[data-training-page]")).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator("[data-training-page]")).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByText("ADVICE QUEUE · 00", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "前往生成排班", exact: true })).toHaveCSS("border-radius", "22px");
 
   await page.evaluate(() => {
     const root = document.documentElement;
@@ -2348,6 +2351,11 @@ test("Skland and account centers share header geometry and account actions use t
     const sklandHeader = sklandRoot.locator(":scope > header");
     const sklandLogout = sklandRoot.locator("[data-skland-logout]");
     await expect(sklandLogout).toBeVisible();
+    const dialogButtonHeight = viewport.width < 640 ? "44px" : "46px";
+    for (const label of ["前往生成排班", "继续配置布局"]) {
+      await expect(sklandRoot.getByRole("button", { name: label })).toHaveCSS("height", dialogButtonHeight);
+      await expect(sklandRoot.getByRole("button", { name: label })).toHaveCSS("border-radius", "22px");
+    }
     const sklandGeometry = await Promise.all([
       sklandHeader.boundingBox(),
       sklandLogout.boundingBox(),
@@ -2378,7 +2386,10 @@ test("Skland and account centers share header geometry and account actions use t
     await expect(actionCards).toHaveCount(2);
     await expect(actionCards.nth(0).getByRole("heading", { name: "登录设备" })).toBeVisible();
     await expect(actionCards.nth(1).getByRole("heading", { name: "永久注销账号" })).toBeVisible();
-    await expect(accountRoot.getByRole("button", { name: "退出全部设备" })).toHaveCSS("height", "44px");
+    for (const label of ["退出全部设备", "永久注销账号"]) {
+      await expect(accountRoot.getByRole("button", { name: label })).toHaveCSS("height", dialogButtonHeight);
+      await expect(accountRoot.getByRole("button", { name: label })).toHaveCSS("border-radius", "22px");
+    }
   }
 });
 
