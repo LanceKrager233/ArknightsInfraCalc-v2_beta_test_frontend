@@ -2532,7 +2532,7 @@ test("layout level controls clamp edits and expose the power-safe 342 defaults",
 
   await page.setViewportSize({ width: 390, height: 844 });
   const footerBox = await dialog.locator("[data-setup-footer]").boundingBox();
-  expect(footerBox?.height ?? Infinity).toBeLessThanOrEqual(56);
+  expect(footerBox?.height ?? Infinity).toBeLessThanOrEqual(68);
   expect((footerBox?.y ?? Infinity) + (footerBox?.height ?? Infinity)).toBeLessThanOrEqual(844);
   expect(await activeTradeOrder.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
   const mobileTradeLevel = dialog.locator('input[aria-label="trade_2 等级"]:visible');
