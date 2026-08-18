@@ -31,11 +31,13 @@ test("CI enforces the initial route JavaScript budget after building", async () 
   assert.match(budgetCheck, /firstLoadUncompressedJsBytes/);
 });
 
-test("CI runs browser suites in parallel behind the protected quality gate", async () => {
+test("CI gates releases on Chromium and schedules the full WebKit suite", async () => {
   const workflow = await readRepoFile(".github/workflows/frontend-quality.yml");
 
-  assert.match(workflow, /browser_e2e:[\s\S]+browser: \[chromium, webkit\]/);
+  assert.match(workflow, /browser_e2e:[\s\S]+npm run test:e2e[\s\S]+npm run test:e2e:production-profile/);
+  assert.match(workflow, /webkit_e2e:[\s\S]+github\.event_name == 'schedule'[\s\S]+npm run test:e2e:webkit/);
   assert.match(workflow, /quality:[\s\S]+needs: \[checks, browser_e2e\]/);
+  assert.doesNotMatch(workflow, /quality:[\s\S]+needs: \[[^\]]*webkit_e2e/);
   assert.match(workflow, /deploy:[\s\S]+needs: quality/);
   assert.match(workflow, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/);
 });

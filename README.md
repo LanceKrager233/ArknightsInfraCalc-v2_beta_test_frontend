@@ -30,7 +30,7 @@ npm run test:e2e:production-profile
 npm run test:e2e:webkit
 ```
 
-`npm run test:e2e`运行默认 Chromium 门禁；涉及响应式、触控或 Safari 兼容性的 UI 改动还应运行独立 WebKit 门禁。
+`npm run test:e2e`运行默认 Chromium 发布门禁；涉及响应式、触控或 Safari 兼容性的 UI 改动还应在本地运行独立 WebKit 回归。CI 每日定时运行完整 WebKit 套件，也可从 Actions 手动触发。
 
 仓库文本由`.gitattributes`和`.editorconfig`统一为 UTF-8/LF。Windows 日常开发使用 PowerShell；部署 shell 测试应在 Linux CI 或显式指定的 WSL Ubuntu 中运行，裸`bash`可能指向 Docker WSL 或 Git Bash。完整跨平台约束见[开发与发布维护准则](./docs/DEVELOPMENT_RELEASE_GUARDRAILS.md)。
 
