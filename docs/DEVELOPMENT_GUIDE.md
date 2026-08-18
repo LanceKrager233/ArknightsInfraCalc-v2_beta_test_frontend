@@ -56,7 +56,7 @@ Windows 前端命令使用 PowerShell。部署 shell 测试只以 Linux CI 或�
 | `src/app/api/*/route.ts` | 公开 HTTP 路由 |
 | `e2e/production-readiness.spec.ts` | hydration、产品主流程和锁定区域回归 |
 | `scripts/extract-room-emblems.mjs` | 从现有 WebP 确定性提取透明高清设施徽记 |
-| `.github/workflows/frontend-quality.yml` | PR 与 main push 质量门禁 |
+| `.github/workflows/frontend-quality.yml` | PR 与 main/develop push 的并行质量门禁及部署汇总 |
 
 ## 公开 API 契约
 
@@ -210,18 +210,13 @@ v5 只保存：
 
 ## 测试与合并门禁
 
-GitHub Actions 在面向`main`或`develop`的 PR 和 push 上使用 Node 22，顺序执行：
+GitHub Actions 在面向`main`或`develop`的 PR 和 push 上使用 Node 22，并行执行三个隔离 Job：
 
-1. `npm ci`
-2. `npm run lint`
-3. `npm test`
-4. `npm run test:api-contract`
-5. `npm run test:deploy`
-6. `npm run build`
-7. `npm run test:production-client`
-8. `npx playwright install --with-deps chromium`
-9. `npm run test:e2e`
-10. `npm run test:e2e:production-profile`
+1. 核心检查：数据库权限与 migration、security audit、lint、单元与契约测试、求解器/部署脚本测试、production build 和客户端隔离检查。
+2. Chromium：完整 E2E 与 production profile 隔离测试。
+3. WebKit：同一套完整 E2E 兼容性测试。
+
+三个 Job 全部成功后，保持原状态名称的`quality`汇总门禁才会通过；受保护分支 push 随后才能部署。PR 的新提交会取消同一 PR 的旧运行，push 与已经开始的部署不会被取消。
 
 `main`和`develop`都执行相同质量门禁。通过 push 门禁后，部署工作流分别使用 GitHub Environments `production`和`development`中的 SSH Secrets 与部署 Variables 发布对应站点；PR 不部署。工作流先验证两个服务器 helper 是`root:root 0755`普通文件且显式契约版本兼容，再从`/var/cache/arknights-infra-deploy/repository.git`增量准备准确 SHA 的发布包；production/development 使用独立 refs 和共享`flock`。helper 在 GitHub 网络、缓存或锁的临时故障时返回`75`；Runner 随后优先读取对应服务器缓存 ref，并发送从该 ref 到已验证 SHA 的增量 Git bundle，缓存 ref 不可用时才使用上一次 push SHA。服务器校验并导入缓存，只有 bundle 基线或传输不可用时才上传完整发布包。SHA、tree、路径、helper 契约和 bundle HEAD 等完整性错误都直接失败。`DEPLOY_DEBUG_TOOLS_ENABLED`和`DEPLOY_RATE_LIMIT_ENABLED`集中管理 dev 的调试入口与限流，production 则固定为调试关闭、限流开启。production-profile 门禁会故意反向设置森空岛、调试和限流变量，确认 production 的强制策略不可被误配置绕过。
 Production client isolation scans static JavaScript and public HTML/RSC; production-profile separately verifies hidden UI, absent requests and health fields, and the API 404 boundary. Both gates are required.
