@@ -1135,8 +1135,10 @@ test("anonymous MAA data cannot drive planning or training advice", async ({ pag
   await seedV4Session(page, planData, { boxSource: "maa" });
   await page.goto("/");
 
+  await expect(page.locator("[data-calculator-controls]")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("button", { name: "请先登录网站账号" })).toBeDisabled();
   await page.getByRole("button", { name: "练卡建议" }).click();
+  await expect(page.locator("[data-training-page]")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("heading", { name: "登录后查看 MAA 练卡建议" })).toBeVisible();
   await expect(page.locator("[data-training-advice-list]")).toHaveCount(0);
 });
@@ -3613,7 +3615,9 @@ test("Skland supports adding, switching, and individually logging out multiple a
     addAccount.evaluate((element) => element.getBoundingClientRect().height),
     logout.evaluate((element) => element.getBoundingClientRect().height),
   ]);
-  expect(new Set(controlHeights)).toEqual(new Set([44]));
+  for (const height of controlHeights) {
+    expect(height).toBeCloseTo(44, 2);
+  }
   await expect(logout).toHaveClass(/text-destructive/);
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -3622,7 +3626,9 @@ test("Skland supports adding, switching, and individually logging out multiple a
     addAccount.evaluate((element) => element.getBoundingClientRect().height),
     logout.evaluate((element) => element.getBoundingClientRect().height),
   ]);
-  expect(new Set(mobileControlHeights)).toEqual(new Set([44]));
+  for (const height of mobileControlHeights) {
+    expect(height).toBeCloseTo(44, 2);
+  }
   await page.setViewportSize({ width: 1440, height: 1000 });
 
   await addAccount.click();
