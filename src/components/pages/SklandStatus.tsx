@@ -167,8 +167,6 @@ function OperatorFilterCombobox({
   );
 }
 
-export type SklandStatusView = "overview" | "infrastructure";
-
 export interface SklandStatusProps {
   scheduleSnapshot: SklandScheduleSnapshot | null;
   snapshot: SklandStatusSnapshot | null;
@@ -176,7 +174,6 @@ export interface SklandStatusProps {
   activeAccountId: string | null;
   bindingCount: number;
   bindingSummary: SklandBindingSummary;
-  view: SklandStatusView;
   sessionLoading: boolean;
   layoutMatches: boolean;
   layoutDirty: boolean;
@@ -1370,7 +1367,6 @@ export function SklandStatus({
   activeAccountId,
   bindingCount,
   bindingSummary,
-  view,
   sessionLoading,
   layoutMatches,
   layoutDirty,
@@ -1397,7 +1393,7 @@ export function SklandStatus({
     return (
       <div className="grid gap-6 pt-5 pb-2 sm:pb-5" data-skland-page>
         <header className="max-w-2xl">
-          <p className="text-xs font-medium tracking-wide text-primary">账号状态中心 · 森空岛</p>
+          <p className="text-xs font-medium tracking-wide text-primary">森空岛状态中心</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight">
             {bindingState === "renewal-due"
               ? "七天授权期已结束，请扫码续期"
@@ -1437,7 +1433,7 @@ export function SklandStatus({
     return (
       <div className="grid gap-6 pt-5 pb-2 sm:pb-5" data-skland-page data-skland-status-load-error>
         <header className="max-w-2xl">
-          <p className="text-xs font-medium tracking-wide text-primary">账号状态中心 · 森空岛</p>
+          <p className="text-xs font-medium tracking-wide text-primary">森空岛状态中心</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight">完整状态暂时无法加载</h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
             当前已登录{activeRole ? `“${activeRole.nickname}”` : "森空岛"}。你可以重新加载，或退出当前账号后重新扫码。
@@ -1650,23 +1646,28 @@ export function SklandStatus({
         </Alert>
       ) : null}
 
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3" data-skland-view-header>
-        <div>
-          <p className="text-xs font-medium tracking-wide text-primary">{view === "overview" ? "森空岛概览" : "基建状态"}</p>
-          <h3 className="mt-1 text-lg font-semibold">{view === "overview" ? "账号数据总览" : "当前基建进驻"}</h3>
+      <Tabs defaultValue="overview">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3" data-skland-view-header>
+          <div className="-mx-3 min-w-0 overflow-x-auto overflow-y-hidden px-3 pb-1">
+            <TabsList className="min-w-max" data-skland-view-tabs>
+              <TabsTrigger value="overview">概览</TabsTrigger>
+              <TabsTrigger value="infrastructure">基建</TabsTrigger>
+            </TabsList>
+          </div>
+          <LayoutSyncControl
+            snapshot={snapshot}
+            layoutMatches={layoutMatches}
+            layoutDirty={layoutDirty}
+            onApplyLayout={onApplyLayout}
+          />
         </div>
-        <LayoutSyncControl
-          snapshot={snapshot}
-          layoutMatches={layoutMatches}
-          layoutDirty={layoutDirty}
-          onApplyLayout={onApplyLayout}
-        />
-      </div>
-      {view === "overview" ? (
-        <OverviewTab snapshot={snapshot} onContinueSetup={onContinueSetup} onOpenCalculator={onOpenCalculator} />
-      ) : (
-        <InfrastructureTab snapshot={snapshot} />
-      )}
+        <TabsContent value="overview" className="pt-5">
+          <OverviewTab snapshot={snapshot} onContinueSetup={onContinueSetup} onOpenCalculator={onOpenCalculator} />
+        </TabsContent>
+        <TabsContent value="infrastructure" className="pt-5">
+          <InfrastructureTab snapshot={snapshot} />
+        </TabsContent>
+      </Tabs>
 
       <SklandDataControls
         account={activeAccount}
