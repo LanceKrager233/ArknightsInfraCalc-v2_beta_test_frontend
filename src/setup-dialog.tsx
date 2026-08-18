@@ -194,7 +194,7 @@ export function SetupDialog({
 
   async function importMaaFile(file: File) {
     if (!websiteSession) {
-      setAuthNotice("请先前往账号状态中心登录，再导入 MAA 数据。");
+      setAuthNotice("请先前往账号管理登录，再导入 MAA 数据。");
       return;
     }
     if (await onMaaFile(file)) {
@@ -206,7 +206,7 @@ export function SetupDialog({
 
   function importMaaPaste() {
     if (!websiteSession) {
-      setAuthNotice("请先前往账号状态中心登录，再导入 MAA 数据。");
+      setAuthNotice("请先前往账号管理登录，再导入 MAA 数据。");
       return;
     }
     if (onMaaPaste()) {

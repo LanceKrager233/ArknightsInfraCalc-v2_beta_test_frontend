@@ -897,8 +897,7 @@ async function mockApis(
 }
 
 async function openSklandOverview(page: Page) {
-  await page.getByRole("button", { name: "账号状态中心", exact: true }).click();
-  await page.getByRole("tab", { name: "森空岛概览", exact: true }).click();
+  await page.getByRole("button", { name: "森空岛状态中心", exact: true }).click();
 }
 
 async function seedPreferences(page: Page) {
@@ -988,7 +987,10 @@ for (const viewport of [
     await page.goto("/");
 
     if (viewport.width < 768) await page.getByRole("button", { name: "Toggle Sidebar" }).click();
-    await page.getByRole("button", { name: "账号状态中心", exact: true }).click();
+    const accountNavigation = page.getByRole("button", { name: "账号管理", exact: true });
+    await expect(accountNavigation.locator(".lucide-user-round")).toBeVisible();
+    await accountNavigation.click();
+    await expect(page.locator("[data-account-management]")).toBeVisible();
     const accountPanel = page.locator("[data-website-account-panel]");
     await expect(accountPanel.locator("[data-wizard-steps]")).toBeVisible();
     await expect(accountPanel.getByRole("button", { name: /第 1 步，共 1 步：登录/ })).toHaveAttribute("aria-current", "step");
@@ -1020,7 +1022,7 @@ for (const viewport of [
   });
 }
 
-test("website login opens inline Skland guidance when the account still needs a QR", async ({ page }) => {
+test("website login opens the separate Skland status center when the account still needs a QR", async ({ page }) => {
   let authenticated = false;
   await page.unroute("**/api/auth/get-session");
   await page.route("**/api/auth/get-session", (route) => route.fulfill({
@@ -1038,13 +1040,13 @@ test("website login opens inline Skland guidance when the account still needs a 
   await mockApis(page, { sklandConfigured: true });
   await seedPreferences(page);
   await page.goto("/");
-  await page.getByRole("button", { name: "账号状态中心", exact: true }).click();
+  await page.getByRole("button", { name: "账号管理", exact: true }).click();
   const accountPanel = page.locator("[data-website-account-panel]");
   await accountPanel.getByRole("textbox", { name: "邮箱", exact: true }).fill("signed-in@example.test");
   await accountPanel.getByLabel("密码", { exact: true }).fill("secure-password-1");
   await accountPanel.getByRole("button", { name: "登录", exact: true }).click();
 
-  await expect(page.getByRole("tab", { name: "森空岛概览", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("button", { name: "森空岛状态中心", exact: true })).toHaveAttribute("data-active", "");
   await expect(page.getByRole("heading", { name: "把当前罗德岛带进排班助手" })).toBeVisible();
   await expect(page.locator("[data-skland-login-panel]")).toBeVisible();
 });
@@ -1053,14 +1055,12 @@ test("seven-day bindings stay visible and require QR renewal", async ({ page }) 
   await mockApis(page, { sklandConfigured: true, sklandBindingCount: 1, sklandRenewalDueCount: 1 });
   await seedPreferences(page);
   await page.goto("/");
-  const accountNavigation = page.getByRole("button", { name: "账号状态中心", exact: true });
-  await expect(accountNavigation.locator(".lucide-cloud")).toBeVisible();
-  await accountNavigation.click();
+  const sklandNavigation = page.getByRole("button", { name: "森空岛状态中心", exact: true });
+  await expect(sklandNavigation.locator(".lucide-cloud")).toBeVisible();
+  await sklandNavigation.click();
   await expect(page.getByText("ACCOUNT TERMINAL", { exact: true })).toHaveCount(0);
   await expect(page.getByText("统一管理网站账号、登录设备和森空岛授权。森空岛凭据固定七天失效，到期后需要重新扫码。", { exact: true })).toHaveCount(0);
   await expect(page.locator("[data-skland-binding-summary]")).toHaveCount(0);
-  await page.getByRole("tab", { name: "森空岛概览", exact: true }).click();
-  await expect(page.locator("[data-skland-binding-summary]")).toContainText("待续期 1");
   await expect(page.getByRole("heading", { name: "七天授权期已结束，请扫码续期" })).toBeVisible();
   await expect(page.locator("[data-skland-login-panel]")).toBeVisible();
 });
@@ -1102,9 +1102,9 @@ test("account settings revokes every session and returns to the app", async ({ p
   await mockApis(page);
   await seedPreferences(page);
   await page.goto("/");
-  await page.getByRole("button", { name: "账号状态中心", exact: true }).click();
+  await page.getByRole("button", { name: "账号管理", exact: true }).click();
 
-  await expect(page.getByRole("heading", { name: "账号状态中心" })).toBeVisible();
+  await expect(page.locator("[data-account-management]")).toBeVisible();
   await expect(page.getByText("test@example.com", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "退出全部设备" }).click();
   await expect.poll(() => revokeRequests).toBe(1);
@@ -1523,9 +1523,8 @@ test("Skland calculator keeps the schedule visible before and after sidebar navi
   await expect(page.locator('[data-slot="drawer-root"]')).toHaveCount(0);
   await expect(comparisonTrigger).toBeFocused();
 
-  const returnToCalculator = async (destination: "练卡建议" | "账号状态中心", marker: string, label: string) => {
+  const returnToCalculator = async (destination: "练卡建议" | "森空岛状态中心", marker: string, label: string) => {
     await page.getByRole("button", { name: destination, exact: true }).click();
-    if (destination === "账号状态中心") await page.getByRole("tab", { name: "森空岛概览", exact: true }).click();
     await expect(page.locator(marker)).toBeVisible();
     await armMotionCapture(page, "[data-plan-board]", label, 320);
     await page.getByRole("button", { name: "基建计算器", exact: true }).click();
@@ -1541,7 +1540,7 @@ test("Skland calculator keeps the schedule visible before and after sidebar navi
 
   await returnToCalculator("练卡建议", '[data-slot="training-summary"]', "calculator-return-training");
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await returnToCalculator("账号状态中心", "[data-skland-view-tabs]", "calculator-return-skland-reduced");
+  await returnToCalculator("森空岛状态中心", "[data-skland-view-tabs]", "calculator-return-skland-reduced");
 });
 
 test("plan completion reveals status, metrics, and schedule once without resetting board state", async ({ page, browserName }) => {
@@ -2189,7 +2188,8 @@ test("responsive navigation and the two locked areas keep their current behavior
 
   await expect(page.getByRole("button", { name: "基建计算器" })).toBeVisible();
   await expect(page.getByRole("button", { name: "练卡建议" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "账号状态中心", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "森空岛状态中心", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "账号管理", exact: true })).toBeVisible();
 });
 
 test("the compact mobile navigation stays pinned while the account control belongs to the calculator", async ({ page }) => {
@@ -2223,7 +2223,7 @@ test("the compact mobile navigation stays pinned while the account control belon
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   await expect.poll(async () => (await topbar.boundingBox())?.y ?? -1).toBeCloseTo(0, 0);
 
-  for (const destination of ["练卡建议", "账号状态中心"]) {
+  for (const destination of ["练卡建议", "森空岛状态中心", "账号管理"]) {
     await topbar.getByRole("button", { name: "Toggle Sidebar" }).click();
     await page.getByRole("button", { name: destination, exact: true }).click();
     await expect(page.locator("[data-skland-account-control]")).toHaveCount(0);
@@ -2254,7 +2254,8 @@ test("all primary pages share the calculator top content offset", async ({ page 
     for (const destination of [
       { name: "练卡建议", root: "[data-training-page]" },
       { name: "技能查询", root: "[data-skill-query-page]" },
-      { name: "账号状态中心", root: "[data-account-status-center]" },
+      { name: "森空岛状态中心", root: "[data-skland-page]" },
+      { name: "账号管理", root: "[data-account-management]" },
     ]) {
       if (viewport.width < 768) {
         await page.locator("[data-app-topbar]").getByRole("button", { name: "Toggle Sidebar" }).click();
@@ -3114,11 +3115,11 @@ test("Skland status center keeps profile and recruitment in overview and support
   expect(accountPopupBox?.width).toBeCloseTo(accountFieldBox?.width ?? 0, 0);
   await accountCombobox.press("Escape");
   await expect(page.locator('[data-slot="select-trigger"]')).toHaveCount(0);
-  await expect(page.getByRole("tab", { name: "森空岛概览", exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "概览", exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: "基建", exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: "进度", exact: true })).toHaveCount(0);
-  await expect(page.locator("[data-skland-view-tabs]")).toHaveAttribute("data-variant", "line");
-  await expect(page.locator("[data-skland-view-tabs] svg")).toHaveCount(3);
+  await expect(page.locator("[data-skland-view-tabs]")).toHaveAttribute("data-variant", "default");
+  await expect(page.locator("[data-skland-view-tabs] svg")).toHaveCount(0);
   const layoutSync = page.locator('[data-slot="skland-layout-sync"]');
   await expect(layoutSync).toBeVisible();
   await expect(layoutSync).not.toHaveClass(/infra-room-surface/);
@@ -3126,10 +3127,10 @@ test("Skland status center keeps profile and recruitment in overview and support
     page.locator("[data-skland-view-tabs]").boundingBox(),
     layoutSync.boundingBox(),
   ]);
-  expect((layoutSyncBox?.y ?? 0)).toBeGreaterThan(viewTabsBox?.y ?? 0);
+  expect((layoutSyncBox?.x ?? 0)).toBeGreaterThan(viewTabsBox?.x ?? 0);
   const dataControlsBox = await page.locator("[data-skland-data-controls]").boundingBox();
-  expect(dataControlsBox?.y).toBeGreaterThan(layoutSyncBox?.y ?? 0);
-  const sklandViewTabHeight = await page.getByRole("tab", { name: "森空岛概览", exact: true })
+  expect(dataControlsBox?.y).toBeGreaterThan(viewTabsBox?.y ?? 0);
+  const sklandViewTabHeight = await page.getByRole("tab", { name: "概览", exact: true })
     .evaluate((element) => element.getBoundingClientRect().height);
   expect(sklandViewTabHeight).toBe(scheduleViewTabHeight);
   await expect(page.getByRole("tab", { name: "干员", exact: true })).toHaveCount(0);
@@ -3203,7 +3204,7 @@ test("Skland status center keeps profile and recruitment in overview and support
   const trainingRoom = page.locator('[data-slot="skland-training-room"]');
   await expect(trainingRoom.getByText("当前空闲", { exact: true })).toBeVisible();
   await expect(trainingRoom.getByText("暂无训练任务", { exact: true })).toBeVisible();
-  await page.getByRole("tab", { name: "森空岛概览", exact: true }).click();
+  await page.getByRole("tab", { name: "概览", exact: true }).click();
   await expect(page.getByText("训练任务已完成", { exact: true })).toHaveCount(0);
 
   await expect.poll(async () => page.evaluate(() => JSON.stringify(localStorage))).not.toContain("987654321");
@@ -3292,17 +3293,14 @@ test("Skland base metrics reuse the existing technical card grid and keyboard ta
     expect(widthState.overflow, JSON.stringify(widthState)).toBeLessThanOrEqual(1);
   }
 
-  const overviewTab = page.getByRole("tab", { name: "森空岛概览", exact: true });
+  const overviewTab = page.getByRole("tab", { name: "概览", exact: true });
   const infrastructureTab = page.getByRole("tab", { name: "基建", exact: true });
-  const accountTab = page.getByRole("tab", { name: "账号", exact: true });
-  await expect(page.locator("[data-skland-view-tabs] [role=tab]")).toHaveText(["森空岛概览", "基建", "账号"]);
+  await expect(page.locator("[data-skland-view-tabs] [role=tab]")).toHaveText(["概览", "基建"]);
   await expect(page.getByRole("tab", { name: "进度", exact: true })).toHaveCount(0);
   await overviewTab.focus();
   await overviewTab.press("ArrowRight");
   await expect(infrastructureTab).toBeFocused();
   await infrastructureTab.press("ArrowRight");
-  await expect(accountTab).toBeFocused();
-  await accountTab.press("ArrowRight");
   await expect(overviewTab).toBeFocused();
 });
 

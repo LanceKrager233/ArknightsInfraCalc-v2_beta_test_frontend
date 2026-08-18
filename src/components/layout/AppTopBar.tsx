@@ -26,22 +26,22 @@ interface SklandAccountControlProps {
   account?: SklandAccountSummary | null;
   statusSnapshot?: SklandStatusSnapshot | null;
   sessionLoading?: boolean;
-  onOpenAccountCenter?: () => void;
+  onOpenSkland?: () => void;
 }
 
 export function SklandAccountControl({
   account,
   statusSnapshot,
   sessionLoading,
-  onOpenAccountCenter,
+  onOpenSkland,
 }: SklandAccountControlProps) {
   if (!CLIENT_SKLAND_ENABLED) return null;
 
   const selectedRole = account?.roles.find((role) => role.uid === account.selectedUid) ?? account?.roles[0] ?? null;
   const nickname = statusSnapshot?.player.nickname ?? selectedRole?.nickname ?? null;
   const accountLabel = account
-    ? `${nickname ?? "已登录账号"}，进入账号状态中心`
-    : "进入账号状态中心绑定森空岛";
+    ? `${nickname ?? "已登录账号"}，进入森空岛状态中心`
+    : "进入森空岛状态中心绑定账号";
 
   if (sessionLoading && !account) {
     return (
@@ -60,9 +60,9 @@ export function SklandAccountControl({
       size="icon-lg"
       variant={account ? "default" : "outline"}
       className={`relative -ms-px size-9 overflow-hidden rounded-l-none rounded-r-lg max-sm:size-11 ${account ? "max-sm:border-transparent max-sm:bg-transparent" : ""}`}
-      onClick={onOpenAccountCenter}
+      onClick={onOpenSkland}
       aria-label={accountLabel}
-      title={nickname ?? "账号状态中心"}
+      title={nickname ?? "森空岛状态中心"}
       data-skland-account-control
     >
       {account ? (

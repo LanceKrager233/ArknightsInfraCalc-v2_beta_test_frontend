@@ -9,10 +9,7 @@ import { AppSidebar, type AppPage } from "@/components/layout/AppSidebar";
 import { AppTopBar, SklandAccountControl } from "@/components/layout/AppTopBar";
 import { InfraCalculator } from "@/components/pages/InfraCalculator";
 import { AccountStatusCenter } from "@/components/pages/AccountStatusCenter";
-import {
-  DevelopmentAccountStatusCenter,
-  type AccountCenterView,
-} from "@/components/pages/DevelopmentAccountStatusCenter";
+import { DevelopmentSklandStatusCenter } from "@/components/pages/DevelopmentSklandStatusCenter";
 import { LiveActivity, usePlanActivity } from "@/components/ui/live-activity";
 import { authClient } from "@/lib/auth-client";
 
@@ -235,7 +232,6 @@ function WorkbenchApp() {
   const defaultPreset = PRESETS[0];
   const defaultLayout = buildBlueprint(defaultPreset);
   const [page, setPage] = useState<AppPage>("calculator");
-  const [accountView, setAccountView] = useState<AccountCenterView>("account");
   const [websiteAuthReloadKey, setWebsiteAuthReloadKey] = useState(0);
   const [betaRequested, setBetaRequested] = useState(false);
   const [debugToolsEnabled, setDebugToolsEnabled] = useState(false);
@@ -537,8 +533,7 @@ function WorkbenchApp() {
           }
         }
         if (pendingPostLoginNavigation.current) {
-          setPage("account");
-          setAccountView(!session.authenticated || bindingSummary.renewalDueCount > 0 ? "skland-overview" : "account");
+          setPage(!session.authenticated || bindingSummary.renewalDueCount > 0 ? "skland" : "account");
           pendingPostLoginNavigation.current = false;
         }
       })
@@ -546,8 +541,7 @@ function WorkbenchApp() {
         if (cancelled) return;
         setSklandError(toDisplayError(error, "森空岛会话恢复失败，请稍后刷新。"));
         if (pendingPostLoginNavigation.current) {
-          setPage("account");
-          setAccountView("skland-overview");
+          setPage("skland");
           pendingPostLoginNavigation.current = false;
         }
       })
@@ -562,8 +556,7 @@ function WorkbenchApp() {
   useEffect(() => {
     if (
       !CLIENT_SKLAND_ENABLED
-      || page !== "account"
-      || accountView === "account"
+      || page !== "skland"
       || !activeSklandAccount
       || sklandStatusSnapshot
       || statusLoadingAccount.current === activeSklandAccount.accountId
@@ -589,7 +582,7 @@ function WorkbenchApp() {
     return () => {
       cancelled = true;
     };
-  }, [accountView, activeSklandAccount, page, sklandStatusReloadKey, sklandStatusSnapshot]);
+  }, [activeSklandAccount, page, sklandStatusReloadKey, sklandStatusSnapshot]);
 
   async function handleFile(file: File): Promise<boolean> {
     setInputError(null);
@@ -1049,13 +1042,7 @@ function WorkbenchApp() {
   function openSklandFromSetup() {
     setInputError(null);
     setSetupOpen(false);
-    setAccountView("skland-overview");
-    setPage("account");
-  }
-
-  function handleAppPageChange(nextPage: AppPage) {
-    setPage(nextPage);
-    if (nextPage === "account") setAccountView("account");
+    setPage("skland");
   }
 
   async function handleWebsiteSessionChanged(authenticated: boolean) {
@@ -1064,7 +1051,6 @@ function WorkbenchApp() {
       pendingPostLoginNavigation.current = true;
     } else {
       pendingPostLoginNavigation.current = false;
-      setAccountView("account");
       if (!authenticated) {
         setSklandAccounts([]);
         setSklandActiveAccountId(null);
@@ -1231,7 +1217,7 @@ function WorkbenchApp() {
 
   return (
     <SidebarProvider defaultOpen={false}>
-      <AppSidebar page={page} onPageChange={handleAppPageChange} />
+      <AppSidebar page={page} onPageChange={setPage} />
       <SidebarInset>
         <AppTopBar />
         <LiveActivity
@@ -1269,10 +1255,7 @@ function WorkbenchApp() {
               account={activeSklandAccount}
               statusSnapshot={sklandStatusSnapshot}
               sessionLoading={sklandSessionLoading}
-              onOpenAccountCenter={() => {
-                setAccountView("skland-overview");
-                setPage("account");
-              }}
+              onOpenSkland={() => setPage("skland")}
             />
           ) : undefined}
           onLoadSample={handleLoadSample}
@@ -1289,45 +1272,41 @@ function WorkbenchApp() {
           onClearResultNotice={() => setResultClearNotice(null)}
           onDismissResultClearWarning={dismissResultClearWarning}
         />
+      ) : CLIENT_SKLAND_ENABLED && page === "skland" ? (
+        <DevelopmentSklandStatusCenter
+          websiteAuthenticated={Boolean(websiteSession)}
+          websiteSessionPending={websiteSessionPending}
+          bindingSummary={sklandBindingSummary}
+          onOpenAccount={() => setPage("account")}
+          skland={{
+            scheduleSnapshot: sklandScheduleSnapshot,
+            snapshot: sklandStatusSnapshot,
+            accounts: sklandAccounts,
+            activeAccountId: sklandActiveAccountId,
+            bindingCount: sklandBindingCount,
+            sessionLoading: sklandSessionLoading,
+            layoutMatches: sklandLayoutMatches ?? false,
+            layoutDirty,
+            configured: sklandConfigured,
+            disabledReason: sklandDisabledReason,
+            busy: sklandBusy,
+            error: sklandError,
+            onAuthenticated: handleSklandAuthenticated,
+            onRoleChange: handleSklandRole,
+            onLogout: handleSklandLogout,
+            onRetryStatus: handleRetrySklandStatus,
+            onDeleteAllData: handleDeleteAllSklandData,
+            onApplyLayout: handleApplySklandLayout,
+            onContinueSetup: () => {
+              setSetupInitialStep("layout");
+              setSetupOpen(true);
+            },
+            onOpenCalculator: () => setPage("calculator"),
+            onCopyUid: (uid) => void copyText(uid),
+          }}
+        />
       ) : page === "account" ? (
-        CLIENT_SKLAND_ENABLED ? (
-          <DevelopmentAccountStatusCenter
-            view={accountView}
-            onViewChange={setAccountView}
-            websiteAuthenticated={Boolean(websiteSession)}
-            websiteSessionPending={websiteSessionPending}
-            bindingSummary={sklandBindingSummary}
-            onWebsiteSessionChanged={handleWebsiteSessionChanged}
-            skland={{
-              scheduleSnapshot: sklandScheduleSnapshot,
-              snapshot: sklandStatusSnapshot,
-              accounts: sklandAccounts,
-              activeAccountId: sklandActiveAccountId,
-              bindingCount: sklandBindingCount,
-              sessionLoading: sklandSessionLoading,
-              layoutMatches: sklandLayoutMatches ?? false,
-              layoutDirty,
-              configured: sklandConfigured,
-              disabledReason: sklandDisabledReason,
-              busy: sklandBusy,
-              error: sklandError,
-              onAuthenticated: handleSklandAuthenticated,
-              onRoleChange: handleSklandRole,
-              onLogout: handleSklandLogout,
-              onRetryStatus: handleRetrySklandStatus,
-              onDeleteAllData: handleDeleteAllSklandData,
-              onApplyLayout: handleApplySklandLayout,
-              onContinueSetup: () => {
-                setSetupInitialStep("layout");
-                setSetupOpen(true);
-              },
-              onOpenCalculator: () => setPage("calculator"),
-              onCopyUid: (uid) => void copyText(uid),
-            }}
-          />
-        ) : (
-          <AccountStatusCenter onSessionChanged={handleWebsiteSessionChanged} />
-        )
+        <AccountStatusCenter onSessionChanged={handleWebsiteSessionChanged} />
       ) : page === "skill-query" ? (
         <SkillQuery />
       ) : (

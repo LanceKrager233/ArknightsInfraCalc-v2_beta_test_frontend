@@ -18,8 +18,8 @@ test("production profile removes Skland UI, requests, health data, and API acces
   await expect(page.getByText("调试工具", { exact: false })).toHaveCount(0);
   expect(sklandRequests).toEqual([]);
 
-  await page.getByRole("button", { name: "账号状态中心", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "账号状态中心" })).toBeVisible();
+  await page.getByRole("button", { name: "账号管理", exact: true }).click();
+  await expect(page.locator("[data-account-management]")).toBeVisible();
   await expect(page.locator("[data-website-account-panel]")).toBeVisible();
   await expect(page.getByRole("dialog", { name: "登录网站账号" })).toHaveCount(0);
   await expect(page.getByText("森空岛", { exact: false })).toHaveCount(0);

@@ -308,7 +308,7 @@ export function WebsiteAccountPanel({ onSessionChanged }: WebsiteAccountPanelPro
           <div className="mb-6 grid size-10 place-items-center rounded-lg bg-primary text-primary-foreground">
             <UserRound className="size-5" aria-hidden="true" />
           </div>
-          <p className="text-xs font-medium tracking-wide text-primary">网站账号</p>
+          <p className="text-xs font-medium tracking-wide text-primary">账号管理</p>
           <h3 className="mt-2 text-2xl font-semibold tracking-tight">{MODE_COPY[mode].title}</h3>
           <p className="mt-3 max-w-sm text-sm leading-6 text-muted-foreground">{MODE_COPY[mode].description}</p>
           <WizardSteps
