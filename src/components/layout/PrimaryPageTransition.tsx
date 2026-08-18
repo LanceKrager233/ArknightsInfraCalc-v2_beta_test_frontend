@@ -1,9 +1,9 @@
 "use client";
 
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useState, type ReactNode } from "react";
 
-import { MOTION_EASE_OUT } from "@/motion";
+import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
 
 export function PrimaryPageTransition({
   pageKey,
@@ -12,6 +12,7 @@ export function PrimaryPageTransition({
   pageKey: string;
   children: ReactNode;
 }) {
+  const shouldReduceMotion = useReducedMotion();
   const [hasMounted, setHasMounted] = useState(false);
   useEffect(() => {
     setHasMounted(true);
@@ -21,13 +22,14 @@ export function PrimaryPageTransition({
     <AnimatePresence mode="wait">
       <motion.div
         key={pageKey}
-        initial={hasMounted ? { opacity: 0 } : false}
-        animate={{ opacity: 1 }}
+        initial={hasMounted ? { opacity: 0, y: shouldReduceMotion ? 0 : 4 } : false}
+        animate={{ opacity: 1, y: 0 }}
         exit={{
           opacity: 0,
+          y: shouldReduceMotion ? 0 : -2,
           transition: { duration: 0.1, ease: MOTION_EASE_OUT },
         }}
-        transition={{ duration: 0.16, ease: MOTION_EASE_OUT }}
+        transition={{ duration: shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.fast, ease: MOTION_EASE_OUT }}
         data-primary-page={pageKey}
       >
         {children}

@@ -1551,6 +1551,50 @@ test("Skland calculator keeps the schedule visible before and after sidebar navi
   await returnToCalculator("森空岛状态中心", "[data-skland-view-tabs]", "calculator-return-skland-reduced");
 });
 
+test("empty calculator returns directly to the compact view with one coherent entrance", async ({ page, browserName }) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await mockApis(page);
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  await expect(page.locator('[data-schedule-view="compact"]')).toBeVisible();
+  await expect(page.locator("[data-compact-schedule-skeleton]")).toHaveCount(0);
+  await page.getByRole("button", { name: "练卡建议", exact: true }).click();
+  await expect(page.locator("[data-training-page]")).toBeVisible({ timeout: 15_000 });
+
+  await page.evaluate(() => {
+    const root = document.documentElement;
+    root.setAttribute("data-compact-skeleton-seen", "false");
+    const observer = new MutationObserver((records) => {
+      const skeletonWasAdded = records.some((record) => Array.from(record.addedNodes).some((node) => (
+        node instanceof Element
+        && (node.matches("[data-compact-schedule-skeleton]") || node.querySelector("[data-compact-schedule-skeleton]"))
+      )));
+      if (!skeletonWasAdded) return;
+      root.setAttribute("data-compact-skeleton-seen", "true");
+      observer.disconnect();
+    });
+    const content = document.querySelector("[data-app-content]");
+    if (content) observer.observe(content, { childList: true, subtree: true });
+    window.setTimeout(() => observer.disconnect(), 5_000);
+  });
+
+  if (browserName === "webkit") {
+    await armTransientStyleCapture(page, '[data-schedule-view="compact"]', "empty-compact-return");
+  } else {
+    await armMotionCapture(page, '[data-schedule-view="compact"]', "empty-compact-return", 280);
+  }
+  await page.getByRole("button", { name: "基建计算器", exact: true }).click();
+
+  const compactView = page.locator('[data-schedule-view="compact"]');
+  await expect(compactView).toBeVisible();
+  await expect(page.locator("[data-compact-schedule-skeleton]")).toHaveCount(0);
+  await expect(page.locator("html")).toHaveAttribute("data-compact-skeleton-seen", "false");
+  if (browserName === "webkit") await expectCapturedStyleMotion(page, "empty-compact-return");
+  else await expectCapturedMotion(page, "empty-compact-return", 280);
+});
+
 test("plan completion reveals status, metrics, and schedule once without resetting board state", async ({ page, browserName }) => {
   const invalidTransformWarnings: string[] = [];
   page.on("console", (message) => {

@@ -291,6 +291,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               shiftDirection={shiftDirection}
               activePlan={activePlan}
               searchQuery={operatorQuery}
+              animateInitialView={!scheduleResult}
               mobileActionsSlot={renderExportActions("mobile")}
               shiftInfoSlot={(
                 <div className="flex flex-wrap items-center justify-end gap-2 max-sm:w-full max-sm:justify-between" data-shift-actions>
