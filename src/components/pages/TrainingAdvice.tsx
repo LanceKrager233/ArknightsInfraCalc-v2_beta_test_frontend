@@ -192,12 +192,12 @@ export function TrainingAdvice({ operbox, layout, profile, requiresAccount = fal
                 <h3 className="text-xl font-semibold">
                   {profile ? "本次排班暂无培养建议" : "尚无培养建议"}
                 </h3>
-                <p className="mt-2 max-w-lg text-sm leading-6 text-white/62">
-                  {profile
-                    ? "当前干员与布局没有需要优先培养的项目，可以继续使用现有排班。"
-                    : "先导入干员数据、确认基建布局并生成一次排班。"}
-                </p>
-                <div className="mt-5 flex justify-end">
+                {profile ? (
+                  <p className="mt-2 max-w-lg text-sm leading-6 text-white/62">
+                    当前干员与布局没有需要优先培养的项目，可以继续使用现有排班。
+                  </p>
+                ) : null}
+                <div className="mt-5 flex justify-start">
                   <Button type="button" size="dialog" className="bg-white text-[#272a2b] hover:bg-white/90" onClick={onOpenCalculator}>
                     {profile ? "查看当前排班" : "前往生成排班"}
                   </Button>

@@ -1074,7 +1074,7 @@ test("a cached Skland box is labeled separately when the website binding needs b
 
   await openSklandOverview(page);
   await expect(page.getByRole("heading", { name: "森空岛已绑定，请授权当前浏览器" })).toBeVisible();
-  await expect(page.getByText(/网站账号仍记录着 1 个森空岛绑定/)).toBeVisible();
+  await expect(page.getByText(/网站账号仍保留 1 个森空岛绑定/)).toBeVisible();
 
   await page.getByRole("button", { name: "Toggle Sidebar" }).click();
   await page.getByRole("button", { name: "基建计算器", exact: true }).click();
@@ -2946,7 +2946,7 @@ test("publishes the site terms and privacy policy with upstream policy links", a
   await expect(page.getByText(/非官方、非商业工具/)).toBeVisible();
 });
 
-test("Skland login shows QR on every viewport and offers a separate mobile app shortcut", async ({ page }) => {
+test("Skland login centers the QR on every viewport and starts after explicit consent", async ({ page }) => {
   await mockApis(page, { sklandConfigured: true });
   let qrStartRequests = 0;
   await page.route("**/api/skland/auth/qr", (route) => {
@@ -2997,47 +2997,51 @@ test("Skland login shows QR on every viewport and offers a separate mobile app s
   await accountLogin.click();
   await expect(page.getByRole("heading", { name: "把当前罗德岛带进排班助手" })).toBeVisible();
   await expect(page.getByText(/手机号|验证码|密码/)).toHaveCount(0);
-  await expect(page.getByText("登录信息会加密保存在你的浏览器中，7 天后自动失效；本站不会另行长期保存。")).toBeVisible();
+  await expect(page.getByText("使用森空岛 App 扫描二维码，同步当前角色的干员与基建数据。")).toBeVisible();
+  await expect(page.getByText("登录凭证只保存在当前浏览器，7 天后失效。")).toBeVisible();
   await expect(page.getByText(/本站不会自动签到或读取社区内容/)).toHaveCount(0);
   expect(qrStartRequests).toBe(0);
   const [mobileQrBox, mobileCopyBox] = await Promise.all([
     page.locator("[data-skland-login-qr]").boundingBox(),
     page.locator("[data-skland-login-copy]").boundingBox(),
   ]);
-  expect(mobileQrBox?.y).toBeLessThan(mobileCopyBox?.y ?? 0);
+  expect(mobileCopyBox?.y).toBeLessThan(mobileQrBox?.y ?? 0);
 
   const consentCheckboxes = page.getByRole("checkbox");
   await expect(consentCheckboxes).toHaveCount(2);
-  await expect(page.getByRole("button", { name: "生成二维码" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /生成|打开森空岛/ })).toHaveCount(0);
   await consentCheckboxes.nth(0).check();
-  await expect(page.getByRole("button", { name: "生成二维码" })).toBeDisabled();
+  expect(qrStartRequests).toBe(0);
   await consentCheckboxes.nth(1).check();
-  await page.getByRole("button", { name: "生成二维码" }).click();
   await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "打开森空岛 App" })).toHaveAttribute(
-    "href",
-    "https://bbs.hycdn.cn/u-link/download.html?schema=skland%3A%2F%2FgameCenter"
-  );
-  await expect(page.getByText("请用森空岛扫描上方二维码", { exact: false })).toBeVisible();
-
-  await page.setViewportSize({ width: 1024, height: 800 });
-  await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "打开森空岛 App" })).toBeHidden();
-  await expect(page.locator("[data-skland-login-panel]")).toHaveCSS("border-radius", "0px");
+  await expect(page.getByText("请使用森空岛 App 扫描二维码", { exact: true })).toBeVisible();
+  await expect(page.locator("[data-skland-login-panel]")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await expect(page.locator("[data-skland-login-copy]")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await expect(page.getByRole("link", { name: "本站服务条款" }).first()).toHaveAttribute("href", "/terms");
   await expect(page.getByRole("link", { name: "本站隐私政策" }).first()).toHaveAttribute("href", "/privacy");
   await expect(page.getByText(/skland-kit/i)).toHaveCount(0);
-  const [sklandPageBox, loginPanelBox] = await Promise.all([
-    page.locator("[data-skland-page]").boundingBox(),
-    page.locator("[data-skland-login-panel]").boundingBox(),
-  ]);
-  expect(loginPanelBox?.x).toBeCloseTo(sklandPageBox?.x ?? 0, 0);
-  expect(loginPanelBox?.width).toBeCloseTo(sklandPageBox?.width ?? 0, 0);
+
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 768, height: 900 },
+    { width: 1440, height: 900 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
+    const [sklandPageBox, qrBox] = await Promise.all([
+      page.locator("[data-skland-page]").boundingBox(),
+      page.locator("[data-skland-qr-visual]").boundingBox(),
+    ]);
+    expect(sklandPageBox).not.toBeNull();
+    expect(qrBox).not.toBeNull();
+    const pageCenter = (sklandPageBox?.x ?? 0) + (sklandPageBox?.width ?? 0) / 2;
+    const qrCenter = (qrBox?.x ?? 0) + (qrBox?.width ?? 0) / 2;
+    expect(qrCenter).toBeCloseTo(pageCenter, 0);
+  }
   expect(qrStartRequests).toBe(1);
 });
 
-test("Skland login waits for an explicit click and explains slow preparation", async ({ page }) => {
+test("Skland login waits for explicit consent and explains slow preparation", async ({ page }) => {
   await mockApis(page, { sklandConfigured: true });
   let qrStartRequests = 0;
   let releaseQr: (() => void) | undefined;
@@ -3077,12 +3081,11 @@ test("Skland login waits for an explicit click and explains slow preparation", a
   await page.getByRole("button", { name: "Toggle Sidebar" }).click();
   await openSklandOverview(page);
   expect(qrStartRequests).toBe(0);
-  const generateButton = page.getByRole("button", { name: "生成二维码" });
   await page.getByRole("checkbox").nth(0).check();
+  expect(qrStartRequests).toBe(0);
   await page.getByRole("checkbox").nth(1).check();
-  await generateButton.click();
   await expect(page.locator("[data-skland-login-qr]").getByRole("status")).toContainText("正在生成二维码…");
-  await expect(page.getByText("正在连接登录服务…")).toBeVisible({ timeout: 3_000 });
+  await expect(page.getByText("正在连接登录服务，请稍候…")).toBeVisible({ timeout: 3_000 });
   expect(qrStartRequests).toBe(1);
 
   releaseQr?.();

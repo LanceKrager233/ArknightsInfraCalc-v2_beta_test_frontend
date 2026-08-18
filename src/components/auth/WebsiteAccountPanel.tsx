@@ -5,7 +5,6 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
-  KeyRound,
   LogOut,
   MailCheck,
   MonitorSmartphone,
@@ -279,7 +278,7 @@ export function WebsiteAccountPanel({ onSessionChanged }: WebsiteAccountPanelPro
                   disabled={busyAction !== null}
                   onClick={() => void runAccountAction("sessions")}
                 >
-                  <KeyRound />{busyAction === "sessions" ? "正在撤销 Session…" : "退出全部设备"}
+                  {busyAction === "sessions" ? "正在撤销 Session…" : "退出全部设备"}
                 </Button>
               </div>
             </section>
@@ -317,7 +316,7 @@ export function WebsiteAccountPanel({ onSessionChanged }: WebsiteAccountPanelPro
                   disabled={deletePassword.length < 10 || busyAction !== null}
                   onClick={() => void runAccountAction("delete")}
                 >
-                  <Trash2 />{busyAction === "delete" ? "正在注销…" : "永久注销账号"}
+                  {busyAction === "delete" ? "正在注销…" : "永久注销账号"}
                 </Button>
               </div>
             </section>

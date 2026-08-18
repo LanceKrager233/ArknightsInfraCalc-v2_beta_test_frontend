@@ -30,7 +30,7 @@ npm run test:e2e:production-profile
 npm run test:e2e:webkit
 ```
 
-`npm run test:e2e`运行默认 Chromium 门禁；涉及响应式、触控或 Safari 兼容性的 UI 改动还应运行独立 WebKit 门禁。
+`npm run test:e2e`运行默认 Chromium 发布门禁；涉及响应式、触控或 Safari 兼容性的 UI 改动还应在本地运行独立 WebKit 回归。CI 每日定时运行完整 WebKit 套件，也可从 Actions 手动触发。
 
 仓库文本由`.gitattributes`和`.editorconfig`统一为 UTF-8/LF。Windows 日常开发使用 PowerShell；部署 shell 测试应在 Linux CI 或显式指定的 WSL Ubuntu 中运行，裸`bash`可能指向 Docker WSL 或 Git Bash。完整跨平台约束见[开发与发布维护准则](./docs/DEVELOPMENT_RELEASE_GUARDRAILS.md)。
 
@@ -60,7 +60,7 @@ http://127.0.0.1:5174/?beta
 
 ## Box 导入与 dev 森空岛登录
 
-所有环境均支持上传或粘贴 MAA 的 `Arknights_OperBox_Export.json`。dev 环境还支持森空岛同步：桌面端使用二维码登录，手机端可通过鹰角官方 `u-link` 包装二维码接口返回的 `scanUrl`，尝试拉起森空岛完成同一授权流程。移动端兼容性取决于森空岛 App 是否转交登录载荷，失败时应改用桌面二维码；本项目不提供账号密码登录。旧的一图流 xlsx 仍保留为兼容入口，243 全精二样例可从首页的“全角色导入”直接载入。
+所有环境均支持上传或粘贴 MAA 的 `Arknights_OperBox_Export.json`。dev 环境还支持森空岛同步：用户分别同意本站服务条款与隐私政策后，页面会自动显示二维码，使用森空岛 App 扫码即可完成授权；本项目不提供账号密码登录。旧的一图流 xlsx 仍保留为兼容入口，243 全精二样例可从首页的“全角色导入”直接载入。
 
 网站账号与森空岛状态使用两个独立的侧边栏页面：“账号管理”提供注册、登录、邮箱验证码、找回密码、设备退出和销户；development 的“森空岛状态中心”保留“概览 / 基建”页签，并负责扫码绑定与七天续期。同一浏览器最多保留 5 个森空岛账号。生成二维码前必须分别同意[本站服务条款](./src/app/terms/page.tsx)与[本站隐私政策](./src/app/privacy/page.tsx)。登录成功后，状态中心会按隐私政策列明的白名单直接读取 Box、设施、当前进驻、头像、理智、任务、公招、皮肤、活动和游戏进度等完整状态，并展示已接入界面的数据，不再设置二次授权；传给排班流程的仍只有求解所需最小字段。具体范围与排除项见 [森空岛数据能力矩阵](docs/SKLAND_DATA_CAPABILITIES.md)。
 

@@ -2,18 +2,44 @@ name: Frontend quality
 
 on:
   workflow_dispatch:
+    inputs:
+      run_webkit:
+        description: Run the full WebKit compatibility suite
+        required: false
+        default: true
+        type: boolean
   pull_request:
     branches: [main, develop]
   push:
     branches: [main, develop]
+  schedule:
+    - cron: "23 18 * * *"
 
 permissions:
   contents: read
 
+concurrency:
+  group: frontend-quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  BETA_DEBUG_TOOLS_ENABLED: "0"
+  BETA_RATE_LIMIT_ENABLED: "0"
+  BETA_TRUST_PROXY_HEADERS: "0"
+  DATABASE_URL: postgresql://arknights_test_runtime:runtime-test-only@127.0.0.1:5432/arknights_auth_test
+  DATABASE_MIGRATION_URL: postgresql://arknights_test_migration:migration-test-only@127.0.0.1:5432/arknights_auth_test
+  AUTH_INTEGRATION_DATABASE_URL: postgresql://arknights_test_runtime:runtime-test-only@127.0.0.1:5432/arknights_auth_test
+  BETTER_AUTH_SECRET: integration-test-secret-at-least-32-bytes-long
+  BETTER_AUTH_URL: https://auth.integration.test
+  RESEND_API_KEY: re_test_not_used
+  AUTH_EMAIL_FROM: Authentication Test <auth@example.test>
+
 jobs:
-  quality:
+  checks:
+    name: Core checks
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636
@@ -28,17 +54,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
-    env:
-      BETA_DEBUG_TOOLS_ENABLED: "0"
-      BETA_RATE_LIMIT_ENABLED: "0"
-      BETA_TRUST_PROXY_HEADERS: "0"
-      DATABASE_URL: postgresql://arknights_test_runtime:runtime-test-only@127.0.0.1:5432/arknights_auth_test
-      DATABASE_MIGRATION_URL: postgresql://arknights_test_migration:migration-test-only@127.0.0.1:5432/arknights_auth_test
-      AUTH_INTEGRATION_DATABASE_URL: postgresql://arknights_test_runtime:runtime-test-only@127.0.0.1:5432/arknights_auth_test
-      BETTER_AUTH_SECRET: integration-test-secret-at-least-32-bytes-long
-      BETTER_AUTH_URL: https://auth.integration.test
-      RESEND_API_KEY: re_test_not_used
-      AUTH_EMAIL_FROM: Authentication Test <auth@example.test>
 
     steps:
       - name: Checkout
@@ -158,17 +173,143 @@ jobs:
       - name: Production client isolation
         run: npm run test:production-client
 
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium webkit
+  browser_e2e:
+    name: E2E (chromium)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636
+        env:
+          POSTGRES_DB: arknights_auth_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres-test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d arknights_auth_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
 
-      - name: End-to-end tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Initialize limited database roles
+        run: |
+          docker run --rm --network host \
+            -v "$PWD/deploy/postgres/init-roles.sh:/init-roles.sh:ro" \
+            -e PGHOST=127.0.0.1 \
+            -e PGPORT=5432 \
+            -e PGPASSWORD=postgres-test-only \
+            -e POSTGRES_DB=arknights_auth_test \
+            -e POSTGRES_USER=postgres \
+            -e AUTH_RUNTIME_USER=arknights_test_runtime \
+            -e AUTH_RUNTIME_PASSWORD=runtime-test-only \
+            -e AUTH_MIGRATION_USER=arknights_test_migration \
+            -e AUTH_MIGRATION_PASSWORD=migration-test-only \
+            -e AUTH_BACKUP_USER=arknights_test_backup \
+            -e AUTH_BACKUP_PASSWORD=backup-test-only \
+            postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636 \
+            sh /init-roles.sh
+
+      - name: Apply committed authentication migrations
+        run: npm run db:migrate
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Chromium end-to-end tests
         run: npm run test:e2e
 
       - name: Production profile isolation
         run: npm run test:e2e:production-profile
 
+  webkit_e2e:
+    name: Scheduled WebKit compatibility
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_webkit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636
+        env:
+          POSTGRES_DB: arknights_auth_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres-test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d arknights_auth_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Initialize limited database roles
+        run: |
+          docker run --rm --network host \
+            -v "$PWD/deploy/postgres/init-roles.sh:/init-roles.sh:ro" \
+            -e PGHOST=127.0.0.1 \
+            -e PGPORT=5432 \
+            -e PGPASSWORD=postgres-test-only \
+            -e POSTGRES_DB=arknights_auth_test \
+            -e POSTGRES_USER=postgres \
+            -e AUTH_RUNTIME_USER=arknights_test_runtime \
+            -e AUTH_RUNTIME_PASSWORD=runtime-test-only \
+            -e AUTH_MIGRATION_USER=arknights_test_migration \
+            -e AUTH_MIGRATION_PASSWORD=migration-test-only \
+            -e AUTH_BACKUP_USER=arknights_test_backup \
+            -e AUTH_BACKUP_PASSWORD=backup-test-only \
+            postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636 \
+            sh /init-roles.sh
+
+      - name: Apply committed authentication migrations
+        run: npm run db:migrate
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps webkit
+
       - name: WebKit end-to-end tests
         run: npm run test:e2e:webkit
+
+  quality:
+    name: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [checks, browser_e2e]
+    if: always() && github.event_name != 'schedule'
+    steps:
+      - name: Verify all quality jobs passed
+        env:
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          BROWSER_E2E_RESULT: ${{ needs.browser_e2e.result }}
+        run: |
+          test "$CHECKS_RESULT" = "success"
+          test "$BROWSER_E2E_RESULT" = "success"
 
   deploy:
     needs: quality
