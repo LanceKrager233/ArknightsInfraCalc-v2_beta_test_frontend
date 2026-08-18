@@ -23,6 +23,11 @@ import {
 import { OtpInput, type OtpInputHandle, type OtpStatus } from "@/components/interior/otp-input";
 import { PasswordStrength } from "@/components/interior/password-strength";
 import { WizardSteps } from "@/components/interior/wizard-steps";
+import {
+  InfraTechnicalCard as AccountTechnicalCard,
+  InfraTechnicalHeading as AccountTechnicalHeading,
+} from "@/components/InfraTechnicalCard";
+import { StatusCenterHeader, StatusCenterLoading } from "@/components/pages/StatusCenterShell";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -214,77 +219,108 @@ export function WebsiteAccountPanel({ onSessionChanged }: WebsiteAccountPanelPro
   }
 
   if (isPending && !busy && !message && !error) {
-    return (
-      <div className="grid gap-4" role="status" aria-label="正在恢复网站账号">
-        <div className="h-32 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
-        <div className="h-56 animate-pulse rounded-xl bg-muted/70 motion-reduce:animate-none" />
-      </div>
-    );
+    return <StatusCenterLoading label="正在恢复网站账号" />;
   }
 
   if (session) {
     const expiresAt = formatSessionExpiry(session.session.expiresAt);
     const initial = (session.user.name || session.user.email).trim().slice(0, 1).toLocaleUpperCase("zh-CN");
     return (
-      <div className="grid gap-8" data-website-account-panel data-authenticated="true">
-        <header className="grid gap-5 border-b border-border/70 pb-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-          <div className="flex min-w-0 items-center gap-4">
-            <div className="grid size-14 shrink-0 place-items-center rounded-xl bg-primary text-lg font-semibold text-primary-foreground" aria-hidden="true">
-              {initial || <UserRound className="size-6" />}
-            </div>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="truncate text-2xl font-semibold tracking-tight">{session.user.name}</h3>
-                <Badge variant="secondary"><ShieldCheck />邮箱已验证</Badge>
+      <div className="grid gap-6" data-website-account-panel data-authenticated="true">
+        <StatusCenterHeader
+          identity={(
+            <div className="flex min-w-0 items-center gap-4">
+              <div className="grid size-14 shrink-0 place-items-center rounded-xl bg-primary text-lg font-semibold text-primary-foreground" aria-hidden="true">
+                {initial || <UserRound className="size-6" />}
               </div>
-              <p className="mt-1 break-all text-sm text-muted-foreground">{session.user.email}</p>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="truncate text-2xl font-semibold tracking-tight">{session.user.name}</h2>
+                  <Badge variant="secondary"><ShieldCheck />邮箱已验证</Badge>
+                </div>
+                <p className="mt-1 break-all text-sm text-muted-foreground">{session.user.email}</p>
+              </div>
             </div>
-          </div>
-          <Button type="button" variant="outline" className="min-h-11" disabled={busyAction !== null} onClick={() => void runAccountAction("signout")}>
-            <LogOut />{busyAction === "signout" ? "正在退出…" : "退出当前设备"}
-          </Button>
-        </header>
+          )}
+          actions={(
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 w-full sm:w-auto"
+              disabled={busyAction !== null}
+              onClick={() => void runAccountAction("signout")}
+              data-account-logout
+            >
+              <LogOut />{busyAction === "signout" ? "正在退出…" : "退出当前设备"}
+            </Button>
+          )}
+        />
 
         {error ? <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert> : null}
         {message ? <p role="status" className="text-sm text-muted-foreground">{message}</p> : null}
 
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
-          <section className="grid content-start gap-4" aria-labelledby={`${fieldId}-devices`}>
-            <div className="flex items-start gap-3">
-              <MonitorSmartphone className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden="true" />
-              <div>
-                <h3 id={`${fieldId}-devices`} className="font-semibold">登录设备</h3>
-                <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-                  当前会话{expiresAt ? `将在 ${expiresAt} 到期` : "处于有效状态"}。退出全部设备会撤销数据库 Session，并清除当前浏览器保存的第三方账号凭据。
-                </p>
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]" data-account-action-cards>
+          <AccountTechnicalCard group="control" className="min-h-64">
+            <section className="flex h-full flex-col" aria-labelledby={`${fieldId}-devices`}>
+              <AccountTechnicalHeading
+                icon={<MonitorSmartphone className="size-4" aria-hidden="true" />}
+                titleId={`${fieldId}-devices`}
+              >
+                登录设备
+              </AccountTechnicalHeading>
+              <p className="mt-4 max-w-xl text-sm leading-6 text-white/64">
+                当前会话{expiresAt ? `将在 ${expiresAt} 到期` : "处于有效状态"}。退出全部设备会撤销数据库 Session，并清除当前浏览器保存的第三方账号凭据。
+              </p>
+              <div className="mt-auto pt-5">
+                <Button
+                  type="button"
+                  className="h-11 w-full justify-between bg-white text-[#272a2b] hover:bg-white/90"
+                  disabled={busyAction !== null}
+                  onClick={() => void runAccountAction("sessions")}
+                >
+                  {busyAction === "sessions" ? "正在撤销 Session…" : "退出全部设备"}<KeyRound />
+                </Button>
               </div>
-            </div>
-            <Button type="button" variant="outline" className="w-full min-h-11 sm:w-fit" disabled={busyAction !== null} onClick={() => void runAccountAction("sessions")}>
-              <KeyRound />{busyAction === "sessions" ? "正在撤销 Session…" : "退出全部设备"}
-            </Button>
-          </section>
+            </section>
+          </AccountTechnicalCard>
 
-          <section className="grid content-start gap-4 border-t border-destructive/30 pt-6 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0" aria-labelledby={`${fieldId}-delete`}>
-            <div>
-              <h3 id={`${fieldId}-delete`} className="font-semibold text-destructive">永久注销账号</h3>
-              <p className="mt-1 text-sm leading-6 text-muted-foreground">账号与全部 Session 会立即删除。请输入当前密码确认，此操作不可撤销。</p>
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor={`${fieldId}-delete-password`}>当前密码</Label>
-              <Input
-                id={`${fieldId}-delete-password`}
-                type="password"
-                value={deletePassword}
-                onChange={(event) => setDeletePassword(event.target.value)}
-                minLength={10}
-                maxLength={128}
-                autoComplete="current-password"
-              />
-            </div>
-            <Button type="button" variant="destructive" className="min-h-11" disabled={deletePassword.length < 10 || busyAction !== null} onClick={() => void runAccountAction("delete")}>
-              <Trash2 />{busyAction === "delete" ? "正在注销…" : "永久注销账号"}
-            </Button>
-          </section>
+          <AccountTechnicalCard group="manufacture" className="min-h-64">
+            <section className="flex h-full flex-col" aria-labelledby={`${fieldId}-delete`}>
+              <AccountTechnicalHeading
+                icon={<Trash2 className="size-4" aria-hidden="true" />}
+                titleId={`${fieldId}-delete`}
+              >
+                永久注销账号
+              </AccountTechnicalHeading>
+              <p className="mt-4 text-sm leading-6 text-white/64">
+                账号与全部 Session 会立即删除。请输入当前密码确认，此操作不可撤销。
+              </p>
+              <div className="mt-4 grid gap-1.5">
+                <Label className="text-white/72" htmlFor={`${fieldId}-delete-password`}>当前密码</Label>
+                <Input
+                  id={`${fieldId}-delete-password`}
+                  className="border-white/22 bg-white text-[#242424] shadow-none placeholder:text-[#737373]"
+                  type="password"
+                  value={deletePassword}
+                  onChange={(event) => setDeletePassword(event.target.value)}
+                  minLength={10}
+                  maxLength={128}
+                  autoComplete="current-password"
+                />
+              </div>
+              <div className="mt-auto pt-5">
+                <Button
+                  type="button"
+                  variant="destructive"
+                  className="h-11 w-full justify-between"
+                  disabled={deletePassword.length < 10 || busyAction !== null}
+                  onClick={() => void runAccountAction("delete")}
+                >
+                  {busyAction === "delete" ? "正在注销…" : "永久注销账号"}<Trash2 />
+                </Button>
+              </div>
+            </section>
+          </AccountTechnicalCard>
         </div>
       </div>
     );

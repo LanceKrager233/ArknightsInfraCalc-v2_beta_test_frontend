@@ -100,6 +100,8 @@ interface InfraCalculatorProps {
   loading: boolean;
   canRun: boolean;
   plannerReady: boolean;
+  animatePlanEntrance: boolean;
+  onPlanEntranceConsumed: (revision: string) => void;
   requiresAccount?: boolean;
   accountControl?: ReactNode;
   onLoadSample: () => Promise<boolean>;
@@ -124,7 +126,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     activePlan, closestComparison,
     resultClearNotice,
     issueForPanel, issueReport, feedbackResult, feedbackError,
-    sampleLoading, loading, canRun, plannerReady, requiresAccount = false, accountControl,
+    sampleLoading, loading, canRun, plannerReady, animatePlanEntrance, onPlanEntranceConsumed, requiresAccount = false, accountControl,
     onLoadSample, onOpenSetup, onRun, onCancelRun,
     onSetActiveShift, onMarkIssue,
     onFactoryRecipeChange, onTradeOrderChange,
@@ -276,6 +278,8 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                 activeShift={activeShift}
                 comparison={closestComparison}
                 planRevision={scheduleResult.diagnosticId}
+                animateEntrance={animatePlanEntrance}
+                onEntranceConsumed={onPlanEntranceConsumed}
               />
             ) : null}
             {rows.length > 0 ? <ScheduleBoard
