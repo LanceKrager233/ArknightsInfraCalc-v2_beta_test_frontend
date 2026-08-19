@@ -159,6 +159,7 @@ test("production public plan data recursively excludes internal fields", () => {
     assert.equal(publicData.diagnosticId, "diagnostic-1");
     assert.equal(publicData.rotation.profile, "abc_12_6_6");
     assert.deepEqual(publicData.rotation.daily, { trade: 4.2, manu: 8.4, power: 2.2 });
+    assert.equal(publicData.rotation.shifts[0].scores.room_lines[0].final_efficiency, 2.1);
     assert.equal(publicData.rotation.shifts[0].scores.room_lines[0].trade_score, 2.1);
     assert.equal(publicData.maa.planTimes, 2);
     assert.deepEqual(publicData.maa.plans[0].Fiammetta, { enable: true, target: "但书", order: "pre" });

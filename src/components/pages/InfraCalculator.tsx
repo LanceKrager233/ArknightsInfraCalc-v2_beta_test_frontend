@@ -274,6 +274,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               <PlanResultSummary
                 profile={scheduleResult.profile}
                 rotation={scheduleResult.rotation}
+                maa={scheduleResult.maa}
                 layout={layout}
                 activeShift={activeShift}
                 comparison={closestComparison}
