@@ -176,19 +176,24 @@ jobs:
   browser_e2e:
     name: E2E (chromium)
     if: github.event_name != 'schedule'
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.0-noble@sha256:baed2032d533817f3dbe6425de795788430ba345e819a1201337009ba17c9d07
+      options: --user 1001
+    env:
+      DATABASE_URL: postgresql://arknights_e2e:e2e-test-only@postgres:5432/arknights_auth_test
+      DATABASE_MIGRATION_URL: postgresql://arknights_e2e:e2e-test-only@postgres:5432/arknights_auth_test
+      AUTH_INTEGRATION_DATABASE_URL: postgresql://arknights_e2e:e2e-test-only@postgres:5432/arknights_auth_test
     services:
       postgres:
         image: postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636
         env:
           POSTGRES_DB: arknights_auth_test
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres-test-only
-        ports:
-          - 5432:5432
+          POSTGRES_USER: arknights_e2e
+          POSTGRES_PASSWORD: e2e-test-only
         options: >-
-          --health-cmd "pg_isready -U postgres -d arknights_auth_test"
+          --health-cmd "pg_isready -U arknights_e2e -d arknights_auth_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
@@ -206,29 +211,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Initialize limited database roles
-        run: |
-          docker run --rm --network host \
-            -v "$PWD/deploy/postgres/init-roles.sh:/init-roles.sh:ro" \
-            -e PGHOST=127.0.0.1 \
-            -e PGPORT=5432 \
-            -e PGPASSWORD=postgres-test-only \
-            -e POSTGRES_DB=arknights_auth_test \
-            -e POSTGRES_USER=postgres \
-            -e AUTH_RUNTIME_USER=arknights_test_runtime \
-            -e AUTH_RUNTIME_PASSWORD=runtime-test-only \
-            -e AUTH_MIGRATION_USER=arknights_test_migration \
-            -e AUTH_MIGRATION_PASSWORD=migration-test-only \
-            -e AUTH_BACKUP_USER=arknights_test_backup \
-            -e AUTH_BACKUP_PASSWORD=backup-test-only \
-            postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636 \
-            sh /init-roles.sh
-
       - name: Apply committed authentication migrations
         run: npm run db:migrate
-
-      - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
 
       - name: Chromium end-to-end tests
         run: npm run test:e2e
@@ -239,19 +223,24 @@ jobs:
   webkit_e2e:
     name: Scheduled WebKit compatibility
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_webkit)
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.0-noble@sha256:baed2032d533817f3dbe6425de795788430ba345e819a1201337009ba17c9d07
+      options: --user 1001
+    env:
+      DATABASE_URL: postgresql://arknights_e2e:e2e-test-only@postgres:5432/arknights_auth_test
+      DATABASE_MIGRATION_URL: postgresql://arknights_e2e:e2e-test-only@postgres:5432/arknights_auth_test
+      AUTH_INTEGRATION_DATABASE_URL: postgresql://arknights_e2e:e2e-test-only@postgres:5432/arknights_auth_test
     services:
       postgres:
         image: postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636
         env:
           POSTGRES_DB: arknights_auth_test
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres-test-only
-        ports:
-          - 5432:5432
+          POSTGRES_USER: arknights_e2e
+          POSTGRES_PASSWORD: e2e-test-only
         options: >-
-          --health-cmd "pg_isready -U postgres -d arknights_auth_test"
+          --health-cmd "pg_isready -U arknights_e2e -d arknights_auth_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
@@ -269,29 +258,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Initialize limited database roles
-        run: |
-          docker run --rm --network host \
-            -v "$PWD/deploy/postgres/init-roles.sh:/init-roles.sh:ro" \
-            -e PGHOST=127.0.0.1 \
-            -e PGPORT=5432 \
-            -e PGPASSWORD=postgres-test-only \
-            -e POSTGRES_DB=arknights_auth_test \
-            -e POSTGRES_USER=postgres \
-            -e AUTH_RUNTIME_USER=arknights_test_runtime \
-            -e AUTH_RUNTIME_PASSWORD=runtime-test-only \
-            -e AUTH_MIGRATION_USER=arknights_test_migration \
-            -e AUTH_MIGRATION_PASSWORD=migration-test-only \
-            -e AUTH_BACKUP_USER=arknights_test_backup \
-            -e AUTH_BACKUP_PASSWORD=backup-test-only \
-            postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636 \
-            sh /init-roles.sh
-
       - name: Apply committed authentication migrations
         run: npm run db:migrate
-
-      - name: Install Playwright browser
-        run: npx playwright install --with-deps webkit
 
       - name: WebKit end-to-end tests
         run: npm run test:e2e:webkit

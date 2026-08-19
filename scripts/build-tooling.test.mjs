@@ -42,6 +42,21 @@ test("CI gates releases on Chromium and schedules the full WebKit suite", async 
   assert.match(workflow, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/);
 });
 
+test("CI browser jobs use the matching pinned Playwright image without runtime apt installs", async () => {
+  const packageLock = JSON.parse(await readRepoFile("package-lock.json"));
+  const workflow = await readRepoFile(".github/workflows/frontend-quality.yml");
+  const playwrightVersion = packageLock.packages["node_modules/@playwright/test"].version;
+  const escapedVersion = playwrightVersion.replaceAll(".", "\\.");
+  const pinnedImage = new RegExp(`image: mcr\\.microsoft\\.com/playwright:v${escapedVersion}-noble@sha256:[a-f0-9]{64}`, "g");
+  const browserJobs = workflow.slice(workflow.indexOf("  browser_e2e:"), workflow.indexOf("  quality:"));
+
+  assert.equal(workflow.match(pinnedImage)?.length, 2);
+  assert.equal(browserJobs.match(/@postgres:5432\/arknights_auth_test/g)?.length, 6);
+  assert.doesNotMatch(browserJobs, /playwright install(?:-deps)?/);
+  assert.doesNotMatch(browserJobs, /Initialize limited database roles/);
+  assert.equal(browserJobs.match(/options: --user 1001/g)?.length, 2);
+});
+
 test("production injects the client feature flag at every browser boundary", async () => {
   const nextConfig = await readRepoFile("next.config.ts");
   const app = await readRepoFile("src/App.tsx");
