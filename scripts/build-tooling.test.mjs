@@ -20,15 +20,29 @@ test("Next.js commands use the default Turbopack bundler", async () => {
   assert.doesNotMatch(productionPlaywrightConfig, /--webpack\b/);
 });
 
-test("CI enforces the initial route JavaScript budget after building", async () => {
+test("CI enforces route and document preload JavaScript budgets after building", async () => {
   const packageJson = JSON.parse(await readRepoFile("package.json"));
   const workflow = await readRepoFile(".github/workflows/frontend-quality.yml");
   const budgetCheck = await readRepoFile("scripts/check-bundle-budget.mjs");
 
   assert.equal(packageJson.scripts["test:bundle-budget"], "node scripts/check-bundle-budget.mjs");
   assert.match(workflow, /Production build[\s\S]+npm run test:bundle-budget/);
-  assert.match(budgetCheck, /MAX_INITIAL_JS_BYTES = 1_100_000/);
+  assert.match(budgetCheck, /MAX_ROUTE_INITIAL_JS_BYTES = 1_100_000/);
+  assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_JS_BYTES = 1_450_000/);
+  assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_GZIP_JS_BYTES = 410_000/);
+  assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_JS_FILES = 20/);
   assert.match(budgetCheck, /firstLoadUncompressedJsBytes/);
+  assert.match(budgetCheck, /\.next\/server\/app\/index\.html/);
+  assert.match(budgetCheck, /gzipSync/);
+});
+
+test("Next and the verified deployment keep real public GET responses compressed", async () => {
+  const nextConfig = await readRepoFile("next.config.ts");
+  const deployWorkflow = await readRepoFile(".github/workflows/deploy.yml");
+
+  assert.match(nextConfig, /compress: true/);
+  assert.match(deployWorkflow, /Deploy and verify[\s\S]+Verify public response compression/);
+  assert.match(deployWorkflow, /node scripts\/verify-public-compression\.mjs "\$DEPLOY_PUBLIC_HEALTH_URL"/);
 });
 
 test("CI gates releases on Chromium and schedules the full WebKit suite", async () => {
