@@ -1365,7 +1365,8 @@ test("two-shift output drives product estimates, room formulas, and profile deta
   await page.getByRole("tab", { name: /第 2 班 · 12h/ }).click();
   await expect(shiftTabs.nth(1)).toHaveAttribute("aria-label", /替补 上班 · 主力 休息/);
 
-  const detailsTrigger = page.locator('[data-plan-details-trigger="efficiency"]').last();
+  await expect(page.getByRole("button", { name: "查看详情", exact: true })).toHaveCount(0);
+  const detailsTrigger = page.locator("[data-plan-primary-details-trigger]");
   await detailsTrigger.click();
   const detailsSheet = page.locator('[data-slot="drawer-content"]');
   await expect(detailsSheet).toBeVisible();

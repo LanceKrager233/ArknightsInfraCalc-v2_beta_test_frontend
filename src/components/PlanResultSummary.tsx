@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart3, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
@@ -8,7 +8,6 @@ import { useEffect, useState } from "react";
 import { AnimatedNumber, AnimatedText } from "@/components/AnimatedText";
 import { ShiftComparisonDetails } from "@/components/ShiftComparisonCard";
 import { RecommendationCard } from "@/components/RecommendationCard";
-import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { estimateDailyProduction, type DailyProductionAmount, type DailyProductionEstimate, type DailyProductionUnavailableReason } from "@/daily-production";
@@ -141,8 +140,8 @@ export function PlanResultSummary({
         {animateOnMount ? (
           <motion.span key={`accent-${planRevision}`} className="pointer-events-none absolute inset-x-0 top-0 z-20 h-0.5 origin-left bg-[#FFD501]" aria-hidden="true" initial={{ scaleX: 0, opacity: 0 }} animate={{ scaleX: 1, opacity: [0, 1, 1, 0] }} transition={{ duration: shouldReduceMotion ? 0 : 0.62, delay: shouldReduceMotion ? 0 : 0.08, times: [0, 0.15, 0.82, 1], ease: MOTION_EASE_OUT }} />
         ) : null}
-        <div key={planRevision} className="grid min-h-[84px] grid-cols-[minmax(10rem,1.05fr)_minmax(0,5fr)_auto] items-stretch max-[820px]:grid-cols-1">
-          <motion.button type="button" className={cn("group relative flex min-w-0 items-center justify-between gap-3 overflow-hidden bg-[#272A2B] px-5 py-3 text-left text-white focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-[#FFD800] max-[820px]:row-span-1 max-sm:min-h-16", comparison && "row-span-2")} data-plan-details-trigger="efficiency" whileHover={shouldReduceMotion ? undefined : { x: 2 }} whileTap={shouldReduceMotion ? undefined : { scale: 0.985 }} onClick={() => openDetails("efficiency")}>
+        <div key={planRevision} className="grid min-h-[84px] grid-cols-[minmax(10rem,1.05fr)_minmax(0,5fr)] items-stretch max-[820px]:grid-cols-1">
+          <motion.button type="button" className={cn("group relative flex min-w-0 items-center justify-between gap-3 overflow-hidden bg-[#272A2B] px-5 py-3 text-left text-white focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-[#FFD800] max-[820px]:row-span-1 max-sm:min-h-16", comparison && "row-span-2")} data-plan-details-trigger="efficiency" data-plan-primary-details-trigger whileHover={shouldReduceMotion ? undefined : { x: 2 }} whileTap={shouldReduceMotion ? undefined : { scale: 0.985 }} onClick={() => openDetails("efficiency")}>
             <motion.span className="min-w-0" data-plan-metric initial={animateOnMount ? { opacity: 0, x: shouldReduceMotion ? 0 : -10 } : false} animate={{ opacity: 1, x: 0 }} transition={{ duration: shouldReduceMotion ? MOTION_DURATION.feedback : 0.36, delay: shouldReduceMotion ? 0 : 0.1, ease: MOTION_EASE_OUT }}>
               <strong className="block truncate text-lg font-medium"><span className="font-number">{layout.template}</span> 基建方案</strong>
               <span className="mt-1 block text-[10px] text-white/45">点击查看产出组成与效率诊断</span>
@@ -194,7 +193,7 @@ export function PlanResultSummary({
           </div>
 
           {comparison ? (
-            <motion.button type="button" className="col-span-2 col-start-2 min-w-0 border-t border-[#313131]/10 bg-[#E7E3D8] px-4 py-2.5 text-left transition-colors hover:bg-[#DDD8CA] focus-visible:outline-2 focus-visible:outline-primary max-[820px]:col-span-1 max-[820px]:col-start-1 max-sm:min-h-14" data-shift-comparison data-plan-details-trigger="comparison" whileTap={shouldReduceMotion ? undefined : { scale: 0.99 }} onClick={() => openDetails("comparison")}>
+            <motion.button type="button" className="col-start-2 min-w-0 border-t border-[#313131]/10 bg-[#E7E3D8] px-4 py-2.5 text-left transition-colors hover:bg-[#DDD8CA] focus-visible:outline-2 focus-visible:outline-primary max-[820px]:col-start-1 max-sm:min-h-14" data-shift-comparison data-plan-details-trigger="comparison" whileTap={shouldReduceMotion ? undefined : { scale: 0.99 }} onClick={() => openDetails("comparison")}>
               <span className="flex items-center justify-between gap-3 text-xs">
                 <span className="min-w-0 truncate">最接近第 <strong className="font-number"><AnimatedText value={comparison.planIndex + 1} /></strong> 班 · 匹配率 <strong className="font-number"><AnimatedText value={`${comparison.score}%`} /></strong></span>
                 <span className="shrink-0 text-[#313131]/60">需调整 <strong className="font-number text-[#313131]"><AnimatedText value={adjustmentCount} /></strong> 处</span>
@@ -212,10 +211,6 @@ export function PlanResultSummary({
               </span>
             </motion.button>
           ) : null}
-
-          <Button type="button" variant="ghost" size="sm" className="m-2 self-center whitespace-nowrap max-[820px]:m-0 max-[820px]:min-h-12 max-[820px]:justify-between max-[820px]:border-t" data-plan-details-trigger="efficiency" data-motion-pressable onClick={() => openDetails("efficiency")}>
-            <BarChart3 />查看详情
-          </Button>
         </div>
       </motion.section>
 
