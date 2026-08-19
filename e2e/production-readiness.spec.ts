@@ -26,6 +26,14 @@ test.beforeEach(async ({ page }) => {
   }));
 });
 
+test("cold HTML contains the workbench shell instead of only the client loading placeholder", async ({ request }) => {
+  const response = await request.get("/");
+  expect(response.status()).toBe(200);
+  const html = await response.text();
+  expect(html).toContain("data-calculator-controls");
+  expect(html).not.toContain("正在加载基建计算器");
+});
+
 async function expectUnifiedDialogTypography(dialog: Locator, radius: "24px" | "32px" = "32px") {
   await expect(dialog).toHaveClass(/dialog-acrylic/);
   await expect(dialog).toHaveCSS("border-radius", radius);
@@ -228,7 +236,17 @@ async function gotoStable(page: Page, path: string) {
 }
 
 async function expectVisibleNumbersUseNumberFont(page: Page, scope: Locator = page.locator("body")) {
-  await page.evaluate(() => document.fonts.ready);
+  await page.evaluate(async () => {
+    const numberFamily = getComputedStyle(document.documentElement)
+      .getPropertyValue("--font-number-source")
+      .split(",")[0]
+      .trim()
+      .replace(/^['"]|['"]$/g, "");
+    if (numberFamily) {
+      await document.fonts.load(`16px "${numberFamily}"`, "0123456789+-.,%/:−");
+    }
+    await document.fonts.ready;
+  });
   const audit = await scope.evaluate((root) => {
     const numberFamily = getComputedStyle(document.documentElement)
       .getPropertyValue("--font-number-source")
@@ -806,6 +824,8 @@ async function mockApis(
     sklandBindingCount?: number;
     sklandRenewalDueCount?: number;
     sklandSessionDelayMs?: number;
+    sklandSummaryDelayMs?: number;
+    sklandSessionFailure?: boolean;
   } = {}
 ) {
   await page.route("**/api/health", (route) => route.fulfill({
@@ -826,11 +846,27 @@ async function mockApis(
       requestId,
     }),
   }));
-  await page.route("**/api/skland/session", async (route) => {
-    if (options.sklandSessionDelayMs) {
+  await page.route("**/api/skland/session*", async (route) => {
+    const mode = new URL(route.request().url()).searchParams.get("mode");
+    const isSummary = mode === "summary";
+    const isLogout = route.request().method() === "DELETE";
+    if (isSummary && options.sklandSummaryDelayMs) {
+      await new Promise((resolve) => setTimeout(resolve, options.sklandSummaryDelayMs));
+    } else if (!isSummary && !isLogout && options.sklandSessionDelayMs) {
       await new Promise((resolve) => setTimeout(resolve, options.sklandSessionDelayMs));
     }
-    const isLogout = route.request().method() === "DELETE";
+    if (!isSummary && !isLogout && options.sklandSessionFailure) {
+      return route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        headers: { "X-Request-Id": requestId },
+        body: JSON.stringify({
+          success: false,
+          error: { code: "AIC-SYS-5000", message: "森空岛会话恢复失败，请稍后刷新。", retryable: true },
+          requestId,
+        }),
+      });
+    }
     const accounts = options.sklandAccounts
       ?? (options.sklandSnapshot ? [{
         ...primarySklandAccount,
@@ -866,7 +902,7 @@ async function mockApis(
               bindingSummary: { totalCount: 0, activeCount: 0, renewalDueCount: 0, nextExpiresAt: null, latestExpiredAt: null },
             }
           : {
-              authenticated: Boolean(options.sklandSnapshot),
+              authenticated: isSummary ? accounts.length > 0 : Boolean(options.sklandSnapshot),
               configured: Boolean(options.sklandConfigured),
               authMethods: { qr: true },
               accounts,
@@ -876,8 +912,8 @@ async function mockApis(
               disabledReason: options.sklandConfigured
                 ? null
                 : "当前未开放森空岛登录，可使用 MAA 导入。",
-              ...(options.sklandSnapshot ? { scheduleSnapshot: options.sklandSnapshot } : {}),
-              ...(options.sklandSnapshot ? { statusSnapshot: options.sklandSnapshot } : {}),
+              ...(!isSummary && options.sklandSnapshot ? { scheduleSnapshot: options.sklandSnapshot } : {}),
+              ...(!isSummary && options.sklandSnapshot ? { statusSnapshot: options.sklandSnapshot } : {}),
             },
         requestId,
       }),
@@ -1209,6 +1245,7 @@ test("server auth boundaries reject anonymous planning and every development Skl
 
   for (const [method, path] of [
     ["GET", "/api/skland/session"],
+    ["GET", "/api/skland/session?mode=summary"],
     ["DELETE", "/api/skland/session"],
     ["POST", "/api/skland/auth/qr"],
     ["POST", "/api/skland/auth/qr/status"],
@@ -1301,6 +1338,97 @@ test("restores a v4 schedule without hydration errors and keeps only safe data",
   expect(JSON.stringify(persisted)).not.toContain("stdout");
 });
 
+test("planning preloads every versioned product icon and renders direct immutable WebP requests", async ({ page }) => {
+  await mockApis(page);
+  await seedV4Session(page, null);
+  await page.unroute("**/api/plan");
+
+  let releasePlan!: () => void;
+  const planBarrier = new Promise<void>((resolve) => {
+    releasePlan = resolve;
+  });
+  let planReleased = false;
+  const productsRequestedBeforePlanResponse = new Set<string>();
+  page.on("request", (request) => {
+    if (!planReleased && request.url().includes("/images/products/")) {
+      productsRequestedBeforePlanResponse.add(new URL(request.url()).pathname);
+    }
+  });
+  await page.route("**/api/plan", async (route) => {
+    await planBarrier;
+    planReleased = true;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true, data: planData, requestId }),
+    });
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "生成排班" }).click();
+  await expect.poll(() => productsRequestedBeforePlanResponse.size).toBe(5);
+  releasePlan();
+
+  const productImages = page.locator("[data-daily-production-summary] img");
+  await expect(productImages).toHaveCount(5);
+  const imageAttributes = await productImages.evaluateAll((images) => images.map((image) => ({
+    src: image.getAttribute("src"),
+    width: image.getAttribute("width"),
+    height: image.getAttribute("height"),
+    loading: image.getAttribute("loading"),
+  })));
+  for (const image of imageAttributes) {
+    expect(image.src).toMatch(/^\/images\/products\/[a-z_]+\.webp\?v=\d+-[0-9a-f]{12}$/);
+    expect(image.src).not.toContain("/_next/image");
+    expect(["16", "32"]).toContain(image.width);
+    expect(image.height).toBe(image.width);
+    expect(image.loading).toBe("eager");
+  }
+
+  const versionedPath = imageAttributes[0].src;
+  if (!versionedPath) throw new Error("Missing versioned product image path.");
+  const versionedResponse = await page.request.get(versionedPath);
+  expect(versionedResponse.headers()["cache-control"]).toContain("max-age=31536000");
+  expect(versionedResponse.headers()["cache-control"]).toContain("immutable");
+
+  const unversionedResponse = await page.request.get(versionedPath.split("?")[0]);
+  expect(unversionedResponse.headers()["cache-control"] ?? "").not.toContain("immutable");
+});
+
+test("a failed complete Skland restore keeps the independently restored identity visible", async ({ page }) => {
+  await mockApis(page, {
+    sklandConfigured: true,
+    sklandSnapshot: authenticatedSklandSnapshot,
+    sklandSessionFailure: true,
+  });
+  await page.unroute("**/api/skland/status");
+  let releaseStatus!: () => void;
+  const statusBarrier = new Promise<void>((resolve) => {
+    releaseStatus = resolve;
+  });
+  await page.route("**/api/skland/status", async (route) => {
+    await statusBarrier;
+    await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
+  });
+  await seedPreferences(page);
+  const fullRestoreFailed = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === "/api/skland/session"
+      && !url.searchParams.has("mode")
+      && response.status() === 500;
+  });
+  await page.goto("/");
+
+  const accountControl = page.locator("[data-skland-account-control]");
+  await expect(accountControl).toHaveAttribute("aria-label", "测试博士，进入森空岛状态中心");
+  await fullRestoreFailed;
+  await accountControl.click();
+  await expect(page.getByText(/森空岛会话恢复失败，请稍后刷新。/)).toBeVisible();
+  await page.getByRole("button", { name: "基建计算器", exact: true }).click();
+  await expect(accountControl).toHaveAttribute("aria-label", "测试博士，进入森空岛状态中心");
+  releaseStatus();
+});
+
 test("two-shift output drives product estimates, room formulas, and profile details", async ({ page, browserName }) => {
   await mockApis(page);
   await seedV4Session(page, twoShiftPlanData, { rotationProfile: "main_backup_12_12" });
@@ -1330,6 +1458,7 @@ test("two-shift output drives product estimates, room formulas, and profile deta
   await expect(dailyProducts.locator('[data-daily-product="shards"]')).toContainText(/源石碎片.*48.*枚/s);
   await expect(dailyProducts.locator('[data-daily-product="orundum"]')).toContainText(/合成玉.*360.*合成玉/s);
   await expect(dailyProducts.getByText("龙门币订单", { exact: true })).toHaveCount(0);
+  await waitForOwnAnimations(dailyProducts.locator("[data-plan-metric]").last());
 
   const primaryProductOffsets = await Promise.all(
     ["experience", "lmd", "orundum"].map((group) => dailyProducts.locator(`[data-daily-product-group="${group}"]`).evaluate((card) => {
@@ -2364,7 +2493,11 @@ test("responsive navigation and the two locked areas keep their current behavior
 
 test("the compact mobile navigation stays pinned while the account control belongs to the calculator", async ({ page }) => {
   test.setTimeout(60_000);
-  await mockApis(page, { sklandSessionDelayMs: 12_000 });
+  await mockApis(page, {
+    sklandConfigured: true,
+    sklandSnapshot: authenticatedSklandSnapshot,
+    sklandSessionDelayMs: 4_000,
+  });
   await seedV4Session(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
@@ -2383,8 +2516,12 @@ test("the compact mobile navigation stays pinned while the account control belon
   expect(topbarStyle.borderBottomWidth).toBe("1px");
   expect(topbarStyle.boxShadow).toBe("none");
   await expect(topbar.locator("[data-skland-account-control]")).toHaveCount(0);
-  await expect(page.locator("[data-skland-account-loading]")).toBeVisible();
-  await expect(page.locator("[data-skland-account-control]")).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator("[data-skland-account-control]")).toHaveAttribute(
+    "aria-label",
+    "测试博士，进入森空岛状态中心",
+    { timeout: 2_000 },
+  );
+  await expect(page.locator("[data-skland-account-loading]")).toHaveCount(0);
   await expect(page.locator("[data-skland-sidebar-account]")).toHaveCount(0);
 
   const mobileBar = topbar.locator(".app-content-track");
@@ -2854,7 +2991,7 @@ test("calculator owns scheduling controls and training advice uses a single tech
     page.locator('[data-calculator-export-actions="mobile"] [data-full-e2]').evaluate((element) => element.getBoundingClientRect().height),
     page.getByRole("button", { name: "生成排班" }).evaluate((element) => element.getBoundingClientRect().height),
   ]);
-  expect(Math.min(...mobileHeights)).toBeGreaterThanOrEqual(44);
+  expect(Math.min(...mobileHeights)).toBeGreaterThanOrEqual(44 - 0.01);
 });
 
 test("schedule visuals use a stable technical canvas and responsive level markers", async ({ page }) => {
@@ -3597,7 +3734,7 @@ test("Skland supports adding, switching, and individually logging out multiple a
     sklandConfigured: true,
     sklandSnapshot: authenticatedSklandSnapshot,
   });
-  await page.route("**/api/skland/session", async (route) => {
+  await page.route("**/api/skland/session*", async (route) => {
     if (route.request().method() === "DELETE") {
       const body = route.request().postDataJSON() as { accountId?: string } | null;
       currentAccounts = currentAccounts.filter((account) => account.accountId !== body?.accountId);

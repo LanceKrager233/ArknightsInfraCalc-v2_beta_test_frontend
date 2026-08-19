@@ -17,10 +17,16 @@ const nextConfig: NextConfig = {
         has: [{ type: "query", key: "v", value: "\\d+-[0-9a-f]{12}" }],
         headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
       },
+      {
+        source: "/images/products/:asset",
+        has: [{ type: "query", key: "v", value: "\\d+-[0-9a-f]{12}" }],
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
     ];
   },
   env: {
     APP_CLIENT_SKLAND_ENABLED: isSklandFeatureEnabled() ? "1" : "0",
+    APP_CLIENT_SKLAND_API_PREFIX: isSklandFeatureEnabled() ? "/api/skland" : "",
   },
   outputFileTracingExcludes: {
     "/*": outputFileTracingExcludes,

@@ -65,18 +65,27 @@ test("production injects the client feature flag at every browser boundary", asy
   const workflow = await readRepoFile(".github/workflows/frontend-quality.yml");
 
   assert.match(nextConfig, /APP_CLIENT_SKLAND_ENABLED: isSklandFeatureEnabled\(\) \? "1" : "0"/);
+  assert.match(nextConfig, /APP_CLIENT_SKLAND_API_PREFIX: isSklandFeatureEnabled\(\) \? "\/api\/skland" : ""/);
   assert.match(app, /process\.env\.APP_CLIENT_SKLAND_ENABLED === "1"/);
   assert.match(setupDialog, /process\.env\.APP_CLIENT_SKLAND_ENABLED === "1"/);
   assert.match(developmentSklandCenter, /SklandStatus/);
   assert.match(workflow, /Production build[\s\S]+APP_DEPLOYMENT_ENV: production/);
 });
 
-test("the application entry is split behind an accessible loading boundary", async () => {
+test("the application entry remains split while the workbench participates in server rendering", async () => {
   const page = await readRepoFile("src/app/page.tsx");
   const loader = await readRepoFile("src/AppLoader.tsx");
 
   assert.match(page, /import AppLoader from "@\/AppLoader"/);
   assert.match(loader, /dynamic\(\(\) => import\("@\/App"\)/);
-  assert.match(loader, /ssr: false/);
-  assert.match(loader, /role="status"/);
+  assert.doesNotMatch(loader, /ssr: false/);
+  assert.doesNotMatch(loader, /正在加载基建计算器/);
+});
+
+test("versioned product assets receive immutable cache headers", async () => {
+  const nextConfig = await readRepoFile("next.config.ts");
+
+  assert.match(nextConfig, /source: "\/images\/products\/:asset"/);
+  assert.match(nextConfig, /key: "v", value: "\\\\d\+-\[0-9a-f\]\{12\}"/);
+  assert.match(nextConfig, /public, max-age=31536000, immutable/);
 });

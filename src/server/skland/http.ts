@@ -53,9 +53,9 @@ function cookieOptions(request: Request, maxAge = SKLAND_SESSION_TTL_SECONDS) {
   };
 }
 
-export async function readSklandAccountStore(): Promise<SklandAccountStore> {
-  const website = await websiteSession(await headers());
-  const websiteOwnerTag = website?.user.id ? websiteUserOwnerTag(website.user.id) : null;
+export async function readSklandAccountStore(verifiedWebsiteUserId?: string): Promise<SklandAccountStore> {
+  const websiteUserId = verifiedWebsiteUserId ?? (await websiteSession(await headers()))?.user.id;
+  const websiteOwnerTag = websiteUserId ? websiteUserOwnerTag(websiteUserId) : null;
   if (!websiteOwnerTag) return { accounts: [], activeAccountId: null, staleCookieNames: [], migratedSnapshot: null, websiteOwnerTag: null };
   if (!isSklandConfigured()) {
     return { accounts: [], activeAccountId: null, staleCookieNames: [], migratedSnapshot: null, websiteOwnerTag };
