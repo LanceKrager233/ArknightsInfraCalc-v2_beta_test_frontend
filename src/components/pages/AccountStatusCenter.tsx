@@ -3,7 +3,7 @@
 import { WebsiteAccountPanel } from "@/components/auth/WebsiteAccountPanel";
 import { StatusCenterPage } from "@/components/pages/StatusCenterShell";
 
-interface AccountStatusCenterProps {
+export interface AccountStatusCenterProps {
   onSessionChanged?: (authenticated: boolean) => void | Promise<void>;
 }
 

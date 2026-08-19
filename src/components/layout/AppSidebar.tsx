@@ -1,6 +1,8 @@
 "use client";
 
-import { Calculator, Cloud, GraduationCap, Search, UserRound } from "lucide-react";
+import { Calculator, Cloud, GraduationCap, Search, UserRound, type LucideIcon } from "lucide-react";
+import Link from "next/link";
+import { useState } from "react";
 
 import {
   Sidebar,
@@ -13,23 +15,62 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
+import { workbenchHref, type AppPage } from "@/workbench-routes";
 
-export type AppPage = "calculator" | "training" | "skland" | "account" | "skill-query";
+const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
 
 interface AppSidebarProps {
   page: AppPage;
-  onPageChange: (page: AppPage) => void;
+  betaRequested: boolean;
+  onPageChange: (page: AppPage) => boolean;
 }
 
-export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
+interface AppNavigationItemProps extends AppSidebarProps {
+  target: AppPage;
+  label: string;
+  icon: LucideIcon;
+}
+
+function AppNavigationItem({
+  page,
+  target,
+  label,
+  icon: Icon,
+  betaRequested,
+  onPageChange,
+}: AppNavigationItemProps) {
   const { isMobile, setOpenMobile } = useSidebar();
+  const [prefetchOnIntent, setPrefetchOnIntent] = useState(false);
+  const href = workbenchHref(target, betaRequested);
 
-  function handlePageChange(nextPage: AppPage) {
-    onPageChange(nextPage);
-    if (isMobile) setOpenMobile(false);
-  }
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        render={(
+          <Link
+            href={href}
+            role="button"
+            prefetch={prefetchOnIntent ? null : false}
+            aria-current={page === target ? "page" : undefined}
+            onMouseEnter={() => setPrefetchOnIntent(true)}
+            onFocus={() => setPrefetchOnIntent(true)}
+            onClick={(event) => {
+              if (!onPageChange(target)) event.preventDefault();
+              if (isMobile) setOpenMobile(false);
+            }}
+          />
+        )}
+        isActive={page === target}
+        tooltip={label}
+      >
+        <Icon className="size-5" />
+        <span>{label}</span>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
 
+export function AppSidebar({ page, betaRequested, onPageChange }: AppSidebarProps) {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="h-[65px] flex-row items-center justify-end border-b border-sidebar-border px-2 group-data-[collapsible=icon]:justify-center">
@@ -38,58 +79,13 @@ export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
       <SidebarContent>
         <SidebarGroup>
           <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                isActive={page === "calculator"}
-                onClick={() => handlePageChange("calculator")}
-                tooltip="基建计算器"
-              >
-                <Calculator className="size-5" />
-                <span>基建计算器</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                isActive={page === "training"}
-                onClick={() => handlePageChange("training")}
-                tooltip="练卡建议"
-              >
-                <GraduationCap className="size-5" />
-                <span>练卡建议</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                isActive={page === "skill-query"}
-                onClick={() => handlePageChange("skill-query")}
-                tooltip="技能查询"
-              >
-                <Search className="size-5" />
-                <span>技能查询</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+            <AppNavigationItem page={page} target="calculator" label="基建计算器" icon={Calculator} betaRequested={betaRequested} onPageChange={onPageChange} />
+            <AppNavigationItem page={page} target="training" label="练卡建议" icon={GraduationCap} betaRequested={betaRequested} onPageChange={onPageChange} />
+            <AppNavigationItem page={page} target="skill-query" label="技能查询" icon={Search} betaRequested={betaRequested} onPageChange={onPageChange} />
             {CLIENT_SKLAND_ENABLED ? (
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  isActive={page === "skland"}
-                  onClick={() => handlePageChange("skland")}
-                  tooltip="森空岛状态中心"
-                >
-                  <Cloud className="size-5" />
-                  <span>森空岛状态中心</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+              <AppNavigationItem page={page} target="skland" label="森空岛状态中心" icon={Cloud} betaRequested={betaRequested} onPageChange={onPageChange} />
             ) : null}
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                isActive={page === "account"}
-                onClick={() => handlePageChange("account")}
-                tooltip="账号管理"
-              >
-                <UserRound className="size-5" />
-                <span>账号管理</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+            <AppNavigationItem page={page} target="account" label="账号管理" icon={UserRound} betaRequested={betaRequested} onPageChange={onPageChange} />
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
