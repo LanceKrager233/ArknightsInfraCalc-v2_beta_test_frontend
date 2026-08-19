@@ -7,7 +7,7 @@ import { StatusCenterLoading, StatusCenterPage } from "@/components/pages/Status
 import { Button } from "@/components/ui/button";
 import type { SklandBindingSummary } from "@/types";
 
-interface DevelopmentSklandStatusCenterProps {
+export interface DevelopmentSklandStatusCenterProps {
   websiteAuthenticated: boolean;
   websiteSessionPending: boolean;
   bindingSummary: SklandBindingSummary;

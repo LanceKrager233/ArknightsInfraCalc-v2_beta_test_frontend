@@ -34,6 +34,45 @@ test("cold HTML contains the workbench shell instead of only the client loading 
   expect(html).not.toContain("正在加载基建计算器");
 });
 
+test("primary pages use independent routes without eagerly loading every view", async ({ page }) => {
+  const trainingRouteRequests: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/training") {
+      trainingRouteRequests.push(request.url());
+    }
+  });
+  await mockApis(page, { sklandConfigured: true, sklandSnapshot: authenticatedSklandSnapshot });
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  const destinations = [
+    { name: "练卡建议", href: "/training", root: "[data-training-page]" },
+    { name: "技能查询", href: "/skills", root: "[data-skill-query-page]" },
+    { name: "森空岛状态中心", href: "/skland", root: "[data-skland-page]" },
+    { name: "账号管理", href: "/account", root: "[data-account-management]" },
+  ];
+  for (const destination of destinations) {
+    await expect(page.getByRole("button", { name: destination.name, exact: true })).toHaveAttribute("href", destination.href);
+  }
+  expect(trainingRouteRequests).toEqual([]);
+
+  const trainingLink = page.getByRole("button", { name: "练卡建议", exact: true });
+  await trainingLink.hover();
+
+  for (const destination of destinations) {
+    await page.getByRole("button", { name: destination.name, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`${destination.href.replace("/", "\\/")}$`));
+    await expect(page.locator(destination.root)).toBeVisible({ timeout: 45_000 });
+    if (destination.href === "/training") expect(trainingRouteRequests.length).toBeGreaterThan(0);
+  }
+
+  await page.getByRole("button", { name: "基建计算器", exact: true }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.locator("[data-calculator-controls]")).toBeVisible();
+});
+
 async function expectUnifiedDialogTypography(dialog: Locator, radius: "24px" | "32px" = "32px") {
   await expect(dialog).toHaveClass(/dialog-acrylic/);
   await expect(dialog).toHaveCSS("border-radius", radius);
@@ -1199,7 +1238,9 @@ test("account settings revokes every session and returns to the app", async ({ p
   await expect(page.locator("[data-account-management]")).toHaveCount(0);
   await expect(page.locator("[data-calculator-controls]")).toBeVisible();
   await expect(page.getByRole("dialog", { name: "登录网站账号" })).toHaveCount(0);
-  expect((await page.request.get("/account")).status()).toBe(404);
+  const accountRoute = await page.request.get("/account");
+  expect(accountRoute.status()).toBe(200);
+  expect(await accountRoute.text()).toContain("data-workbench-hydrated");
 });
 
 test("password reset rejects a link without a token before making a request", async ({ page }) => {

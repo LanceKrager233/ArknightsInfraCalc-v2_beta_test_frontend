@@ -1,18 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import type { ComponentProps, ComponentType } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { AppSidebar, type AppPage } from "@/components/layout/AppSidebar";
+import { AppSidebar } from "@/components/layout/AppSidebar";
 import { AppTopBar, SklandAccountControl } from "@/components/layout/AppTopBar";
 import { AppMotionProvider } from "@/components/MotionProvider";
 import { PrimaryPageTransition } from "@/components/layout/PrimaryPageTransition";
-import { InfraCalculator } from "@/components/pages/InfraCalculator";
 import { LiveActivity, usePlanActivity } from "@/components/ui/live-activity";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { preloadProductIcons } from "@/product-assets";
+import { WorkbenchContext } from "@/workbench-context";
+import { workbenchHref, workbenchPageFromPathname, type AppPage } from "@/workbench-routes";
 import { useWebsiteSessionIdentity } from "@/website-session";
 
 import {
@@ -92,30 +93,6 @@ function bindingSummaryFromSession(session: Pick<SklandSessionData, "accounts" |
   };
 }
 
-function DeferredPageLoading() {
-  return (
-    <div className="grid min-h-64 place-items-center" role="status" aria-live="polite">
-      <span className="text-sm text-muted-foreground">正在加载页面…</span>
-    </div>
-  );
-}
-
-const TrainingAdvice = lazy(() => import("@/components/pages/TrainingAdvice").then((module) => ({
-  default: module.TrainingAdvice,
-})));
-const SkillQuery = lazy(() => import("@/components/pages/SkillQuery").then((module) => ({
-  default: module.SkillQuery,
-})));
-const AccountStatusCenter = lazy(() => import("@/components/pages/AccountStatusCenter").then((module) => ({
-  default: module.AccountStatusCenter,
-})));
-type DevelopmentSklandStatusCenterProps = ComponentProps<typeof import("@/components/pages/DevelopmentSklandStatusCenter").DevelopmentSklandStatusCenter>;
-type DevelopmentSklandStatusCenterComponent = ComponentType<DevelopmentSklandStatusCenterProps>;
-const DevelopmentSklandStatusCenter: DevelopmentSklandStatusCenterComponent = CLIENT_SKLAND_ENABLED
-  ? lazy(() => import("@/components/pages/DevelopmentSklandStatusCenter").then((module) => ({
-      default: module.DevelopmentSklandStatusCenter,
-    })))
-  : () => null;
 const WebsiteAccountDialog = lazy(() => import("@/components/auth/WebsiteAccountDialog").then((module) => ({
   default: module.WebsiteAccountDialog,
 })));
@@ -233,11 +210,13 @@ function buildIssueReport(
   };
 }
 
-function WorkbenchApp() {
+function WorkbenchApp({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const page = workbenchPageFromPathname(pathname);
   const { data: websiteSession, isPending: websiteSessionPending, refetch: refetchWebsiteSession } = useWebsiteSessionIdentity();
   const defaultPreset = PRESETS[0];
   const defaultLayout = buildBlueprint(defaultPreset);
-  const [page, setPage] = useState<AppPage>("calculator");
   const hasRenderedCalculator = useRef(false);
   const revealedPlanRevisions = useRef(new Set<string>());
   const [websiteAuthReloadKey, setWebsiteAuthReloadKey] = useState(0);
@@ -282,6 +261,7 @@ function WorkbenchApp() {
   const initialLayoutSource = useRef<"local" | "skland">("local");
   const initialLocalLayoutBackup = useRef<BaseBlueprint | null>(null);
   const skipNextPersistence = useRef(false);
+  const leavingAccountAfterLogout = useRef(false);
   const statusLoadingAccount = useRef<string | null>(null);
   const sklandRestoreGuard = useRef(createSklandRestoreGuard());
   const [inputError, setInputError] = useState<string | null>(null);
@@ -617,15 +597,19 @@ function WorkbenchApp() {
 
   useEffect(() => {
     if (websiteSessionPending) return;
+    if (page !== "account") leavingAccountAfterLogout.current = false;
     if (websiteSession) {
       if (websiteAuthDialogOpen) {
         setWebsiteAuthDialogOpen(false);
-        setPage("account");
+        router.push(workbenchHref("account", betaRequested));
       }
       return;
     }
-    if (page === "account") setPage("calculator");
-  }, [page, websiteAuthDialogOpen, websiteSession, websiteSessionPending]);
+    if (page === "account") {
+      if (!leavingAccountAfterLogout.current) setWebsiteAuthDialogOpen(true);
+      router.replace(workbenchHref("calculator", betaRequested));
+    }
+  }, [betaRequested, page, router, websiteAuthDialogOpen, websiteSession, websiteSessionPending]);
 
   useEffect(() => {
     if (
@@ -1125,21 +1109,28 @@ function WorkbenchApp() {
   function openSklandFromSetup() {
     setInputError(null);
     setSetupOpen(false);
-    setPage("skland");
+    navigateToPage("skland");
   }
 
-  function handleAppPageChange(nextPage: AppPage) {
+  function handleAppPageChange(nextPage: AppPage): boolean {
     if (nextPage === "account" && !websiteSession) {
       setWebsiteAuthDialogOpen(true);
-      return;
+      return false;
     }
-    setPage(nextPage);
+    if (nextPage === "calculator") hasRenderedCalculator.current = true;
+    return true;
+  }
+
+  function navigateToPage(nextPage: AppPage) {
+    if (!handleAppPageChange(nextPage)) return;
+    router.push(workbenchHref(nextPage, betaRequested));
   }
 
   async function handleWebsiteSessionChanged(authenticated: boolean) {
     beginSklandStateChange();
+    leavingAccountAfterLogout.current = !authenticated;
     setWebsiteAuthDialogOpen(false);
-    setPage(authenticated ? "account" : "calculator");
+    router.push(workbenchHref(authenticated ? "account" : "calculator", betaRequested));
     if (!authenticated) {
       setSklandAccounts([]);
       setSklandActiveAccountId(null);
@@ -1302,6 +1293,97 @@ function WorkbenchApp() {
     && !revealedPlanRevisions.current.has(visiblePlanRevision)
   );
   const animateEmptyScheduleEntrance = page === "calculator" && hasRenderedCalculator.current;
+  const workbenchContext = {
+    calculator: {
+      layout,
+      showBetaPanels,
+      result,
+      scheduleResult,
+      activeShift,
+      rows,
+      currentMoraleByOperator,
+      activePlan,
+      closestComparison,
+      resultClearNotice,
+      issueForPanel,
+      issueReport,
+      feedbackResult,
+      feedbackError,
+      sampleLoading,
+      loading,
+      canRun,
+      plannerReady: cliReady,
+      animatePlanEntrance,
+      animateEmptyScheduleEntrance,
+      onPlanEntranceConsumed: (revision: string) => revealedPlanRevisions.current.add(revision),
+      requiresAccount: !accountCanUseCurrentBox,
+      accountControl: CLIENT_SKLAND_ENABLED ? (
+        <SklandAccountControl
+          account={activeSklandAccount}
+          statusSnapshot={sklandStatusSnapshot}
+          sessionLoading={sklandSessionLoading}
+          onOpenSkland={() => navigateToPage("skland")}
+        />
+      ) : undefined,
+      onLoadSample: handleLoadSample,
+      onOpenSetup: openSetup,
+      onRun: handleRun,
+      onCancelRun: handleCancelRun,
+      onSetActiveShift: setActiveShift,
+      onMarkIssue: handleMarkIssue,
+      onFactoryRecipeChange: handleScheduleFactoryRecipeChange,
+      onTradeOrderChange: handleScheduleTradeOrderChange,
+      onDownloadMaa: handleDownloadMaa,
+      onDownloadBundle: handleDownloadBundle,
+      onCopyCommand: handleCopyCommand,
+      onClearResultNotice: () => setResultClearNotice(null),
+      onDismissResultClearWarning: dismissResultClearWarning,
+    },
+    training: {
+      operbox: accountCanUseCurrentBox ? operbox : null,
+      layout,
+      profile: accountCanUseCurrentBox ? result?.profile : null,
+      requiresAccount: !accountCanUseCurrentBox,
+      onOpenCalculator: () => navigateToPage("calculator"),
+    },
+    account: {
+      authenticated: Boolean(websiteSession),
+      pending: websiteSessionPending,
+      onSessionChanged: handleWebsiteSessionChanged,
+    },
+    skland: CLIENT_SKLAND_ENABLED ? {
+      websiteAuthenticated: Boolean(websiteSession),
+      websiteSessionPending,
+      bindingSummary: sklandBindingSummary,
+      onOpenAccount: () => navigateToPage("account"),
+      skland: {
+        scheduleSnapshot: sklandScheduleSnapshot,
+        snapshot: sklandStatusSnapshot,
+        accounts: sklandAccounts,
+        activeAccountId: sklandActiveAccountId,
+        bindingCount: sklandBindingCount,
+        sessionLoading: sklandSessionLoading,
+        layoutMatches: sklandLayoutMatches ?? false,
+        layoutDirty,
+        configured: sklandConfigured,
+        disabledReason: sklandDisabledReason,
+        busy: sklandBusy,
+        error: sklandError,
+        onAuthenticated: handleSklandAuthenticated,
+        onRoleChange: handleSklandRole,
+        onLogout: handleSklandLogout,
+        onRetryStatus: handleRetrySklandStatus,
+        onDeleteAllData: handleDeleteAllSklandData,
+        onApplyLayout: handleApplySklandLayout,
+        onContinueSetup: () => {
+          setSetupInitialStep("layout");
+          setSetupOpen(true);
+        },
+        onOpenCalculator: () => navigateToPage("calculator"),
+        onCopyUid: (uid: string) => void copyText(uid),
+      },
+    } : null,
+  };
 
   return (
     <AppMotionProvider>
@@ -1313,7 +1395,7 @@ function WorkbenchApp() {
       data-workbench-hydrated={hasRestoredSession ? "true" : "false"}
     >
     <SidebarProvider defaultOpen={false}>
-      <AppSidebar page={page} onPageChange={handleAppPageChange} />
+      <AppSidebar page={page} betaRequested={betaRequested} onPageChange={handleAppPageChange} />
       <SidebarInset>
         <AppTopBar />
         <LiveActivity
@@ -1325,118 +1407,20 @@ function WorkbenchApp() {
         />
 
       <div className="app-content-track py-4" data-app-content>
-      <PrimaryPageTransition pageKey={page}>
-      <Suspense fallback={<DeferredPageLoading />}>
-      {page === "calculator" ? (
-        <InfraCalculator
-          layout={layout}
-          showBetaPanels={showBetaPanels}
-          result={result}
-          scheduleResult={scheduleResult}
-          activeShift={activeShift}
-          rows={rows}
-          currentMoraleByOperator={currentMoraleByOperator}
-          activePlan={activePlan}
-          closestComparison={closestComparison}
-          resultClearNotice={resultClearNotice}
-          issueForPanel={issueForPanel}
-          issueReport={issueReport}
-          feedbackResult={feedbackResult}
-          feedbackError={feedbackError}
-          sampleLoading={sampleLoading}
-          loading={loading}
-          canRun={canRun}
-          plannerReady={cliReady}
-          animatePlanEntrance={animatePlanEntrance}
-          animateEmptyScheduleEntrance={animateEmptyScheduleEntrance}
-          onPlanEntranceConsumed={(revision) => revealedPlanRevisions.current.add(revision)}
-          requiresAccount={!accountCanUseCurrentBox}
-          accountControl={CLIENT_SKLAND_ENABLED ? (
-            <SklandAccountControl
-              account={activeSklandAccount}
-              statusSnapshot={sklandStatusSnapshot}
-              sessionLoading={sklandSessionLoading}
-              onOpenSkland={() => setPage("skland")}
-            />
-          ) : undefined}
-          onLoadSample={handleLoadSample}
-          onOpenSetup={openSetup}
-          onRun={handleRun}
-          onCancelRun={handleCancelRun}
-          onSetActiveShift={setActiveShift}
-          onMarkIssue={handleMarkIssue}
-          onFactoryRecipeChange={handleScheduleFactoryRecipeChange}
-          onTradeOrderChange={handleScheduleTradeOrderChange}
-          onDownloadMaa={handleDownloadMaa}
-          onDownloadBundle={handleDownloadBundle}
-          onCopyCommand={handleCopyCommand}
-          onClearResultNotice={() => setResultClearNotice(null)}
-          onDismissResultClearWarning={dismissResultClearWarning}
-        />
-      ) : CLIENT_SKLAND_ENABLED && page === "skland" ? (
-        <DevelopmentSklandStatusCenter
-          websiteAuthenticated={Boolean(websiteSession)}
-          websiteSessionPending={websiteSessionPending}
-          bindingSummary={sklandBindingSummary}
-          onOpenAccount={() => handleAppPageChange("account")}
-          skland={{
-            scheduleSnapshot: sklandScheduleSnapshot,
-            snapshot: sklandStatusSnapshot,
-            accounts: sklandAccounts,
-            activeAccountId: sklandActiveAccountId,
-            bindingCount: sklandBindingCount,
-            sessionLoading: sklandSessionLoading,
-            layoutMatches: sklandLayoutMatches ?? false,
-            layoutDirty,
-            configured: sklandConfigured,
-            disabledReason: sklandDisabledReason,
-            busy: sklandBusy,
-            error: sklandError,
-            onAuthenticated: handleSklandAuthenticated,
-            onRoleChange: handleSklandRole,
-            onLogout: handleSklandLogout,
-            onRetryStatus: handleRetrySklandStatus,
-            onDeleteAllData: handleDeleteAllSklandData,
-            onApplyLayout: handleApplySklandLayout,
-            onContinueSetup: () => {
-              setSetupInitialStep("layout");
-              setSetupOpen(true);
-            },
-            onOpenCalculator: () => setPage("calculator"),
-            onCopyUid: (uid) => void copyText(uid),
-          }}
-        />
-      ) : page === "account" ? (
-        websiteSession ? (
-          <AccountStatusCenter onSessionChanged={handleWebsiteSessionChanged} />
-        ) : (
-          <div className="grid min-h-64 place-items-center" role="status" aria-live="polite">
-            <span className="text-sm text-muted-foreground">正在确认网站账号…</span>
-          </div>
-        )
-      ) : page === "skill-query" ? (
-        <SkillQuery />
-      ) : (
-        <TrainingAdvice
-          operbox={accountCanUseCurrentBox ? operbox : null}
-          layout={layout}
-          profile={accountCanUseCurrentBox ? result?.profile : null}
-          requiresAccount={!accountCanUseCurrentBox}
-          onOpenCalculator={() => setPage("calculator")}
-        />
-      )}
-      </Suspense>
-      </PrimaryPageTransition>
+      <WorkbenchContext.Provider value={workbenchContext}>
+        <PrimaryPageTransition pageKey={page}>{children}</PrimaryPageTransition>
+      </WorkbenchContext.Provider>
       </div>
 
       <footer className="app-content-track mt-auto flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border/70 py-5 text-xs text-muted-foreground">
         <span>非官方、小范围测试中的排班辅助工具</span>
-        <Link className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/terms">本站服务条款</Link>
-        <Link className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/privacy">本站隐私政策</Link>
+        <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/terms">本站服务条款</Link>
+        <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/privacy">本站隐私政策</Link>
         {debugToolsEnabled ? (
           <Link
             className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground"
-            href={betaRequested ? "/" : "/?beta"}
+            href={workbenchHref(page, !betaRequested)}
+            prefetch={false}
             onClick={() => setBetaRequested((current) => !current)}
           >
             {betaRequested ? "退出调试工具" : "开启调试工具"}

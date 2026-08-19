@@ -32,6 +32,10 @@ test("production profile removes Skland UI, requests, health data, and API acces
   await expect(page.getByText("森空岛", { exact: false })).toHaveCount(0);
   await expect(page.getByText("上传练度 JSON / XLSX", { exact: true })).toBeVisible();
 
+  const sklandPageResponse = await request.get("/skland");
+  expect(sklandPageResponse.status()).toBe(404);
+  expect(await sklandPageResponse.text()).not.toContain("森空岛");
+
   const healthResponse = await request.get("/api/health");
   expect([200, 503]).toContain(healthResponse.status());
   const health = await healthResponse.json();

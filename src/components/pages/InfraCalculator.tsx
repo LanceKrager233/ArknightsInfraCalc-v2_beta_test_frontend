@@ -84,7 +84,7 @@ function RunButton({
   );
 }
 
-interface InfraCalculatorProps {
+export interface InfraCalculatorProps {
   layout: BaseBlueprint;
   showBetaPanels: boolean;
   result: PublicPlanData | null;
