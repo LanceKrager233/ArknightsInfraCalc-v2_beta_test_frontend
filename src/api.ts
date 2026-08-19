@@ -18,6 +18,8 @@ import type {
 } from "./types";
 import type { SklandPolicyConsentRequest } from "./legal-policy";
 
+const SKLAND_API_PREFIX = process.env.APP_CLIENT_SKLAND_API_PREFIX ?? "";
+
 export class ApiClientError extends Error implements DisplayError {
   readonly code: AppErrorCode;
   readonly requestId?: string;
@@ -63,6 +65,16 @@ async function requestData<T>(path: string, init?: RequestInit): Promise<T> {
   });
 }
 
+function sklandApiPath(path: string): string {
+  if (SKLAND_API_PREFIX) return `${SKLAND_API_PREFIX}${path}`;
+  throw new ApiClientError({
+    code: "AIC-AUTH-2007",
+    message: "当前站点不提供此功能。",
+    requestId: crypto.randomUUID(),
+    retryable: false,
+  });
+}
+
 export function toDisplayError(error: unknown, fallback: string): DisplayError {
   if (error instanceof ApiClientError) {
     return {
@@ -103,12 +115,12 @@ export function getHealth(): Promise<PublicHealthData> {
   return requestData("/api/health");
 }
 
-export function getSklandSession(): Promise<SklandSessionData> {
-  return requestData("/api/skland/session");
+export function getSklandSession(mode: "full" | "summary" = "full"): Promise<SklandSessionData> {
+  return requestData(sklandApiPath(mode === "summary" ? "/session?mode=summary" : "/session"));
 }
 
 export function startSklandQr(consent: SklandPolicyConsentRequest): Promise<SklandQrStartData> {
-  return requestData("/api/skland/auth/qr", {
+  return requestData(sklandApiPath("/auth/qr"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ consent }),
@@ -116,11 +128,11 @@ export function startSklandQr(consent: SklandPolicyConsentRequest): Promise<Skla
 }
 
 export function getSklandStatus(): Promise<SklandStatusData> {
-  return requestData("/api/skland/status");
+  return requestData(sklandApiPath("/status"));
 }
 
 export function pollSklandQr(scanId: string): Promise<SklandQrStatusData> {
-  return requestData("/api/skland/auth/qr/status", {
+  return requestData(sklandApiPath("/auth/qr/status"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ scanId }),
@@ -128,11 +140,11 @@ export function pollSklandQr(scanId: string): Promise<SklandQrStatusData> {
 }
 
 export function syncSkland(): Promise<SklandSessionData> {
-  return requestData("/api/skland/sync", { method: "POST" });
+  return requestData(sklandApiPath("/sync"), { method: "POST" });
 }
 
 export function selectSklandRole(accountId: string, uid: string): Promise<SklandSessionData> {
-  return requestData("/api/skland/role", {
+  return requestData(sklandApiPath("/role"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ accountId, uid }),
@@ -140,7 +152,7 @@ export function selectSklandRole(accountId: string, uid: string): Promise<Skland
 }
 
 export function logoutSkland(accountId?: string): Promise<SklandSessionData> {
-  return requestData("/api/skland/session", {
+  return requestData(sklandApiPath("/session"), {
     method: "DELETE",
     ...(accountId ? {
       headers: { "Content-Type": "application/json" },
@@ -150,7 +162,7 @@ export function logoutSkland(accountId?: string): Promise<SklandSessionData> {
 }
 
 export function deleteAllSklandData(): Promise<{ deleted: true; runs: number; feedback: number }> {
-  return requestData("/api/skland/data", { method: "DELETE" });
+  return requestData(sklandApiPath("/data"), { method: "DELETE" });
 }
 
 export function getSampleOperbox(): Promise<SampleOperboxData> {

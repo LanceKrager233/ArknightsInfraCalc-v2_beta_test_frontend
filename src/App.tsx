@@ -3,17 +3,16 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ComponentProps, ComponentType } from "react";
 
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar, type AppPage } from "@/components/layout/AppSidebar";
 import { AppTopBar, SklandAccountControl } from "@/components/layout/AppTopBar";
 import { PrimaryPageTransition } from "@/components/layout/PrimaryPageTransition";
 import { InfraCalculator } from "@/components/pages/InfraCalculator";
-import { AccountStatusCenter } from "@/components/pages/AccountStatusCenter";
-import { DevelopmentSklandStatusCenter } from "@/components/pages/DevelopmentSklandStatusCenter";
-import { WebsiteAccountDialog } from "@/components/auth/WebsiteAccountDialog";
 import { LiveActivity, usePlanActivity } from "@/components/ui/live-activity";
 import { authClient } from "@/lib/auth-client";
+import { preloadProductIcons } from "@/product-assets";
 
 import {
   deleteAllSklandData,
@@ -56,6 +55,7 @@ import { planToRows, RoomRow } from "./schedule";
 import { DEFAULT_ROTATION_PROFILE } from "./rotation-settings";
 import { closestShift, compareShifts } from "./skland";
 import { emptySklandBindingSummary } from "./skland-binding-state";
+import { createSklandRestoreGuard } from "./skland-restore-guard";
 import { setupConfigurationFingerprint } from "./setup-configuration";
 import {
   BaseBlueprint,
@@ -106,6 +106,22 @@ const TrainingAdvice = dynamic(
 const SkillQuery = dynamic(
   () => import("@/components/pages/SkillQuery").then((module) => module.SkillQuery),
   { loading: DeferredPageLoading, ssr: false },
+);
+const AccountStatusCenter = dynamic(
+  () => import("@/components/pages/AccountStatusCenter").then((module) => module.AccountStatusCenter),
+  { loading: DeferredPageLoading, ssr: false },
+);
+type DevelopmentSklandStatusCenterProps = ComponentProps<typeof import("@/components/pages/DevelopmentSklandStatusCenter").DevelopmentSklandStatusCenter>;
+type DevelopmentSklandStatusCenterComponent = ComponentType<DevelopmentSklandStatusCenterProps>;
+const DevelopmentSklandStatusCenter: DevelopmentSklandStatusCenterComponent = CLIENT_SKLAND_ENABLED
+  ? dynamic(
+      () => import("@/components/pages/DevelopmentSklandStatusCenter").then((module) => module.DevelopmentSklandStatusCenter),
+      { loading: DeferredPageLoading, ssr: false },
+    )
+  : () => null;
+const WebsiteAccountDialog = dynamic(
+  () => import("@/components/auth/WebsiteAccountDialog").then((module) => module.WebsiteAccountDialog),
+  { ssr: false },
 );
 const SetupDialog = dynamic(
   () => import("./setup-dialog").then((module) => module.SetupDialog),
@@ -237,6 +253,7 @@ function WorkbenchApp() {
   const revealedPlanRevisions = useRef(new Set<string>());
   const [websiteAuthReloadKey, setWebsiteAuthReloadKey] = useState(0);
   const [websiteAuthDialogOpen, setWebsiteAuthDialogOpen] = useState(false);
+  const [websiteAuthDialogMounted, setWebsiteAuthDialogMounted] = useState(false);
   const [betaRequested, setBetaRequested] = useState(false);
   const [debugToolsEnabled, setDebugToolsEnabled] = useState(false);
   const [hasRestoredSession, setHasRestoredSession] = useState(false);
@@ -277,6 +294,7 @@ function WorkbenchApp() {
   const initialLocalLayoutBackup = useRef<BaseBlueprint | null>(null);
   const skipNextPersistence = useRef(false);
   const statusLoadingAccount = useRef<string | null>(null);
+  const sklandRestoreGuard = useRef(createSklandRestoreGuard());
   const [inputError, setInputError] = useState<string | null>(null);
   const [inputErrorCode, setInputErrorCode] = useState<DisplayError["code"]>("AIC-BOX-1101");
   const [sampleLoading, setSampleLoading] = useState(false);
@@ -349,6 +367,10 @@ function WorkbenchApp() {
   const sklandBindingCount = sklandBindingSummary.totalCount;
   const websiteUserId = websiteSession?.user.id ?? null;
 
+  function beginSklandStateChange(): number {
+    return sklandRestoreGuard.current.begin();
+  }
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const syncBetaPanels = () => setBetaRequested(new URLSearchParams(window.location.search).has("beta"));
@@ -360,6 +382,10 @@ function WorkbenchApp() {
   useEffect(() => {
     if (setupOpen) setSetupMounted(true);
   }, [setupOpen]);
+
+  useEffect(() => {
+    if (websiteAuthDialogOpen) setWebsiteAuthDialogMounted(true);
+  }, [websiteAuthDialogOpen]);
 
   useEffect(() => {
     if (issueOpen) setIssueModalMounted(true);
@@ -480,22 +506,49 @@ function WorkbenchApp() {
   }, [hasRestoredSession]);
 
   useEffect(() => {
+    if (!CLIENT_SKLAND_ENABLED) return;
+    const generation = sklandRestoreGuard.current.begin();
+    let cancelled = false;
+    setSklandSessionLoading(true);
+    void getSklandSession("summary")
+      .then((session) => {
+        if (
+          cancelled
+          || !sklandRestoreGuard.current.canApplySummary(generation)
+        ) return;
+        setSklandConfigured(session.configured);
+        setSklandDisabledReason(session.disabledReason ?? null);
+        setSklandAccounts(session.accounts);
+        setSklandActiveAccountId(session.activeAccountId);
+        setSklandBindingSummary(bindingSummaryFromSession(session));
+      })
+      .catch(() => {
+        // 完整恢复会在网站 Session 确认后提供可操作错误；摘要失败不清除已有身份。
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [websiteAuthReloadKey]);
+
+  useEffect(() => {
     if (!hasRestoredSession || websiteSessionPending) return;
     if (!CLIENT_SKLAND_ENABLED) {
       setSklandSessionLoading(false);
       return;
     }
 
+    const generation = sklandRestoreGuard.current.current();
     let cancelled = false;
     statusLoadingAccount.current = null;
-    setSklandAccounts([]);
-    setSklandActiveAccountId(null);
-    setSklandBindingSummary(emptySklandBindingSummary());
-    setSklandScheduleSnapshot(null);
-    setSklandStatusSnapshot(null);
-    setSklandError(null);
 
     if (!websiteUserId) {
+      sklandRestoreGuard.current.acceptFull(generation);
+      setSklandAccounts([]);
+      setSklandActiveAccountId(null);
+      setSklandBindingSummary(emptySklandBindingSummary());
+      setSklandScheduleSnapshot(null);
+      setSklandStatusSnapshot(null);
+      setSklandError(null);
       setSklandSessionLoading(false);
       return;
     }
@@ -503,7 +556,7 @@ function WorkbenchApp() {
     setSklandSessionLoading(true);
     void getSklandSession()
       .then((session) => {
-        if (cancelled) return;
+        if (cancelled || !sklandRestoreGuard.current.acceptFull(generation)) return;
         const bindingSummary = bindingSummaryFromSession(session);
         setSklandError(null);
         setSklandConfigured(session.configured);
@@ -534,14 +587,17 @@ function WorkbenchApp() {
             setLayoutSource("skland");
             setPreset(resolvePreset(PRESETS.find((item) => item.label === session.scheduleSnapshot?.infrastructure.layoutLabel)));
           }
+        } else {
+          setSklandScheduleSnapshot(null);
+          setSklandStatusSnapshot(null);
         }
       })
       .catch((error) => {
-        if (cancelled) return;
+        if (cancelled || !sklandRestoreGuard.current.isCurrent(generation)) return;
         setSklandError(toDisplayError(error, "森空岛会话恢复失败，请稍后刷新。"));
       })
       .finally(() => {
-        if (!cancelled) setSklandSessionLoading(false);
+        if (!cancelled && sklandRestoreGuard.current.isCurrent(generation)) setSklandSessionLoading(false);
       });
     return () => {
       cancelled = true;
@@ -659,17 +715,22 @@ function WorkbenchApp() {
   }
 
   async function handleSklandRole(accountId: string, uid: string) {
+    const generation = beginSklandStateChange();
     setSklandBusy(true);
     setSklandError(null);
     try {
       const session = await selectSklandRole(accountId, uid);
+      if (!sklandRestoreGuard.current.isCurrent(generation)) return;
       if (!session.authenticated || !session.scheduleSnapshot) throw new Error("角色切换失败。");
+      sklandRestoreGuard.current.acceptFull(generation);
       applySklandSession(session, false);
     } catch (error) {
+      if (!sklandRestoreGuard.current.isCurrent(generation)) return;
       const normalized = toDisplayError(error, "角色切换失败，请稍后重试。");
       setSklandError(normalized);
       try {
         const current = await getSklandSession();
+        if (!sklandRestoreGuard.current.acceptFull(generation)) return;
         setSklandAccounts(current.accounts);
         setSklandActiveAccountId(current.activeAccountId);
         setSklandStatusSnapshot(current.statusSnapshot ?? null);
@@ -678,22 +739,25 @@ function WorkbenchApp() {
         // 保留上一份成功快照，等待用户再次操作。
       }
     } finally {
-      setSklandBusy(false);
+      if (sklandRestoreGuard.current.isCurrent(generation)) setSklandBusy(false);
     }
   }
 
   async function handleSklandLogout() {
     if (!sklandActiveAccountId) return;
+    const generation = beginSklandStateChange();
     setSklandBusy(true);
     setSklandError(null);
     try {
       const session = await logoutSkland(sklandActiveAccountId);
+      if (!sklandRestoreGuard.current.acceptFull(generation)) return;
       applySklandSession(session, false);
     } catch (error) {
+      if (!sklandRestoreGuard.current.isCurrent(generation)) return;
       const normalized = toDisplayError(error, "退出森空岛失败，请稍后重试。");
       setSklandError(normalized);
     } finally {
-      setSklandBusy(false);
+      if (sklandRestoreGuard.current.isCurrent(generation)) setSklandBusy(false);
     }
   }
 
@@ -719,6 +783,7 @@ function WorkbenchApp() {
       setApiError(displayError("AIC-PLAN-3001", "排班服务暂不可用，请稍后重试。", true));
       return;
     }
+    preloadProductIcons();
     setLoading(true);
     const controller = new AbortController();
     planAbortRef.current?.abort();
@@ -1061,6 +1126,7 @@ function WorkbenchApp() {
   }
 
   async function handleWebsiteSessionChanged(authenticated: boolean) {
+    beginSklandStateChange();
     setWebsiteAuthDialogOpen(false);
     setPage(authenticated ? "account" : "calculator");
     if (!authenticated) {
@@ -1080,6 +1146,8 @@ function WorkbenchApp() {
   }
 
   function handleSklandAuthenticated(session: SklandSessionData) {
+    const generation = beginSklandStateChange();
+    sklandRestoreGuard.current.acceptFull(generation);
     setSklandError(null);
     applySklandSession(session);
   }
@@ -1091,10 +1159,12 @@ function WorkbenchApp() {
   }
 
   async function handleDeleteAllSklandData() {
+    const generation = beginSklandStateChange();
     setSklandBusy(true);
     setSklandError(null);
     try {
       await deleteAllSklandData();
+      if (!sklandRestoreGuard.current.acceptFull(generation)) return;
       const clearsBox = boxSource === "skland";
       const clearsLayout = layoutSource === "skland";
       const retainedLayout = clearsLayout
@@ -1148,10 +1218,11 @@ function WorkbenchApp() {
       }
       clearIssueState();
     } catch (error) {
+      if (!sklandRestoreGuard.current.isCurrent(generation)) return;
       setSklandError(toDisplayError(error, "森空岛数据删除失败，请稍后重试。"));
       throw error;
     } finally {
-      setSklandBusy(false);
+      if (sklandRestoreGuard.current.isCurrent(generation)) setSklandBusy(false);
     }
   }
 
@@ -1220,19 +1291,13 @@ function WorkbenchApp() {
     && !revealedPlanRevisions.current.has(visiblePlanRevision)
   );
 
-  if (!hasRestoredSession) {
-    return (
-      <main className="grid min-h-dvh place-items-center bg-background px-6" role="status" aria-live="polite">
-        <div className="w-full max-w-md space-y-3" aria-label="正在恢复本地数据">
-          <div className="h-10 animate-pulse rounded-lg bg-muted" />
-          <div className="h-56 animate-pulse rounded-lg bg-muted/70" />
-          <span className="sr-only">正在恢复本地数据</span>
-        </div>
-      </main>
-    );
-  }
-
   return (
+    <div
+      className="contents"
+      inert={!hasRestoredSession}
+      aria-busy={!hasRestoredSession}
+      data-workbench-hydrated={hasRestoredSession ? "true" : "false"}
+    >
     <SidebarProvider defaultOpen={false}>
       <AppSidebar page={page} onPageChange={handleAppPageChange} />
       <SidebarInset>
@@ -1362,11 +1427,11 @@ function WorkbenchApp() {
         ) : null}
       </footer>
 
-      <WebsiteAccountDialog
+      {websiteAuthDialogMounted ? <WebsiteAccountDialog
         open={websiteAuthDialogOpen}
         onOpenChange={setWebsiteAuthDialogOpen}
         onSessionChanged={handleWebsiteSessionChanged}
-      />
+      /> : null}
 
       {setupMounted ? <SetupDialog
         {...(CLIENT_SKLAND_ENABLED ? {
@@ -1433,6 +1498,7 @@ function WorkbenchApp() {
       /> : null}
       </SidebarInset>
     </SidebarProvider>
+    </div>
   );
 }
 

@@ -10,6 +10,7 @@ import {
 import {
   assertSklandAvailable,
   assertSklandFeatureEnabled,
+  activeSklandAccount,
   loadActiveSklandAccount,
   readSklandAccountStore,
   setSklandAccountStoreCookies,
@@ -21,6 +22,7 @@ import { isSecureSklandRequest, isSklandConfigured } from "@/server/skland/sessi
 import { requireWebsiteSession } from "@/server/auth/authorization";
 import { getSklandBindingSummary, removeSklandBindings } from "@/server/skland/bindings";
 import type { SklandBindingSummary } from "@/types";
+import { resolveSklandSessionView, sklandSessionMode } from "@/server/skland/session-view";
 
 export const runtime = "nodejs";
 const authMethods = { qr: true as const };
@@ -30,15 +32,22 @@ export async function GET(request: Request) {
   const startedAt = performance.now();
   let websiteUserId: string;
   let bindingSummary: SklandBindingSummary;
+  let mode: ReturnType<typeof sklandSessionMode>;
   try {
     assertSklandFeatureEnabled();
+    mode = sklandSessionMode(request.url);
     const website = await requireWebsiteSession(request);
     websiteUserId = website.user.id;
-    bindingSummary = await getSklandBindingSummary(websiteUserId);
   } catch (error) {
     return sklandErrorResponse(error, requestId, "/api/skland/session", startedAt);
   }
+  const bindingSummaryPromise = getSklandBindingSummary(websiteUserId);
   if (!isSklandConfigured() || !isSecureSklandRequest(request)) {
+    try {
+      bindingSummary = await bindingSummaryPromise;
+    } catch (error) {
+      return sklandErrorResponse(error, requestId, "/api/skland/session", startedAt);
+    }
     return successResponse({
       authenticated: false,
       configured: isSklandConfigured(),
@@ -51,20 +60,21 @@ export async function GET(request: Request) {
     }, requestId);
   }
   try {
-    const previous = await readSklandAccountStore();
-    const loaded = await loadActiveSklandAccount(previous);
-    const response = successResponse({
-      authenticated: Boolean(loaded.snapshot),
-      configured: true,
-      authMethods,
-      accounts: sklandAccountSummaries(loaded.store),
-      activeAccountId: loaded.store.activeAccountId,
-      bindingCount: bindingSummary.totalCount,
+    const [previous, resolvedBindingSummary] = await Promise.all([
+      readSklandAccountStore(websiteUserId),
+      bindingSummaryPromise,
+    ]);
+    bindingSummary = resolvedBindingSummary;
+    const resolved = await resolveSklandSessionView({
+      mode,
+      store: previous,
       bindingSummary,
-      ...(loaded.snapshot ? { scheduleSnapshot: loaded.snapshot } : {}),
-      ...(loaded.statusSnapshot ? { statusSnapshot: loaded.statusSnapshot } : {}),
-    }, requestId);
-    setSklandAccountStoreCookies(response, request, loaded.store, previous);
+      accountSummaries: sklandAccountSummaries,
+      activeAccountId: (store) => activeSklandAccount(store)?.accountId ?? null,
+      loadFull: loadActiveSklandAccount,
+    });
+    const response = successResponse(resolved.data, requestId);
+    if (resolved.refreshed) setSklandAccountStoreCookies(response, request, resolved.store, previous);
     return response;
   } catch (error) {
     return sklandErrorResponse(error, requestId, "/api/skland/session", startedAt);
@@ -80,7 +90,7 @@ export async function DELETE(request: Request) {
     assertSklandAvailable(request);
     assertSameOrigin(request);
     enforceRateLimit("skland-action", requestClientIp(request), 30, 60 * 60_000);
-    const previous = await readSklandAccountStore();
+    const previous = await readSklandAccountStore(website.user.id);
     let next = previous;
     let removedSklandUserIds: string[];
     if (request.body) {
