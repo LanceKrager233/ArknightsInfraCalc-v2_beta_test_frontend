@@ -2943,6 +2943,7 @@ test("calculator owns scheduling controls and training advice uses a single tech
   await seedV4Session(page, adviceResult);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
+  await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
 
   const calculatorControls = page.locator("[data-calculator-controls]");
   const fullE2 = page.locator('[data-calculator-export-actions="desktop"] [data-full-e2]');
@@ -3470,8 +3471,10 @@ test("Skland status center keeps profile and recruitment in overview and support
   await seedPreferences(page);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
-  const scheduleViewTabHeight = await page.getByRole("tab", { name: "列表式布局" })
-    .evaluate((element) => element.getBoundingClientRect().height);
+  await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
+  const scheduleViewTab = page.getByRole("tab", { name: "列表式布局" });
+  await expect(scheduleViewTab).toBeVisible();
+  const scheduleViewTabHeight = await scheduleViewTab.evaluate((element) => element.getBoundingClientRect().height);
   await openSklandOverview(page);
   await expect(page.locator("[data-calculator-controls]")).toHaveCount(0);
 

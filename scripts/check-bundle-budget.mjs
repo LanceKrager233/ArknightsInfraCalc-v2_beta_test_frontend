@@ -4,10 +4,10 @@ import { stdout } from "node:process";
 import { URL } from "node:url";
 import { gzipSync } from "node:zlib";
 
-const MAX_ROUTE_INITIAL_JS_BYTES = 1_100_000;
-const MAX_DOCUMENT_INITIAL_JS_BYTES = 1_450_000;
-const MAX_DOCUMENT_INITIAL_GZIP_JS_BYTES = 410_000;
-const MAX_DOCUMENT_INITIAL_JS_FILES = 20;
+const MAX_ROUTE_INITIAL_JS_BYTES = 950_000;
+const MAX_DOCUMENT_INITIAL_JS_BYTES = 1_060_000;
+const MAX_DOCUMENT_INITIAL_GZIP_JS_BYTES = 340_000;
+const MAX_DOCUMENT_INITIAL_JS_FILES = 16;
 const statsUrl = new URL("../.next/diagnostics/route-bundle-stats.json", import.meta.url);
 const documentUrl = new URL("../.next/server/app/index.html", import.meta.url);
 const buildRootUrl = new URL("../.next/", import.meta.url);

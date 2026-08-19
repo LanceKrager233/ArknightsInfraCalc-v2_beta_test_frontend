@@ -27,10 +27,10 @@ test("CI enforces route and document preload JavaScript budgets after building",
 
   assert.equal(packageJson.scripts["test:bundle-budget"], "node scripts/check-bundle-budget.mjs");
   assert.match(workflow, /Production build[\s\S]+npm run test:bundle-budget/);
-  assert.match(budgetCheck, /MAX_ROUTE_INITIAL_JS_BYTES = 1_100_000/);
-  assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_JS_BYTES = 1_450_000/);
-  assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_GZIP_JS_BYTES = 410_000/);
-  assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_JS_FILES = 20/);
+  assert.match(budgetCheck, /MAX_ROUTE_INITIAL_JS_BYTES = 950_000/);
+  assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_JS_BYTES = 1_060_000/);
+  assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_GZIP_JS_BYTES = 340_000/);
+  assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_JS_FILES = 16/);
   assert.match(budgetCheck, /firstLoadUncompressedJsBytes/);
   assert.match(budgetCheck, /\.next\/server\/app\/index\.html/);
   assert.match(budgetCheck, /gzipSync/);
@@ -86,14 +86,24 @@ test("production injects the client feature flag at every browser boundary", asy
   assert.match(workflow, /Production build[\s\S]+APP_DEPLOYMENT_ENV: production/);
 });
 
-test("the application entry remains split while the workbench participates in server rendering", async () => {
+test("the server page imports the workbench directly without a dynamic preload group", async () => {
   const page = await readRepoFile("src/app/page.tsx");
-  const loader = await readRepoFile("src/AppLoader.tsx");
 
-  assert.match(page, /import AppLoader from "@\/AppLoader"/);
-  assert.match(loader, /dynamic\(\(\) => import\("@\/App"\)/);
-  assert.doesNotMatch(loader, /ssr: false/);
-  assert.doesNotMatch(loader, /正在加载基建计算器/);
+  assert.match(page, /import WorkbenchApp from "@\/App"/);
+  assert.doesNotMatch(page, /dynamic\(/);
+});
+
+test("heavy account, operator, and scrollbar modules stay behind runtime boundaries", async () => {
+  const app = await readRepoFile("src/App.tsx");
+  const schedule = await readRepoFile("src/schedule.ts");
+  const components = await readRepoFile("src/components.tsx");
+  const scrollbar = await readRepoFile("src/components/ui/page-scrollbar.tsx");
+
+  assert.match(app, /useWebsiteSessionIdentity/);
+  assert.doesNotMatch(app, /authClient\.useSession/);
+  assert.doesNotMatch(schedule, /operatorPresentationFor/);
+  assert.doesNotMatch(components, /from "@\/operatorPortraits"/);
+  assert.match(scrollbar, /import\("overlayscrollbars"\)/);
 });
 
 test("versioned product assets receive immutable cache headers", async () => {
