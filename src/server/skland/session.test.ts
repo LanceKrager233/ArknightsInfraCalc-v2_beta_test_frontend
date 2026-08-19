@@ -151,6 +151,13 @@ test("Skland account cookies are bound to one website user", () => {
   assert.equal(sealed.includes("website-user-one"), false);
 });
 
+test("expired owned account cookies cannot produce an identity summary", () => {
+  const account = createSklandStoredAccount(sessionFor("expired-user"), rolesFor("expired-user"), "account_expired");
+  const owner = websiteUserOwnerTag("website-user", secret);
+  const sealed = sealOwnedSklandAccount(account, owner, secret);
+  assert.equal(unsealOwnedSklandAccount(sealed, owner, secret, account.session.expiresAt), null);
+});
+
 test("QR consent requires both current policy versions", () => {
   const valid = {
     termsAccepted: true as const,

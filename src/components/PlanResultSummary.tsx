@@ -14,6 +14,7 @@ import { estimateDailyProduction, type DailyProductionAmount, type DailyProducti
 import { manufacturePoolReady, profileEfficiency } from "@/efficiency";
 import { cn } from "@/lib/utils";
 import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
+import { PRODUCT_ICON_URLS } from "@/product-assets";
 import { relativeMetricDelta, rotationMetricValue, type RotationMetricKind } from "@/rotation-presentation";
 import type { BaseBlueprint, MaaJson, RotationJson, ShiftComparison, UserProfile } from "@/types";
 
@@ -29,14 +30,6 @@ function severityClass(severity: "ok" | "warn" | "critical") {
   if (severity === "warn") return "bg-amber-100 text-amber-800";
   return "bg-emerald-100 text-emerald-800";
 }
-
-const PRODUCT_ICONS = {
-  lmdOrders: "/images/products/lmd_orders.webp",
-  gold: "/images/products/gold.webp",
-  experience: "/images/products/experience.webp",
-  shards: "/images/products/originium_shard.webp",
-  orundum: "/images/products/orundum.webp",
-} as const;
 
 function dailyNumber(value: number | null): string {
   return value === null ? "—" : Math.round(value).toLocaleString("zh-CN");
@@ -100,17 +93,17 @@ export function PlanResultSummary({
   const productGroups = production ? [
     {
       id: "experience",
-      primary: { id: "experience", label: "经验", unit: "经验", icon: PRODUCT_ICONS.experience, amount: production.experience },
+      primary: { id: "experience", label: "经验", unit: "经验", icon: PRODUCT_ICON_URLS.experience, amount: production.experience },
     },
     {
       id: "lmd",
-      primary: { id: "lmd-orders", label: "龙门币", unit: "龙门币", icon: PRODUCT_ICONS.lmdOrders, amount: production.lmdOrders },
-      supporting: { id: "gold", label: "赤金", unit: "枚", icon: PRODUCT_ICONS.gold, amount: production.gold },
+      primary: { id: "lmd-orders", label: "龙门币", unit: "龙门币", icon: PRODUCT_ICON_URLS.lmdOrders, amount: production.lmdOrders },
+      supporting: { id: "gold", label: "赤金", unit: "枚", icon: PRODUCT_ICON_URLS.gold, amount: production.gold },
     },
     {
       id: "orundum",
-      primary: { id: "orundum", label: "合成玉", unit: "合成玉", icon: PRODUCT_ICONS.orundum, amount: production.orundum },
-      supporting: { id: "shards", label: "源石碎片", unit: "枚", icon: PRODUCT_ICONS.shards, amount: production.shards },
+      primary: { id: "orundum", label: "合成玉", unit: "合成玉", icon: PRODUCT_ICON_URLS.orundum, amount: production.orundum },
+      supporting: { id: "shards", label: "源石碎片", unit: "枚", icon: PRODUCT_ICON_URLS.shards, amount: production.shards },
     },
   ] : [];
   const adjustmentCount = comparison?.adjustments.length ?? 0;
@@ -177,7 +170,7 @@ export function PlanResultSummary({
                   </span>
                   {productGroup.supporting ? (
                     <span className="mt-2 flex min-w-0 items-center gap-1.5 bg-[#313131]/[0.045] px-1.5 py-1" data-daily-product={productGroup.supporting.id} data-product-role="supporting">
-                      <Image src={productGroup.supporting.icon} alt="" width={183} height={183} className="size-4 shrink-0 object-contain" aria-hidden="true" />
+                      <Image src={productGroup.supporting.icon} alt="" width={16} height={16} unoptimized loading="eager" className="size-4 shrink-0 object-contain" aria-hidden="true" />
                       <span className="min-w-0 flex-1 truncate text-[9px] font-medium text-[#313131]/55">{productGroup.supporting.label}</span>
                       <strong className="font-number flex shrink-0 items-baseline gap-0.5 text-[11px] leading-none tabular-nums">
                         <AnimatedNumber value={dailyNumber(productGroup.supporting.amount.value)} drift={{ x: 0, y: shouldReduceMotion ? 0 : 5 }} />
@@ -186,7 +179,7 @@ export function PlanResultSummary({
                     </span>
                   ) : null}
                 </motion.span>
-                <Image src={productGroup.primary.icon} alt="" width={183} height={183} className="pointer-events-none absolute right-1.5 top-1.5 size-8 object-contain opacity-75 transition-transform duration-200 group-hover:scale-105" aria-hidden="true" />
+                <Image src={productGroup.primary.icon} alt="" width={32} height={32} unoptimized loading="eager" className="pointer-events-none absolute right-1.5 top-1.5 size-8 object-contain opacity-75 transition-transform duration-200 group-hover:scale-105" aria-hidden="true" />
                 <motion.span className="absolute inset-x-0 bottom-0 h-0.5 origin-left bg-[#313131]/18" aria-hidden="true" initial={animateOnMount ? { scaleX: 0 } : false} animate={{ scaleX: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.42, delay: shouldReduceMotion ? 0 : 0.2 + index * 0.065, ease: MOTION_EASE_OUT }} />
               </motion.button>
             ))}
@@ -251,7 +244,7 @@ function ProductionDetailItem({ product, supporting = false }: { product: Produc
       data-product-role={supporting ? "supporting" : "primary"}
     >
       <div className="flex min-w-0 items-center gap-3">
-        <Image src={product.icon} alt="" width={183} height={183} className={cn("shrink-0 object-contain", supporting ? "size-8" : "size-10")} aria-hidden="true" />
+        <Image src={product.icon} alt="" width={32} height={32} unoptimized loading="eager" className="size-8 shrink-0 object-contain" aria-hidden="true" />
         <div className="min-w-0">
           <span className="flex min-w-0 items-center gap-2">
             <span className="truncate text-[11px] font-semibold text-muted-foreground">{product.label}</span>
@@ -301,7 +294,7 @@ function ProductionDetails({ production }: { production: DailyProductionEstimate
         id: "experience",
         label: "经验",
         unit: "经验",
-        icon: PRODUCT_ICONS.experience,
+        icon: PRODUCT_ICON_URLS.experience,
         amount: production.experience,
         rows: [["自然制造", production.experience.natural, "经验"], ["无人机制造", production.experience.drones, "经验"]],
       },
@@ -312,7 +305,7 @@ function ProductionDetails({ production }: { production: DailyProductionEstimate
         id: "lmd-orders",
         label: "龙门币",
         unit: "龙门币",
-        icon: PRODUCT_ICONS.lmdOrders,
+        icon: PRODUCT_ICON_URLS.lmdOrders,
         amount: production.lmdOrders,
         rows: [["自然订单", production.lmdOrders.natural, "龙门币"], ["无人机订单", production.lmdOrders.droneTrade, "龙门币"]],
       },
@@ -320,7 +313,7 @@ function ProductionDetails({ production }: { production: DailyProductionEstimate
         id: "gold",
         label: "赤金",
         unit: "枚",
-        icon: PRODUCT_ICONS.gold,
+        icon: PRODUCT_ICON_URLS.gold,
         amount: production.gold,
         rows: [["自然制造", production.gold.natural, "枚"], ["无人机制造", production.gold.drones, "枚"]],
         relation: "订单原料",
@@ -332,7 +325,7 @@ function ProductionDetails({ production }: { production: DailyProductionEstimate
         id: "orundum",
         label: "合成玉",
         unit: "合成玉",
-        icon: PRODUCT_ICONS.orundum,
+        icon: PRODUCT_ICON_URLS.orundum,
         amount: production.orundum,
         rows: [["碎片阶段可供", production.orundum.manufactureCapacity, "合成玉"], ["订单阶段可交付", production.orundum.tradeCapacity, "合成玉"]],
         note: `限制环节：${bottleneck}`,
@@ -341,7 +334,7 @@ function ProductionDetails({ production }: { production: DailyProductionEstimate
         id: "shards",
         label: "源石碎片",
         unit: "枚",
-        icon: PRODUCT_ICONS.shards,
+        icon: PRODUCT_ICON_URLS.shards,
         amount: production.shards,
         rows: [["自然制造", production.shards.natural, "枚"], ["无人机制造", production.shards.drones, "枚"]],
         relation: "制造环节",
