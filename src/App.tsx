@@ -124,10 +124,6 @@ const IssueNoteModal = lazy(() => import("./components").then((module) => ({ def
 const ProductChangeConfirmModal = lazy(() => import("./components").then((module) => ({
   default: module.ProductChangeConfirmModal,
 })));
-const PageScrollbar = lazy(() => import("@/components/ui/page-scrollbar").then((module) => ({
-  default: module.PageScrollbar,
-})));
-
 type ProductChange =
   | { type: "factory"; roomId: string; recipe: FactoryRecipe }
   | { type: "trade"; roomId: string; order: TradeOrder };
@@ -242,6 +238,7 @@ function WorkbenchApp() {
   const defaultPreset = PRESETS[0];
   const defaultLayout = buildBlueprint(defaultPreset);
   const [page, setPage] = useState<AppPage>("calculator");
+  const hasRenderedCalculator = useRef(false);
   const revealedPlanRevisions = useRef(new Set<string>());
   const [websiteAuthReloadKey, setWebsiteAuthReloadKey] = useState(0);
   const [websiteAuthDialogOpen, setWebsiteAuthDialogOpen] = useState(false);
@@ -388,6 +385,10 @@ function WorkbenchApp() {
     window.addEventListener("popstate", syncBetaPanels);
     return () => window.removeEventListener("popstate", syncBetaPanels);
   }, []);
+
+  useEffect(() => {
+    if (page === "calculator") hasRenderedCalculator.current = true;
+  }, [page]);
 
   useEffect(() => {
     if (setupOpen) setSetupMounted(true);
@@ -1300,10 +1301,10 @@ function WorkbenchApp() {
     && visiblePlanRevision
     && !revealedPlanRevisions.current.has(visiblePlanRevision)
   );
+  const animateEmptyScheduleEntrance = page === "calculator" && hasRenderedCalculator.current;
 
   return (
     <AppMotionProvider>
-      {hasRestoredSession ? <Suspense fallback={null}><PageScrollbar /></Suspense> : null}
       <TooltipProvider>
     <div
       className="contents"
@@ -1347,6 +1348,7 @@ function WorkbenchApp() {
           canRun={canRun}
           plannerReady={cliReady}
           animatePlanEntrance={animatePlanEntrance}
+          animateEmptyScheduleEntrance={animateEmptyScheduleEntrance}
           onPlanEntranceConsumed={(revision) => revealedPlanRevisions.current.add(revision)}
           requiresAccount={!accountCanUseCurrentBox}
           accountControl={CLIENT_SKLAND_ENABLED ? (

@@ -1349,12 +1349,8 @@ export function ScheduleBoard({
 }) {
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [hiddenGroups, setHiddenGroups] = useState<Record<string, boolean>>({});
-  const [viewMode, setViewMode] = useState<"list" | "compact">(() => (
-    typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches
-      ? "compact"
-      : "list"
-  ));
-  const [supportsCompactLayout, setSupportsCompactLayout] = useState(viewMode === "compact");
+  const [viewMode, setViewMode] = useState<"list" | "compact">("list");
+  const [supportsCompactLayout, setSupportsCompactLayout] = useState(false);
   const preferredViewMode = useRef<"list" | "compact" | null>(null);
   const shouldReduceMotion = useReducedMotion();
 
