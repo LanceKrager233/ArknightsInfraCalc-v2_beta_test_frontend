@@ -129,6 +129,7 @@ export interface MaaJson {
 }
 
 export interface RoomEfficiency {
+  final_efficiency?: number;
   trade_score?: number;
   trade_pct?: number;
   trade_skill_pct?: number;

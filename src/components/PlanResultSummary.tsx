@@ -1,7 +1,8 @@
 "use client";
 
-import { Activity, ArrowUpRight, BarChart3, ChevronRight } from "lucide-react";
+import { BarChart3, ChevronRight } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 
 import { AnimatedNumber, AnimatedText } from "@/components/AnimatedText";
@@ -10,11 +11,12 @@ import { RecommendationCard } from "@/components/RecommendationCard";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { estimateDailyProduction, type DailyProductionAmount, type DailyProductionEstimate, type DailyProductionUnavailableReason } from "@/daily-production";
 import { manufacturePoolReady, profileEfficiency } from "@/efficiency";
 import { cn } from "@/lib/utils";
 import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
 import { relativeMetricDelta, rotationMetricValue, type RotationMetricKind } from "@/rotation-presentation";
-import type { BaseBlueprint, RotationJson, ShiftComparison, UserProfile } from "@/types";
+import type { BaseBlueprint, MaaJson, RotationJson, ShiftComparison, UserProfile } from "@/types";
 
 type DetailSection = "efficiency" | "comparison";
 
@@ -29,9 +31,39 @@ function severityClass(severity: "ok" | "warn" | "critical") {
   return "bg-emerald-100 text-emerald-800";
 }
 
+const PRODUCT_ICONS = {
+  lmdOrders: "/images/products/lmd_orders.webp",
+  gold: "/images/products/gold.webp",
+  experience: "/images/products/experience.webp",
+  shards: "/images/products/originium_shard.webp",
+  orundum: "/images/products/orundum.webp",
+} as const;
+
+function dailyNumber(value: number | null): string {
+  return value === null ? "—" : Math.round(value).toLocaleString("zh-CN");
+}
+
+type ProductionDetailProduct = {
+  id: string;
+  label: string;
+  unit: string;
+  icon: string;
+  amount: DailyProductionAmount;
+  rows: Array<[string, number | null, string]>;
+  relation?: string;
+  note?: string;
+};
+
+function unavailableReason(reason: DailyProductionUnavailableReason | undefined): string {
+  if (reason === "ambiguous-recipe") return "配方无法归类";
+  if (reason === "missing-drone-data") return "无人机数据不足";
+  return "逐房数据不足";
+}
+
 export function PlanResultSummary({
   profile,
   rotation,
+  maa,
   layout,
   activeShift,
   comparison,
@@ -41,6 +73,7 @@ export function PlanResultSummary({
 }: {
   profile?: UserProfile;
   rotation?: RotationJson;
+  maa: MaaJson;
   layout: BaseBlueprint;
   activeShift: number;
   comparison: ShiftComparison | null;
@@ -59,11 +92,28 @@ export function PlanResultSummary({
 
   const currentRotation = profile?.rotation;
   const baselineRotation = profile?.baseline_rotation;
-  const metrics = [
+  const efficiencyMetrics = [
     { kind: "trade" as const, label: "24h 贸易", value: rotation?.daily.trade ?? currentRotation?.daily_trade_efficiency ?? currentRotation?.daily_trade, baseline: baselineRotation?.daily_trade_efficiency ?? baselineRotation?.daily_trade, suffix: "×" },
     { kind: "manu" as const, label: "24h 制造", value: rotation?.daily.manu ?? currentRotation?.daily_manufacture_efficiency ?? currentRotation?.daily_manu, baseline: baselineRotation?.daily_manufacture_efficiency ?? baselineRotation?.daily_manu, suffix: "%" },
     { kind: "power" as const, label: "24h 发电", value: rotation?.daily.power ?? currentRotation?.daily_power_efficiency ?? currentRotation?.daily_power, baseline: baselineRotation?.daily_power_efficiency ?? baselineRotation?.daily_power, suffix: "%" },
   ].filter((metric): metric is { kind: RotationMetricKind; label: string; value: number; baseline: number | undefined; suffix: string } => typeof metric.value === "number");
+  const production = rotation ? estimateDailyProduction({ layout, maa, rotation }) : null;
+  const productGroups = production ? [
+    {
+      id: "experience",
+      primary: { id: "experience", label: "经验", unit: "经验", icon: PRODUCT_ICONS.experience, amount: production.experience },
+    },
+    {
+      id: "lmd",
+      primary: { id: "lmd-orders", label: "龙门币", unit: "龙门币", icon: PRODUCT_ICONS.lmdOrders, amount: production.lmdOrders },
+      supporting: { id: "gold", label: "赤金", unit: "枚", icon: PRODUCT_ICONS.gold, amount: production.gold },
+    },
+    {
+      id: "orundum",
+      primary: { id: "orundum", label: "合成玉", unit: "合成玉", icon: PRODUCT_ICONS.orundum, amount: production.orundum },
+      supporting: { id: "shards", label: "源石碎片", unit: "枚", icon: PRODUCT_ICONS.shards, amount: production.shards },
+    },
+  ] : [];
   const adjustmentCount = comparison?.adjustments.length ?? 0;
   const activeDetailSection = detailSection === "comparison" && comparison ? "comparison" : "efficiency";
   const openDetails = (section: DetailSection) => {
@@ -91,49 +141,60 @@ export function PlanResultSummary({
         {animateOnMount ? (
           <motion.span key={`accent-${planRevision}`} className="pointer-events-none absolute inset-x-0 top-0 z-20 h-0.5 origin-left bg-[#FFD501]" aria-hidden="true" initial={{ scaleX: 0, opacity: 0 }} animate={{ scaleX: 1, opacity: [0, 1, 1, 0] }} transition={{ duration: shouldReduceMotion ? 0 : 0.62, delay: shouldReduceMotion ? 0 : 0.08, times: [0, 0.15, 0.82, 1], ease: MOTION_EASE_OUT }} />
         ) : null}
-        <div key={planRevision} className="grid min-h-[84px] grid-cols-[minmax(10rem,1.15fr)_repeat(3,minmax(7.5rem,.82fr))_minmax(15rem,1.35fr)_auto] items-stretch max-[1120px]:grid-cols-[minmax(10rem,1fr)_repeat(3,minmax(7rem,.8fr))_auto] max-[820px]:grid-cols-4 max-sm:grid-cols-2">
-          <motion.button type="button" className="group relative flex min-w-0 items-center justify-between gap-3 overflow-hidden bg-[#272A2B] px-5 py-3 text-left text-white focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-[#FFD800] max-sm:col-span-2 max-sm:min-h-16" data-plan-details-trigger="efficiency" whileHover={shouldReduceMotion ? undefined : { x: 2 }} whileTap={shouldReduceMotion ? undefined : { scale: 0.985 }} onClick={() => openDetails("efficiency")}>
+        <div key={planRevision} className="grid min-h-[84px] grid-cols-[minmax(10rem,1.05fr)_minmax(0,5fr)_auto] items-stretch max-[820px]:grid-cols-1">
+          <motion.button type="button" className={cn("group relative flex min-w-0 items-center justify-between gap-3 overflow-hidden bg-[#272A2B] px-5 py-3 text-left text-white focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-[#FFD800] max-[820px]:row-span-1 max-sm:min-h-16", comparison && "row-span-2")} data-plan-details-trigger="efficiency" whileHover={shouldReduceMotion ? undefined : { x: 2 }} whileTap={shouldReduceMotion ? undefined : { scale: 0.985 }} onClick={() => openDetails("efficiency")}>
             <motion.span className="min-w-0" data-plan-metric initial={animateOnMount ? { opacity: 0, x: shouldReduceMotion ? 0 : -10 } : false} animate={{ opacity: 1, x: 0 }} transition={{ duration: shouldReduceMotion ? MOTION_DURATION.feedback : 0.36, delay: shouldReduceMotion ? 0 : 0.1, ease: MOTION_EASE_OUT }}>
-              <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/52"><Activity className="size-3 text-[#FFD501]" aria-hidden="true" />PLAN ONLINE</span>
-              <strong className="mt-1 block truncate text-lg font-medium"><span className="font-number">{layout.template}</span> 基建方案</strong>
-              <span className="mt-1 block text-[10px] text-white/45">点击查看完整效率诊断</span>
+              <strong className="block truncate text-lg font-medium"><span className="font-number">{layout.template}</span> 基建方案</strong>
+              <span className="mt-1 block text-[10px] text-white/45">点击查看产出组成与效率诊断</span>
             </motion.span>
             <ChevronRight className="size-4 shrink-0 text-white/55 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
           </motion.button>
 
-          {metrics.map((metric, index) => {
-            const value = rotationMetricValue(metric.kind, metric.value);
-            const digits = metric.kind === "trade" ? 3 : 1;
-            const delta = typeof metric.baseline === "number" ? relativeMetricDelta(metric.value, metric.baseline) : undefined;
-            return (
+          <div className="grid min-w-0 grid-cols-3 max-sm:grid-cols-2" aria-label="预计日产物" data-daily-production-summary>
+            {productGroups.map((productGroup, index) => (
               <motion.button
-                key={metric.kind}
+                key={productGroup.id}
                 type="button"
-                className={cn("group relative min-h-[84px] overflow-hidden border-r border-[#313131]/10 px-4 py-3 text-left transition-colors hover:bg-white/55 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-primary max-sm:min-h-[72px] max-sm:border-t", index === 2 && "max-sm:col-span-2")}
+                className={cn("group relative flex min-h-[84px] min-w-0 flex-col items-stretch justify-start overflow-hidden border-r border-[#313131]/10 px-3 py-3 text-left transition-colors hover:bg-white/55 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-primary max-sm:min-h-[78px] max-sm:border-t", productGroup.id === "orundum" && "max-sm:col-span-2")}
                 data-plan-details-trigger="efficiency"
+                data-daily-product-group={productGroup.id}
                 whileTap={shouldReduceMotion ? undefined : { scale: 0.98 }}
                 onClick={() => openDetails("efficiency")}
               >
                 <motion.span
-                  className="block"
+                  className="relative z-10 block w-full min-w-0 self-start"
                   data-plan-metric
                   initial={animateOnMount ? { opacity: 0, y: shouldReduceMotion ? 0 : 10 } : false}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: shouldReduceMotion ? MOTION_DURATION.feedback : 0.36, delay: shouldReduceMotion ? 0 : 0.15 + index * 0.065, ease: MOTION_EASE_OUT }}
                 >
-                  <span className="font-number block text-[10px] font-medium uppercase tracking-[0.08em] text-[#313131]/52">{metric.label}</span>
-                  <strong className="font-technical mt-0.5 block text-[clamp(1.05rem,1.55vw,1.35rem)] font-semibold leading-none tabular-nums"><AnimatedNumber value={`${compactNumber(value, digits)}${metric.suffix}`} drift={{ x: 0, y: shouldReduceMotion ? 0 : 8 }} trend={delta === undefined ? 0 : delta >= 0 ? 1 : -1} /></strong>
-                  <span className={cn("mt-2 inline-flex items-center gap-1 text-[10px] font-semibold", delta === undefined ? "text-[#313131]/42" : delta >= 0 ? "text-emerald-700" : "text-red-700")}>
-                    {delta === undefined ? "暂无参考" : <><ArrowUpRight className={cn("size-3", delta < 0 && "rotate-90")} aria-hidden="true" />{delta >= 0 ? "+" : ""}{compactNumber(delta)}%</>}
+                  <span className="block min-w-0" data-daily-product={productGroup.primary.id}>
+                    <span className="font-number block truncate pr-6 text-[10px] font-medium tracking-[0.06em] text-[#313131]/58">{productGroup.primary.label}</span>
+                    <strong className="font-technical mt-1 flex min-w-0 items-baseline gap-1 leading-none tabular-nums">
+                      <span className="truncate text-[clamp(1rem,1.5vw,1.35rem)] font-semibold"><AnimatedNumber value={dailyNumber(productGroup.primary.amount.value)} drift={{ x: 0, y: shouldReduceMotion ? 0 : 8 }} /></span>
+                      {productGroup.primary.amount.value === null ? null : <span className="shrink-0 text-[9px] font-medium text-[#313131]/45">{productGroup.primary.unit}</span>}
+                    </strong>
+                    {productGroup.primary.amount.value === null ? <span className="mt-1 block truncate text-[10px] font-semibold text-amber-800">{unavailableReason(productGroup.primary.amount.unavailableReason)}</span> : null}
                   </span>
+                  {productGroup.supporting ? (
+                    <span className="mt-2 flex min-w-0 items-center gap-1.5 bg-[#313131]/[0.045] px-1.5 py-1" data-daily-product={productGroup.supporting.id} data-product-role="supporting">
+                      <Image src={productGroup.supporting.icon} alt="" width={183} height={183} className="size-4 shrink-0 object-contain" aria-hidden="true" />
+                      <span className="min-w-0 flex-1 truncate text-[9px] font-medium text-[#313131]/55">{productGroup.supporting.label}</span>
+                      <strong className="font-number flex shrink-0 items-baseline gap-0.5 text-[11px] leading-none tabular-nums">
+                        <AnimatedNumber value={dailyNumber(productGroup.supporting.amount.value)} drift={{ x: 0, y: shouldReduceMotion ? 0 : 5 }} />
+                        {productGroup.supporting.amount.value === null ? null : <span className="text-[8px] font-medium text-[#313131]/45">{productGroup.supporting.unit}</span>}
+                      </strong>
+                    </span>
+                  ) : null}
                 </motion.span>
-                <motion.span className={cn("absolute inset-x-0 bottom-0 h-0.5 origin-left", delta === undefined ? "bg-[#313131]/18" : delta >= 0 ? "bg-emerald-500" : "bg-red-500")} aria-hidden="true" initial={animateOnMount ? { scaleX: 0 } : false} animate={{ scaleX: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.42, delay: shouldReduceMotion ? 0 : 0.2 + index * 0.065, ease: MOTION_EASE_OUT }} />
+                <Image src={productGroup.primary.icon} alt="" width={183} height={183} className="pointer-events-none absolute right-1.5 top-1.5 size-8 object-contain opacity-75 transition-transform duration-200 group-hover:scale-105" aria-hidden="true" />
+                <motion.span className="absolute inset-x-0 bottom-0 h-0.5 origin-left bg-[#313131]/18" aria-hidden="true" initial={animateOnMount ? { scaleX: 0 } : false} animate={{ scaleX: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.42, delay: shouldReduceMotion ? 0 : 0.2 + index * 0.065, ease: MOTION_EASE_OUT }} />
               </motion.button>
-            );
-          })}
+            ))}
+          </div>
 
           {comparison ? (
-            <motion.button type="button" className="min-w-0 bg-[#E7E3D8] px-4 py-3 text-left transition-colors hover:bg-[#DDD8CA] focus-visible:outline-2 focus-visible:outline-primary max-[1120px]:col-span-4 max-[1120px]:border-t max-md:col-span-3 max-sm:col-span-2 max-sm:min-h-14" data-shift-comparison data-plan-details-trigger="comparison" whileTap={shouldReduceMotion ? undefined : { scale: 0.99 }} onClick={() => openDetails("comparison")}>
+            <motion.button type="button" className="col-span-2 col-start-2 min-w-0 border-t border-[#313131]/10 bg-[#E7E3D8] px-4 py-2.5 text-left transition-colors hover:bg-[#DDD8CA] focus-visible:outline-2 focus-visible:outline-primary max-[820px]:col-span-1 max-[820px]:col-start-1 max-sm:min-h-14" data-shift-comparison data-plan-details-trigger="comparison" whileTap={shouldReduceMotion ? undefined : { scale: 0.99 }} onClick={() => openDetails("comparison")}>
               <span className="flex items-center justify-between gap-3 text-xs">
                 <span className="min-w-0 truncate">最接近第 <strong className="font-number"><AnimatedText value={comparison.planIndex + 1} /></strong> 班 · 匹配率 <strong className="font-number"><AnimatedText value={`${comparison.score}%`} /></strong></span>
                 <span className="shrink-0 text-[#313131]/60">需调整 <strong className="font-number text-[#313131]"><AnimatedText value={adjustmentCount} /></strong> 处</span>
@@ -152,22 +213,22 @@ export function PlanResultSummary({
             </motion.button>
           ) : null}
 
-          <Button type="button" variant="ghost" size="sm" className="m-2 self-center whitespace-nowrap max-[820px]:col-start-4 max-sm:col-span-2 max-sm:col-start-auto max-sm:m-0 max-sm:min-h-12 max-sm:justify-between max-sm:border-t" data-plan-details-trigger="efficiency" data-motion-pressable onClick={() => openDetails("efficiency")}>
+          <Button type="button" variant="ghost" size="sm" className="m-2 self-center whitespace-nowrap max-[820px]:m-0 max-[820px]:min-h-12 max-[820px]:justify-between max-[820px]:border-t" data-plan-details-trigger="efficiency" data-motion-pressable onClick={() => openDetails("efficiency")}>
             <BarChart3 />查看详情
           </Button>
         </div>
       </motion.section>
 
-      <Drawer open={drawerOpen} onOpenChange={setDrawerOpen} title="排班结果详情" description="核心效率与当前进驻状态的完整诊断。" width={560}>
+      <Drawer open={drawerOpen} onOpenChange={setDrawerOpen} title="排班结果详情" description="日产物组成、原效率与当前进驻状态诊断。" width={560}>
         <Tabs value={activeDetailSection} onValueChange={(value) => setDetailSection(value as DetailSection)} className="min-h-0 flex-1 gap-0">
           <TabsList variant="line" className="w-full justify-start gap-1 border-b border-border/70 px-4 py-0" aria-label="结果详情分类">
-            <TabsTrigger value="efficiency" className="min-h-11 flex-none px-3">效率详情</TabsTrigger>
+            <TabsTrigger value="efficiency" className="min-h-11 flex-none px-3">产出与效率</TabsTrigger>
             {comparison ? <TabsTrigger value="comparison" className="min-h-11 flex-none px-3">当前状态匹配</TabsTrigger> : null}
           </TabsList>
           <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pb-6" data-plan-details-section={activeDetailSection}>
             <TabsContent value="efficiency" className="m-0">
               <motion.div initial={{ opacity: 0, x: shouldReduceMotion ? 0 : -12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.state, ease: MOTION_EASE_OUT }}>
-                <EfficiencyDetails profile={profile} rotation={rotation} layout={layout} metrics={metrics} />
+                <EfficiencyDetails profile={profile} rotation={rotation} layout={layout} metrics={efficiencyMetrics} production={production} />
               </motion.div>
             </TabsContent>
             {comparison ? (
@@ -184,13 +245,141 @@ export function PlanResultSummary({
   );
 }
 
-function EfficiencyDetails({ profile, rotation, layout, metrics }: { profile?: UserProfile; rotation?: RotationJson; layout: BaseBlueprint; metrics: Array<{ kind: RotationMetricKind; label: string; value: number; baseline: number | undefined; suffix: string }> }) {
+function ProductionDetailItem({ product, supporting = false }: { product: ProductionDetailProduct; supporting?: boolean }) {
+  return (
+    <article
+      className={cn(
+        "grid gap-3 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]",
+        supporting && "ml-6 bg-muted/40 px-3 py-2 sm:ml-12",
+      )}
+      data-production-detail={product.id}
+      data-product-role={supporting ? "supporting" : "primary"}
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <Image src={product.icon} alt="" width={183} height={183} className={cn("shrink-0 object-contain", supporting ? "size-8" : "size-10")} aria-hidden="true" />
+        <div className="min-w-0">
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-[11px] font-semibold text-muted-foreground">{product.label}</span>
+            {product.relation ? <span className="shrink-0 bg-background/80 px-1.5 py-0.5 text-[9px] text-muted-foreground">{product.relation}</span> : null}
+          </span>
+          <strong className={cn("font-technical mt-0.5 flex items-baseline gap-1 leading-none tabular-nums", supporting ? "text-lg" : "text-xl")}>
+            <span>{dailyNumber(product.amount.value)}</span>
+            {product.amount.value === null ? null : <span className="text-[10px] font-medium text-muted-foreground">{product.unit} / 日</span>}
+          </strong>
+          {product.amount.value === null ? <span className="mt-1 block text-[10px] font-semibold text-amber-800">{unavailableReason(product.amount.unavailableReason)}</span> : null}
+        </div>
+      </div>
+      <div className="min-w-0 text-[11px]">
+        <dl className="grid grid-cols-2 gap-x-3 gap-y-1">
+          {product.rows.map(([label, value, unit]) => (
+            <div key={label} className="flex min-w-0 justify-between gap-2">
+              <dt className="truncate text-muted-foreground">{label}</dt>
+              <dd className="font-number shrink-0 font-semibold">{dailyNumber(value)}{value === null ? "" : ` ${unit}`}</dd>
+            </div>
+          ))}
+        </dl>
+        {product.note ? <p className="mt-1.5 text-muted-foreground">{product.note}</p> : null}
+      </div>
+    </article>
+  );
+}
+
+function ProductionDetails({ production }: { production: DailyProductionEstimate | null }) {
+  if (!production) return null;
+  const bottleneck = production.orundum.bottleneck === "manufacture"
+    ? "源石碎片制造"
+    : production.orundum.bottleneck === "trade"
+      ? "合成玉订单"
+      : production.orundum.bottleneck === "balanced"
+        ? "两段持平"
+        : production.orundum.bottleneck === "none"
+          ? "暂无搓玉产线"
+          : "产出数据不足";
+  const productGroups: Array<{
+    id: string;
+    primary: ProductionDetailProduct;
+    supporting?: ProductionDetailProduct;
+  }> = [
+    {
+      id: "experience",
+      primary: {
+        id: "experience",
+        label: "经验",
+        unit: "经验",
+        icon: PRODUCT_ICONS.experience,
+        amount: production.experience,
+        rows: [["自然制造", production.experience.natural, "经验"], ["无人机制造", production.experience.drones, "经验"]],
+      },
+    },
+    {
+      id: "lmd",
+      primary: {
+        id: "lmd-orders",
+        label: "龙门币",
+        unit: "龙门币",
+        icon: PRODUCT_ICONS.lmdOrders,
+        amount: production.lmdOrders,
+        rows: [["自然订单", production.lmdOrders.natural, "龙门币"], ["无人机订单", production.lmdOrders.droneTrade, "龙门币"]],
+      },
+      supporting: {
+        id: "gold",
+        label: "赤金",
+        unit: "枚",
+        icon: PRODUCT_ICONS.gold,
+        amount: production.gold,
+        rows: [["自然制造", production.gold.natural, "枚"], ["无人机制造", production.gold.drones, "枚"]],
+        relation: "订单原料",
+      },
+    },
+    {
+      id: "orundum",
+      primary: {
+        id: "orundum",
+        label: "合成玉",
+        unit: "合成玉",
+        icon: PRODUCT_ICONS.orundum,
+        amount: production.orundum,
+        rows: [["碎片阶段可供", production.orundum.manufactureCapacity, "合成玉"], ["订单阶段可交付", production.orundum.tradeCapacity, "合成玉"]],
+        note: `限制环节：${bottleneck}`,
+      },
+      supporting: {
+        id: "shards",
+        label: "源石碎片",
+        unit: "枚",
+        icon: PRODUCT_ICONS.shards,
+        amount: production.shards,
+        rows: [["自然制造", production.shards.natural, "枚"], ["无人机制造", production.shards.drones, "枚"]],
+        relation: "制造环节",
+      },
+    },
+  ];
+
+  return (
+    <section aria-label="预计日产物详情" data-production-details>
+      <h3 className="text-sm font-semibold">预计日产物</h3>
+      <div className="mt-2 divide-y divide-border/70 border-y border-border/70">
+        {productGroups.map((productGroup) => (
+          <section key={productGroup.id} className="space-y-2 py-3" data-production-group={productGroup.id}>
+            <ProductionDetailItem product={productGroup.primary} />
+            {productGroup.supporting ? <ProductionDetailItem product={productGroup.supporting} supporting /> : null}
+          </section>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function EfficiencyDetails({ profile, rotation, layout, metrics, production }: { profile?: UserProfile; rotation?: RotationJson; layout: BaseBlueprint; metrics: Array<{ kind: RotationMetricKind; label: string; value: number; baseline: number | undefined; suffix: string }>; production: DailyProductionEstimate | null }) {
   const shouldReduceMotion = useReducedMotion();
   const summary = profile?.summary;
   const domains = profile?.domains ?? [];
   return (
     <section className="pt-4" aria-label="效率详情" data-efficiency-details>
-      <div className="grid gap-2 sm:grid-cols-3" data-efficiency-insights>
+      <ProductionDetails production={production} />
+      <div className="mt-5 border-t border-border/70 pt-4">
+        <h3 className="text-sm font-semibold">原效率与基准</h3>
+      </div>
+      <div className="mt-2 grid gap-2 sm:grid-cols-3" data-efficiency-insights>
         {metrics.map((metric, index) => {
           const digits = metric.kind === "trade" ? 3 : 1;
           const value = rotationMetricValue(metric.kind, metric.value);

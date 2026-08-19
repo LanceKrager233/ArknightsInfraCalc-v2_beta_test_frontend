@@ -171,7 +171,7 @@ function CompactRoomCard({
           </span>
           {efficiency.details.map((detail) => (
             <span key={detail.label} className={`font-number ${detail.kind === "cross-station" ? "text-[#C8F75A]" : ""}`}>
-              / {detail.label} <AnimatedText value={detail.value} trend={shiftDirection} />
+              {efficiency.formula ? <>{detail.operator ? `${detail.operator} ` : ""}<AnimatedText value={detail.value} trend={shiftDirection} /> {detail.label}</> : <>/ {detail.label} <AnimatedText value={detail.value} trend={shiftDirection} /></>}
             </span>
           ))}
         </div>
@@ -217,7 +217,7 @@ function CompactRoomCard({
 
   if (horizontal) {
     return (
-      <div className={`${COMPACT_POWER_CARD_CLASS} ${className}`} style={{ ...rowStyle, ...style }}>
+      <div className={`${COMPACT_POWER_CARD_CLASS} ${className}`} data-room-group={row.group} data-room-title={row.title} style={{ ...rowStyle, ...style }}>
         {backgroundLayers}
         <div className="relative z-10 min-w-0">
           {header}
@@ -231,7 +231,7 @@ function CompactRoomCard({
   }
 
   return (
-    <div className={`${COMPACT_CARD_CLASS} ${className}`} style={{ ...rowStyle, ...style }}>
+    <div className={`${COMPACT_CARD_CLASS} ${className}`} data-room-group={row.group} data-room-title={row.title} style={{ ...rowStyle, ...style }}>
       {backgroundLayers}
       <div className="relative z-10">{header}</div>
       {efficiencyContent ? (

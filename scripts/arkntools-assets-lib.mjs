@@ -13,6 +13,7 @@ export const GENERATED_VERSION = 2;
 const MANAGED_PATHS = [
   "public/images/operator-portraits",
   "public/images/building-skills",
+  "public/images/products",
   "src/generated/arkntools",
 ];
 
@@ -20,6 +21,7 @@ const MANAGED_PATHS = [
 // 按上游原尺寸使用：透明内容在画布内居中后有损转成 WebP（透明背景保留，q85 + 智能色度抽样避免边缘色晕）。
 const PORTRAITS_DIRECTORY = "avatar";
 const WEBP_PORTRAIT_OPTIONS = { quality: 85, effort: 6, smartSubsample: true };
+const WEBP_PRODUCT_OPTIONS = { quality: 85, effort: 6, smartSubsample: true };
 
 const SOURCE_PATHS = {
   characterData: "assets/data/character.json",
@@ -28,6 +30,14 @@ const SOURCE_PATHS = {
   buildingLocale: "assets/locales/cn/building.json",
   buildingSkills: "assets/img/building_skill",
 };
+
+const PRODUCT_ASSETS = [
+  { id: "lmd_orders", source: "arkntools", path: "assets/img/item/4001.png" },
+  { id: "gold", source: "game-resource", path: "item/MTL_GOLD3.png" },
+  { id: "experience", source: "arkntools", path: "assets/img/item/2003.png" },
+  { id: "originium_shard", source: "game-resource", path: "item/MTL_DIAMOND_SHD.png" },
+  { id: "orundum", source: "game-resource", path: "item/DIAMOND_SHD.png" },
+];
 
 const SAFE_ASSET_NAME = /^[A-Za-z0-9_&]+$/;
 
@@ -132,6 +142,20 @@ async function validatePngFormat(filePath, label) {
 async function validateWebpFormat(filePath, label) {
   const metadata = await readImageMetadata(filePath, label);
   assert(metadata.format === "webp", `${label} 不是 WebP。`);
+}
+
+async function validateProductSource(filePath, label) {
+  const metadata = await readImageMetadata(filePath, label);
+  assert(metadata.format === "png", `${label} 不是 PNG。`);
+  assert(metadata.width === 183 && metadata.height === 183, `${label} 尺寸应为 183×183。`);
+  assert(metadata.hasAlpha, `${label} 必须包含透明通道。`);
+}
+
+async function validateProductWebp(filePath, label) {
+  const metadata = await readImageMetadata(filePath, label);
+  assert(metadata.format === "webp", `${label} 不是 WebP。`);
+  assert(metadata.width === 183 && metadata.height === 183, `${label} 尺寸应为 183×183。`);
+  assert(metadata.hasAlpha, `${label} 必须保留透明通道。`);
 }
 
 async function inspectSourceIcon(filePath, label) {
@@ -305,11 +329,17 @@ async function loadSource(sourceRoot, sourceSha, portraitsRoot, portraitsSha) {
     name: `${icon}.png`,
     source: path.join(resolvedSource, SOURCE_PATHS.buildingSkills, `${icon}.png`),
   }));
+  const productFiles = PRODUCT_ASSETS.map((asset) => ({
+    ...asset,
+    name: `${asset.id}.webp`,
+    sourcePath: path.join(asset.source === "arkntools" ? resolvedSource : resolvedPortraits, asset.path),
+  }));
 
   await mapLimit(portraitFiles, 16, ({ source, name }) => validatePngFormat(source, `干员头像 ${name}`));
   await mapLimit(iconFiles, 16, async (file) => {
     Object.assign(file, await inspectSourceIcon(file.source, `基建技能图标 ${file.name}`));
   });
+  await mapLimit(productFiles, 5, ({ sourcePath, name }) => validateProductSource(sourcePath, `产物图标 ${name}`));
 
   const skillCatalog = sortedObject(skills.map((skill) => [skill.id, skill]));
   const manifest = {
@@ -322,15 +352,22 @@ async function loadSource(sourceRoot, sourceSha, portraitsRoot, portraitsSha) {
       repository: ARKNIGHTS_GAME_RESOURCE_REPOSITORY,
       commit: normalizedPortraitsSha,
     },
+    products: productFiles.map((file) => ({
+      id: file.id,
+      output: relativeAssetPath("products", file.id, "webp"),
+      source: file.source,
+      path: file.path,
+    })),
     counts: {
       operators: operators.length,
       buildingSkills: skills.length,
       portraits: portraitFiles.length,
       buildingSkillIcons: iconFiles.length,
+      productIcons: productFiles.length,
     },
   };
 
-  return { operators, skills: skillCatalog, manifest, portraitFiles, iconFiles };
+  return { operators, skills: skillCatalog, manifest, portraitFiles, iconFiles, productFiles };
 }
 
 function json(value) {
@@ -340,8 +377,9 @@ function json(value) {
 async function writeStage(stageRoot, generated) {
   const portraitTarget = path.join(stageRoot, MANAGED_PATHS[0]);
   const iconTarget = path.join(stageRoot, MANAGED_PATHS[1]);
-  const dataTarget = path.join(stageRoot, MANAGED_PATHS[2]);
-  await Promise.all([mkdir(portraitTarget, { recursive: true }), mkdir(iconTarget, { recursive: true }), mkdir(dataTarget, { recursive: true })]);
+  const productTarget = path.join(stageRoot, MANAGED_PATHS[2]);
+  const dataTarget = path.join(stageRoot, MANAGED_PATHS[3]);
+  await Promise.all([mkdir(portraitTarget, { recursive: true }), mkdir(iconTarget, { recursive: true }), mkdir(productTarget, { recursive: true }), mkdir(dataTarget, { recursive: true })]);
 
   await Promise.all([
     mapLimit(generated.portraitFiles, 16, ({ source, name }) =>
@@ -352,6 +390,10 @@ async function writeStage(stageRoot, generated) {
           .png({ compressionLevel: 9 })
           .toFile(path.join(iconTarget, name))
       : copyFile(source, path.join(iconTarget, name))),
+    mapLimit(generated.productFiles, 5, async ({ sourcePath, name }) => {
+      const output = await sharp(await readFile(sourcePath)).webp(WEBP_PRODUCT_OPTIONS).toBuffer();
+      await writeFile(path.join(productTarget, name), output);
+    }),
     writeFile(path.join(dataTarget, "operator-catalog.json"), json(generated.operators), "utf8"),
     writeFile(path.join(dataTarget, "building-skill-catalog.json"), json(generated.skills), "utf8"),
     writeFile(path.join(dataTarget, "source.json"), json(generated.manifest), "utf8"),
@@ -371,7 +413,7 @@ async function listRegularAssetNames(directory, label, extension) {
 
 export async function checkGeneratedAssets(root) {
   const resolvedRoot = path.resolve(root);
-  const dataRoot = path.join(resolvedRoot, MANAGED_PATHS[2]);
+  const dataRoot = path.join(resolvedRoot, MANAGED_PATHS[3]);
   const [operators, skills, manifest] = await Promise.all([
     readJson(path.join(dataRoot, "operator-catalog.json"), "已生成干员目录"),
     readJson(path.join(dataRoot, "building-skill-catalog.json"), "已生成基建技能目录"),
@@ -385,6 +427,13 @@ export async function checkGeneratedAssets(root) {
   assert(isObject(manifest.portraitsSource), "已生成头像来源清单无效。");
   normalizeCommit(manifest.portraitsSource?.commit);
   assert(manifest.portraitsSource?.repository === ARKNIGHTS_GAME_RESOURCE_REPOSITORY, "已生成头像来源仓库无效。");
+  assert(Array.isArray(manifest.products), "已生成产物来源清单无效。");
+  assert(JSON.stringify(manifest.products) === JSON.stringify(PRODUCT_ASSETS.map((asset) => ({
+    id: asset.id,
+    output: relativeAssetPath("products", asset.id, "webp"),
+    source: asset.source,
+    path: asset.path,
+  }))), "已生成产物来源清单与受管清单不一致。");
   const portraitVersion = portraitAssetVersion(manifest.portraitsSource.commit);
 
   const ids = new Set();
@@ -425,27 +474,33 @@ export async function checkGeneratedAssets(root) {
 
   const portraitDirectory = path.join(resolvedRoot, MANAGED_PATHS[0]);
   const iconDirectory = path.join(resolvedRoot, MANAGED_PATHS[1]);
-  const [actualPortraits, actualIcons] = await Promise.all([
+  const productDirectory = path.join(resolvedRoot, MANAGED_PATHS[2]);
+  const [actualPortraits, actualIcons, actualProducts] = await Promise.all([
     listRegularAssetNames(portraitDirectory, "干员头像目录", "webp"),
     listRegularAssetNames(iconDirectory, "基建技能图标目录", "png"),
+    listRegularAssetNames(productDirectory, "产物图标目录", "webp"),
   ]);
   const expectedPortraits = portraitNames.sort((left, right) => left.localeCompare(right, "en"));
   const expectedIcons = [...referencedIcons].sort((left, right) => left.localeCompare(right, "en"));
   assert(JSON.stringify(actualPortraits) === JSON.stringify(expectedPortraits), "干员头像目录与生成目录不一致。");
   assert(JSON.stringify(actualIcons) === JSON.stringify(expectedIcons), "基建技能图标目录与生成目录不一致。");
+  const expectedProducts = PRODUCT_ASSETS.map((asset) => `${asset.id}.webp`).sort((left, right) => left.localeCompare(right, "en"));
+  assert(JSON.stringify(actualProducts) === JSON.stringify(expectedProducts), "产物图标目录与生成目录不一致。");
   assert(manifest.counts?.operators === operators.length, "来源清单的干员数量不一致。");
   assert(manifest.counts?.buildingSkills === Object.keys(skills).length, "来源清单的基建技能数量不一致。");
   assert(manifest.counts?.portraits === actualPortraits.length, "来源清单的头像数量不一致。");
   assert(manifest.counts?.buildingSkillIcons === actualIcons.length, "来源清单的技能图标数量不一致。");
+  assert(manifest.counts?.productIcons === actualProducts.length, "来源清单的产物图标数量不一致。");
 
   await mapLimit(actualPortraits, 16, (name) => validateWebpFormat(path.join(portraitDirectory, name), `干员头像 ${name}`));
   await mapLimit(actualIcons, 16, (name) => validatePng(path.join(iconDirectory, name), 36, 36, `基建技能图标 ${name}`));
+  await mapLimit(actualProducts, 5, (name) => validateProductWebp(path.join(productDirectory, name), `产物图标 ${name}`));
   return manifest;
 }
 
 async function existingManifest(root) {
   try {
-    return await readJson(path.join(root, MANAGED_PATHS[2], "source.json"), "现有来源清单");
+    return await readJson(path.join(root, MANAGED_PATHS[3], "source.json"), "现有来源清单");
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return null;
     throw error;

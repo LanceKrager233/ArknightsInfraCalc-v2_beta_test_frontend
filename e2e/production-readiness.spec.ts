@@ -160,7 +160,12 @@ async function expectCapturedMotion(page: Page, label: string, durationMs: numbe
 async function expectCapturedMotionDelays(page: Page, label: string, durationMs: number, delays: number[]) {
   await expect.poll(async () => {
     const value = await page.locator("html").getAttribute(`data-motion-enter-${label}`);
-    return value ? JSON.parse(value) as Array<{ duration: number; delay: number }> : null;
+    if (!value) return null;
+
+    return (JSON.parse(value) as Array<{ duration: number; delay: number }>).map(({ duration, delay }) => ({
+      duration: Math.round(duration),
+      delay: Math.round(delay),
+    }));
   }).toEqual(delays.map((delay) => ({ duration: durationMs, delay })));
 }
 
@@ -355,7 +360,7 @@ function rotationResultData({
   };
 }
 
-const twoShiftPlanData = rotationResultData({
+const twoShiftPlanBase = rotationResultData({
   rotationProfile: "main_backup_12_12",
   durations: [12, 12],
   profileOverrides: {
@@ -396,6 +401,51 @@ const twoShiftPlanData = rotationResultData({
     }],
   },
 });
+
+const twoShiftPlanData = {
+  ...twoShiftPlanBase,
+  maa: {
+    ...twoShiftPlanBase.maa,
+    plans: twoShiftPlanBase.maa.plans.map((plan, index) => ({
+      ...plan,
+      drones: { enable: true, room: "manufacture" as const, index: index === 0 ? 1 : 3, order: "pre" as const },
+      rooms: {
+        ...plan.rooms,
+        trading: [
+          { product: "LMD", operators: [], sort: true, autofill: false },
+          { product: "Originium Shard", operators: [], sort: true, autofill: false },
+        ],
+        manufacture: [
+          { product: "Gold", operators: [], sort: true, autofill: false },
+          { product: "Gold", operators: [], sort: true, autofill: false },
+          { product: "Battle Record", operators: [], sort: true, autofill: false },
+          { product: "Originium Shard", operators: [], sort: true, autofill: false },
+        ],
+        power: [0, 1, 2].map(() => ({ operators: [] })),
+      },
+    })),
+  },
+  rotation: {
+    ...twoShiftPlanBase.rotation,
+    shifts: twoShiftPlanBase.rotation.shifts.map((shift) => ({
+      ...shift,
+      scores: {
+        ...shift.scores,
+        room_lines: [
+          { room_id: "trade_1", final_efficiency: 3.337, trade_score: 3.337, trade_pct: 135, trade_skill_pct: 132, trade_gold_pct: 42 },
+          { room_id: "trade_2", final_efficiency: 1.5, trade_score: 1.5, trade_pct: 50, trade_skill_pct: 50 },
+          { room_id: "manu_1", final_efficiency: 2.36, manu_score: 236, manu_prod_skill: 130, manu_display_pct: 136 },
+          { room_id: "manu_2", final_efficiency: 2, manu_prod_total: 100, manu_prod_skill: 94 },
+          { room_id: "manu_3", final_efficiency: 2, manu_prod_total: 100, manu_prod_skill: 94 },
+          { room_id: "manu_4", final_efficiency: 2, manu_prod_total: 100, manu_prod_skill: 94 },
+          { room_id: "power_1", final_efficiency: 1.2, power_charge_speed_pct: 20 },
+          { room_id: "power_2", final_efficiency: 1.2, power_charge_speed_pct: 20 },
+          { room_id: "power_3", final_efficiency: 1.2, power_charge_speed_pct: 20 },
+        ],
+      },
+    })),
+  },
+};
 
 const fourShiftPlanData = rotationResultData({
   rotationProfile: "fiammetta_8_8_4_4",
@@ -1251,7 +1301,7 @@ test("restores a v4 schedule without hydration errors and keeps only safe data",
   expect(JSON.stringify(persisted)).not.toContain("stdout");
 });
 
-test("two-shift output drives labels, teams, metric units, and profile details", async ({ page, browserName }) => {
+test("two-shift output drives product estimates, room formulas, and profile details", async ({ page, browserName }) => {
   await mockApis(page);
   await seedV4Session(page, twoShiftPlanData, { rotationProfile: "main_backup_12_12" });
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -1263,9 +1313,54 @@ test("two-shift output drives labels, teams, metric units, and profile details",
   await expect(page.getByRole("tab", { name: /第 3 班/ })).toHaveCount(0);
   await expect(shiftTabs.first()).toHaveAttribute("aria-label", /主力 上班 · 替补 休息/);
 
-  await expect(page.getByText("5.288×", { exact: true })).toBeVisible();
-  await expect(page.getByText("917.5%", { exact: true })).toBeVisible();
-  await expect(page.getByText("355.2%", { exact: true })).toBeVisible();
+  const dailyProducts = page.locator("[data-daily-production-summary]");
+  await expect(page.getByText("PLAN ONLINE", { exact: true })).toHaveCount(0);
+  await expect(dailyProducts.locator("[data-daily-product-group]")).toHaveCount(3);
+  await expect(dailyProducts.locator("[data-daily-product-group]").nth(0)).toHaveAttribute("data-daily-product-group", "experience");
+  await expect(dailyProducts.locator("[data-daily-product-group]").nth(1)).toHaveAttribute("data-daily-product-group", "lmd");
+  await expect(dailyProducts.locator("[data-daily-product-group]").nth(2)).toHaveAttribute("data-daily-product-group", "orundum");
+  await expect(dailyProducts.locator("[data-daily-product]")).toHaveCount(5);
+  await expect(dailyProducts.locator('[data-daily-product-group="lmd"] [data-daily-product]').nth(0)).toHaveAttribute("data-daily-product", "lmd-orders");
+  await expect(dailyProducts.locator('[data-daily-product-group="lmd"] [data-daily-product]').nth(1)).toHaveAttribute("data-daily-product", "gold");
+  await expect(dailyProducts.locator('[data-daily-product-group="orundum"] [data-daily-product]').nth(0)).toHaveAttribute("data-daily-product", "orundum");
+  await expect(dailyProducts.locator('[data-daily-product-group="orundum"] [data-daily-product]').nth(1)).toHaveAttribute("data-daily-product", "shards");
+  await expect(dailyProducts.locator('[data-daily-product="lmd-orders"]')).toContainText(/龙门币.*34,254.*龙门币/s);
+  await expect(dailyProducts.locator('[data-daily-product="gold"]')).toContainText(/赤金.*106.*枚/s);
+  await expect(dailyProducts.locator('[data-daily-product="experience"]')).toContainText(/经验.*22,400.*经验/s);
+  await expect(dailyProducts.locator('[data-daily-product="shards"]')).toContainText(/源石碎片.*48.*枚/s);
+  await expect(dailyProducts.locator('[data-daily-product="orundum"]')).toContainText(/合成玉.*360.*合成玉/s);
+  await expect(dailyProducts.getByText("龙门币订单", { exact: true })).toHaveCount(0);
+
+  const primaryProductOffsets = await Promise.all(
+    ["experience", "lmd", "orundum"].map((group) => dailyProducts.locator(`[data-daily-product-group="${group}"]`).evaluate((card) => {
+      const product = card.querySelector<HTMLElement>("[data-daily-product]");
+      if (!product) throw new Error(`Missing primary product in ${card.getAttribute("data-daily-product-group") ?? "unknown"} card`);
+      const cardBounds = card.getBoundingClientRect();
+      const productBounds = product.getBoundingClientRect();
+      return { inlineStart: productBounds.left - cardBounds.left, blockStart: productBounds.top - cardBounds.top };
+    })),
+  );
+  expect(primaryProductOffsets[0].inlineStart).toBeCloseTo(primaryProductOffsets[1].inlineStart, 0);
+  expect(primaryProductOffsets[0].inlineStart).toBeCloseTo(primaryProductOffsets[2].inlineStart, 0);
+  expect(primaryProductOffsets[0].blockStart).toBeCloseTo(primaryProductOffsets[1].blockStart, 0);
+  expect(primaryProductOffsets[0].blockStart).toBeCloseTo(primaryProductOffsets[2].blockStart, 0);
+
+  const manufactureFormula = page.locator('[data-room-title="制造站 1"]');
+  const tradeFormula = page.locator('[data-room-title="贸易站 1"]');
+  await expect(manufactureFormula).toContainText(/236%\s*=\s*100%\s*\+\s*130%\s*纯技能\s*\+\s*6%\s*跨设施/);
+  await expect(tradeFormula).toContainText(/333\.7%\s*=\s*100%\s*\+\s*135%\s*综合加成\s*×\s*1\.42\s*订单机制/);
+  await expect(manufactureFormula.getByText("基础", { exact: true })).toHaveCount(0);
+  await expect(tradeFormula.getByText("基础", { exact: true })).toHaveCount(0);
+
+  for (const viewport of [{ width: 390, height: 844 }, { width: 768, height: 900 }, { width: 1440, height: 900 }]) {
+    await page.setViewportSize(viewport);
+    const fit = await dailyProducts.evaluate((element) => ({ clientWidth: element.clientWidth, scrollWidth: element.scrollWidth }));
+    expect(fit.scrollWidth).toBeLessThanOrEqual(fit.clientWidth);
+    for (const product of await dailyProducts.locator("[data-daily-product-group]").all()) {
+      const cardFit = await product.evaluate((element) => ({ clientWidth: element.clientWidth, scrollWidth: element.scrollWidth }));
+      expect(cardFit.scrollWidth).toBeLessThanOrEqual(cardFit.clientWidth + 1);
+    }
+  }
 
   await page.getByRole("tab", { name: /第 2 班 · 12h/ }).click();
   await expect(shiftTabs.nth(1)).toHaveAttribute("aria-label", /替补 上班 · 主力 休息/);
@@ -1274,6 +1369,21 @@ test("two-shift output drives labels, teams, metric units, and profile details",
   await detailsTrigger.click();
   const detailsSheet = page.locator('[data-slot="drawer-content"]');
   await expect(detailsSheet).toBeVisible();
+  await expect(detailsSheet.getByRole("heading", { name: "预计日产物" })).toBeVisible();
+  await expect(detailsSheet.getByText("DAILY OUTPUT", { exact: true })).toHaveCount(0);
+  await expect(detailsSheet.getByText("完整精度汇总 · 显示取整", { exact: true })).toHaveCount(0);
+  await expect(detailsSheet.locator("[data-production-group]").nth(0)).toHaveAttribute("data-production-group", "experience");
+  await expect(detailsSheet.locator("[data-production-group]").nth(1)).toHaveAttribute("data-production-group", "lmd");
+  await expect(detailsSheet.locator("[data-production-group]").nth(2)).toHaveAttribute("data-production-group", "orundum");
+  await expect(detailsSheet.locator('[data-production-group="lmd"] [data-production-detail]').nth(0)).toHaveAttribute("data-production-detail", "lmd-orders");
+  await expect(detailsSheet.locator('[data-production-group="lmd"] [data-production-detail]').nth(1)).toHaveAttribute("data-production-detail", "gold");
+  await expect(detailsSheet.getByText("龙门币订单", { exact: true })).toHaveCount(0);
+  await expect(detailsSheet.locator('[data-production-detail="gold"]')).toContainText("订单原料");
+  await expect(detailsSheet.locator('[data-production-group="orundum"] [data-production-detail]').nth(0)).toHaveAttribute("data-production-detail", "orundum");
+  await expect(detailsSheet.locator('[data-production-group="orundum"] [data-production-detail]').nth(1)).toHaveAttribute("data-production-detail", "shards");
+  await expect(detailsSheet.locator('[data-production-detail="shards"]')).toContainText("制造环节");
+  await expect(detailsSheet.locator('[data-production-detail="orundum"]')).toContainText("限制环节：合成玉订单");
+  await expect(detailsSheet.locator("[data-production-method]")).toHaveCount(0);
   await expect(detailsSheet.getByText("24h 贸易", { exact: true }).locator("..")).toContainText(/参考 4\.968×\s*\+6\.4%/);
   await expect(detailsSheet.getByText("24h 制造", { exact: true }).locator("..")).toContainText(/参考 850%\s*\+7\.9%/);
   await expect(detailsSheet.locator('[data-efficiency-insights] [data-insight-state="positive"]')).toHaveCount(3);
@@ -1707,7 +1817,7 @@ test("plan completion reveals status, metrics, and schedule once without resetti
       totalElementCount: document.querySelectorAll("*").length,
     };
   });
-  expect(renderingBudget.summaryCalligraphCount).toBe(3);
+  expect(renderingBudget.summaryCalligraphCount).toBe(5);
   expect(renderingBudget.boardCalligraphCount).toBe(renderingBudget.roomPrimaryCount);
   expect(renderingBudget.totalCalligraphCount).toBe(
     renderingBudget.summaryCalligraphCount + renderingBudget.boardCalligraphCount
