@@ -102,12 +102,31 @@ async function createSource(root, operatorIds = ["001_alpha", "002_beta"]) {
     desc_alpha: "进驻时，生产力<@cc.vup>+10%</>。",
     ...(operatorIds.length > 1 ? { desc_beta: "精英后<$cc.test><@cc.kw>生效</></>。" } : {}),
   };
+  const buffInfo = {
+    desc_alpha: { building: "MANUFACTURE", num: { product: 10 }, is: { "贵金属": 1 } },
+    ...(operatorIds.length > 1 ? { desc_beta: { building: "DORMITORY", num: {}, is: { "单体恢复": 1 } } } : {}),
+  };
+  const roomNames = {
+    CONTROL: "控制中枢",
+    POWER: "发电站",
+    MANUFACTURE: "制造站",
+    TRADING: "贸易站",
+    DORMITORY: "宿舍",
+    MEETING: "会客室",
+    WORKSHOP: "加工站",
+    TRAINING: "训练室",
+    HIRE: "办公室",
+  };
+  const terms = {
+    cc_test: { name: "测试词条", desc: "<$cc.x><@cc.rem>红松骑士团</></>" },
+  };
 
   await Promise.all([
     writeFile(path.join(root, "assets/data/character.json"), JSON.stringify(characters), "utf8"),
     writeFile(path.join(root, "assets/locales/cn/character.json"), JSON.stringify(names), "utf8"),
-    writeFile(path.join(root, "assets/data/building.json"), JSON.stringify({ char: charSkills, buff: { data: buffData } }), "utf8"),
-    writeFile(path.join(root, "assets/locales/cn/building.json"), JSON.stringify({ buff: { name: buffNames, description: descriptions } }), "utf8"),
+    writeFile(path.join(root, "assets/data/building.json"), JSON.stringify({ char: charSkills, buff: { data: buffData, info: buffInfo } }), "utf8"),
+    writeFile(path.join(root, "assets/locales/cn/building.json"), JSON.stringify({ name: roomNames, buff: { name: buffNames, description: descriptions } }), "utf8"),
+    writeFile(path.join(root, "assets/locales/cn/term.json"), JSON.stringify(terms), "utf8"),
     ...operatorIds.map((id, index) => png(path.join(portraitsRoot, `avatar/char_${id}.png`), 180, 180, { r: index * 40, g: 20, b: 30, alpha: 1 })),
     png(path.join(root, "assets/img/building_skill/icon_shared.png"), 35, 36, { r: 10, g: 20, b: 30, alpha: 1 }),
     ...(operatorIds.length > 1
@@ -139,7 +158,7 @@ test("generates deterministic catalogs and normalizes the known 35px icon input"
   await generateAssets({ sourceRoot: source, sourceSha: SOURCE_SHA, portraitsRoot: portraitsSource, portraitsSha: PORTRAITS_SHA, outputRoot: first, allowRemovals: true });
   await generateAssets({ sourceRoot: source, sourceSha: SOURCE_SHA, portraitsRoot: portraitsSource, portraitsSha: PORTRAITS_SHA, outputRoot: second, allowRemovals: true });
   const manifest = await checkGeneratedAssets(first);
-  assert.deepEqual(manifest.counts, { operators: 2, buildingSkills: 2, portraits: 2, buildingSkillIcons: 2, productIcons: 5 });
+  assert.deepEqual(manifest.counts, { operators: 2, buildingSkills: 2, terms: 1, portraits: 2, buildingSkillIcons: 2, productIcons: 5 });
   assert.equal(manifest.portraitsSource.repository, ARKNIGHTS_GAME_RESOURCE_REPOSITORY);
   assert.equal(manifest.portraitsSource.commit, PORTRAITS_SHA);
   assert.deepEqual(manifest.products.map((product) => [product.id, product.source]), [
@@ -152,10 +171,21 @@ test("generates deterministic catalogs and normalizes the known 35px icon input"
   assert.equal(manifest.source.repository, ARKNTOOLS_REPOSITORY);
   const operators = JSON.parse(await readFile(path.join(first, "src/generated/arkntools/operator-catalog.json"), "utf8"));
   assert.equal(operators[0].portrait, `/images/operator-portraits/001_alpha.webp?v=${GENERATED_VERSION}-${PORTRAITS_SHA.slice(0, 12)}`);
+  assert.equal(operators[0].buildingSkills[0].room, "MANUFACTURE");
+  assert.equal(operators[0].buildingSkills[0].roomLabel, "制造站");
+  assert.deepEqual(operators[0].buildingSkills[0].tags, ["贵金属"]);
+
+  const skills = JSON.parse(await readFile(path.join(first, "src/generated/arkntools/building-skill-catalog.json"), "utf8"));
+  assert.equal(skills.skill_alpha.description, "进驻时，生产力+10%。");
+  assert.equal(skills.skill_alpha.descriptionRich, "进驻时，生产力<@cc.vup>+10%</>。");
+
+  const terms = JSON.parse(await readFile(path.join(first, "src/generated/arkntools/term-catalog.json"), "utf8"));
+  assert.deepEqual(terms.cc_test, { id: "cc_test", name: "测试词条", desc: "<$cc.x><@cc.rem>红松骑士团</></>", descText: "红松骑士团" });
 
   const relativeFiles = [
     "src/generated/arkntools/operator-catalog.json",
     "src/generated/arkntools/building-skill-catalog.json",
+    "src/generated/arkntools/term-catalog.json",
     "src/generated/arkntools/source.json",
     "public/images/building-skills/icon_shared.png",
     "public/images/operator-portraits/001_alpha.webp",

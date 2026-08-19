@@ -28,6 +28,7 @@ const SOURCE_PATHS = {
   buildingData: "assets/data/building.json",
   characterLocale: "assets/locales/cn/character.json",
   buildingLocale: "assets/locales/cn/building.json",
+  termLocale: "assets/locales/cn/term.json",
   buildingSkills: "assets/img/building_skill",
 };
 
@@ -239,20 +240,29 @@ async function loadSource(sourceRoot, sourceSha, portraitsRoot, portraitsSha) {
   const normalizedSourceSha = normalizeCommit(sourceSha);
   const normalizedPortraitsSha = normalizeCommit(portraitsSha);
   const portraitVersion = portraitAssetVersion(normalizedPortraitsSha);
-  const [characterData, buildingData, characterLocale, buildingLocale] = await Promise.all([
+  const [characterData, buildingData, characterLocale, buildingLocale, termLocale] = await Promise.all([
     readJson(path.join(resolvedSource, SOURCE_PATHS.characterData), "干员数据"),
     readJson(path.join(resolvedSource, SOURCE_PATHS.buildingData), "基建数据"),
     readJson(path.join(resolvedSource, SOURCE_PATHS.characterLocale), "干员中文本地化"),
     readJson(path.join(resolvedSource, SOURCE_PATHS.buildingLocale), "基建中文本地化"),
+    readJson(path.join(resolvedSource, SOURCE_PATHS.termLocale), "基建词条本地化"),
   ]);
 
   assert(isObject(characterData), "干员数据根节点必须是对象。");
   assert(isObject(characterLocale), "干员本地化根节点必须是对象。");
-  assert(isObject(buildingData) && isObject(buildingData.char) && isObject(buildingData.buff?.data), "基建数据结构不完整。");
+  assert(
+    isObject(buildingData)
+      && isObject(buildingData.char)
+      && isObject(buildingData.buff?.data)
+      && isObject(buildingData.buff?.info),
+    "基建数据结构不完整。",
+  );
   assert(isObject(buildingLocale?.buff?.name) && isObject(buildingLocale?.buff?.description), "基建本地化结构不完整。");
+  assert(isObject(termLocale), "基建词条本地化结构不完整。");
   sameKeys(characterData, characterLocale, "干员数据", "干员本地化");
   sameKeys(characterData, buildingData.char, "干员数据", "基建技能映射");
 
+  const roomLabels = buildingLocale.name;
   const names = new Map();
   const referencedSkillIds = new Set();
   const referencedIcons = new Set();
@@ -277,10 +287,18 @@ async function loadSource(sourceRoot, sourceSha, portraitsRoot, portraitsSha) {
       assert(typeof rawSkill.id === "string" && rawSkill.id.trim(), `干员 ${shortId} 的第 ${offset + 1} 个基建技能缺少 ID。`);
       assert(buildingData.buff.data[rawSkill.id], `干员 ${shortId} 引用了未知基建技能 ${rawSkill.id}。`);
       referencedSkillIds.add(rawSkill.id);
+      const skillInfo = buildingData.buff.info[buildingData.buff.data[rawSkill.id].desc];
+      const room = skillInfo?.building ?? null;
+      assert(
+        room === null || typeof roomLabels[room] === "string",
+        `基建技能 ${rawSkill.id} 的房间类型 ${room} 缺少中文名。`,
+      );
       return {
         index: offset + 1,
         id: rawSkill.id,
         ...parseUnlock(rawSkill.unlock),
+        ...(room ? { room, roomLabel: roomLabels[room] } : {}),
+        tags: Object.keys(skillInfo?.is ?? {}),
       };
     });
 
@@ -310,9 +328,26 @@ async function loadSource(sourceRoot, sourceSha, portraitsRoot, portraitsSha) {
       id: skillId,
       name,
       description: stripGameMarkup(rawDescription),
+      descriptionRich: rawDescription,
       icon: relativeAssetPath("building-skills", metadata.icon),
     });
   }
+
+  const terms = sortedObject(
+    Object.entries(termLocale)
+      .sort(([left], [right]) => left.localeCompare(right, "en"))
+      .map(([termId, entry]) => {
+        assert(isObject(entry), `基建词条 ${termId} 无效。`);
+        assert(typeof entry.name === "string" && entry.name.trim(), `基建词条 ${termId} 缺少名称。`);
+        assert(typeof entry.desc === "string" && entry.desc.trim(), `基建词条 ${termId} 缺少描述。`);
+        return [termId, {
+          id: termId,
+          name: entry.name,
+          desc: entry.desc,
+          descText: stripGameMarkup(entry.desc),
+        }];
+      }),
+  );
 
   for (const skillId of referencedSkillIds) {
     assert(buildingData.buff.data[skillId], `缺少被干员引用的基建技能 ${skillId}。`);
@@ -361,13 +396,14 @@ async function loadSource(sourceRoot, sourceSha, portraitsRoot, portraitsSha) {
     counts: {
       operators: operators.length,
       buildingSkills: skills.length,
+      terms: Object.keys(terms).length,
       portraits: portraitFiles.length,
       buildingSkillIcons: iconFiles.length,
       productIcons: productFiles.length,
     },
   };
 
-  return { operators, skills: skillCatalog, manifest, portraitFiles, iconFiles, productFiles };
+  return { operators, skills: skillCatalog, terms, manifest, portraitFiles, iconFiles, productFiles };
 }
 
 function json(value) {
@@ -396,6 +432,7 @@ async function writeStage(stageRoot, generated) {
     }),
     writeFile(path.join(dataTarget, "operator-catalog.json"), json(generated.operators), "utf8"),
     writeFile(path.join(dataTarget, "building-skill-catalog.json"), json(generated.skills), "utf8"),
+    writeFile(path.join(dataTarget, "term-catalog.json"), json(generated.terms), "utf8"),
     writeFile(path.join(dataTarget, "source.json"), json(generated.manifest), "utf8"),
   ]);
 }
@@ -414,13 +451,15 @@ async function listRegularAssetNames(directory, label, extension) {
 export async function checkGeneratedAssets(root) {
   const resolvedRoot = path.resolve(root);
   const dataRoot = path.join(resolvedRoot, MANAGED_PATHS[3]);
-  const [operators, skills, manifest] = await Promise.all([
+  const [operators, skills, terms, manifest] = await Promise.all([
     readJson(path.join(dataRoot, "operator-catalog.json"), "已生成干员目录"),
     readJson(path.join(dataRoot, "building-skill-catalog.json"), "已生成基建技能目录"),
+    readJson(path.join(dataRoot, "term-catalog.json"), "已生成词条目录"),
     readJson(path.join(dataRoot, "source.json"), "已生成来源清单"),
   ]);
   assert(Array.isArray(operators), "已生成干员目录必须是数组。");
   assert(isObject(skills), "已生成基建技能目录必须是对象。");
+  assert(isObject(terms), "已生成词条目录必须是对象。");
   assert(isObject(manifest) && manifest.version === GENERATED_VERSION, "已生成来源清单版本无效。");
   normalizeCommit(manifest.source?.commit);
   assert(manifest.source?.repository === ARKNTOOLS_REPOSITORY, "已生成来源仓库无效。");
@@ -457,6 +496,9 @@ export async function checkGeneratedAssets(root) {
       assert(skills[skill.id], `干员 ${operator.id} 引用了未知基建技能 ${skill.id}。`);
       assert(Number.isInteger(skill.elite) && skill.elite >= 0 && skill.elite <= 2, `干员 ${operator.id} 的基建技能精英阶段无效。`);
       assert(Number.isInteger(skill.level) && skill.level >= 1 && skill.level <= 90, `干员 ${operator.id} 的基建技能等级无效。`);
+      assert(typeof skill.room === "string" && skill.room, `干员 ${operator.id} 的基建技能缺少工作房间。`);
+      assert(typeof skill.roomLabel === "string" && skill.roomLabel, `干员 ${operator.id} 的基建技能缺少房间中文名。`);
+      assert(Array.isArray(skill.tags), `干员 ${operator.id} 的基建技能标签无效。`);
     });
   }
 
@@ -465,11 +507,20 @@ export async function checkGeneratedAssets(root) {
     assert(typeof skill.name === "string" && skill.name.trim(), `已生成基建技能 ${skillId} 缺少名称。`);
     assert(typeof skill.description === "string" && skill.description.trim(), `已生成基建技能 ${skillId} 缺少描述。`);
     assert(!/<[^>]*>/.test(skill.description), `已生成基建技能 ${skillId} 仍包含富文本标记。`);
+    assert(typeof skill.descriptionRich === "string" && skill.descriptionRich.trim(), `已生成基建技能 ${skillId} 缺少富文本描述。`);
     const prefix = "/images/building-skills/";
     assert(typeof skill.icon === "string" && skill.icon.startsWith(prefix) && skill.icon.endsWith(".png"), `已生成基建技能 ${skillId} 的图标路径无效。`);
     const icon = skill.icon.slice(prefix.length, -4);
     assert(SAFE_ASSET_NAME.test(icon), `已生成基建技能 ${skillId} 的图标名不安全。`);
     referencedIcons.add(`${icon}.png`);
+  }
+
+  for (const [termId, term] of Object.entries(terms)) {
+    assert(isObject(term) && term.id === termId, `已生成词条 ${termId} 无效。`);
+    assert(typeof term.name === "string" && term.name.trim(), `已生成词条 ${termId} 缺少名称。`);
+    assert(typeof term.desc === "string" && term.desc.trim(), `已生成词条 ${termId} 缺少描述。`);
+    assert(typeof term.descText === "string" && term.descText.trim(), `已生成词条 ${termId} 缺少纯文本描述。`);
+    assert(!/<[^>]*>/.test(term.descText), `已生成词条 ${termId} 的纯文本描述仍包含富文本标记。`);
   }
 
   const portraitDirectory = path.join(resolvedRoot, MANAGED_PATHS[0]);
@@ -488,6 +539,7 @@ export async function checkGeneratedAssets(root) {
   assert(JSON.stringify(actualProducts) === JSON.stringify(expectedProducts), "产物图标目录与生成目录不一致。");
   assert(manifest.counts?.operators === operators.length, "来源清单的干员数量不一致。");
   assert(manifest.counts?.buildingSkills === Object.keys(skills).length, "来源清单的基建技能数量不一致。");
+  assert(manifest.counts?.terms === Object.keys(terms).length, "来源清单的词条数量不一致。");
   assert(manifest.counts?.portraits === actualPortraits.length, "来源清单的头像数量不一致。");
   assert(manifest.counts?.buildingSkillIcons === actualIcons.length, "来源清单的技能图标数量不一致。");
   assert(manifest.counts?.productIcons === actualProducts.length, "来源清单的产物图标数量不一致。");
