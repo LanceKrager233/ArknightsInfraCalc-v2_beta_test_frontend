@@ -171,6 +171,8 @@ test("generates deterministic catalogs and normalizes the known 35px icon input"
   assert.equal(manifest.source.repository, ARKNTOOLS_REPOSITORY);
   const operators = JSON.parse(await readFile(path.join(first, "src/generated/arkntools/operator-catalog.json"), "utf8"));
   assert.equal(operators[0].portrait, `/images/operator-portraits/001_alpha.webp?v=${GENERATED_VERSION}-${PORTRAITS_SHA.slice(0, 12)}`);
+  assert.equal(operators[0].order, 0);
+  assert.equal(operators[1].order, 1);
   assert.equal(operators[0].buildingSkills[0].room, "MANUFACTURE");
   assert.equal(operators[0].buildingSkills[0].roomLabel, "制造站");
   assert.deepEqual(operators[0].buildingSkills[0].tags, ["贵金属"]);

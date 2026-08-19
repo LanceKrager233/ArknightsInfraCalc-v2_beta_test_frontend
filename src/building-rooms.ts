@@ -47,6 +47,8 @@ export function buildingRoomPrefixForSkillId(skillId: string): BuildingRoomPrefi
 export interface OperatorWithSkills {
   name: string;
   buildingSkills: readonly { id: string }[];
+  /** 数据仓库 building.json char 字段中的原始顺序（生成时写入），用于默认倒序展示。 */
+  order?: number;
 }
 
 export function operatorMatchesRooms(
@@ -74,10 +76,15 @@ export function filterOperators<T extends OperatorWithSkills>(
   rooms: readonly BuildingRoomPrefix[],
   query: string,
 ): T[] {
+  const normalizedQuery = query.trim();
   return operators
     .filter((operator) => {
       const skillIds = operator.buildingSkills.map((skill) => skill.id);
       return operatorMatchesRooms(skillIds, rooms) && operatorMatchesNameContains(operator.name, query);
     })
-    .sort((left, right) => left.name.localeCompare(right.name, "zh-CN"));
+    .sort((left, right) => {
+      // 搜索时按名字排序便于查找；默认浏览按数据仓库原始顺序倒序（新在前）。
+      if (normalizedQuery) return left.name.localeCompare(right.name, "zh-CN");
+      return (right.order ?? 0) - (left.order ?? 0) || left.name.localeCompare(right.name, "zh-CN");
+    });
 }

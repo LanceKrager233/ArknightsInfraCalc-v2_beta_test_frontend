@@ -11,6 +11,8 @@ export interface OperatorBuildingSkillRef {
 export interface OperatorAssetRecord {
   id: string;
   name: string;
+  /** 数据仓库 building.json char 字段中的原始顺序，用于默认倒序展示。 */
+  order: number;
   rarity: number;
   profession: number;
   position: number;
@@ -22,6 +24,7 @@ interface BuildingSkillRecord {
   id: string;
   name: string;
   description: string;
+  descriptionRich: string;
   icon: string;
 }
 

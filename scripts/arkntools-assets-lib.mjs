@@ -267,6 +267,7 @@ async function loadSource(sourceRoot, sourceSha, portraitsRoot, portraitsSha) {
   const referencedSkillIds = new Set();
   const referencedIcons = new Set();
   const operators = [];
+  const charOrder = new Map(Object.keys(buildingData.char).map((shortId, index) => [shortId, index]));
 
   for (const shortId of Object.keys(characterData).sort((left, right) => left.localeCompare(right, "en"))) {
     assert(SAFE_ASSET_NAME.test(shortId), `不安全的干员 ID：${shortId}`);
@@ -305,6 +306,7 @@ async function loadSource(sourceRoot, sourceSha, portraitsRoot, portraitsSha) {
     operators.push({
       id: `char_${shortId}`,
       name,
+      order: charOrder.get(shortId) ?? 0,
       rarity: metadata.star,
       profession: metadata.profession,
       position: metadata.position,
@@ -489,6 +491,7 @@ export async function checkGeneratedAssets(root) {
     names.add(operator.name);
     const shortId = operator.id.slice(5);
     assert(operator.portrait === relativeAssetPath("operator-portraits", shortId, "webp", portraitVersion), `干员 ${operator.id} 的头像路径无效。`);
+    assert(Number.isInteger(operator.order), `干员 ${operator.id} 的原始顺序无效。`);
     portraitNames.push(`${shortId}.webp`);
     assert(Array.isArray(operator.buildingSkills), `干员 ${operator.id} 的基建技能无效。`);
     operator.buildingSkills.forEach((skill, offset) => {

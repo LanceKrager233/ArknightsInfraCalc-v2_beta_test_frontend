@@ -81,6 +81,17 @@ test("combines room and name-substring filters with AND and sorts by name", () =
   assert.ok(all.includes("阿米娅") && all.includes("阿能") && all.includes("能天使"));
 });
 
+test("default browse order follows the data warehouse order in reverse", () => {
+  const operators: OperatorWithSkills[] = [
+    { name: "能天使", order: 0, buildingSkills: [{ id: "manu_x" }] },
+    { name: "阿米娅", order: 2, buildingSkills: [{ id: "control_x" }] },
+    { name: "阿能", order: 1, buildingSkills: [{ id: "manu_y" }] },
+  ];
+  assert.deepEqual(filterOperators(operators, [], "").map((operator) => operator.name), ["阿米娅", "阿能", "能天使"]);
+  // 带搜索词时仍按名字排序，便于查找。
+  assert.deepEqual(filterOperators(operators, [], "阿").map((operator) => operator.name), ["阿米娅", "阿能"]);
+});
+
 test("filters the real catalog by substring query", () => {
   const names = filterOperators(OPERATOR_CATALOG, [], "黑角").map((operator) => operator.name);
   assert.ok(names.includes("黑角"));

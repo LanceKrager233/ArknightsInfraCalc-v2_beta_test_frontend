@@ -474,6 +474,81 @@
   text-shadow: 0 0 7px color-mix(in srgb, var(--room-accent) 42%, transparent);
 }
 
+/* ── 基建技能富文本（对齐工具箱 richText.css / RIIC.vue） ─────────────── */
+.cc-vup {
+  color: #0098DC;
+}
+
+.cc-vdown {
+  color: #FF6237;
+}
+
+.cc-rem {
+  color: #F49800;
+}
+
+.cc-kw {
+  color: #00B0FF;
+}
+
+.cc-miu {
+  color: #8F7156;
+}
+
+.riic-term {
+  cursor: pointer;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+}
+
+.riic-term-static {
+  cursor: default;
+}
+
+.riic-term .riic-rt {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: top;
+  transition: filter 0.2s;
+}
+
+.riic-term .riic-rt::before {
+  content: "";
+  position: absolute;
+  bottom: 1px;
+  left: 0;
+  width: 100%;
+  height: 1px;
+}
+
+.riic-term .cc-vup::before {
+  background-color: #0098DC;
+}
+
+.riic-term .cc-vdown::before {
+  background-color: #FF6237;
+}
+
+.riic-term .cc-rem::before {
+  background-color: #F49800;
+}
+
+.riic-term .cc-kw::before {
+  background-color: #00B0FF;
+}
+
+.riic-term .cc-miu::before {
+  background-color: #8F7156;
+}
+
+.riic-term:hover .riic-rt {
+  filter: brightness(1.15);
+}
+
 .infra-room-control {
   transition:
     border-color 160ms var(--infra-ease-out),
