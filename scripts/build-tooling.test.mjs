@@ -27,10 +27,10 @@ test("CI enforces route and document preload JavaScript budgets after building",
 
   assert.equal(packageJson.scripts["test:bundle-budget"], "node scripts/check-bundle-budget.mjs");
   assert.match(workflow, /Production build[\s\S]+npm run test:bundle-budget/);
-  assert.match(budgetCheck, /MAX_ROUTE_INITIAL_JS_BYTES = 950_000/);
-  assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_JS_BYTES = 1_060_000/);
-  assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_GZIP_JS_BYTES = 340_000/);
-  assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_JS_FILES = 16/);
+  assert.match(budgetCheck, /MAX_ROUTE_INITIAL_JS_BYTES = 1_120_000/);
+  assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_JS_BYTES = 1_240_000/);
+  assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_GZIP_JS_BYTES = 395_000/);
+  assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_JS_FILES = 17/);
   assert.match(budgetCheck, /firstLoadUncompressedJsBytes/);
   assert.match(budgetCheck, /\.next\/server\/app\/index\.html/);
   assert.match(budgetCheck, /gzipSync/);
@@ -91,6 +91,23 @@ test("the server page imports the workbench directly without a dynamic preload g
 
   assert.match(page, /import WorkbenchApp from "@\/App"/);
   assert.doesNotMatch(page, /dynamic\(/);
+});
+
+test("the critical calculator board stays in the initial client graph", async () => {
+  const calculator = await readRepoFile("src/components/pages/InfraCalculator.tsx");
+  const app = await readRepoFile("src/App.tsx");
+
+  assert.match(calculator, /import \{ ScheduleBoard, ShiftTabs \} from "@\/components"/);
+  assert.doesNotMatch(calculator, /const (?:ScheduleBoard|ShiftTabs) = lazy\(/);
+  assert.doesNotMatch(calculator, /const (?:ScheduleBoard|ShiftTabs) = dynamic\(/);
+  assert.doesNotMatch(calculator, /<Suspense fallback=\{<DeferredResultLoading \/>\}><ScheduleBoard/);
+  assert.doesNotMatch(app, /PageScrollbar/);
+  const components = await readRepoFile("src/components.tsx");
+  assert.match(components, /useState<"list" \| "compact">\("list"\)/);
+  assert.doesNotMatch(components, /useState<"list" \| "compact">\(\(\) =>[\s\S]{0,200}matchMedia/);
+  assert.match(app, /const hasRenderedCalculator = useRef\(false\)/);
+  assert.match(calculator, /animateInitialView=\{!scheduleResult && animateEmptyScheduleEntrance\}/);
+  assert.doesNotMatch(calculator, /animateInitialView=\{!scheduleResult\}/);
 });
 
 test("heavy account, operator, and scrollbar modules stay behind runtime boundaries", async () => {

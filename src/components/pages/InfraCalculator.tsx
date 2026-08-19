@@ -3,6 +3,7 @@
 import { Download, FileJson, FlaskConical, HeartPulse, Keyboard, Loader2, Play, Search, Settings2, Terminal, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 
+import { ScheduleBoard, ShiftTabs } from "@/components";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -22,8 +23,6 @@ import type {
   ShiftComparison,
 } from "@/types";
 
-const ScheduleBoard = lazy(() => import("@/components").then((module) => ({ default: module.ScheduleBoard })));
-const ShiftTabs = lazy(() => import("@/components").then((module) => ({ default: module.ShiftTabs })));
 const PlanResultSummary = lazy(() => import("@/components/PlanResultSummary").then((module) => ({ default: module.PlanResultSummary })));
 const DebugActions = lazy(() => import("@/components").then((module) => ({ default: module.DebugActions })));
 const IssuePanel = lazy(() => import("@/components").then((module) => ({ default: module.IssuePanel })));
@@ -105,6 +104,7 @@ interface InfraCalculatorProps {
   canRun: boolean;
   plannerReady: boolean;
   animatePlanEntrance: boolean;
+  animateEmptyScheduleEntrance: boolean;
   onPlanEntranceConsumed: (revision: string) => void;
   requiresAccount?: boolean;
   accountControl?: ReactNode;
@@ -130,7 +130,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     activePlan, closestComparison,
     resultClearNotice,
     issueForPanel, issueReport, feedbackResult, feedbackError,
-    sampleLoading, loading, canRun, plannerReady, animatePlanEntrance, onPlanEntranceConsumed, requiresAccount = false, accountControl,
+    sampleLoading, loading, canRun, plannerReady, animatePlanEntrance, animateEmptyScheduleEntrance, onPlanEntranceConsumed, requiresAccount = false, accountControl,
     onLoadSample, onOpenSetup, onRun, onCancelRun,
     onSetActiveShift, onMarkIssue,
     onFactoryRecipeChange, onTradeOrderChange,
@@ -289,7 +289,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                 />
               </Suspense>
             ) : null}
-            {rows.length > 0 ? <Suspense fallback={<DeferredResultLoading />}><ScheduleBoard
+            {rows.length > 0 ? <ScheduleBoard
               rows={rows}
               layout={layout}
               planRevision={result?.diagnosticId}
@@ -298,7 +298,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               shiftDirection={shiftDirection}
               activePlan={activePlan}
               searchQuery={operatorQuery}
-              animateInitialView={!scheduleResult}
+              animateInitialView={!scheduleResult && animateEmptyScheduleEntrance}
               mobileActionsSlot={renderExportActions("mobile")}
               shiftInfoSlot={(
                 <div className="flex flex-wrap items-center justify-end gap-2 max-sm:w-full max-sm:justify-between" data-shift-actions>
@@ -324,7 +324,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               onFactoryRecipeChange={onFactoryRecipeChange}
               onTradeOrderChange={onTradeOrderChange}
               onViewModeChange={setScheduleViewMode}
-            /></Suspense> : (
+            /> : (
               <div className="flex min-h-[420px] items-center justify-center border-y border-dashed border-border/70 py-6 text-center text-sm text-muted-foreground">
                 没有可展示的布局房间。
               </div>
