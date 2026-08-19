@@ -213,7 +213,7 @@ npm start
 - `npm run test:e2e` 默认在 5184 端口自动启动 Next，并用 Playwright 拦截外部 API；通常不需要真实 CLI 或森空岛凭据。
 - `npm run test:e2e:webkit` 使用同一套 E2E 场景执行独立 WebKit 兼容性门禁。
 - `npm start` 默认监听 `0.0.0.0:5174`。
-- CI 将核心检查和 Chromium E2E 拆成隔离 Job 并行执行，再由受保护的 `quality` 汇总门禁统一放行；push 只有在同一 SHA 的两个必需 Job 成功后才进入部署。完整 WebKit E2E 每日定时运行，也可手动触发，不阻塞逐次发布。
+- CI 将核心检查和 Chromium E2E 拆成隔离 Job 并行执行，再由受保护的 `quality` 汇总门禁统一放行；push 只有在同一 SHA 的两个必需 Job 成功后才进入部署。Chromium 与 WebKit Job 使用和 lockfile 中 Playwright 版本一致、以 digest 固定的官方 noble 镜像，不得在临时 runner 上重新执行 `playwright install --with-deps`；升级 Playwright 时必须同步镜像标签、digest 和构建工具契约测试。完整 WebKit E2E 每日定时运行，也可手动触发，不阻塞逐次发布。
 
 开发调试模式仅在本地这样开启：
 
