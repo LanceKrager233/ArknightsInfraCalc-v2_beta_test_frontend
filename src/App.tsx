@@ -1,18 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentProps, ComponentType } from "react";
 
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar, type AppPage } from "@/components/layout/AppSidebar";
 import { AppTopBar, SklandAccountControl } from "@/components/layout/AppTopBar";
+import { AppMotionProvider } from "@/components/MotionProvider";
 import { PrimaryPageTransition } from "@/components/layout/PrimaryPageTransition";
 import { InfraCalculator } from "@/components/pages/InfraCalculator";
 import { LiveActivity, usePlanActivity } from "@/components/ui/live-activity";
-import { authClient } from "@/lib/auth-client";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { preloadProductIcons } from "@/product-assets";
+import { useWebsiteSessionIdentity } from "@/website-session";
 
 import {
   deleteAllSklandData,
@@ -99,42 +100,33 @@ function DeferredPageLoading() {
   );
 }
 
-const TrainingAdvice = dynamic(
-  () => import("@/components/pages/TrainingAdvice").then((module) => module.TrainingAdvice),
-  { loading: DeferredPageLoading, ssr: false },
-);
-const SkillQuery = dynamic(
-  () => import("@/components/pages/SkillQuery").then((module) => module.SkillQuery),
-  { loading: DeferredPageLoading, ssr: false },
-);
-const AccountStatusCenter = dynamic(
-  () => import("@/components/pages/AccountStatusCenter").then((module) => module.AccountStatusCenter),
-  { loading: DeferredPageLoading, ssr: false },
-);
+const TrainingAdvice = lazy(() => import("@/components/pages/TrainingAdvice").then((module) => ({
+  default: module.TrainingAdvice,
+})));
+const SkillQuery = lazy(() => import("@/components/pages/SkillQuery").then((module) => ({
+  default: module.SkillQuery,
+})));
+const AccountStatusCenter = lazy(() => import("@/components/pages/AccountStatusCenter").then((module) => ({
+  default: module.AccountStatusCenter,
+})));
 type DevelopmentSklandStatusCenterProps = ComponentProps<typeof import("@/components/pages/DevelopmentSklandStatusCenter").DevelopmentSklandStatusCenter>;
 type DevelopmentSklandStatusCenterComponent = ComponentType<DevelopmentSklandStatusCenterProps>;
 const DevelopmentSklandStatusCenter: DevelopmentSklandStatusCenterComponent = CLIENT_SKLAND_ENABLED
-  ? dynamic(
-      () => import("@/components/pages/DevelopmentSklandStatusCenter").then((module) => module.DevelopmentSklandStatusCenter),
-      { loading: DeferredPageLoading, ssr: false },
-    )
+  ? lazy(() => import("@/components/pages/DevelopmentSklandStatusCenter").then((module) => ({
+      default: module.DevelopmentSklandStatusCenter,
+    })))
   : () => null;
-const WebsiteAccountDialog = dynamic(
-  () => import("@/components/auth/WebsiteAccountDialog").then((module) => module.WebsiteAccountDialog),
-  { ssr: false },
-);
-const SetupDialog = dynamic(
-  () => import("./setup-dialog").then((module) => module.SetupDialog),
-  { ssr: false },
-);
-const IssueNoteModal = dynamic(
-  () => import("./components").then((module) => module.IssueNoteModal),
-  { ssr: false },
-);
-const ProductChangeConfirmModal = dynamic(
-  () => import("./components").then((module) => module.ProductChangeConfirmModal),
-  { ssr: false },
-);
+const WebsiteAccountDialog = lazy(() => import("@/components/auth/WebsiteAccountDialog").then((module) => ({
+  default: module.WebsiteAccountDialog,
+})));
+const SetupDialog = lazy(() => import("./setup-dialog").then((module) => ({ default: module.SetupDialog })));
+const IssueNoteModal = lazy(() => import("./components").then((module) => ({ default: module.IssueNoteModal })));
+const ProductChangeConfirmModal = lazy(() => import("./components").then((module) => ({
+  default: module.ProductChangeConfirmModal,
+})));
+const PageScrollbar = lazy(() => import("@/components/ui/page-scrollbar").then((module) => ({
+  default: module.PageScrollbar,
+})));
 
 type ProductChange =
   | { type: "factory"; roomId: string; recipe: FactoryRecipe }
@@ -246,7 +238,7 @@ function buildIssueReport(
 }
 
 function WorkbenchApp() {
-  const { data: websiteSession, isPending: websiteSessionPending, refetch: refetchWebsiteSession } = authClient.useSession();
+  const { data: websiteSession, isPending: websiteSessionPending, refetch: refetchWebsiteSession } = useWebsiteSessionIdentity();
   const defaultPreset = PRESETS[0];
   const defaultLayout = buildBlueprint(defaultPreset);
   const [page, setPage] = useState<AppPage>("calculator");
@@ -320,7 +312,25 @@ function WorkbenchApp() {
   const scheduleResult = result;
   const activePlan = scheduleResult?.maa.plans?.[activeShift];
   const activeRotationShift = scheduleResult?.rotation.shifts?.[activeShift];
-  const rows = useMemo(() => planToRows(activePlan, activeRotationShift, layout), [activePlan, activeRotationShift, layout]);
+  const baseRows = useMemo(() => planToRows(activePlan, activeRotationShift, layout), [activePlan, activeRotationShift, layout]);
+  const [presentedRows, setPresentedRows] = useState<{ source: RoomRow[]; rows: RoomRow[] } | null>(null);
+  useEffect(() => {
+    if (!baseRows.some((row) => row.operatorSlots.length > 0)) {
+      setPresentedRows(null);
+      return;
+    }
+
+    let cancelled = false;
+    void import("./schedule-presentation")
+      .then(({ addOperatorPresentations }) => {
+        if (!cancelled) setPresentedRows({ source: baseRows, rows: addOperatorPresentations(baseRows) });
+      })
+      .catch(() => {
+        if (!cancelled) setPresentedRows(null);
+      });
+    return () => { cancelled = true; };
+  }, [baseRows]);
+  const rows = presentedRows?.source === baseRows ? presentedRows.rows : baseRows;
   const ownsFiammetta = Boolean(operbox?.some((operator) => operator.own && operator.name === "菲亚梅塔"));
   const fiammettaForcedByRotation = rotationProfile === "fiammetta_8_8_4_4";
   const effectiveFiammettaEnabled = ownsFiammetta && (fiammettaForcedByRotation || fiammettaEnabled);
@@ -1292,6 +1302,9 @@ function WorkbenchApp() {
   );
 
   return (
+    <AppMotionProvider>
+      {hasRestoredSession ? <Suspense fallback={null}><PageScrollbar /></Suspense> : null}
+      <TooltipProvider>
     <div
       className="contents"
       inert={!hasRestoredSession}
@@ -1312,6 +1325,7 @@ function WorkbenchApp() {
 
       <div className="app-content-track py-4" data-app-content>
       <PrimaryPageTransition pageKey={page}>
+      <Suspense fallback={<DeferredPageLoading />}>
       {page === "calculator" ? (
         <InfraCalculator
           layout={layout}
@@ -1409,6 +1423,7 @@ function WorkbenchApp() {
           onOpenCalculator={() => setPage("calculator")}
         />
       )}
+      </Suspense>
       </PrimaryPageTransition>
       </div>
 
@@ -1427,13 +1442,13 @@ function WorkbenchApp() {
         ) : null}
       </footer>
 
-      {websiteAuthDialogMounted ? <WebsiteAccountDialog
-        open={websiteAuthDialogOpen}
-        onOpenChange={setWebsiteAuthDialogOpen}
-        onSessionChanged={handleWebsiteSessionChanged}
-      /> : null}
+      {websiteAuthDialogMounted ? <Suspense fallback={null}><WebsiteAccountDialog
+          open={websiteAuthDialogOpen}
+          onOpenChange={setWebsiteAuthDialogOpen}
+          onSessionChanged={handleWebsiteSessionChanged}
+        /></Suspense> : null}
 
-      {setupMounted ? <SetupDialog
+      {setupMounted ? <Suspense fallback={null}><SetupDialog
         {...(CLIENT_SKLAND_ENABLED ? {
           sklandSnapshot: sklandScheduleSnapshot,
           sklandBindingCount,
@@ -1476,9 +1491,9 @@ function WorkbenchApp() {
         powerBudget={powerBudget}
         onFinish={closeSetup}
         onSkip={closeSetup}
-      /> : null}
+      /></Suspense> : null}
 
-      {issueModalMounted ? <IssueNoteModal
+      {issueModalMounted ? <Suspense fallback={null}><IssueNoteModal
         open={issueOpen}
         row={issueDraftRow}
         note={issueDraftNote}
@@ -1486,8 +1501,8 @@ function WorkbenchApp() {
         onNoteChange={setIssueDraftNote}
         onSave={handleSaveIssue}
         onCancel={handleCancelIssue}
-      /> : null}
-      {productModalMounted ? <ProductChangeConfirmModal
+      /></Suspense> : null}
+      {productModalMounted ? <Suspense fallback={null}><ProductChangeConfirmModal
         open={Boolean(pendingProductChange)}
         roomLabel={rows.find((row) => row.roomId === pendingProductChange?.roomId)?.title ?? pendingProductChange?.roomId ?? "当前设施"}
         changeKind={pendingProductChange?.type === "trade" ? "贸易策略" : "制造配方"}
@@ -1495,10 +1510,12 @@ function WorkbenchApp() {
         busy={loading && Boolean(pendingProductChange)}
         onConfirm={() => void confirmScheduleProductChange()}
         onCancel={() => setPendingProductChange(null)}
-      /> : null}
+      /></Suspense> : null}
       </SidebarInset>
     </SidebarProvider>
     </div>
+      </TooltipProvider>
+    </AppMotionProvider>
   );
 }
 

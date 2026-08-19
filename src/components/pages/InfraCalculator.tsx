@@ -1,8 +1,7 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { Download, FileJson, FlaskConical, HeartPulse, Keyboard, Loader2, Play, Search, Settings2, Terminal, X } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -23,14 +22,19 @@ import type {
   ShiftComparison,
 } from "@/types";
 
-const ScheduleBoard = dynamic(() => import("@/components").then((module) => module.ScheduleBoard), { ssr: false });
-const ShiftTabs = dynamic(() => import("@/components").then((module) => module.ShiftTabs), { ssr: false });
-const PlanResultSummary = dynamic(
-  () => import("@/components/PlanResultSummary").then((module) => module.PlanResultSummary),
-  { ssr: false },
-);
-const DebugActions = dynamic(() => import("@/components").then((module) => module.DebugActions), { ssr: false });
-const IssuePanel = dynamic(() => import("@/components").then((module) => module.IssuePanel), { ssr: false });
+const ScheduleBoard = lazy(() => import("@/components").then((module) => ({ default: module.ScheduleBoard })));
+const ShiftTabs = lazy(() => import("@/components").then((module) => ({ default: module.ShiftTabs })));
+const PlanResultSummary = lazy(() => import("@/components/PlanResultSummary").then((module) => ({ default: module.PlanResultSummary })));
+const DebugActions = lazy(() => import("@/components").then((module) => ({ default: module.DebugActions })));
+const IssuePanel = lazy(() => import("@/components").then((module) => ({ default: module.IssuePanel })));
+
+function DeferredResultLoading() {
+  return (
+    <div className="grid min-h-64 place-items-center" role="status" aria-live="polite">
+      <span className="text-sm text-muted-foreground">正在恢复排班视图…</span>
+    </div>
+  );
+}
 
 function Panel({ children, className = "", action, title, icon }: {
   children: ReactNode;
@@ -271,19 +275,21 @@ export function InfraCalculator(props: InfraCalculatorProps) {
             )}
           >
             {scheduleResult ? (
-              <PlanResultSummary
-                profile={scheduleResult.profile}
-                rotation={scheduleResult.rotation}
-                maa={scheduleResult.maa}
-                layout={layout}
-                activeShift={activeShift}
-                comparison={closestComparison}
-                planRevision={scheduleResult.diagnosticId}
-                animateEntrance={animatePlanEntrance}
-                onEntranceConsumed={onPlanEntranceConsumed}
-              />
+              <Suspense fallback={<DeferredResultLoading />}>
+                <PlanResultSummary
+                  profile={scheduleResult.profile}
+                  rotation={scheduleResult.rotation}
+                  maa={scheduleResult.maa}
+                  layout={layout}
+                  activeShift={activeShift}
+                  comparison={closestComparison}
+                  planRevision={scheduleResult.diagnosticId}
+                  animateEntrance={animatePlanEntrance}
+                  onEntranceConsumed={onPlanEntranceConsumed}
+                />
+              </Suspense>
             ) : null}
-            {rows.length > 0 ? <ScheduleBoard
+            {rows.length > 0 ? <Suspense fallback={<DeferredResultLoading />}><ScheduleBoard
               rows={rows}
               layout={layout}
               planRevision={result?.diagnosticId}
@@ -318,7 +324,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               onFactoryRecipeChange={onFactoryRecipeChange}
               onTradeOrderChange={onTradeOrderChange}
               onViewModeChange={setScheduleViewMode}
-            /> : (
+            /></Suspense> : (
               <div className="flex min-h-[420px] items-center justify-center border-y border-dashed border-border/70 py-6 text-center text-sm text-muted-foreground">
                 没有可展示的布局房间。
               </div>
@@ -334,10 +340,10 @@ export function InfraCalculator(props: InfraCalculatorProps) {
         {showBetaSidebar ? (
           <aside className="min-w-0 divide-y divide-border/70 border-l border-border/70 pl-5 max-[1100px]:mt-5 max-[1100px]:grid max-[1100px]:grid-cols-[repeat(auto-fit,minmax(280px,1fr))] max-[1100px]:divide-x max-[1100px]:divide-y-0 max-[1100px]:border-l-0 max-[1100px]:border-t max-[1100px]:pl-0 max-[1100px]:[&>section]:px-5 max-[700px]:block max-[700px]:divide-x-0 max-[700px]:divide-y max-[700px]:[&>section]:px-0">
             <Panel title="问题上下文" icon={<FileJson className="size-4" />}>
-              <IssuePanel issue={issueForPanel} report={issueReport} feedback={feedbackResult} feedbackError={feedbackError} />
+              <Suspense fallback={null}><IssuePanel issue={issueForPanel} report={issueReport} feedback={feedbackResult} feedbackError={feedbackError} /></Suspense>
             </Panel>
             <Panel title="调试输出" icon={<Terminal className="size-4" />}>
-              <DebugActions result={result} onDownloadMaa={onDownloadMaa} onDownloadBundle={onDownloadBundle} onCopyCommand={onCopyCommand} />
+              <Suspense fallback={null}><DebugActions result={result} onDownloadMaa={onDownloadMaa} onDownloadBundle={onDownloadBundle} onCopyCommand={onCopyCommand} /></Suspense>
               <details className="mt-3 text-sm text-muted-foreground">
                 <summary className="cursor-pointer">stdout / stderr</summary>
                 <Textarea readOnly value={result?.debug?.stdout || result?.debug?.stderr || "暂无输出。"} className="mt-2 max-h-64 min-h-32 resize-y font-mono text-xs" />

@@ -15,7 +15,7 @@ import {
   Upload,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { CSSProperties, ChangeEvent, ReactElement, ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { CSSProperties, ChangeEvent, lazy, ReactElement, ReactNode, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { AnimatedNumber, AnimatedText } from "@/components/AnimatedText";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -44,13 +44,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
-import { OperatorSkillTooltip } from "@/components/OperatorSkillTooltip";
 import {
   BUILDING_SKILL_ENHANCED_WORD,
   buildingSkillUnlockLabel,
   buildingSkillUnlockPrefix,
-  operatorProfessionPresentation,
-} from "@/operatorPortraits";
+  operatorProfessionPresentationForCode,
+} from "@/operator-presentation";
 import { roomVisualFor } from "@/room-visuals";
 import {
   MOTION_DURATION,
@@ -113,6 +112,10 @@ import {
   RotationJson,
   UserProfile,
 } from "./types";
+
+const OperatorSkillTooltip = lazy(() => import("@/components/OperatorSkillTooltip").then((module) => ({
+  default: module.OperatorSkillTooltip,
+})));
 
 type Option<T extends string> = {
   value: T;
@@ -1194,7 +1197,7 @@ export function OperatorSlot({
   const shouldReduceMotion = useReducedMotion();
   const identity = slot?.name ?? (autofill ? "autofill" : "empty");
   const suppressNativeTitles = showSkillTooltip && slot !== undefined;
-  const profession = slot ? operatorProfessionPresentation(slot.name) : null;
+  const profession = slot ? operatorProfessionPresentationForCode(slot.profession) : undefined;
   const enterX = shouldReduceMotion ? 0 : shiftDirection * 6;
   const exitX = shouldReduceMotion ? 0 : shiftDirection * -4;
   const ariaLabel = slot?.name ?? (autofill ? "自动补位" : "空置");
@@ -1295,7 +1298,11 @@ export function OperatorSlot({
           </motion.div>
         </AnimatePresence>
       }
-      frameWrapper={showSkillTooltip && slot ? (frame) => <OperatorSkillTooltip name={slot.name} trigger={frame} /> : undefined}
+      frameWrapper={showSkillTooltip && slot ? (frame) => (
+        <Suspense fallback={frame}>
+          <OperatorSkillTooltip name={slot.name} trigger={frame} />
+        </Suspense>
+      ) : undefined}
       label={slot ? <AnimatedText value={slot.name} trend={shiftDirection} /> : autofill ? "自动补位" : "占"}
       labelClassName={slot ? (searchMatched ? "bg-[#FFD501] px-1 text-[#202020]" : "text-white") : autofill ? "text-white/55" : "text-transparent select-none"}
       title={suppressNativeTitles ? undefined : slot?.label}

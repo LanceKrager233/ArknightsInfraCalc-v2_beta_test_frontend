@@ -1,5 +1,13 @@
 import buildingSkillCatalogJson from "./generated/arkntools/building-skill-catalog.json" with { type: "json" };
 import operatorCatalogJson from "./generated/arkntools/operator-catalog.json" with { type: "json" };
+import { operatorProfessionPresentationForCode } from "./operator-presentation.ts";
+
+export {
+  BUILDING_SKILL_ENHANCED_WORD,
+  PROFESSION_LABELS,
+  buildingSkillUnlockLabel,
+  buildingSkillUnlockPrefix,
+} from "./operator-presentation.ts";
 
 export interface OperatorBuildingSkillRef {
   index: number;
@@ -59,22 +67,6 @@ export function isBuildingSkillEnhanced(
     if (candidate.index < minIndex) minIndex = candidate.index;
   }
   return groupCount >= 2 && ref.index !== minIndex;
-}
-
-/** 解锁/提升标签里“精英/等级”前缀部分（不含尾词），如 “精英 2 ”、初始场景为 “初始”。 */
-export function buildingSkillUnlockPrefix(elite: number, level: number): string {
-  if (elite === 0 && level === 1) return "初始";
-  if (elite === 0) return `等级 ${level} `;
-  if (level === 1) return `精英 ${elite} `;
-  return `精英 ${elite} · 等级 ${level} `;
-}
-
-/** 强化技能的尾词（一图流配色），多个展示点共用一份以免措辞漂移。 */
-export const BUILDING_SKILL_ENHANCED_WORD = "提升";
-
-/** 完整的解锁条件文本；强化技能尾词为「提升」，否则为「解锁」。 */
-export function buildingSkillUnlockLabel(elite: number, level: number, enhanced = false): string {
-  return `${buildingSkillUnlockPrefix(elite, level)}${enhanced ? BUILDING_SKILL_ENHANCED_WORD : "解锁"}`;
 }
 
 /** 干员全部基建技能（按 index 升序，合并目录 + 解锁条件 + enhanced）；未知干员返回空数组。 */
@@ -164,17 +156,6 @@ export function operatorPortraitFor(name: string, id?: string): string | undefin
   return operatorPresentationFor({ name, id }).portrait;
 }
 
-export const PROFESSION_LABELS: Readonly<Record<number, string>> = {
-  1: "近卫",
-  2: "狙击",
-  3: "重装",
-  4: "医疗",
-  5: "辅助",
-  6: "术师",
-  7: "特种",
-  8: "先锋",
-};
-
 export function operatorProfessionFor(name: string): number | undefined {
   return operatorFor(name.trim())?.profession;
 }
@@ -182,7 +163,5 @@ export function operatorProfessionFor(name: string): number | undefined {
 export function operatorProfessionPresentation(
   name: string,
 ): { label: string; icon: string } | undefined {
-  const profession = operatorProfessionFor(name);
-  const label = profession !== undefined ? PROFESSION_LABELS[profession] : undefined;
-  return label ? { label, icon: `/images/profession/${label}.webp` } : undefined;
+  return operatorProfessionPresentationForCode(operatorProfessionFor(name));
 }
