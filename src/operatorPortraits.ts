@@ -33,6 +33,12 @@ interface BuildingSkillRecord {
   name: string;
   description: string;
   descriptionRich: string;
+  /** 技能固有标签（数据仓库 is + 关键词补充 + 干员级补充），用于房间下的二级筛选。 */
+  tags: string[];
+  /** 技能所属房间（与技能 id 前缀对应，如 CONTROL）。 */
+  room: string | null;
+  /** 技能所属房间的中文名；room 为 null 时也为 null。 */
+  roomLabel: string | null;
   icon: string;
 }
 

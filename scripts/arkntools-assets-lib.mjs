@@ -91,6 +91,37 @@ export function stripGameMarkup(value) {
     .trim();
 }
 
+// 在工具箱 buff.info.is 标签之外补充的前端标签规则（按房间 + 描述关键词）。
+const SUPPLEMENTAL_TAG_RULES = {
+  CONTROL: [{ tag: "办公室", keyword: "联络速度" }],
+  MEETING: [{ tag: "未拥有加成", keyword: "尚未拥有的线索" }],
+  DORMITORY: [
+    { tag: "自身恢复", keyword: "自身心情每小时恢复" },
+    { tag: "特殊恢复", keyword: "恢复效果额外" },
+  ],
+  HIRE: [
+    { tag: "联络速度", keyword: "联络速度" },
+    { tag: "特殊加成", keyword: "不包含初始招募位" },
+  ],
+};
+
+const OPERATOR_SUPPLEMENTAL_TAGS = {
+  九色鹿: ["精英材料"],
+};
+
+/** 按房间 + 描述关键词计算补充标签。 */
+export function supplementalSkillTags(room, description) {
+  if (!room) return [];
+  return (SUPPLEMENTAL_TAG_RULES[room] ?? [])
+    .filter(({ keyword }) => description.includes(keyword))
+    .map(({ tag }) => tag);
+}
+
+/** 按干员名追加的补充标签（如九色鹿的加工站技能标为精英材料）。 */
+export function operatorSupplementalTags(name) {
+  return OPERATOR_SUPPLEMENTAL_TAGS[name] ?? [];
+}
+
 export function parseUnlock(value) {
   assert(typeof value === "string", "基建技能解锁条件必须是字符串。");
   const match = /^(\d+)_(\d+)$/.exec(value);
@@ -268,6 +299,8 @@ async function loadSource(sourceRoot, sourceSha, portraitsRoot, portraitsSha) {
   const referencedIcons = new Set();
   const operators = [];
   const charOrder = new Map(Object.keys(buildingData.char).map((shortId, index) => [shortId, index]));
+  // 技能 id → 引用该技能的干员名，用于把干员级补充标签（如九色鹿）并集进技能目录。
+  const skillOperatorNames = new Map();
 
   for (const shortId of Object.keys(characterData).sort((left, right) => left.localeCompare(right, "en"))) {
     assert(SAFE_ASSET_NAME.test(shortId), `不安全的干员 ID：${shortId}`);
@@ -288,18 +321,13 @@ async function loadSource(sourceRoot, sourceSha, portraitsRoot, portraitsSha) {
       assert(typeof rawSkill.id === "string" && rawSkill.id.trim(), `干员 ${shortId} 的第 ${offset + 1} 个基建技能缺少 ID。`);
       assert(buildingData.buff.data[rawSkill.id], `干员 ${shortId} 引用了未知基建技能 ${rawSkill.id}。`);
       referencedSkillIds.add(rawSkill.id);
-      const skillInfo = buildingData.buff.info[buildingData.buff.data[rawSkill.id].desc];
-      const room = skillInfo?.building ?? null;
-      assert(
-        room === null || typeof roomLabels[room] === "string",
-        `基建技能 ${rawSkill.id} 的房间类型 ${room} 缺少中文名。`,
-      );
+      const refs = skillOperatorNames.get(rawSkill.id) ?? [];
+      refs.push(name);
+      skillOperatorNames.set(rawSkill.id, refs);
       return {
         index: offset + 1,
         id: rawSkill.id,
         ...parseUnlock(rawSkill.unlock),
-        ...(room ? { room, roomLabel: roomLabels[room] } : {}),
-        tags: Object.keys(skillInfo?.is ?? {}),
       };
     });
 
@@ -325,12 +353,28 @@ async function loadSource(sourceRoot, sourceSha, portraitsRoot, portraitsSha) {
     const rawDescription = buildingLocale.buff.description[metadata.desc];
     assert(typeof name === "string" && name.trim(), `基建技能 ${skillId} 缺少中文名称。`);
     assert(typeof rawDescription === "string" && rawDescription.trim(), `基建技能 ${skillId} 缺少中文描述。`);
+    const skillInfo = buildingData.buff.info[metadata.desc];
+    const room = skillInfo?.building ?? null;
+    assert(
+      room === null || typeof roomLabels[room] === "string",
+      `基建技能 ${skillId} 的房间类型 ${room} 缺少中文名。`,
+    );
+    const operatorTags = (skillOperatorNames.get(skillId) ?? []).flatMap((operatorName) => operatorSupplementalTags(operatorName));
     referencedIcons.add(metadata.icon);
     skills.push({
       id: skillId,
       name,
       description: stripGameMarkup(rawDescription),
       descriptionRich: rawDescription,
+      tags: [
+        ...new Set([
+          ...Object.keys(skillInfo?.is ?? {}),
+          ...supplementalSkillTags(room, rawDescription),
+          ...operatorTags,
+        ]),
+      ],
+      room,
+      roomLabel: room ? roomLabels[room] : null,
       icon: relativeAssetPath("building-skills", metadata.icon),
     });
   }
@@ -499,9 +543,7 @@ export async function checkGeneratedAssets(root) {
       assert(skills[skill.id], `干员 ${operator.id} 引用了未知基建技能 ${skill.id}。`);
       assert(Number.isInteger(skill.elite) && skill.elite >= 0 && skill.elite <= 2, `干员 ${operator.id} 的基建技能精英阶段无效。`);
       assert(Number.isInteger(skill.level) && skill.level >= 1 && skill.level <= 90, `干员 ${operator.id} 的基建技能等级无效。`);
-      assert(typeof skill.room === "string" && skill.room, `干员 ${operator.id} 的基建技能缺少工作房间。`);
-      assert(typeof skill.roomLabel === "string" && skill.roomLabel, `干员 ${operator.id} 的基建技能缺少房间中文名。`);
-      assert(Array.isArray(skill.tags), `干员 ${operator.id} 的基建技能标签无效。`);
+      assert(!("room" in skill) && !("roomLabel" in skill) && !("tags" in skill), `干员 ${operator.id} 的基建技能不应残留房间或标签字段。`);
     });
   }
 
@@ -511,6 +553,13 @@ export async function checkGeneratedAssets(root) {
     assert(typeof skill.description === "string" && skill.description.trim(), `已生成基建技能 ${skillId} 缺少描述。`);
     assert(!/<[^>]*>/.test(skill.description), `已生成基建技能 ${skillId} 仍包含富文本标记。`);
     assert(typeof skill.descriptionRich === "string" && skill.descriptionRich.trim(), `已生成基建技能 ${skillId} 缺少富文本描述。`);
+    assert(Array.isArray(skill.tags), `已生成基建技能 ${skillId} 的标签无效。`);
+    assert(skill.room === null || typeof skill.room === "string", `已生成基建技能 ${skillId} 的房间无效。`);
+    assert(skill.roomLabel === null || typeof skill.roomLabel === "string", `已生成基建技能 ${skillId} 的房间中文名无效。`);
+    assert(
+      (skill.room === null && skill.roomLabel === null) || (skill.room !== null && skill.roomLabel !== null),
+      `已生成基建技能 ${skillId} 的房间与中文名不一致。`,
+    );
     const prefix = "/images/building-skills/";
     assert(typeof skill.icon === "string" && skill.icon.startsWith(prefix) && skill.icon.endsWith(".png"), `已生成基建技能 ${skillId} 的图标路径无效。`);
     const icon = skill.icon.slice(prefix.length, -4);

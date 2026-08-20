@@ -13,8 +13,10 @@ import {
   GENERATED_VERSION,
   checkGeneratedAssets,
   generateAssets,
+  operatorSupplementalTags,
   parseUnlock,
   stripGameMarkup,
+  supplementalSkillTags,
 } from "./arkntools-assets-lib.mjs";
 
 const SOURCE_SHA = "0123456789abcdef0123456789abcdef01234567";
@@ -100,7 +102,7 @@ async function createSource(root, operatorIds = ["001_alpha", "002_beta"]) {
   };
   const descriptions = {
     desc_alpha: "进驻时，生产力<@cc.vup>+10%</>。",
-    ...(operatorIds.length > 1 ? { desc_beta: "精英后<$cc.test><@cc.kw>生效</></>。" } : {}),
+    ...(operatorIds.length > 1 ? { desc_beta: "自身心情每小时恢复<@cc.vup>+0.5</>。" } : {}),
   };
   const buffInfo = {
     desc_alpha: { building: "MANUFACTURE", num: { product: 10 }, is: { "贵金属": 1 } },
@@ -147,6 +149,18 @@ test("strips game markup and parses unlock requirements", () => {
   assert.throws(() => parseUnlock("bad"), /无法解析/);
 });
 
+test("supplements skill tags by room rules and operator names", () => {
+  assert.deepEqual(supplementalSkillTags("CONTROL", "人脉资源的联络速度+10%"), ["办公室"]);
+  assert.deepEqual(supplementalSkillTags("HIRE", "人脉资源的联络速度+10%"), ["联络速度"]);
+  assert.deepEqual(supplementalSkillTags("MEETING", "更容易获得线索板上尚未拥有的线索"), ["未拥有加成"]);
+  assert.deepEqual(supplementalSkillTags("DORMITORY", "自身心情每小时恢复+0.5"), ["自身恢复"]);
+  assert.deepEqual(supplementalSkillTags("DORMITORY", "恢复效果额外+10%"), ["特殊恢复"]);
+  assert.deepEqual(supplementalSkillTags("HIRE", "不包含初始招募位"), ["特殊加成"]);
+  assert.deepEqual(supplementalSkillTags("MANUFACTURE", "生产力+10%"), []);
+  assert.deepEqual(operatorSupplementalTags("九色鹿"), ["精英材料"]);
+  assert.deepEqual(operatorSupplementalTags("阿米娅"), []);
+});
+
 test("generates deterministic catalogs and normalizes the known 35px icon input", async (t) => {
   const root = await makeTemp(t);
   const source = path.join(root, "source");
@@ -173,13 +187,16 @@ test("generates deterministic catalogs and normalizes the known 35px icon input"
   assert.equal(operators[0].portrait, `/images/operator-portraits/001_alpha.webp?v=${GENERATED_VERSION}-${PORTRAITS_SHA.slice(0, 12)}`);
   assert.equal(operators[0].order, 0);
   assert.equal(operators[1].order, 1);
-  assert.equal(operators[0].buildingSkills[0].room, "MANUFACTURE");
-  assert.equal(operators[0].buildingSkills[0].roomLabel, "制造站");
-  assert.deepEqual(operators[0].buildingSkills[0].tags, ["贵金属"]);
+  assert.deepEqual(operators[0].buildingSkills[0], { index: 1, id: "skill_alpha", elite: 0, level: 1 });
+  assert.deepEqual(operators[1].buildingSkills[0], { index: 1, id: "skill_beta", elite: 2, level: 1 });
 
   const skills = JSON.parse(await readFile(path.join(first, "src/generated/arkntools/building-skill-catalog.json"), "utf8"));
   assert.equal(skills.skill_alpha.description, "进驻时，生产力+10%。");
   assert.equal(skills.skill_alpha.descriptionRich, "进驻时，生产力<@cc.vup>+10%</>。");
+  assert.equal(skills.skill_alpha.room, "MANUFACTURE");
+  assert.equal(skills.skill_alpha.roomLabel, "制造站");
+  assert.deepEqual(skills.skill_alpha.tags, ["贵金属"]);
+  assert.deepEqual(skills.skill_beta.tags, ["单体恢复", "自身恢复"]);
 
   const terms = JSON.parse(await readFile(path.join(first, "src/generated/arkntools/term-catalog.json"), "utf8"));
   assert.deepEqual(terms.cc_test, { id: "cc_test", name: "测试词条", desc: "<$cc.x><@cc.rem>红松骑士团</></>", descText: "红松骑士团" });
