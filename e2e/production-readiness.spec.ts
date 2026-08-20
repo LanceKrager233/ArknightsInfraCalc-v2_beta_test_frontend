@@ -1164,6 +1164,55 @@ for (const viewport of [
   });
 }
 
+test("website login keeps a stable dialog skeleton while its deferred UI loads", async ({ page }) => {
+  await page.unroute("**/api/auth/get-session");
+  await page.route("**/api/auth/get-session", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: "null",
+  }));
+  await mockApis(page);
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  let releaseChunks: (() => void) | undefined;
+  const chunkGate = new Promise<void>((resolve) => {
+    releaseChunks = resolve;
+  });
+  let deferredChunkRequests = 0;
+  await page.route("**/_next/static/chunks/*.js", async (route) => {
+    deferredChunkRequests += 1;
+    await chunkGate;
+    await route.continue();
+  });
+
+  await page.getByRole("button", { name: "账号管理", exact: true }).click();
+  const skeleton = page.locator("[data-website-account-dialog-skeleton]");
+  await expect(skeleton).toBeVisible();
+  await expect(skeleton.getByRole("status", { name: "正在加载登录界面" })).toBeVisible();
+  await expect(page.locator("[data-website-account-panel]")).toHaveCount(0);
+  await expect.poll(() => deferredChunkRequests).toBeGreaterThan(0);
+
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 768, height: 900 },
+    { width: 1440, height: 900 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(skeleton).toBeVisible();
+    const box = await skeleton.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box?.width ?? 0).toBeLessThanOrEqual(viewport.width - 16);
+    expect(box?.height ?? 0).toBeLessThanOrEqual(viewport.height - 16);
+  }
+
+  releaseChunks?.();
+  await page.unroute("**/_next/static/chunks/*.js");
+  await expect(page.locator("[data-website-account-panel]")).toBeVisible();
+  await expect(skeleton).toHaveCount(0);
+});
+
 test("website login opens account management after the gated navigation dialog", async ({ page }) => {
   let authenticated = false;
   await page.unroute("**/api/auth/get-session");
@@ -1197,6 +1246,7 @@ test("website login opens account management after the gated navigation dialog",
   await expect(websiteAvatar).toHaveAttribute("data-account-orb-color", /^#[0-9A-F]{6}$/);
   await expect(websiteAvatar.locator("canvas")).toBeVisible();
   await expect(websiteAvatar.locator("[data-fluid-orb-fallback]")).toBeVisible();
+  await expect(websiteAvatar.locator("[data-fluid-orb-fallback]")).toHaveCSS("opacity", "0");
   await expect(websiteAvatar).not.toContainText("新");
   const websiteAvatarBox = await websiteAvatar.boundingBox();
   expect(websiteAvatarBox?.width).toBeCloseTo(56, 0);
@@ -1205,13 +1255,13 @@ test("website login opens account management after the gated navigation dialog",
   await expect(websiteAvatar).toHaveAttribute("data-fluid-orb-motion", /^(still|fallback)$/);
 });
 
-test("website account Fluid Orb keeps its CSS fallback without Canvas support", async ({ page }) => {
+test("website account Fluid Orb keeps its CSS fallback without WebGL", async ({ page }) => {
   await page.addInitScript(() => {
     const originalGetContext = HTMLCanvasElement.prototype.getContext;
     Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
       configurable: true,
       value(contextId: string, ...args: unknown[]) {
-        if (contextId === "2d") return null;
+        if (contextId === "webgl") return null;
         return Reflect.apply(originalGetContext, this, [contextId, ...args]);
       },
     });
@@ -1224,6 +1274,7 @@ test("website account Fluid Orb keeps its CSS fallback without Canvas support", 
   await expect(websiteAvatar).toBeVisible();
   await expect(websiteAvatar).toHaveAttribute("data-fluid-orb-motion", "fallback");
   await expect(websiteAvatar.locator("[data-fluid-orb-fallback]")).toBeVisible();
+  await expect(websiteAvatar.locator("[data-fluid-orb-fallback]")).toHaveCSS("opacity", "1");
 });
 
 test("seven-day bindings stay visible and require QR renewal", async ({ page }) => {
@@ -1510,6 +1561,10 @@ test("a failed complete Skland restore keeps the independently restored identity
 
   const accountControl = page.locator("[data-skland-account-control]");
   await expect(accountControl).toHaveAttribute("aria-label", "测试博士，进入森空岛状态中心");
+  const accountPlaceholder = accountControl.locator("[data-skland-account-placeholder]");
+  await expect(accountPlaceholder).toBeVisible();
+  await expect(accountPlaceholder).toHaveAttribute("data-fluid-orb-color", /^#[0-9A-F]{6}$/);
+  await expect(accountControl).not.toContainText("测");
   await fullRestoreFailed;
   await accountControl.click();
   await expect(page.getByText(/森空岛会话恢复失败，请稍后刷新。/)).toBeVisible();
@@ -3430,6 +3485,44 @@ test("Skland login waits for explicit consent and explains slow preparation", as
   releaseQr?.();
   await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
   expect(qrStartRequests).toBe(1);
+});
+
+test("Skland login replaces a scanned QR with progress while authentication finishes", async ({ page }) => {
+  await mockApis(page, { sklandConfigured: true });
+  await page.route("**/api/skland/auth/qr", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      success: true,
+      data: {
+        scanId: "scan-login-confirming",
+        scanUrl: "hypergryph://scan_login?scanId=scan-login-confirming",
+        expiresInSeconds: 600,
+      },
+      requestId,
+    }),
+  }));
+  await page.route("**/api/skland/auth/qr/status", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      success: true,
+      data: { status: "scanned" },
+      requestId,
+    }),
+  }));
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+  await openSklandOverview(page);
+  await page.getByRole("checkbox").nth(0).check();
+  await page.getByRole("checkbox").nth(1).check();
+  await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
+  await expect(page.locator("[data-skland-login-progress]")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toHaveCount(0);
+  await expect(page.getByRole("status")).toContainText("已扫码，正在等待森空岛 App 确认并完成登录…");
 });
 
 test("Skland login loads full status by default and deletion preserves non-Skland data", async ({ page }) => {
