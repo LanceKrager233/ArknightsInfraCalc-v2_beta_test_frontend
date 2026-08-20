@@ -187,20 +187,45 @@ test("production public plan data recursively excludes internal fields", () => {
   }
 });
 
-test("debug fields require the server environment switch", () => {
-  const previous = process.env.BETA_DEBUG_TOOLS_ENABLED;
+test("debug fields require both the server switch and request opt-in", () => {
+  const previousDeploymentEnvironment = process.env.APP_DEPLOYMENT_ENV;
+  const previousDebugTools = process.env.BETA_DEBUG_TOOLS_ENABLED;
+  process.env.APP_DEPLOYMENT_ENV = "development";
   process.env.BETA_DEBUG_TOOLS_ENABLED = "1";
   try {
-    const data = toPublicPlanData(internalResult(), { layoutLabel: "243", sourceName: "示例" }, "request");
+    const ordinaryData = toPublicPlanData(
+      internalResult(),
+      { layoutLabel: "243", sourceName: "示例" },
+      "request"
+    );
+    assert.equal(ordinaryData.debug, undefined);
+
+    const data = toPublicPlanData(
+      internalResult(),
+      { layoutLabel: "243", sourceName: "示例" },
+      "request",
+      { includeDebug: true }
+    );
     assert.equal(data.debug?.command, "infra-cli serve");
     assert.equal(data.debug?.stdout, "secret stdout");
     const keys = keysDeep(data.debug?.debugBundle);
     assert.equal(keys.has("solver"), false);
     assert.equal(keys.has("plan_contract_sha256"), false);
     assert.equal(keys.has("solver_executable_sha256"), false);
+
+    process.env.BETA_DEBUG_TOOLS_ENABLED = "0";
+    const disabledData = toPublicPlanData(
+      internalResult(),
+      { layoutLabel: "243", sourceName: "示例" },
+      "request",
+      { includeDebug: true }
+    );
+    assert.equal(disabledData.debug, undefined);
   } finally {
-    if (previous === undefined) delete process.env.BETA_DEBUG_TOOLS_ENABLED;
-    else process.env.BETA_DEBUG_TOOLS_ENABLED = previous;
+    if (previousDeploymentEnvironment === undefined) delete process.env.APP_DEPLOYMENT_ENV;
+    else process.env.APP_DEPLOYMENT_ENV = previousDeploymentEnvironment;
+    if (previousDebugTools === undefined) delete process.env.BETA_DEBUG_TOOLS_ENABLED;
+    else process.env.BETA_DEBUG_TOOLS_ENABLED = previousDebugTools;
   }
 });
 
