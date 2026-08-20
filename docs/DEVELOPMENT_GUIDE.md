@@ -56,6 +56,7 @@ Windows 前端命令使用 PowerShell。部署 shell 测试只以 Linux CI 或�
 | `src/app/api/*/route.ts` | 公开 HTTP 路由 |
 | `e2e/production-readiness.spec.ts` | hydration、产品主流程和锁定区域回归 |
 | `scripts/extract-room-emblems.mjs` | 从现有 WebP 确定性提取透明高清设施徽记 |
+| `scripts/ci-change-scope.mjs` | CI 变更范围分类、失败关闭和部署判定 |
 | `.github/workflows/frontend-quality.yml` | PR 与 main/develop push 的并行质量门禁、部署汇总及定时 WebKit 回归 |
 
 ## 公开 API 契约
@@ -210,16 +211,22 @@ v5 只保存：
 
 ## 测试与合并门禁
 
-GitHub Actions 在面向`main`或`develop`的 PR 和 push 上使用 Node 22，并行执行两个必需 Job：
+GitHub Actions 在面向`main`或`develop`的 PR 和 push 上使用 Node 22。`Change scope`先从 PR base/head 或 push before/head 生成 NUL 分隔路径列表，再调用`scripts/ci-change-scope.mjs`选择门禁：
 
-1. 核心检查：数据库权限与 migration、security audit、lint、单元与契约测试、求解器/部署脚本测试、production build 和客户端隔离检查。
-2. Chromium：完整 E2E 与 production profile 隔离测试。
-两个 Job 全部成功后，保持原状态名称的`quality`汇总门禁才会通过；受保护分支 push 随后才能部署。PR 的新提交会取消同一 PR 的旧运行，push 与已经开始的部署不会被取消。
+| 范围 | Core | Chromium | Deploy |
+| --- | --- | --- | --- |
+| 纯文档和仓库文本元数据 | 跳过 | 跳过 | 跳过 |
+| 单元测试或非发布型 CI 配置 | 执行 | 跳过 | 跳过 |
+| 浏览器测试或 Playwright 配置 | 执行 | 执行 | 跳过 |
+| 两个发布工作流 | 执行 | 跳过 | push 时执行 |
+| 运行时、依赖、部署脚本、未知路径 | 执行 | 执行 | push 时执行 |
+
+无法读取可靠 commit、空差异和手动触发都按完整范围处理。Core 包含数据库权限与 migration、security audit、lint、单元与契约测试、求解器/部署脚本测试、production build 和客户端隔离检查；Chromium 包含完整 E2E 与 production profile 隔离测试。保持原状态名称的`quality`汇总门禁始终运行，逐项验证必需 Job 成功或按分类预期跳过。不得对整个 workflow 使用`paths-ignore`，否则受保护分支可能等不到必需检查。PR 的新提交会取消同一 PR 的旧运行，push 与已经开始的部署不会被取消。
 
 完整 WebKit E2E 作为 Safari 兼容性回归每日定时运行，也可通过`workflow_dispatch`手动触发。它不阻塞逐次 PR 与发布；涉及响应式、触控或 Safari 行为的改动仍应在提交前运行`npm run test:e2e:webkit`。
 
-`main`和`develop`都执行相同质量门禁。通过 push 门禁后，部署工作流分别使用 GitHub Environments `production`和`development`中的 SSH Secrets 与部署 Variables 发布对应站点；PR 不部署。工作流先验证两个服务器 helper 是`root:root 0755`普通文件且显式契约版本兼容，再从`/var/cache/arknights-infra-deploy/repository.git`增量准备准确 SHA 的发布包；production/development 使用独立 refs 和共享`flock`。helper 在 GitHub 网络、缓存或锁的临时故障时返回`75`；Runner 随后优先读取对应服务器缓存 ref，并发送从该 ref 到已验证 SHA 的增量 Git bundle，缓存 ref 不可用时才使用上一次 push SHA。服务器校验并导入缓存，只有 bundle 基线或传输不可用时才上传完整发布包。SHA、tree、路径、helper 契约和 bundle HEAD 等完整性错误都直接失败。`DEPLOY_DEBUG_TOOLS_ENABLED`和`DEPLOY_RATE_LIMIT_ENABLED`集中管理 dev 的调试入口与限流，production 则固定为调试关闭、限流开启。production-profile 门禁会故意反向设置森空岛、调试和限流变量，确认 production 的强制策略不可被误配置绕过。
-Production client isolation scans static JavaScript and public HTML/RSC; production-profile separately verifies hidden UI, absent requests and health fields, and the API 404 boundary. Both gates are required.
+`main`和`develop`使用相同分类规则。只有受保护分支 push、`quality`成功且`deploy_required=true`时，部署工作流才使用 GitHub Environments `production`和`development`中的 SSH Secrets 与部署 Variables 发布对应站点；PR、文档、测试和非发布型 CI 变更不创建服务器 release。工作流先验证两个服务器 helper 是`root:root 0755`普通文件且显式契约版本兼容，再从`/var/cache/arknights-infra-deploy/repository.git`增量准备准确 SHA 的发布包；production/development 使用独立 refs 和共享`flock`。helper 在 GitHub 网络、缓存或锁的临时故障时返回`75`；Runner 随后优先读取对应服务器缓存 ref，并发送从该 ref 到已验证 SHA 的增量 Git bundle，缓存 ref 不可用时才使用上一次 push SHA。服务器校验并导入缓存，只有 bundle 基线或传输不可用时才上传完整发布包。SHA、tree、路径、helper 契约和 bundle HEAD 等完整性错误都直接失败。`DEPLOY_DEBUG_TOOLS_ENABLED`和`DEPLOY_RATE_LIMIT_ENABLED`集中管理 dev 的调试入口与限流，production 则固定为调试关闭、限流开启。production-profile 门禁会故意反向设置森空岛、调试和限流变量，确认 production 的强制策略不可被误配置绕过。
+Production client isolation scans static JavaScript and public HTML/RSC; production-profile separately verifies hidden UI, absent requests and health fields, and the API 404 boundary. Whenever runtime scope selects the full gate, both checks remain required.
 
 production 和 dev 的 Funnel Nginx 分别只监听`127.0.0.1:4176`与`127.0.0.1:4274`。公网访问由 Tailscale Funnel 的 8443 与 443 HTTPS 入口提供；用`tailscale funnel status`核对持久化配置、公开地址和实际目标。production 另有受 Host 限制的`0.0.0.0:4174`直连/IP 兼容 vhost，它不是 Funnel 目标，不得作为公开 Origin 或发布健康检查地址。服务器 80 端口只重定向到 production HTTPS，不要把两个回环应用端口重新暴露到公网。Actions 部署用户使用独立密钥，sudo 只允许固定的`/usr/local/sbin/arknights-infra-deploy`。root 所有的 deploy runner 和`/usr/local/sbin/arknights-infra-prepare-release`必须保持 LF、普通文件和`root:root 0755`；二者用`--contract-version`报告当前接口版本，文件 SHA-256只作安装/回滚审计。prepare helper 以`arkdeploy`运行，不新增 sudo 权限；缓存根必须由该用户拥有且不能被 group/other 写入。
 
