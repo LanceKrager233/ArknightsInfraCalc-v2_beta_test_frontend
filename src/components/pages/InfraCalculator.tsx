@@ -137,7 +137,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     onDownloadMaa, onDownloadBundle, onCopyCommand,
     onClearResultNotice, onDismissResultClearWarning,
   } = props;
-  const [scheduleViewMode, setScheduleViewMode] = useState<"list" | "compact">("list");
+  const [scheduleViewMode, setScheduleViewMode] = useState<"list" | "compact">("compact");
   const [shortcutGuideOpen, setShortcutGuideOpen] = useState(false);
   const [operatorQuery, setOperatorQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);

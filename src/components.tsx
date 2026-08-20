@@ -1349,8 +1349,10 @@ export function ScheduleBoard({
 }) {
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [hiddenGroups, setHiddenGroups] = useState<Record<string, boolean>>({});
-  const [viewMode, setViewMode] = useState<"list" | "compact">("list");
-  const [supportsCompactLayout, setSupportsCompactLayout] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "compact">("compact");
+  // The SSR default selects the compact tab, so it must also be enabled during
+  // hydration. The media query switches small screens to the list immediately.
+  const [supportsCompactLayout, setSupportsCompactLayout] = useState(true);
   const preferredViewMode = useRef<"list" | "compact" | null>(null);
   const shouldReduceMotion = useReducedMotion();
 
