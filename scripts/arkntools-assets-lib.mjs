@@ -103,13 +103,15 @@ const SUPPLEMENTAL_TAG_RULES = {
     { tag: "联络速度", keyword: "联络速度" },
     { tag: "特殊加成", keyword: "不包含初始招募位" },
   ],
+  TRAINING: [{ tag: "减半", keyword: "所需时间-50%" }],
+  TRADING: [{ tag: "特殊订单", keyword: "违约订单" }],
 };
 
 const OPERATOR_SUPPLEMENTAL_TAGS = {
   九色鹿: ["精英材料"],
 };
 
-/** 按房间 + 描述关键词计算补充标签。 */
+/** 按房间 + 纯文本描述关键词计算补充标签。 */
 export function supplementalSkillTags(room, description) {
   if (!room) return [];
   return (SUPPLEMENTAL_TAG_RULES[room] ?? [])
@@ -369,7 +371,7 @@ async function loadSource(sourceRoot, sourceSha, portraitsRoot, portraitsSha) {
       tags: [
         ...new Set([
           ...Object.keys(skillInfo?.is ?? {}),
-          ...supplementalSkillTags(room, rawDescription),
+          ...supplementalSkillTags(room, stripGameMarkup(rawDescription)),
           ...operatorTags,
         ]),
       ],

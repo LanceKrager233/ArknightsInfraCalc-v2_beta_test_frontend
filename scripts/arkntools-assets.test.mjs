@@ -156,6 +156,8 @@ test("supplements skill tags by room rules and operator names", () => {
   assert.deepEqual(supplementalSkillTags("DORMITORY", "自身心情每小时恢复+0.5"), ["自身恢复"]);
   assert.deepEqual(supplementalSkillTags("DORMITORY", "恢复效果额外+10%"), ["特殊恢复"]);
   assert.deepEqual(supplementalSkillTags("HIRE", "不包含初始招募位"), ["特殊加成"]);
+  assert.deepEqual(supplementalSkillTags("TRAINING", "该名干员下次训练所需时间-50%（任意一方离开训练室时，效果消失）"), ["减半"]);
+  assert.deepEqual(supplementalSkillTags("TRADING", "如果下笔赤金订单是违约订单，则赤金交付数额外+1"), ["特殊订单"]);
   assert.deepEqual(supplementalSkillTags("MANUFACTURE", "生产力+10%"), []);
   assert.deepEqual(operatorSupplementalTags("九色鹿"), ["精英材料"]);
   assert.deepEqual(operatorSupplementalTags("阿米娅"), []);

@@ -5223,7 +5223,9 @@
     "name": "违约索赔·α",
     "description": "进驻贸易站时，如果下笔赤金订单是违约订单，则赤金交付数额外+1",
     "descriptionRich": "进驻贸易站时，如果下笔<@cc.kw>赤金订单</>是<@cc.kw>违约订单</>，则<@cc.kw>赤金</>交付数额外<@cc.vup>+1</>",
-    "tags": [],
+    "tags": [
+      "特殊订单"
+    ],
     "room": "TRADING",
     "roomLabel": "贸易站",
     "icon": "/images/building-skills/bskill_tra_against.png"
@@ -5233,7 +5235,9 @@
     "name": "违约索赔·β",
     "description": "进驻贸易站时，如果下笔赤金订单是违约订单，则赤金交付数额外+2",
     "descriptionRich": "进驻贸易站时，如果下笔<@cc.kw>赤金订单</>是<@cc.kw>违约订单</>，则<@cc.kw>赤金</>交付数额外<@cc.vup>+2</>",
-    "tags": [],
+    "tags": [
+      "特殊订单"
+    ],
     "room": "TRADING",
     "roomLabel": "贸易站",
     "icon": "/images/building-skills/bskill_tra_against2.png"
@@ -5244,7 +5248,8 @@
     "description": "进驻贸易站时，订单获取效率+10%，固定获取可露希尔特别订单（不视作违约订单）",
     "descriptionRich": "进驻贸易站时，订单获取效率<@cc.vup>+10%</>，固定获取<$cc.tra.closure><@cc.kw>可露希尔特别订单</></>（不视作违约订单）",
     "tags": [
-      "订单效率"
+      "订单效率",
+      "特殊订单"
     ],
     "room": "TRADING",
     "roomLabel": "贸易站",
@@ -5255,7 +5260,9 @@
     "name": "合同法",
     "description": "进驻贸易站时，如果下笔赤金订单交付数小于4，则视为违约订单",
     "descriptionRich": "进驻贸易站时，如果下笔<@cc.kw>赤金订单</>交付数小于<@cc.kw>4</>，则视为<@cc.kw>违约订单</>",
-    "tags": [],
+    "tags": [
+      "特殊订单"
+    ],
     "room": "TRADING",
     "roomLabel": "贸易站",
     "icon": "/images/building-skills/bskill_tra_law.png"
@@ -5401,7 +5408,9 @@
     "name": "投资·α",
     "description": "进驻贸易站后，如果下笔赤金订单交付数大于3（违约订单不视作赤金订单），则其龙门币收益+250，心情每小时消耗-0.25",
     "descriptionRich": "进驻贸易站后，如果下笔<@cc.kw>赤金订单</>交付数大于<@cc.kw>3</>（违约订单不视作赤金订单），则其龙门币收益<@cc.kw>+250</>，心情每小时消耗<@cc.vup>-0.25</>",
-    "tags": [],
+    "tags": [
+      "特殊订单"
+    ],
     "room": "TRADING",
     "roomLabel": "贸易站",
     "icon": "/images/building-skills/bskill_tra_long1.png"
@@ -5411,7 +5420,9 @@
     "name": "投资·β",
     "description": "进驻贸易站后，如果下笔赤金订单交付数大于3（违约订单不视作赤金订单），则其龙门币收益+500，心情每小时消耗-0.25",
     "descriptionRich": "进驻贸易站后，如果下笔<@cc.kw>赤金订单</>交付数大于<@cc.kw>3</>（违约订单不视作赤金订单），则其龙门币收益<@cc.kw>+500</>，心情每小时消耗<@cc.vup>-0.25</>",
-    "tags": [],
+    "tags": [
+      "特殊订单"
+    ],
     "room": "TRADING",
     "roomLabel": "贸易站",
     "icon": "/images/building-skills/bskill_tra_long2.png"
@@ -5445,7 +5456,9 @@
     "name": "慧眼独到",
     "description": "进驻贸易站时，固定获取特别独占订单（不视作违约订单），且该类订单不受任何订单获取效率的影响",
     "descriptionRich": "进驻贸易站时，固定获取<$cc.tra.pepe><@cc.kw>特别独占订单</></>（不视作违约订单），且该类订单<@cc.vdown>不受任何订单获取效率的影响</>",
-    "tags": [],
+    "tags": [
+      "特殊订单"
+    ],
     "room": "TRADING",
     "roomLabel": "贸易站",
     "icon": "/images/building-skills/bskill_tra_pepe.png"
@@ -6184,7 +6197,8 @@
     "description": "进驻贸易站时，订单获取效率+10%，当前贸易站赤金订单的赤金交付数必定为2（不视作违约订单）",
     "descriptionRich": "进驻贸易站时，订单获取效率<@cc.vup>+10%</>，当前贸易站<@cc.kw>赤金订单</>的<@cc.kw>赤金</>交付数必定为<@cc.kw>2</>（不视作违约订单）",
     "tags": [
-      "订单效率"
+      "订单效率",
+      "特殊订单"
     ],
     "room": "TRADING",
     "roomLabel": "贸易站",
@@ -6625,7 +6639,9 @@
     "name": "精神锻炼",
     "description": "进驻训练室单次协助一名干员训练时长达5小时，则该名干员下次训练所需时间-50%（任意一方离开训练室时，效果消失）",
     "descriptionRich": "进驻训练室单次协助一名干员训练时长达<@cc.vup>5</>小时，则该名干员下次训练所需时间<@cc.vup>-50%</>（任意一方离开训练室时，效果消失）",
-    "tags": [],
+    "tags": [
+      "减半"
+    ],
     "room": "TRAINING",
     "roomLabel": "训练室",
     "icon": "/images/building-skills/bskill_train_reduceTime.png"
@@ -6635,7 +6651,9 @@
     "name": "言语之义",
     "description": "进驻训练室单次协助一名干员训练时长达5小时，则该名干员下次训练所需时间-50%（任意一方离开训练室时，效果消失）",
     "descriptionRich": "进驻训练室单次协助一名干员训练时长达<@cc.vup>5</>小时，则该名干员下次训练所需时间<@cc.vup>-50%</>（任意一方离开训练室时，效果消失）",
-    "tags": [],
+    "tags": [
+      "减半"
+    ],
     "room": "TRAINING",
     "roomLabel": "训练室",
     "icon": "/images/building-skills/bskill_train_reduceTime.png"
