@@ -1,5 +1,6 @@
 import buildingSkillCatalogJson from "./generated/arkntools/building-skill-catalog.json" with { type: "json" };
 import operatorCatalogJson from "./generated/arkntools/operator-catalog.json" with { type: "json" };
+import { richTextPlainText } from "./components/skill-query/rich-text.ts";
 import { operatorProfessionPresentationForCode } from "./operator-presentation.ts";
 
 export {
@@ -35,12 +36,10 @@ interface BuildingSkillRecord {
   descriptionRich: string;
   /** 技能固有标签（数据仓库 is + 关键词补充 + 干员级补充），用于房间下的二级筛选。 */
   tags: string[];
-  /** 技能所属房间（与技能 id 前缀对应，如 CONTROL）。 */
-  room: string | null;
-  /** 技能所属房间的中文名；room 为 null 时也为 null。 */
-  roomLabel: string | null;
   icon: string;
 }
+
+type GeneratedBuildingSkillRecord = Omit<BuildingSkillRecord, "description">;
 
 export interface BuildingSkillPresentation extends BuildingSkillRecord {
   index: number;
@@ -112,7 +111,11 @@ const OPERATOR_NAME_ALIASES: Readonly<Record<string, string>> = {
 
 export const OPERATOR_CATALOG = operatorCatalogJson as OperatorAssetRecord[];
 
-export const BUILDING_SKILL_CATALOG = buildingSkillCatalogJson as Record<string, BuildingSkillRecord>;
+export const BUILDING_SKILL_CATALOG = Object.fromEntries(
+  Object.entries(buildingSkillCatalogJson as Record<string, GeneratedBuildingSkillRecord>).map(
+    ([id, skill]) => [id, { ...skill, description: richTextPlainText(skill.descriptionRich) }],
+  ),
+) as Record<string, BuildingSkillRecord>;
 const OPERATOR_BY_ID = new Map(OPERATOR_CATALOG.map((operator) => [operator.id, operator]));
 const OPERATOR_BY_NAME = new Map(OPERATOR_CATALOG.map((operator) => [operator.name, operator]));
 

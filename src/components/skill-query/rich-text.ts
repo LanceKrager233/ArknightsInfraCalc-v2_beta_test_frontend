@@ -13,6 +13,19 @@ export function richTextTermId(tag: string): string {
   return tag.replace(/^\W/, "").replace(/\W/g, "_");
 }
 
+/** 从上游富文本生成稳定的搜索和纯文本展示内容。 */
+export function richTextPlainText(value: string): string {
+  return value
+    .replace(/<[^>]*>/g, "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /**
  * 复刻工具箱 richText2HTML 的语义：样式标签紧跟词条标签时先交换为词条在前，
  * 使 `<$cc.x>` 与其后的 `</>` 配对成词条节点并包裹内部样式内容。

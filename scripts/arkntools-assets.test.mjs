@@ -193,10 +193,10 @@ test("generates deterministic catalogs and normalizes the known 35px icon input"
   assert.deepEqual(operators[1].buildingSkills[0], { index: 1, id: "skill_beta", elite: 2, level: 1 });
 
   const skills = JSON.parse(await readFile(path.join(first, "src/generated/arkntools/building-skill-catalog.json"), "utf8"));
-  assert.equal(skills.skill_alpha.description, "进驻时，生产力+10%。");
   assert.equal(skills.skill_alpha.descriptionRich, "进驻时，生产力<@cc.vup>+10%</>。");
-  assert.equal(skills.skill_alpha.room, "MANUFACTURE");
-  assert.equal(skills.skill_alpha.roomLabel, "制造站");
+  assert.equal("description" in skills.skill_alpha, false);
+  assert.equal("room" in skills.skill_alpha, false);
+  assert.equal("roomLabel" in skills.skill_alpha, false);
   assert.deepEqual(skills.skill_alpha.tags, ["贵金属"]);
   assert.deepEqual(skills.skill_beta.tags, ["单体恢复", "自身恢复"]);
 

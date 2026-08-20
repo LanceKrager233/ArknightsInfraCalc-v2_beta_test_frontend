@@ -366,7 +366,6 @@ async function loadSource(sourceRoot, sourceSha, portraitsRoot, portraitsSha) {
     skills.push({
       id: skillId,
       name,
-      description: stripGameMarkup(rawDescription),
       descriptionRich: rawDescription,
       tags: [
         ...new Set([
@@ -375,8 +374,6 @@ async function loadSource(sourceRoot, sourceSha, portraitsRoot, portraitsSha) {
           ...operatorTags,
         ]),
       ],
-      room,
-      roomLabel: room ? roomLabels[room] : null,
       icon: relativeAssetPath("building-skills", metadata.icon),
     });
   }
@@ -552,16 +549,13 @@ export async function checkGeneratedAssets(root) {
   for (const [skillId, skill] of Object.entries(skills)) {
     assert(isObject(skill) && skill.id === skillId, `已生成基建技能 ${skillId} 无效。`);
     assert(typeof skill.name === "string" && skill.name.trim(), `已生成基建技能 ${skillId} 缺少名称。`);
-    assert(typeof skill.description === "string" && skill.description.trim(), `已生成基建技能 ${skillId} 缺少描述。`);
-    assert(!/<[^>]*>/.test(skill.description), `已生成基建技能 ${skillId} 仍包含富文本标记。`);
     assert(typeof skill.descriptionRich === "string" && skill.descriptionRich.trim(), `已生成基建技能 ${skillId} 缺少富文本描述。`);
+    const plainDescription = stripGameMarkup(skill.descriptionRich);
+    assert(plainDescription, `已生成基建技能 ${skillId} 缺少纯文本描述。`);
+    assert(!/<[^>]*>/.test(plainDescription), `已生成基建技能 ${skillId} 的纯文本描述仍包含富文本标记。`);
+    assert(!("description" in skill), `已生成基建技能 ${skillId} 不应重复保存纯文本描述。`);
     assert(Array.isArray(skill.tags), `已生成基建技能 ${skillId} 的标签无效。`);
-    assert(skill.room === null || typeof skill.room === "string", `已生成基建技能 ${skillId} 的房间无效。`);
-    assert(skill.roomLabel === null || typeof skill.roomLabel === "string", `已生成基建技能 ${skillId} 的房间中文名无效。`);
-    assert(
-      (skill.room === null && skill.roomLabel === null) || (skill.room !== null && skill.roomLabel !== null),
-      `已生成基建技能 ${skillId} 的房间与中文名不一致。`,
-    );
+    assert(!("room" in skill) && !("roomLabel" in skill), `已生成基建技能 ${skillId} 不应保存可由技能 ID 推导的房间字段。`);
     const prefix = "/images/building-skills/";
     assert(typeof skill.icon === "string" && skill.icon.startsWith(prefix) && skill.icon.endsWith(".png"), `已生成基建技能 ${skillId} 的图标路径无效。`);
     const icon = skill.icon.slice(prefix.length, -4);

@@ -1,13 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseRichText, richTextClassName, richTextTermId } from "./rich-text.ts";
+import { parseRichText, richTextClassName, richTextPlainText, richTextTermId } from "./rich-text.ts";
 
 test("maps toolbox tag names and term ids", () => {
   assert.equal(richTextClassName("@cc.vup"), "cc-vup");
   assert.equal(richTextClassName("@cc.miu"), "cc-miu");
   assert.equal(richTextTermId("$cc.bd_A_1"), "cc_bd_A_1");
   assert.equal(richTextTermId("$cc.g.abyssal"), "cc_g_abyssal");
+});
+
+test("derives plain searchable text without duplicating it in the generated catalog", () => {
+  assert.equal(
+    richTextPlainText("进驻时，生产力<@cc.vup>+10%</>。\n&amp; 协同"),
+    "进驻时，生产力+10%。 & 协同",
+  );
 });
 
 test("parses style pairs into styled spans", () => {
