@@ -138,9 +138,9 @@ test("default browse order follows the data warehouse order in reverse", () => {
     { name: "阿米娅", order: 2, buildingSkills: [{ id: "control_x" }] },
     { name: "阿能", order: 1, buildingSkills: [{ id: "manu_y" }] },
   ];
-  assert.deepEqual(filterOperators(operators, null, null, "", () => []).map((operator) => operator.name), ["阿米娅", "阿能", "能天使"]);
+  assert.deepEqual(filterOperators(operators, null, null, "", () => ({})).map((operator) => operator.name), ["阿米娅", "阿能", "能天使"]);
   // 带搜索词时仍按名字排序，便于查找。
-  assert.deepEqual(filterOperators(operators, null, null, "阿", () => []).map((operator) => operator.name), ["阿米娅", "阿能"]);
+  assert.deepEqual(filterOperators(operators, null, null, "阿", () => ({})).map((operator) => operator.name), ["阿米娅", "阿能"]);
 });
 
 test("filters the real catalog by substring query", () => {
