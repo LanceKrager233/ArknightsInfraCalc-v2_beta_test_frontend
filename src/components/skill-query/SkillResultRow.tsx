@@ -63,7 +63,14 @@ export function SkillResultRow({ operator }: SkillResultRowProps) {
       {/* 左右布局：左侧干员卡片（不展示心情），右侧技能（PC 每技能一列，移动端按钮列表+弹窗） */}
       <div className="relative z-10 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-4">
         <div className="shrink-0">
-          <OperatorSlot slot={{ name: operator.name, label: operator.name, portrait: operator.portrait }} />
+          <OperatorSlot
+            slot={{
+              name: operator.name,
+              label: operator.name,
+              portrait: operator.portrait,
+              profession: operator.profession,
+            }}
+          />
         </div>
         {isMobile ? (
           <MobileSkillList skills={skills} />
