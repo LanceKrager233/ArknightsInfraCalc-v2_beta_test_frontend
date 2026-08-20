@@ -19,6 +19,7 @@ import {
   WEBSITE_ACCOUNT_NAME_MIN_LENGTH,
   validateWebsiteAccountName,
 } from "@/account-name";
+import { accountOrbColor } from "@/account-orb";
 import { OtpInput, type OtpInputHandle, type OtpStatus } from "@/components/interior/otp-input";
 import { PasswordStrength } from "@/components/interior/password-strength";
 import { WizardSteps } from "@/components/interior/wizard-steps";
@@ -31,6 +32,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { FluidOrb } from "@/components/ui/fluid-orb";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
@@ -223,15 +225,19 @@ export function WebsiteAccountPanel({ onSessionChanged }: WebsiteAccountPanelPro
 
   if (session) {
     const expiresAt = formatSessionExpiry(session.session.expiresAt);
-    const initial = (session.user.name || session.user.email).trim().slice(0, 1).toLocaleUpperCase("zh-CN");
+    const orbColor = accountOrbColor(session.user.id);
     return (
       <div className="grid gap-6" data-website-account-panel data-authenticated="true">
         <StatusCenterHeader
           identity={(
             <div className="flex min-w-0 items-center gap-4">
-              <div className="grid size-14 shrink-0 place-items-center rounded-xl bg-primary text-lg font-semibold text-primary-foreground" aria-hidden="true">
-                {initial || <UserRound className="size-6" />}
-              </div>
+              <FluidOrb
+                size={56}
+                color={orbColor}
+                aria-hidden="true"
+                data-website-account-avatar
+                data-account-orb-color={orbColor}
+              />
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="truncate text-2xl font-semibold tracking-tight">{session.user.name}</h2>
