@@ -176,6 +176,167 @@ export interface RotationJson {
   };
 }
 
+/** plan.compute 响应里的练卡建议报告（PlayerTrainingAdviceReport v2）。 */
+export type TrainingAdviceNewbieSectionStatus = "shown" | "complete" | "skipped_by_efficiency";
+export type TrainingAdviceAction = "acquire" | "train";
+export type TrainingAdviceProduct =
+  | "trade"
+  | "gold"
+  | "experience"
+  | "general_manufacturing"
+  | "originium_shards";
+export type TrainingAdviceTargetKind =
+  | "explicit"
+  | "no_requirement"
+  | "derive_from_skill_binding"
+  | "needs_review";
+export type TrainingAdviceAcquisitionKind =
+  | "shop"
+  | "public_recruitment"
+  | "event"
+  | "redeem_code"
+  | "integrated_strategy";
+export type TrainingAdviceCombinationState =
+  | "complete"
+  | "needs_training"
+  | "missing_core"
+  | "missing_important"
+  | "needs_review";
+export type TrainingAdviceMemberRole = "core" | "important" | "secondary" | "hanger";
+export type TrainingAdviceMemberProgress = "missing" | "owned_needs_training" | "ready" | "needs_review";
+export type TrainingAdvicePriority =
+  | "newbie_four_star_elite_one"
+  | "flagship_newbie"
+  | "other_newbie"
+  | "owned_tailor"
+  | "automation_must_train"
+  | "small_high_efficiency_core"
+  | "small_high_efficiency_important"
+  | "system_single_core_gap"
+  | "other_important"
+  | "lower_priority_core"
+  | "high_efficiency_standalone";
+export type TrainingAdviceReason =
+  | "newbie_required"
+  | "combination_core"
+  | "combination_important"
+  | "standalone";
+export type TrainingAdviceJsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | TrainingAdviceJsonValue[]
+  | { [key: string]: TrainingAdviceJsonValue };
+
+export interface TrainingAdviceReport {
+  schema_version: 2;
+  context: TrainingAdviceContext;
+  newbie_section_status: TrainingAdviceNewbieSectionStatus;
+  incomplete_newbie: TrainingNewbieItem[];
+  combinations: TrainingCombination[];
+  recommendations: TrainingRecommendation[];
+}
+
+export interface TrainingAdviceContext {
+  dormitory_level_sum?: number;
+  engineering_robot_count?: number;
+  has_originium_shard_factory?: boolean;
+  manufacturing_average_efficiency_percent?: number;
+  meeting_room_max_level?: number;
+  trade_average_efficiency_percent?: number;
+}
+
+export interface TrainingAdviceState {
+  elite: number;
+  level?: number;
+}
+
+export interface TrainingAdviceTarget {
+  kind: TrainingAdviceTargetKind;
+  elite?: number;
+  level?: number;
+}
+
+export interface TrainingAdviceAcquisition {
+  kind: TrainingAdviceAcquisitionKind;
+  detail: string;
+}
+
+export interface TrainingAdviceCondition {
+  kind: "layout" | "facility" | "same_station" | "dormitory" | "engineering_robots" | "custom";
+  key: string;
+  value?: TrainingAdviceJsonValue;
+  description: string;
+}
+
+export interface TrainingAdviceConditionEvaluation {
+  condition: TrainingAdviceCondition;
+  status: "satisfied" | "unsatisfied" | "unknown";
+}
+
+export interface TrainingAdviceEfficiency {
+  value: number;
+  unit: "order_percent" | "production_percent";
+  note?: string;
+}
+
+export interface TrainingAdviceMember {
+  operator: string;
+  role: TrainingAdviceMemberRole;
+  owned: boolean;
+  progress: TrainingAdviceMemberProgress;
+  current?: TrainingAdviceState;
+  target: TrainingAdviceTarget;
+  target_met: boolean;
+  counts_toward_completion: boolean;
+}
+
+export interface TrainingCombination {
+  id: string;
+  name: string;
+  product?: TrainingAdviceProduct;
+  consumer_products?: TrainingAdviceProduct[];
+  scale: "small" | "system";
+  tier?: "high_efficiency" | "low_efficiency";
+  state: TrainingAdviceCombinationState;
+  completed_slots: number;
+  total_slots: number;
+  completion_percent: number;
+  facilities: string[];
+  members: TrainingAdviceMember[];
+  missing_core?: string[];
+  missing_important?: string[];
+  untrained_core?: string[];
+  untrained_important?: string[];
+  selected_alternative?: number;
+}
+
+export interface TrainingRecommendation {
+  action: TrainingAdviceAction;
+  operator: string;
+  combination_id?: string;
+  combination_name?: string;
+  product?: TrainingAdviceProduct;
+  priority: TrainingAdvicePriority;
+  priority_rank: number;
+  reason: TrainingAdviceReason;
+  target: TrainingAdviceTarget;
+  current?: TrainingAdviceState;
+  efficiency?: TrainingAdviceEfficiency;
+  conditions?: TrainingAdviceConditionEvaluation[];
+  acquisition?: TrainingAdviceAcquisition;
+}
+
+export interface TrainingNewbieItem {
+  action: TrainingAdviceAction;
+  operator: string;
+  product: TrainingAdviceProduct;
+  target: TrainingAdviceTarget;
+  current?: TrainingAdviceState;
+  acquisition?: TrainingAdviceAcquisition;
+}
+
 export interface CliCandidate {
   path: string;
   exists: boolean;
@@ -777,6 +938,7 @@ export interface PlanApiResponse {
   stderr?: string;
   profileJson?: UserProfile;
   maaJson?: MaaJson;
+  trainingAdviceJson?: TrainingAdviceReport;
   rotationJson?: RotationJson;
   solver?: SolverObservation;
   debugBundle?: DebugBundle;
@@ -863,6 +1025,7 @@ export interface PublicPlanData {
   profile: UserProfile;
   maa: MaaJson;
   rotation: RotationJson;
+  trainingAdvice?: TrainingAdviceReport;
   durationMs: number;
   diagnosticId: string;
   debug?: PublicPlanDebug;

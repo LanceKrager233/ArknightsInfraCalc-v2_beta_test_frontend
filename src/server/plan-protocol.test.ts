@@ -150,17 +150,59 @@ test("validates the complete plan.compute success payload", () => {
       profile: { schema_version: 4 },
       rotation: { profile: "abc_12_6_6", daily: {}, shifts: [] },
       maa: { plans: [] },
+      training_advice: {
+        schema_version: 2,
+        context: {},
+        newbie_section_status: "complete",
+        incomplete_newbie: [],
+        combinations: [],
+        recommendations: [],
+      },
     },
   });
 
   assert.deepEqual(payload?.rotation.shifts, []);
   assert.equal(payload?.profile.schema_version, 4);
+  assert.equal(payload?.trainingAdvice?.schema_version, 2);
 });
 
 test("rejects malformed successful plan.compute payloads", () => {
   assert.throws(
     () => parsePlanComputePayload({ ok: true, result: { schema_version: 3, profile: {}, rotation: { shifts: [] } } }),
     /maa/
+  );
+  assert.throws(
+    () => parsePlanComputePayload({
+      ok: true,
+      result: {
+        schema_version: 3,
+        profile: {},
+        rotation: { shifts: [] },
+        maa: {},
+        training_advice: { schema_version: 3 },
+      },
+    }),
+    /training_advice\.schema_version/
+  );
+  assert.throws(
+    () => parsePlanComputePayload({
+      ok: true,
+      result: {
+        schema_version: 3,
+        profile: {},
+        rotation: { shifts: [] },
+        maa: {},
+        training_advice: {
+          schema_version: 2,
+          context: {},
+          newbie_section_status: "complete",
+          incomplete_newbie: [],
+          combinations: {},
+          recommendations: [],
+        },
+      },
+    }),
+    /training_advice\.combinations/
   );
 });
 

@@ -983,6 +983,7 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
     let serveResult: ServeResult;
     let profileJson: unknown;
     let maaJson: unknown;
+    let trainingAdviceJson: unknown;
     let rotationSource: unknown;
     let serveShifts: unknown[] = [];
     let shiftFiles: string[] = [];
@@ -1016,6 +1017,7 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
       }
       profileJson = payload?.profile;
       maaJson = payload?.maa;
+      trainingAdviceJson = payload?.trainingAdvice;
       rotationSource = payload?.rotation;
       serveShifts = payload && Array.isArray(payload.rotation.shifts) ? payload.rotation.shifts : [];
       if (profileJson) await writeJson(profilePath, profileJson);
@@ -1036,6 +1038,9 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
       maaJson = await readJsonIfExists(maaPath);
       const shiftRead = await readShiftFiles(shiftsDir);
       const responseResult = isObject(serveResult.response.result) ? serveResult.response.result : undefined;
+      trainingAdviceJson = responseResult && typeof responseResult === "object"
+        ? (responseResult as { training_advice?: unknown }).training_advice
+        : undefined;
       rotationSource = responseResult;
       const responseShifts = responseResult && Array.isArray(responseResult.shifts) ? responseResult.shifts : [];
       serveShifts = responseShifts.length > 0 ? responseShifts : shiftRead.shifts;
@@ -1117,6 +1122,7 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
       stderr: serveResult.stderr,
       profileJson: profileJson as PlanApiResponse["profileJson"],
       maaJson: maaJson as PlanApiResponse["maaJson"],
+      trainingAdviceJson: trainingAdviceJson as PlanApiResponse["trainingAdviceJson"],
       rotationJson: rotationJson as PlanApiResponse["rotationJson"],
       solver,
       debugBundle,

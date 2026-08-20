@@ -1,4 +1,5 @@
-import type { OperBoxEntry, SolverObservation } from "../types";
+import type { OperBoxEntry, SolverObservation, TrainingAdviceReport } from "../types";
+import { parseTrainingAdviceReport } from "../training-advice-contract.ts";
 
 export type ProtocolRecord = Record<string, unknown>;
 
@@ -26,6 +27,7 @@ export type PlanComputePayload = {
   profile: ProtocolRecord;
   rotation: ProtocolRecord & { shifts: unknown[] };
   maa: ProtocolRecord;
+  trainingAdvice: TrainingAdviceReport;
 };
 
 export function isProtocolRecord(value: unknown): value is ProtocolRecord {
@@ -203,5 +205,6 @@ export function parsePlanComputePayload(response: unknown): PlanComputePayload |
     profile: result.profile,
     rotation: { ...result.rotation, shifts: result.rotation.shifts },
     maa: result.maa,
+    trainingAdvice: parseTrainingAdviceReport(result.training_advice),
   };
 }
