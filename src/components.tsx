@@ -1780,8 +1780,9 @@ export function IssueNoteModal({
   }, [kind, open, row?.key]);
 
   useEffect(() => {
-    returnFocusId.current = row ? scheduleIssueTriggerId(row) : null;
-  }, [kind, row]);
+    if (row) returnFocusId.current = scheduleIssueTriggerId(row);
+    else if (open && isPerformance) returnFocusId.current = null;
+  }, [isPerformance, open, row]);
 
   return (
     <Dialog
