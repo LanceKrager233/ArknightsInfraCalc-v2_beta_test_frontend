@@ -71,10 +71,11 @@
 | `src/server/skland/*` | 森空岛会话加密、Cookie、扫码、同步、角色切换与数据归一化 |
 | `src/internal-field-safety.ts` | 递归剔除内部字段 |
 | `scripts/extract-room-emblems.mjs` | 从现有 WebP 确定性提取透明高清设施徽记 |
+| `scripts/ci-change-scope.mjs` | 失败关闭的 CI 变更范围分类与部署判定 |
 | `fixtures/operbox_full_e2.json` | 首页 Full E2 的 243 全精二样例 |
 | `bin/infra-cli*`、`bin/data/` | 当前平台 CLI 与可选运行数据 |
 | `e2e/production-readiness.spec.ts` | 产品边界、响应式、持久化、调试开关与森空岛 UI 回归 |
-| `.github/workflows/frontend-quality.yml` | main / PR 的完整质量门禁 |
+| `.github/workflows/frontend-quality.yml` | main/develop PR 与 push 的范围感知质量门禁 |
 | `docs/FRONTEND_PRODUCTION_READINESS_REPORT.md` | 公开边界、错误码和产品化基线 |
 | `docs/UPDATE_SOLVER.md` | 只更新线上求解器时的操作与回滚说明 |
 
@@ -213,7 +214,7 @@ npm start
 - `npm run test:e2e` 默认在 5184 端口自动启动 Next，并用 Playwright 拦截外部 API；通常不需要真实 CLI 或森空岛凭据。
 - `npm run test:e2e:webkit` 使用同一套 E2E 场景执行独立 WebKit 兼容性门禁。
 - `npm start` 默认监听 `0.0.0.0:5174`。
-- CI 将核心检查和 Chromium E2E 拆成隔离 Job 并行执行，再由受保护的 `quality` 汇总门禁统一放行；push 只有在同一 SHA 的两个必需 Job 成功后才进入部署。Chromium 与 WebKit Job 使用和 lockfile 中 Playwright 版本一致、以 digest 固定的官方 noble 镜像，不得在临时 runner 上重新执行 `playwright install --with-deps`；升级 Playwright 时必须同步镜像标签、digest 和构建工具契约测试。完整 WebKit E2E 每日定时运行，也可手动触发，不阻塞逐次发布。
+- CI 先由`Change scope`读取 NUL 分隔的准确变更路径，再按保守白名单决定 Core、Chromium 和 deploy。纯`docs/**`、根目录 Markdown 与`.gitignore`/`.editorconfig`只跑轻量范围检查；`.gitattributes`会影响归档与文件语义，必须走完整门禁。测试和非发布型 GitHub 配置至少跑 Core；浏览器测试还跑 Chromium；两个发布工作流改动会跳过业务 E2E 但必须真实部署；任何运行时或未知路径、空差异、手动触发都失败关闭为完整 Core + Chromium，并在受保护分支 push 时部署。不得用 workflow 级`paths-ignore`让必需检查消失；`quality`必须始终汇总实际成功或按分类预期跳过的 Job。Chromium 与 WebKit Job 使用和 lockfile 中 Playwright 版本一致、以 digest 固定的官方 noble 镜像，不得在临时 runner 上重新执行`playwright install --with-deps`；升级 Playwright 时必须同步镜像标签、digest 和构建工具契约测试。完整 WebKit E2E 每日定时运行，也可手动触发，不阻塞逐次发布。
 
 开发调试模式仅在本地这样开启：
 
@@ -293,7 +294,7 @@ development loopback nginx: 127.0.0.1:4274 (SSH tunnel only until a dev domain i
 development persistent storage: /var/lib/arknights-infra-dev
 ```
 
-`main`和`develop` push 必须先通过`Frontend quality`，随后由`Deploy verified branch`从已验证 SHA 自动发布到各自 GitHub Environment。发布包只包含 Git 跟踪内容；服务器优先通过`/usr/local/sbin/arknights-infra-prepare-release`和`/var/cache/arknights-infra-deploy/repository.git`增量准备准确 SHA。helper 返回临时故障码`75`时，Runner 优先读取对应服务器缓存 ref，并发送从该 ref 到已验证 SHA 的增量 Git bundle；缓存 ref 不可用时才使用上一次 push SHA。helper 校验路径、HEAD、前置对象、tree、完整对象图后导入，仅在 bundle 不可用时回退完整 SCP。SHA、tree、路径、bundle 或 helper 契约错误必须直接失败。新 release 从应用根目录的`shared/.env.local`继承环境配置；`shared/bin-data`只有包含当前 Worker 所需的完整数据文件集时才注入 release，不完整的旧数据保留但不得覆盖制品内置数据。随后以`arkinfra`用户执行`npm ci`/`npm run build`，再原子切换`current`并重启对应 systemd。部署锁内只允许清理命名和提交标记均合法的 release 直属目录；每个环境保留当前 release 加两个回滚版本，失败半成品必须移除，清理后可用空间少于 3 GiB 时必须在创建新 release 前失败。`shared`和`/var/lib`永不进入 release 淘汰范围。不得把服务器密码写入文件或命令；只使用受保护的 SSH key 与 known_hosts。手动发布仍必须基于对应已合并、已验证的远端分支。
+`main`和`develop` push 必须先通过`Frontend quality`；只有范围分类输出`deploy_required=true`时，`Deploy verified branch`才从已验证 SHA 自动发布到对应 GitHub Environment。文档、仓库元数据、测试和非发布型 CI 配置不得创建无意义的服务器 release；运行时、未知路径和发布工作流改动仍必须部署。发布包只包含 Git 跟踪内容；服务器优先通过`/usr/local/sbin/arknights-infra-prepare-release`和`/var/cache/arknights-infra-deploy/repository.git`增量准备准确 SHA。helper 返回临时故障码`75`时，Runner 优先读取对应服务器缓存 ref，并发送从该 ref 到已验证 SHA 的增量 Git bundle；缓存 ref 不可用时才使用上一次 push SHA。helper 校验路径、HEAD、前置对象、tree、完整对象图后导入，仅在 bundle 不可用时回退完整 SCP。SHA、tree、路径、bundle 或 helper 契约错误必须直接失败。新 release 从应用根目录的`shared/.env.local`继承环境配置；`shared/bin-data`只有包含当前 Worker 所需的完整数据文件集时才注入 release，不完整的旧数据保留但不得覆盖制品内置数据。随后以`arkinfra`用户执行`npm ci`/`npm run build`，再原子切换`current`并重启对应 systemd。部署锁内只允许清理命名和提交标记均合法的 release 直属目录；每个环境保留当前 release 加两个回滚版本，失败半成品必须移除，清理后可用空间少于 3 GiB 时必须在创建新 release 前失败。`shared`和`/var/lib`永不进入 release 淘汰范围。不得把服务器密码写入文件或命令；只使用受保护的 SSH key 与 known_hosts。手动发布仍必须基于对应已合并、已验证的远端分支。
 
 两个固定 helper 必须是`root:root 0755`普通文件并支持`--contract-version`；当前 prepare/deploy 契约均为`1`。工作流以契约版本做兼容握手，并把服务器文件 SHA-256只作为审计信息。内部实现保持参数、退出码和权限语义兼容时不得随意升级版本；任何不兼容修改必须成套更新脚本、工作流、测试和文档，先通过完整 PR 门禁，再在合并前原子安装并复核新 helper。不得通过跳过 owner/mode/version 检查让部署通过。
 

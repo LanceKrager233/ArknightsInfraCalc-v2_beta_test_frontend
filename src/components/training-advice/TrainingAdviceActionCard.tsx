@@ -6,31 +6,24 @@ import { OperatorSlot } from "@/components";
 import { InfraTechnicalCard } from "@/components/InfraTechnicalCard";
 import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
 import { operatorPortraitFor } from "@/operatorPortraits";
-import type { OperBoxEntry, TrainingAdviceTarget } from "@/types";
+import type {
+  OperBoxEntry,
+  TrainingNewbieItem,
+  TrainingRecommendation,
+} from "@/types";
 
 import {
+  trainingAcquisitionLabel,
+  trainingConditionStatusLabel,
   trainingLevelText,
   trainingPriorityLabel,
   trainingProductGroup,
   trainingProductLabel,
+  trainingReasonLabel,
 } from "./presentation";
 
 const ACTION_LABELS: Record<string, string> = { acquire: "获取", train: "培养" };
-const REASON_LABELS: Record<string, string> = {
-  combination_core: "组合核心",
-  combination_important: "组合重要",
-};
-
-type ActionCardItem = {
-  action?: string;
-  operator: string;
-  product?: string | null;
-  priority_rank?: number | null;
-  reason?: string | null;
-  target?: TrainingAdviceTarget | null;
-  current?: { elite: number; level?: number } | null;
-  combination_name?: string | null;
-};
+type ActionCardItem = TrainingNewbieItem | TrainingRecommendation;
 
 export function TrainingAdviceActionCard({
   action,
@@ -42,7 +35,7 @@ export function TrainingAdviceActionCard({
   index: number;
 }) {
   const reduceMotion = useReducedMotion();
-  const actionLabel = ACTION_LABELS[action.action ?? ""] ?? "建议";
+  const actionLabel = ACTION_LABELS[action.action];
   const currentText = action.current ? `当前 ${trainingLevelText(action.current)} → ` : "";
   const targetText = trainingLevelText(action.target);
 
@@ -76,7 +69,7 @@ export function TrainingAdviceActionCard({
                 <span className="font-medium text-[var(--room-accent)]">
                   {trainingProductLabel(action.product)}
                 </span>
-                {action.combination_name ? (
+                {"combination_name" in action && action.combination_name ? (
                   <>
                     <span aria-hidden="true">·</span>
                     <span>{action.combination_name}</span>
@@ -86,13 +79,33 @@ export function TrainingAdviceActionCard({
               <p className="mt-2 max-w-[72ch] text-pretty text-sm leading-6 text-white/82">
                 {actionLabel}「{action.operator}」{currentText}目标 {targetText}
               </p>
+              {action.acquisition ? (
+                <p className="mt-1 text-xs leading-5 text-white/58">
+                  获取方式：{trainingAcquisitionLabel(action.acquisition.kind)} · {action.acquisition.detail}
+                </p>
+              ) : null}
+              {"efficiency" in action && action.efficiency ? (
+                <p className="mt-1 text-xs leading-5 text-white/58">
+                  效率知识：{action.efficiency.value}%
+                  {action.efficiency.note ? ` · ${action.efficiency.note}` : ""}
+                </p>
+              ) : null}
+              {"conditions" in action && action.conditions?.length ? (
+                <ul className="mt-2 grid gap-1 text-xs leading-5 text-white/58">
+                  {action.conditions.map(({ condition, status }) => (
+                    <li key={`${condition.kind}-${condition.key}`}>
+                      {trainingConditionStatusLabel(status)} · {condition.description}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
             <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-end">
               <span className="font-number border border-[var(--room-accent)] bg-[var(--room-accent)] px-2.5 py-1 text-xs font-semibold text-[#202223]">
-                {trainingPriorityLabel(action.priority_rank)}
+                {trainingPriorityLabel("priority" in action ? action.priority : undefined)}
               </span>
               <span className="border border-white/15 bg-white/7 px-2.5 py-1 text-xs text-white/70">
-                {REASON_LABELS[action.reason ?? ""] ?? actionLabel}
+                {trainingReasonLabel("reason" in action ? action.reason : undefined)}
               </span>
             </div>
           </div>

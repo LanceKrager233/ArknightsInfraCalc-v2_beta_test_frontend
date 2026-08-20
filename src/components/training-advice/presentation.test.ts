@@ -4,55 +4,95 @@ import test from "node:test";
 import {
   sortTrainingCombinations,
   sortTrainingRecommendations,
+  trainingAcquisitionLabel,
   trainingCombinationStateLabel,
+  trainingConditionStatusLabel,
   trainingLevelText,
+  trainingMemberProgressLabel,
+  trainingMemberRoleLabel,
   trainingPriorityLabel,
   trainingProductLabel,
-  trainingMemberRoleLabel,
+  trainingReasonLabel,
   trainingScaleLabel,
 } from "./presentation.ts";
 import type { TrainingCombination, TrainingRecommendation } from "@/types";
 
-test("labels map product, state, level and priority", () => {
+const target = { kind: "explicit" as const, elite: 1, level: 30 };
+
+test("maps every schema v2 wire enum used by the presentation", () => {
   assert.equal(trainingProductLabel("trade"), "贸易");
   assert.equal(trainingProductLabel("general_manufacturing"), "制造");
-  assert.equal(trainingProductLabel(null), "综合");
+  assert.equal(trainingProductLabel("originium_shards"), "源石碎片");
+  assert.equal(trainingProductLabel(), "综合");
   assert.equal(trainingScaleLabel("system"), "体系组合");
   assert.equal(trainingScaleLabel("small"), "小型组合");
   assert.equal(trainingMemberRoleLabel("core"), "核心");
   assert.equal(trainingMemberRoleLabel("important"), "重要");
   assert.equal(trainingMemberRoleLabel("secondary"), "次级");
   assert.equal(trainingMemberRoleLabel("hanger"), "挂件");
-  assert.equal(trainingCombinationStateLabel("missing_core"), "缺失核心");
-  assert.equal(trainingLevelText({ elite: 2 }), "精2");
-  assert.equal(trainingLevelText({ elite: 0, level: 30 }), "精0 Lv30");
-  assert.equal(trainingPriorityLabel(50), "P1");
-  assert.equal(trainingPriorityLabel(55), "P2");
-  assert.equal(trainingPriorityLabel(70), "P3");
-  assert.equal(trainingPriorityLabel(null), "—");
+  assert.equal(trainingCombinationStateLabel("needs_review"), "待核对");
+  assert.equal(trainingMemberProgressLabel("needs_review"), "待核对");
+  assert.equal(trainingReasonLabel("newbie_required"), "新手必需");
+  assert.equal(trainingReasonLabel("combination_core"), "组合核心");
+  assert.equal(trainingReasonLabel("combination_important"), "组合重要");
+  assert.equal(trainingReasonLabel("standalone"), "独立推荐");
+  assert.equal(trainingPriorityLabel("automation_must_train"), "自动化必练");
+  assert.equal(trainingAcquisitionLabel("public_recruitment"), "公开招募");
+  assert.equal(trainingConditionStatusLabel("unknown"), "待确认");
 });
 
-test("sorts combinations by severity, tier and completion", () => {
+test("formats all target kinds without exposing protocol values", () => {
+  assert.equal(trainingLevelText({ kind: "explicit", elite: 2 }), "精2");
+  assert.equal(trainingLevelText(target), "精1 Lv30");
+  assert.equal(trainingLevelText({ kind: "no_requirement" }), "无需额外培养");
+  assert.equal(trainingLevelText({ kind: "derive_from_skill_binding" }), "按技能解锁要求");
+  assert.equal(trainingLevelText({ kind: "needs_review" }), "目标待核对");
+});
+
+test("preserves the server-defined combination and recommendation order", () => {
   const combinations: TrainingCombination[] = [
-    { id: "a", name: "完成", state: "complete", tier: "high_efficiency", completion_percent: 100 },
-    { id: "b", name: "缺核", state: "missing_core", tier: "high_efficiency", completion_percent: 0 },
-    { id: "c", name: "需培养", state: "needs_training", tier: "high_efficiency", completion_percent: 50 },
-    { id: "d", name: "低效完成", state: "complete", tier: "low_efficiency", completion_percent: 100 },
+    {
+      id: "complete-first",
+      name: "服务端第一项",
+      scale: "small",
+      state: "complete",
+      completed_slots: 1,
+      total_slots: 1,
+      completion_percent: 100,
+      facilities: [],
+      members: [],
+    },
+    {
+      id: "missing-second",
+      name: "服务端第二项",
+      scale: "system",
+      state: "missing_core",
+      completed_slots: 0,
+      total_slots: 2,
+      completion_percent: 0,
+      facilities: [],
+      members: [],
+    },
   ];
-  assert.deepEqual(
-    sortTrainingCombinations(combinations).map((item) => item.id),
-    ["b", "c", "a", "d"],
-  );
-});
-
-test("sorts recommendations by priority rank ascending", () => {
   const recommendations: TrainingRecommendation[] = [
-    { operator: "低", priority_rank: 70 },
-    { operator: "高", priority_rank: 50 },
-    { operator: "中", priority_rank: 55 },
+    {
+      operator: "服务端第一名",
+      action: "train",
+      target,
+      priority: "lower_priority_core",
+      priority_rank: 90,
+      reason: "combination_core",
+    },
+    {
+      operator: "服务端第二名",
+      action: "train",
+      target,
+      priority: "newbie_four_star_elite_one",
+      priority_rank: 10,
+      reason: "newbie_required",
+    },
   ];
-  assert.deepEqual(
-    sortTrainingRecommendations(recommendations).map((item) => item.operator),
-    ["高", "中", "低"],
-  );
+
+  assert.deepEqual(sortTrainingCombinations(combinations).map((item) => item.id), ["complete-first", "missing-second"]);
+  assert.deepEqual(sortTrainingRecommendations(recommendations).map((item) => item.operator), ["服务端第一名", "服务端第二名"]);
 });

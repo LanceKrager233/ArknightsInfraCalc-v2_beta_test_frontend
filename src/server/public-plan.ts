@@ -11,6 +11,7 @@ import { sanitizeMaaJson } from "../maa-safety.ts";
 import { DEFAULT_ROTATION_PROFILE } from "../rotation-settings.ts";
 import { isDebugToolsEnabled, PublicApiError } from "./api-contract.ts";
 import { normalizeRotationResult, rotationFallbackProfile } from "../rotation-result.ts";
+import { parseTrainingAdviceReport } from "../training-advice-contract.ts";
 
 const PATH_SEPARATOR = /[/\\]+/g;
 const SOLVER_DIAGNOSTIC_FIELDS = new Set([
@@ -18,6 +19,10 @@ const SOLVER_DIAGNOSTIC_FIELDS = new Set([
   "plan_contract_sha256",
   "solver_executable_sha256",
 ]);
+
+type PublicPlanOptions = {
+  includeDebug?: boolean;
+};
 
 function safeDuration(value: unknown): number {
   const duration = Number(value);
@@ -84,7 +89,8 @@ function sanitizePublicDebugBundle(
 export function toPublicPlanData(
   result: PlanApiResponse,
   input: { layoutLabel: string; sourceName: string },
-  requestId: string
+  requestId: string,
+  options: PublicPlanOptions = {}
 ): PublicPlanData {
   if (!result.success || !result.profileJson || !result.maaJson || !result.rotationJson) {
     const message = result.error?.toLowerCase() ?? "";
@@ -97,10 +103,19 @@ export function toPublicPlanData(
     throw new PublicApiError("AIC-PLAN-3004");
   }
 
+  let trainingAdvice: PublicPlanData["trainingAdvice"];
+  if (result.trainingAdviceJson !== undefined) {
+    try {
+      trainingAdvice = parseTrainingAdviceReport(result.trainingAdviceJson);
+    } catch (error) {
+      throw new PublicApiError("AIC-PLAN-3004", { cause: error });
+    }
+  }
+
   const data: PublicPlanData = {
     profile: sanitizeProfile(result.profileJson, input.layoutLabel, input.sourceName),
     maa: sanitizeMaa(result.maaJson, input.layoutLabel),
-    ...(result.trainingAdviceJson ? { trainingAdvice: result.trainingAdviceJson } : {}),
+    ...(trainingAdvice ? { trainingAdvice } : {}),
     rotation: normalizeRotationResult({
       source: result.rotationJson as RotationJson,
       profile: result.profileJson,
@@ -110,7 +125,7 @@ export function toPublicPlanData(
     diagnosticId: result.runId ?? requestId,
   };
 
-  if (isDebugToolsEnabled()) {
+  if (options.includeDebug && isDebugToolsEnabled()) {
     data.debug = {
       command: result.command,
       stdout: result.stdout,

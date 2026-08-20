@@ -31,6 +31,7 @@ export async function POST(request: Request) {
   const startedAt = performance.now();
   let release: (() => void) | undefined;
   try {
+    const includeDebug = new URL(request.url).searchParams.get("beta") === "1";
     assertSameOrigin(request);
     const ip = requestClientIp(request);
     enforceRateLimit("plan", ip, 20, 10 * 60_000, "AIC-PLAN-3002");
@@ -107,7 +108,12 @@ export async function POST(request: Request) {
     }
     const result = await runPlan({ layout: body.layout, operbox, sourceName, rotation, fiammettaEnable, dataOwnerTag });
     return successResponse(
-      toPublicPlanData(result, { layoutLabel: body.layout.template, sourceName }, requestId),
+      toPublicPlanData(
+        result,
+        { layoutLabel: body.layout.template, sourceName },
+        requestId,
+        { includeDebug }
+      ),
       requestId
     );
   } catch (error) {

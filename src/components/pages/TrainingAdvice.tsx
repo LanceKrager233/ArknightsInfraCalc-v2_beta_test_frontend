@@ -143,15 +143,9 @@ export function TrainingAdvice({
   const actions = profile?.actions ?? [];
   const ownedTotal = entries.filter((entry) => entry.own).length;
   const eliteTotal = entries.filter((entry) => entry.own && entry.elite >= 2).length;
-  const advice =
-    trainingAdvice
-    && (trainingAdvice.combinations?.length
-      || trainingAdvice.recommendations?.length
-      || trainingAdvice.incomplete_newbie?.length)
-      ? trainingAdvice
-      : null;
-  const recommendations = advice ? sortTrainingRecommendations(advice.recommendations ?? []) : [];
-  const combinations = advice ? sortTrainingCombinations(advice.combinations ?? []) : [];
+  const advice = trainingAdvice ?? null;
+  const recommendations = advice ? sortTrainingRecommendations(advice.recommendations) : [];
+  const combinations = advice ? sortTrainingCombinations(advice.combinations) : [];
   const context = advice?.context;
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const toggleSection = (id: string) =>
@@ -271,7 +265,7 @@ export function TrainingAdvice({
 
       {advice ? (
         <>
-          {advice.incomplete_newbie?.length ? (
+          {advice.newbie_section_status === "shown" && advice.incomplete_newbie.length ? (
             <CollapsibleSection
               accent="bg-[#B8F03A]"
               title="新手目标"
@@ -289,6 +283,18 @@ export function TrainingAdvice({
                 ))}
               </div>
             </CollapsibleSection>
+          ) : advice.newbie_section_status === "skipped_by_efficiency" ? (
+            <InfraTechnicalCard group="power" dataSlot="training-newbie-skipped" showEmblem={false}>
+              <p className="text-sm leading-6 text-white/76">
+                当前贸易与制造均效已高于新手门槛，本轮不把基础名单列为优先行动；仍有
+                <span className="font-number mx-1 text-[var(--room-accent)]">{advice.incomplete_newbie.length}</span>
+                名干员未完成基础目标。
+              </p>
+            </InfraTechnicalCard>
+          ) : advice.newbie_section_status === "complete" ? (
+            <InfraTechnicalCard group="power" dataSlot="training-newbie-complete" showEmblem={false}>
+              <p className="text-sm leading-6 text-white/76">基础练卡目标已完成。</p>
+            </InfraTechnicalCard>
           ) : null}
 
           <CollapsibleSection

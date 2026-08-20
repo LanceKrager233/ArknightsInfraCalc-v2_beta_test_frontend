@@ -21,6 +21,7 @@ const STATE_CLASSES: Record<string, string> = {
   needs_training: "border-amber-400/60 bg-amber-400/10 text-amber-300",
   missing_core: "border-red-400/70 bg-red-400/10 text-red-300",
   missing_important: "border-orange-400/60 bg-orange-400/10 text-orange-300",
+  needs_review: "border-sky-400/60 bg-sky-400/10 text-sky-300",
 };
 
 function MemberRow({ member }: { member: TrainingAdviceMember }) {
@@ -31,7 +32,9 @@ function MemberRow({ member }: { member: TrainingAdviceMember }) {
     : isMissing
       ? "text-red-300"
       : "text-amber-300";
-  const statusText = isReady
+  const statusText = member.progress === "needs_review"
+    ? trainingMemberProgressLabel(member.progress)
+    : isReady
     ? "就绪"
     : isMissing
       ? "缺失"
@@ -77,13 +80,16 @@ export function TrainingCombinationCard({ combination }: { combination: Training
             {trainingCombinationStateLabel(combination.state)}
           </span>
           <span className="font-number text-xs text-white/60">
-            {combination.completed_slots ?? 0}/{combination.total_slots ?? 0}
+            {combination.completed_slots}/{combination.total_slots}
           </span>
         </div>
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/50">
           <span>{trainingScaleLabel(combination.scale)}</span>
           <span>{trainingProductLabel(combination.product)}</span>
+          {combination.consumer_products?.length ? (
+            <span>覆盖：{combination.consumer_products.map(trainingProductLabel).join("、")}</span>
+          ) : null}
           {combination.facilities?.length ? (
             <span>
               工作房间：{combination.facilities.map(trainingFacilityLabel).join("、")}
@@ -92,7 +98,7 @@ export function TrainingCombinationCard({ combination }: { combination: Training
         </div>
 
         <div className="mt-1 flex flex-wrap gap-2 border-t border-white/10 pt-2">
-          {combination.members?.map((member, index) => (
+          {combination.members.map((member, index) => (
             <MemberRow key={`${member.operator}-${index}`} member={member} />
           ))}
         </div>

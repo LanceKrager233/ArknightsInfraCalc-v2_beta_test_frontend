@@ -54,10 +54,31 @@ test("CI gates releases on Chromium and schedules the full WebKit suite", async 
 
   assert.match(workflow, /browser_e2e:[\s\S]+npm run test:e2e[\s\S]+npm run test:e2e:production-profile/);
   assert.match(workflow, /webkit_e2e:[\s\S]+github\.event_name == 'schedule'[\s\S]+npm run test:e2e:webkit/);
-  assert.match(workflow, /quality:[\s\S]+needs: \[checks, browser_e2e\]/);
+  assert.match(workflow, /quality:[\s\S]+needs: \[changes, checks, browser_e2e\]/);
   assert.doesNotMatch(workflow, /quality:[\s\S]+needs: \[[^\]]*webkit_e2e/);
-  assert.match(workflow, /deploy:[\s\S]+needs: quality/);
+  assert.match(workflow, /deploy:[\s\S]+needs: \[changes, quality\]/);
   assert.match(workflow, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/);
+});
+
+test("CI change scope keeps one required quality gate and fails closed", async () => {
+  const workflow = await readRepoFile(".github/workflows/frontend-quality.yml");
+  const classifier = await readRepoFile("scripts/ci-change-scope.mjs");
+
+  assert.doesNotMatch(workflow, /paths-ignore:/);
+  assert.match(workflow, /changes:[\s\S]+name: Change scope/);
+  assert.match(workflow, /fetch-depth: 0/);
+  assert.match(workflow, /node scripts\/ci-change-scope\.mjs/);
+  assert.match(workflow, /git diff --name-only -z "\$PR_BASE_SHA\.\.\.\$PR_HEAD_SHA"/);
+  assert.match(workflow, /git diff --name-only -z "\$PUSH_BEFORE_SHA\.\.\$HEAD_SHA"/);
+  assert.match(workflow, /"\$\{classifier\[@\]\}" --force-full/);
+  assert.match(workflow, /checks:[\s\S]+needs: changes[\s\S]+needs\.changes\.outputs\.run_core == 'true'/);
+  assert.match(workflow, /browser_e2e:[\s\S]+needs: changes[\s\S]+needs\.changes\.outputs\.run_browser == 'true'/);
+  assert.match(workflow, /quality:[\s\S]+test "\$CHANGES_RESULT" = "success"[\s\S]+"\$DEPLOY_REQUIRED" == "true"[\s\S]+"\$required" == "true"[\s\S]+verify_result "\$RUN_CORE"[\s\S]+verify_result "\$RUN_BROWSER"/);
+  assert.match(workflow, /deploy:[\s\S]+needs\.changes\.outputs\.deploy_required == 'true'/);
+
+  assert.match(classifier, /fullScope\(paths, "empty-change-set"\)/);
+  assert.match(classifier, /fullScope\(paths, "runtime-or-unclassified-change"\)/);
+  assert.match(classifier, /runCore: true,[\s\S]+runBrowser: true,[\s\S]+deployRequired: true/);
 });
 
 test("CI browser jobs use the matching pinned Playwright image without runtime apt installs", async () => {
