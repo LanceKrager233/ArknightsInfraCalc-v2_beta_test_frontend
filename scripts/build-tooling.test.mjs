@@ -130,7 +130,8 @@ test("the critical calculator board stays in the initial client graph", async ()
   assert.match(calculatorRoute, /import \{ InfraCalculator \} from "@\/components\/pages\/InfraCalculator"/);
   assert.doesNotMatch(app, /PageScrollbar/);
   const components = await readRepoFile("src/components.tsx");
-  assert.match(components, /useState<"list" \| "compact">\("list"\)/);
+  assert.match(components, /useState<"list" \| "compact">\("compact"\)/);
+  assert.match(calculator, /useState<"list" \| "compact">\("compact"\)/);
   assert.doesNotMatch(components, /useState<"list" \| "compact">\(\(\) =>[\s\S]{0,200}matchMedia/);
   assert.match(app, /const hasRenderedCalculator = useRef\(false\)/);
   assert.match(calculator, /animateInitialView=\{!scheduleResult && animateEmptyScheduleEntrance\}/);

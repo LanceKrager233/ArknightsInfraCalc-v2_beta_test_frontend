@@ -31,6 +31,8 @@ test("cold HTML contains the workbench shell instead of only the client loading 
   expect(response.status()).toBe(200);
   const html = await response.text();
   expect(html).toContain("data-calculator-controls");
+  expect(html).toContain('data-schedule-view="compact"');
+  expect(html).not.toContain('data-schedule-view="list"');
   expect(html).not.toContain("正在加载基建计算器");
 });
 
@@ -1176,6 +1178,38 @@ test("website login opens account management after the gated navigation dialog",
   await expect(page.getByRole("button", { name: "账号管理", exact: true })).toHaveAttribute("data-active", "");
   await expect(page.locator("[data-account-management]")).toBeVisible();
   await expect(page.getByText("signed-in@example.test", { exact: true })).toBeVisible();
+  const websiteAvatar = page.locator("[data-website-account-avatar]");
+  await expect(websiteAvatar).toBeVisible();
+  await expect(websiteAvatar).toHaveAttribute("data-account-orb-color", /^#[0-9A-F]{6}$/);
+  await expect(websiteAvatar.locator("canvas")).toBeVisible();
+  await expect(websiteAvatar.locator("[data-fluid-orb-fallback]")).toBeVisible();
+  await expect(websiteAvatar).not.toContainText("新");
+  const websiteAvatarBox = await websiteAvatar.boundingBox();
+  expect(websiteAvatarBox?.width).toBeCloseTo(56, 0);
+  expect(websiteAvatarBox?.height).toBeCloseTo(56, 0);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(websiteAvatar).toHaveAttribute("data-fluid-orb-motion", /^(still|fallback)$/);
+});
+
+test("website account Fluid Orb keeps its CSS fallback without WebGL", async ({ page }) => {
+  await page.addInitScript(() => {
+    const originalGetContext = HTMLCanvasElement.prototype.getContext;
+    Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+      configurable: true,
+      value(contextId: string, ...args: unknown[]) {
+        if (contextId === "webgl") return null;
+        return Reflect.apply(originalGetContext, this, [contextId, ...args]);
+      },
+    });
+  });
+  await mockApis(page, { sklandConfigured: true });
+  await seedPreferences(page);
+  await page.goto("/account");
+
+  const websiteAvatar = page.locator("[data-website-account-avatar]");
+  await expect(websiteAvatar).toBeVisible();
+  await expect(websiteAvatar).toHaveAttribute("data-fluid-orb-motion", "fallback");
+  await expect(websiteAvatar.locator("[data-fluid-orb-fallback]")).toBeVisible();
 });
 
 test("seven-day bindings stay visible and require QR renewal", async ({ page }) => {
@@ -3406,6 +3440,7 @@ test("Skland login loads full status by default and deletion preserves non-Sklan
     "src",
     snapshotWithAvatar.player.avatarUrl
   );
+  await expect(page.locator("[data-skland-account-avatar] [data-slot=\"fluid-orb\"]")).toHaveCount(0);
   await page.getByRole("button", { name: "Toggle Sidebar" }).click();
   await openSklandOverview(page);
 
