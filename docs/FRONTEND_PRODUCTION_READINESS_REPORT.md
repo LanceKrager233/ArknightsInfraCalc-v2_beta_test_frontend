@@ -97,15 +97,18 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-  E["BETA_DEBUG_TOOLS_ENABLED=1"] --> G{"URL 包含 ?beta"}
-  E --> D["服务端允许 data.debug"]
-  G -->|"是"| P["前端显示调试面板"]
-  G -->|"否"| H["前端隐藏调试面板"]
-  D --> V["仅当前内存可用"]
+  E["BETA_DEBUG_TOOLS_ENABLED=1"] --> D{"本次 plan 请求带 ?beta=1"}
+  U{"页面 URL 包含 ?beta"} -->|"是"| Q["客户端请求 /api/plan?beta=1"]
+  U -->|"否"| H["普通 /api/plan 请求"]
+  Q --> D
+  H --> N["仅返回五个白名单字段"]
+  D -->|"是"| P["返回 data.debug 并显示调试面板"]
+  D -->|"否"| N
+  P --> V["仅当前内存可用"]
   V --> X["v4 持久化剔除 debug"]
 ```
 
-服务端关闭 flag 时，即使 URL 带 `?beta`也不会下发调试字段，health 的 `debugTools`为 false，前端不渲染调试 UI。
+服务端关闭 flag 时，即使 URL 带 `?beta`也不会下发调试字段，health 的 `debugTools`为 false，前端不渲染调试 UI。服务端开启 flag 时，未显式选择调试模式的普通请求同样不会收到 `data.debug`。
 
 ### 错误处理流
 
@@ -318,8 +321,8 @@ $env:BETA_RATE_LIMIT_ENABLED='0'
 
 ### 切换公开/调试模式
 
-1. 开启 flag 并访问 `?beta`，调试面板应出现。
-2. 去掉 `?beta`，即使 flag 开启也不显示面板。
+1. 开启 flag 并访问 `?beta`，确认 plan 请求带 `?beta=1`、响应包含 `data.debug`且调试面板出现。
+2. 去掉 `?beta`，确认普通 plan 请求不带 beta 参数、响应只有五个白名单字段且不显示面板。
 3. 关闭 `BETA_DEBUG_TOOLS_ENABLED`后重启服务。
 4. 再访问 `?beta`，调试 UI 和 `data.debug`都不得出现。
 
