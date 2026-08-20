@@ -2564,6 +2564,45 @@ test("Full E2 stays in place and completes generation, shifts, MAA export, and f
   await expect(page.getByText("反馈已提交，编号：feedback-001")).toBeVisible();
 });
 
+test("slow plans submit performance feedback without attributing an arbitrary room", async ({ page }) => {
+  await mockApis(page);
+  const feedbackPayloads: Record<string, unknown>[] = [];
+  await page.unroute("**/api/feedback");
+  await page.route("**/api/feedback", async (route) => {
+    feedbackPayloads.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: { feedbackId: "feedback-performance", savedAt: "2026-08-20T00:00:00.000Z" },
+        requestId,
+      }),
+    });
+  });
+  await seedV4Session(page, { ...planData, durationMs: 735 });
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "提交性能反馈" }).click();
+  const feedbackDialog = page.getByRole("dialog", { name: "提交性能反馈" });
+  await expect(feedbackDialog).toBeVisible();
+  await expect(feedbackDialog.getByText(/不会附带任意房间或完整干员数据/)).toBeVisible();
+  await feedbackDialog.getByRole("textbox").fill("同一份 Box 之前通常可以更快完成。");
+  await feedbackDialog.getByRole("checkbox").check();
+  await feedbackDialog.getByRole("button", { name: "提交反馈" }).click();
+
+  await expect.poll(() => feedbackPayloads).toHaveLength(1);
+  const feedbackPayload = feedbackPayloads[0];
+  expect(feedbackPayload).toMatchObject({
+    kind: "performance_issue",
+    diagnosticId,
+    consent: true,
+  });
+  expect(feedbackPayload).not.toHaveProperty("room");
+  expect(feedbackPayload?.note).toContain("求解耗时：735 ms");
+  await expect(page.getByText("反馈已提交，编号：feedback-performance")).toBeVisible();
+});
+
 test("scheduled product changes require destructive confirmation and rerun with the updated layout", async ({ page }) => {
   test.setTimeout(60_000);
   await mockApis(page);

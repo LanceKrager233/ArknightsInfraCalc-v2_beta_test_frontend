@@ -66,6 +66,7 @@ import {
   BlueprintRoom,
   DisplayError,
   FeedbackData,
+  FeedbackKind,
   IssueReport,
   OperBoxEntry,
   PublicPlanData,
@@ -275,6 +276,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const [apiError, setApiError] = useState<DisplayError | null>(null);
   const [storageNotice, setStorageNotice] = useState<DisplayError | null>(null);
   const [activeShift, setActiveShift] = useState(0);
+  const [issueDraftKind, setIssueDraftKind] = useState<FeedbackKind>("room_issue");
   const [issueDraftRow, setIssueDraftRow] = useState<RoomRow | null>(null);
   const [issueDraftNote, setIssueDraftNote] = useState("");
   const [savedIssue, setSavedIssue] = useState<{ row: RoomRow; note: string } | null>(null);
@@ -879,6 +881,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   }
 
   function clearIssueState() {
+    setIssueDraftKind("room_issue");
     setIssueDraftRow(null);
     setIssueDraftNote("");
     setSavedIssue(null);
@@ -888,6 +891,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   }
 
   function handleMarkIssue(row: RoomRow) {
+    setIssueDraftKind("room_issue");
     setIssueDraftRow(row);
     setIssueDraftNote("");
     setSavedIssue(null);
@@ -896,8 +900,19 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     setIssueOpen(true);
   }
 
+  function handlePerformanceIssue() {
+    if (!result?.diagnosticId) return;
+    setIssueDraftKind("performance_issue");
+    setIssueDraftRow(null);
+    setIssueDraftNote("本次求解耗时明显偏长。");
+    setSavedIssue(null);
+    setFeedbackResult(null);
+    setFeedbackError(null);
+    setIssueOpen(true);
+  }
+
   async function handleSaveIssue() {
-    if (!issueDraftRow || !issueDraftNote.trim()) return;
+    if (!issueDraftNote.trim() || (issueDraftKind === "room_issue" && !issueDraftRow)) return;
     if (!result?.diagnosticId) {
       setFeedbackError("请先生成排班，再提交问题。");
       return;
@@ -909,26 +924,42 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       `换班方式：${rotationProfile}`,
       `布局：${preset.label}`,
     ].join("；");
-    const issue = { row: issueDraftRow, note: `${issueDraftNote.trim()}\n\n[运行环境] ${environment}` };
+    const note = `${issueDraftNote.trim()}\n\n[运行环境] ${environment}`;
 
     setFeedbackSaving(true);
     setFeedbackError(null);
     setApiError(null);
     try {
-      const response = await saveFeedback({
-        diagnosticId: result.diagnosticId,
-        room: {
-          id: issue.row.roomId,
-          title: issue.row.title,
-          group: issue.row.group,
-          operators: issue.row.operators,
-        },
-        note: issue.note,
-        consent: true,
-      });
-      setSavedIssue(issue);
+      let response: FeedbackData;
+      if (issueDraftKind === "performance_issue") {
+        response = await saveFeedback({
+          kind: "performance_issue",
+          diagnosticId: result.diagnosticId,
+          note,
+          consent: true,
+        });
+      } else {
+        const row = issueDraftRow;
+        if (!row) return;
+        response = await saveFeedback({
+          kind: "room_issue",
+          diagnosticId: result.diagnosticId,
+          room: {
+            id: row.roomId,
+            title: row.title,
+            group: row.group,
+            operators: row.operators,
+          },
+          note,
+          consent: true,
+        });
+      }
+      setSavedIssue(issueDraftKind === "room_issue" && issueDraftRow
+        ? { row: issueDraftRow, note }
+        : null);
       setFeedbackResult(response);
       setIssueOpen(false);
+      setIssueDraftKind("room_issue");
       setIssueDraftRow(null);
       setIssueDraftNote("");
     } catch (error) {
@@ -942,6 +973,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
 
   function handleCancelIssue() {
     setIssueOpen(false);
+    setIssueDraftKind("room_issue");
     setIssueDraftRow(null);
     setIssueDraftNote("");
   }
@@ -1332,6 +1364,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       onCancelRun: handleCancelRun,
       onSetActiveShift: setActiveShift,
       onMarkIssue: handleMarkIssue,
+      onPerformanceIssue: handlePerformanceIssue,
       onFactoryRecipeChange: handleScheduleFactoryRecipeChange,
       onTradeOrderChange: handleScheduleTradeOrderChange,
       onDownloadMaa: handleDownloadMaa,
@@ -1488,6 +1521,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
 
       {issueModalMounted ? <Suspense fallback={null}><IssueNoteModal
         open={issueOpen}
+        kind={issueDraftKind}
         row={issueDraftRow}
         note={issueDraftNote}
         saving={feedbackSaving}

@@ -103,6 +103,7 @@ import {
 import {
   BaseBlueprint,
   FeedbackData,
+  FeedbackKind,
   IssueReport,
   MaaJson,
   MaaPlan,
@@ -1753,6 +1754,7 @@ export function ScheduleBoard({
 
 export function IssueNoteModal({
   open,
+  kind,
   row,
   note,
   saving,
@@ -1761,6 +1763,7 @@ export function IssueNoteModal({
   onCancel,
 }: {
   open: boolean;
+  kind: FeedbackKind;
   row: RoomRow | null;
   note: string;
   saving: boolean;
@@ -1770,18 +1773,20 @@ export function IssueNoteModal({
 }) {
   const [consented, setConsented] = useState(false);
   const returnFocusId = useRef<string | null>(null);
+  const isPerformance = kind === "performance_issue";
 
   useEffect(() => {
     if (open) setConsented(false);
-  }, [open, row?.key]);
+  }, [kind, open, row?.key]);
 
   useEffect(() => {
     if (row) returnFocusId.current = scheduleIssueTriggerId(row);
-  }, [row]);
+    else if (open && isPerformance) returnFocusId.current = null;
+  }, [isPerformance, open, row]);
 
   return (
     <Dialog
-      open={open && Boolean(row)}
+      open={open && (isPerformance || Boolean(row))}
       triggerId={row ? scheduleIssueTriggerId(row) : null}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) onCancel();
@@ -1792,18 +1797,20 @@ export function IssueNoteModal({
         finalFocus={() => returnFocusId.current ? document.getElementById(returnFocusId.current) : true}
       >
         <DialogHeader>
-          <DialogTitle>{row?.title ?? "反馈排班问题"}</DialogTitle>
-          <DialogDescription>反馈排班问题</DialogDescription>
+          <DialogTitle>{isPerformance ? "提交性能反馈" : row?.title ?? "反馈排班问题"}</DialogTitle>
+          <DialogDescription>{isPerformance ? "反馈本次求解性能" : "反馈排班问题"}</DialogDescription>
         </DialogHeader>
         <DialogBody>
           <p className="text-[13px] leading-5 text-muted-foreground">
-            将提交本次排班的诊断编号、房间名称、当前干员和你的说明；不会重复上传完整干员数据或调试包。
+            {isPerformance
+              ? "将提交本次排班的诊断编号、求解耗时、换班方式、布局和你的说明；不会附带任意房间或完整干员数据。"
+              : "将提交本次排班的诊断编号、房间名称、当前干员和你的说明；不会重复上传完整干员数据或调试包。"}
           </p>
           <Textarea
             autoFocus
             value={note}
             onChange={(event) => onNoteChange(event.target.value)}
-            placeholder="例如：这组应该换成可露希尔 / 当前站位有误。"
+            placeholder={isPerformance ? "例如：同一份 Box 之前通常可以更快完成。" : "例如：这组应该换成可露希尔 / 当前站位有误。"}
             className="min-h-36 text-[13px]"
             maxLength={1000}
           />
@@ -1814,7 +1821,7 @@ export function IssueNoteModal({
               onChange={(event) => setConsented(event.target.checked)}
               className="size-4"
             />
-            <span>我确认提交以上排班问题信息。</span>
+            <span>我确认提交以上{isPerformance ? "性能" : "排班问题"}信息。</span>
           </label>
         </DialogBody>
         <DialogFooter>

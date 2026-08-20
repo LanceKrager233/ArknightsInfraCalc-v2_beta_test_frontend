@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, FileJson, FlaskConical, HeartPulse, Keyboard, Loader2, Play, Search, Settings2, Terminal, X } from "lucide-react";
+import { Clock3, Download, FileJson, FlaskConical, HeartPulse, Keyboard, Loader2, Play, Search, Settings2, Terminal, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { ScheduleBoard, ShiftTabs } from "@/components";
@@ -114,6 +114,7 @@ export interface InfraCalculatorProps {
   onCancelRun: () => void;
   onSetActiveShift: (shift: number) => void;
   onMarkIssue: (row: RoomRow) => void;
+  onPerformanceIssue: () => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
   onDownloadMaa: () => void;
@@ -132,7 +133,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     issueForPanel, issueReport, feedbackResult, feedbackError,
     sampleLoading, loading, canRun, plannerReady, animatePlanEntrance, animateEmptyScheduleEntrance, onPlanEntranceConsumed, requiresAccount = false, accountControl,
     onLoadSample, onOpenSetup, onRun, onCancelRun,
-    onSetActiveShift, onMarkIssue,
+    onSetActiveShift, onMarkIssue, onPerformanceIssue,
     onFactoryRecipeChange, onTradeOrderChange,
     onDownloadMaa, onDownloadBundle, onCopyCommand,
     onClearResultNotice, onDismissResultClearWarning,
@@ -275,19 +276,27 @@ export function InfraCalculator(props: InfraCalculatorProps) {
             )}
           >
             {scheduleResult ? (
-              <Suspense fallback={<DeferredResultLoading />}>
-                <PlanResultSummary
-                  profile={scheduleResult.profile}
-                  rotation={scheduleResult.rotation}
-                  maa={scheduleResult.maa}
-                  layout={layout}
-                  activeShift={activeShift}
-                  comparison={closestComparison}
-                  planRevision={scheduleResult.diagnosticId}
-                  animateEntrance={animatePlanEntrance}
-                  onEntranceConsumed={onPlanEntranceConsumed}
-                />
-              </Suspense>
+              <>
+                <Suspense fallback={<DeferredResultLoading />}>
+                  <PlanResultSummary
+                    profile={scheduleResult.profile}
+                    rotation={scheduleResult.rotation}
+                    maa={scheduleResult.maa}
+                    layout={layout}
+                    activeShift={activeShift}
+                    comparison={closestComparison}
+                    planRevision={scheduleResult.diagnosticId}
+                    animateEntrance={animatePlanEntrance}
+                    onEntranceConsumed={onPlanEntranceConsumed}
+                  />
+                </Suspense>
+                {scheduleResult.durationMs > 200 ? (
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950" role="status">
+                    <span className="flex items-center gap-2"><Clock3 className="size-4" />本次求解耗时 {Math.round(scheduleResult.durationMs)} ms</span>
+                    <Button type="button" size="sm" variant="outline" className="border-amber-400 bg-white max-sm:h-11" onClick={onPerformanceIssue}>提交性能反馈</Button>
+                  </div>
+                ) : null}
+              </>
             ) : null}
             {rows.length > 0 ? <ScheduleBoard
               rows={rows}
