@@ -57,6 +57,14 @@ const result = {
   },
   maa: { title: "排班", plans: [] },
   rotation: { profile: DEFAULT_ROTATION_PROFILE, shifts: [], daily: { trade: null, manu: null, power: null } },
+  trainingAdvice: {
+    schema_version: 2 as const,
+    context: {},
+    newbie_section_status: "complete" as const,
+    incomplete_newbie: [],
+    combinations: [],
+    recommendations: [],
+  },
   durationMs: 10,
   diagnosticId: "diag",
   debug: { command: "must be removed", stdout: "secret" },
@@ -118,6 +126,7 @@ test("v5 persistence stores source, expiry metadata, and strips debug fields", (
   assert.equal(Date.parse(saved.expiresAt) - now, SESSION_TTL_MS);
   assert.equal(saved.rotationProfile, DEFAULT_ROTATION_PROFILE);
   assert.equal(saved.result?.debug, undefined);
+  assert.deepEqual(saved.result?.trainingAdvice, result.trainingAdvice);
   assert.equal(saved.layoutSource, "local");
   assert.deepEqual(saved.localLayoutBackup, layout);
   assert.deepEqual(loadPersistedSession(storage, now)?.localLayoutBackup, layout);
@@ -278,8 +287,10 @@ test("internal fields nested in persisted result data are stripped", () => {
   const storage = new MemoryStorage();
   const unsafeResult = structuredClone(result) as PublicPlanData & {
     profile: PublicPlanData["profile"] & { cliPath?: string };
+    trainingAdvice: NonNullable<PublicPlanData["trainingAdvice"]> & { command?: string };
   };
   unsafeResult.profile.cliPath = "C:\\secret\\infra-cli.exe";
+  unsafeResult.trainingAdvice.command = "secret";
 
   const saved = persistSession(storage, {
     presetLabel: "243",
@@ -295,6 +306,7 @@ test("internal fields nested in persisted result data are stripped", () => {
   });
 
   assert.equal("cliPath" in saved.result!.profile, false);
+  assert.equal("command" in saved.result!.trainingAdvice!, false);
 });
 
 test("persistence preserves MAA protocol candidates only inside rooms", () => {

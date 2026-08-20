@@ -3198,6 +3198,89 @@ test("calculator owns scheduling controls and training advice uses a single tech
   expect(Math.min(...mobileHeights)).toBeGreaterThanOrEqual(44 - 0.01);
 });
 
+for (const scenario of [
+  { status: "shown", expectedSlot: "training-newbie-list" },
+  { status: "complete", expectedSlot: "training-newbie-complete" },
+  { status: "skipped_by_efficiency", expectedSlot: "training-newbie-skipped" },
+] as const) {
+  test(`structured training advice obeys newbie status ${scenario.status}`, async ({ page }) => {
+    const structuredAdviceResult = {
+      ...planData,
+      trainingAdvice: {
+        schema_version: 2,
+        context: {
+          has_originium_shard_factory: true,
+          engineering_robot_count: 12,
+          trade_average_efficiency_percent: 31,
+          manufacturing_average_efficiency_percent: 26,
+        },
+        newbie_section_status: scenario.status,
+        incomplete_newbie: [{
+          operator: "芬",
+          product: "trade",
+          action: "train",
+          current: { elite: 0, level: 30 },
+          target: { kind: "derive_from_skill_binding" },
+        }],
+        recommendations: [{
+          operator: "泡泡",
+          action: "acquire",
+          target: { kind: "needs_review" },
+          priority: "high_efficiency_standalone",
+          priority_rank: 100,
+          reason: "standalone",
+          product: "originium_shards",
+          acquisition: { kind: "public_recruitment", detail: "公开招募获取" },
+        }],
+        combinations: [{
+          id: "bubble_group",
+          name: "泡泡火神组",
+          product: "originium_shards",
+          consumer_products: ["gold"],
+          tier: "high_efficiency",
+          scale: "small",
+          facilities: ["manufacturing_station"],
+          state: "needs_review",
+          completed_slots: 0,
+          total_slots: 1,
+          completion_percent: 0,
+          members: [{
+            operator: "泡泡",
+            role: "core",
+            progress: "needs_review",
+            owned: false,
+            target_met: false,
+            target: { kind: "needs_review" },
+            counts_toward_completion: true,
+          }],
+        }],
+      },
+    };
+
+    await mockApis(page);
+    await seedV4Session(page, structuredAdviceResult);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/");
+    await page.getByRole("button", { name: "练卡建议" }).click();
+
+    if (scenario.expectedSlot === "training-newbie-list") {
+      await expect(page.locator("[data-training-newbie-list]")).toBeVisible();
+      await expect(page.locator('[data-slot="training-newbie-complete"]')).toHaveCount(0);
+      await expect(page.locator('[data-slot="training-newbie-skipped"]')).toHaveCount(0);
+      await expect(page.getByText("按技能解锁要求", { exact: false })).toBeVisible();
+    } else {
+      await expect(page.locator("[data-training-newbie-list]")).toHaveCount(0);
+      await expect(page.locator(`[data-slot="${scenario.expectedSlot}"]`)).toBeVisible();
+    }
+
+    await expect(page.getByText("源石碎片", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("目标待核对", { exact: false }).first()).toBeVisible();
+    await expect(page.getByText("独立推荐", { exact: true })).toBeVisible();
+    await expect(page.getByText("待核对", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText(/needs_review|originium_shards|standalone/, { exact: false })).toHaveCount(0);
+  });
+}
+
 test("schedule visuals use a stable technical canvas and responsive level markers", async ({ page }) => {
   await mockApis(page);
   await seedV4Session(page, scheduleVisualPlanData);

@@ -8,6 +8,7 @@ import type {
   UserProfile,
 } from "./types";
 import { stripInternalFields } from "./internal-field-safety.ts";
+import { parseTrainingAdviceReport } from "./training-advice-contract.ts";
 import { sanitizeMaaJson } from "./maa-safety.ts";
 import { normalizeRotationProfile } from "./rotation-settings.ts";
 import { normalizeRotationResult } from "./rotation-result.ts";
@@ -116,6 +117,15 @@ export function normalizePersistedPlanData(value: unknown, fallbackProfile: Rota
   if (!isObject(profile) || !isObject(maa) || !isObject(rotation)) return null;
   if (!Array.isArray(maa.plans) || !Array.isArray(rotation.shifts)) return null;
 
+  let trainingAdvice: PublicPlanData["trainingAdvice"];
+  if (value.trainingAdvice !== undefined) {
+    try {
+      trainingAdvice = parseTrainingAdviceReport(value.trainingAdvice);
+    } catch {
+      trainingAdvice = undefined;
+    }
+  }
+
   return {
     profile: stripInternalFields(structuredClone(profile)),
     maa: sanitizeMaaJson(maa),
@@ -124,6 +134,7 @@ export function normalizePersistedPlanData(value: unknown, fallbackProfile: Rota
       profile,
       fallbackProfile,
     }),
+    ...(trainingAdvice ? { trainingAdvice } : {}),
     durationMs: safeDuration(value.durationMs),
     diagnosticId:
       typeof value.diagnosticId === "string"

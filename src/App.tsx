@@ -1344,6 +1344,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       operbox: accountCanUseCurrentBox ? operbox : null,
       layout,
       profile: accountCanUseCurrentBox ? result?.profile : null,
+      trainingAdvice: accountCanUseCurrentBox ? result?.trainingAdvice ?? null : null,
       requiresAccount: !accountCanUseCurrentBox,
       onOpenCalculator: () => navigateToPage("calculator"),
     },

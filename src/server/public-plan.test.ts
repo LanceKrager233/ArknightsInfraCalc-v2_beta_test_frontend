@@ -63,6 +63,35 @@ function internalResult(): PlanApiResponse {
         solver_executable_sha256: "b".repeat(64),
       },
     } as PlanApiResponse["maaJson"] & { nestedInternal: Record<string, unknown> },
+    trainingAdviceJson: {
+      schema_version: 2,
+      context: { engineering_robot_count: 12, stdout: "secret" },
+      newbie_section_status: "complete",
+      incomplete_newbie: [],
+      combinations: [],
+      recommendations: [{
+        operator: "泡泡",
+        action: "acquire",
+        target: { kind: "needs_review", command: "secret" },
+        priority: "high_efficiency_standalone",
+        priority_rank: 100,
+        reason: "standalone",
+        product: "originium_shards",
+        conditions: [{
+          condition: {
+            kind: "custom",
+            key: "safe",
+            value: { visible: true, stdout: "secret", nested: { solver: "secret" } },
+            description: "待核对条件",
+          },
+          status: "unknown",
+          stderr: "secret",
+        }],
+        solver: { private: true },
+      }],
+      command: "secret",
+      future_internal: "secret",
+    } as unknown as PlanApiResponse["trainingAdviceJson"],
     rotationJson: {
       profile: "abc_12_6_6",
       shifts: [{
@@ -177,6 +206,31 @@ test("production public plan data recursively excludes internal fields", () => {
       false
     );
     assert.equal(publicData.maa.scheduleType?.planTimes, 2);
+    assert.deepEqual(publicData.trainingAdvice, {
+      schema_version: 2,
+      context: { engineering_robot_count: 12 },
+      newbie_section_status: "complete",
+      incomplete_newbie: [],
+      combinations: [],
+      recommendations: [{
+        operator: "泡泡",
+        action: "acquire",
+        target: { kind: "needs_review" },
+        priority: "high_efficiency_standalone",
+        priority_rank: 100,
+        reason: "standalone",
+        product: "originium_shards",
+        conditions: [{
+          condition: {
+            kind: "custom",
+            key: "safe",
+            value: { visible: true, nested: {} },
+            description: "待核对条件",
+          },
+          status: "unknown",
+        }],
+      }],
+    });
     assert.equal(publicData.profile.baseline_label, "产品推荐基准");
     assert.equal(publicData.profile.layout_label.includes("\\"), false);
     assert.equal(publicData.maa.title.includes("\\"), false);
