@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { stdout } from "node:process";
 import { URL } from "node:url";
 import { gzipSync } from "node:zlib";
@@ -15,6 +15,8 @@ const WORKBENCH_ROUTES = ["/", "/training", "/skills", "/skland", "/account"];
 const statsUrl = new URL("../.next/diagnostics/route-bundle-stats.json", import.meta.url);
 const documentUrl = new URL("../.next/server/app/index.html", import.meta.url);
 const buildRootUrl = new URL("../.next/", import.meta.url);
+const COMPACT_SCHEDULE_MARKER = "data-compact-schedule-view";
+const staticChunksUrl = new URL("../.next/static/chunks/", import.meta.url);
 const stats = JSON.parse(await readFile(statsUrl, "utf8"));
 
 assert.ok(Array.isArray(stats), "route bundle stats must be an array; run npm run build first");
@@ -79,11 +81,28 @@ assert.ok(
   `/ document initial gzip JavaScript is ${documentInitialGzipJsBytes} bytes, exceeding the ${MAX_DOCUMENT_INITIAL_GZIP_JS_BYTES} byte budget`,
 );
 
+const compactScheduleChunks = [];
+for (const entry of await readdir(staticChunksUrl, { withFileTypes: true })) {
+  if (!entry.isFile() || !entry.name.endsWith(".js")) continue;
+  const contents = await readFile(new URL(entry.name, staticChunksUrl), "utf8");
+  if (contents.includes(COMPACT_SCHEDULE_MARKER)) compactScheduleChunks.push(entry.name);
+}
+assert.ok(compactScheduleChunks.length > 0, "production build is missing the compact schedule chunk marker");
+
+for (const [index, body] of initialScriptBodies.entries()) {
+  assert.doesNotMatch(
+    body.toString("utf8"),
+    new RegExp(COMPACT_SCHEDULE_MARKER),
+    `compact schedule code leaked into the initially loaded application chunk ${uniqueInitialScriptPaths[index]}`,
+  );
+}
+
 stdout.write(
   [
     `/ route bundle budget passed: ${rootRoute.firstLoadUncompressedJsBytes} / ${MAX_ROUTE_INITIAL_JS_BYTES} uncompressed JS bytes`,
     `secondary workbench route budget passed: enabled routes stay independent and ${WORKBENCH_ROUTES.slice(1).join(", ")} stay below ${MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES} raw bytes`,
     `/ document preload budget passed: ${uniqueInitialScriptPaths.length} / ${MAX_DOCUMENT_INITIAL_JS_FILES} files, ${documentInitialJsBytes} / ${MAX_DOCUMENT_INITIAL_JS_BYTES} raw bytes, ${documentInitialGzipJsBytes} / ${MAX_DOCUMENT_INITIAL_GZIP_JS_BYTES} gzip bytes`,
+    `compact schedule split passed: ${compactScheduleChunks.length} lazy chunk(s) stay outside the initially loaded application graph`,
     "",
   ].join("\n"),
 );

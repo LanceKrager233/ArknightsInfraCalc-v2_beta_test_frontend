@@ -36,6 +36,8 @@ test("CI enforces route and document preload JavaScript budgets after building",
   assert.match(budgetCheck, /firstLoadUncompressedJsBytes/);
   assert.match(budgetCheck, /\.next\/server\/app\/index\.html/);
   assert.match(budgetCheck, /gzipSync/);
+  assert.match(budgetCheck, /COMPACT_SCHEDULE_MARKER = "data-compact-schedule-view"/);
+  assert.match(budgetCheck, /compact schedule code leaked into the initially loaded application chunk/);
 });
 
 test("Next and the verified deployment keep real public GET responses compressed", async () => {
@@ -118,7 +120,7 @@ test("workbench views use five independent route entries under one persistent la
   assert.match(sidebar, /onMouseEnter=\{\(\) => setPrefetchOnIntent\(true\)\}/);
 });
 
-test("the critical calculator board stays in the initial client graph", async () => {
+test("the critical calculator board stays initial while the compact view loads on demand", async () => {
   const calculator = await readRepoFile("src/components/pages/InfraCalculator.tsx");
   const calculatorRoute = await readRepoFile("src/components/workbench/CalculatorRoute.tsx");
   const app = await readRepoFile("src/App.tsx");
@@ -130,10 +132,12 @@ test("the critical calculator board stays in the initial client graph", async ()
   assert.match(calculatorRoute, /import \{ InfraCalculator \} from "@\/components\/pages\/InfraCalculator"/);
   assert.doesNotMatch(app, /PageScrollbar/);
   const components = await readRepoFile("src/components.tsx");
-  assert.match(components, /useState<"list" \| "compact">\("compact"\)/);
-  assert.match(components, /useState\(true\);[\s\S]{0,200}preferredViewMode/);
+  assert.match(components, /useState<ScheduleViewMode \| null>\(null\)/);
+  assert.match(components, /useState<boolean \| null>\(null\)/);
+  assert.match(components, /window\.matchMedia\("\(min-width: 768px\)"\)/);
+  assert.match(components, /viewMode !== "compact"[\s\S]{0,300}import\("@\/components\/CompactScheduleView"\)/);
+  assert.doesNotMatch(components, /import \{ CompactScheduleView \} from "@\/components\/CompactScheduleView"/);
   assert.match(calculator, /useState<"list" \| "compact">\("compact"\)/);
-  assert.doesNotMatch(components, /useState<"list" \| "compact">\(\(\) =>[\s\S]{0,200}matchMedia/);
   assert.match(app, /const hasRenderedCalculator = useRef\(false\)/);
   assert.match(calculator, /animateInitialView=\{!scheduleResult && animateEmptyScheduleEntrance\}/);
   assert.doesNotMatch(calculator, /animateInitialView=\{!scheduleResult\}/);

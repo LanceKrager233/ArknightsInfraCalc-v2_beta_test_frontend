@@ -31,7 +31,8 @@ test("cold HTML contains the workbench shell instead of only the client loading 
   expect(response.status()).toBe(200);
   const html = await response.text();
   expect(html).toContain("data-calculator-controls");
-  expect(html).toContain('data-schedule-view="compact"');
+  expect(html).toContain("data-schedule-view-pending");
+  expect(html).not.toContain('data-schedule-view="compact"');
   expect(html).not.toContain('data-schedule-view="list"');
   expect(html).not.toContain("正在加载基建计算器");
 });
@@ -2599,6 +2600,16 @@ test("scheduled product changes require destructive confirmation and rerun with 
 
 test("responsive navigation and the two locked areas keep their current behavior", async ({ page }) => {
   test.setTimeout(60_000);
+  await page.addInitScript(() => {
+    const history: string[] = [];
+    Object.defineProperty(window, "__scheduleViewHistory", { value: history, configurable: true });
+    const capture = () => {
+      const mode = document.querySelector<HTMLElement>("[data-schedule-view]")?.dataset.scheduleView;
+      if (mode && history.at(-1) !== mode) history.push(mode);
+    };
+    const observer = new MutationObserver(capture);
+    observer.observe(document, { attributes: true, childList: true, subtree: true });
+  });
   await mockApis(page);
   await seedV4Session(page);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -2608,6 +2619,13 @@ test("responsive navigation and the two locked areas keep their current behavior
   const compactViewTab = page.getByRole("tab", { name: "一图流布局" });
   await expect(compactViewTab).toHaveCount(0);
   await expect(listViewTab).toHaveCount(0);
+  await expect(page.locator('[data-schedule-view="list"]')).toBeVisible();
+  await expect(page.locator('[data-schedule-view="compact"]')).toHaveCount(0);
+  await expect(page.locator("[data-compact-schedule-loading]")).toHaveCount(0);
+  const mobileViewHistory = await page.evaluate(() => (
+    (window as Window & { __scheduleViewHistory?: string[] }).__scheduleViewHistory ?? []
+  ));
+  expect(mobileViewHistory).toEqual(["list"]);
   await expect(page.getByText("加工站")).toBeVisible();
 
   await page.getByRole("button", { name: /功能设施/ }).click();
@@ -2628,6 +2646,15 @@ test("responsive navigation and the two locked areas keep their current behavior
     await expect(compactViewTab).toBeEnabled();
     await expect(compactViewTab).toHaveAttribute("aria-selected", "true");
   }
+  await listViewTab.click();
+  await expect(listViewTab).toHaveAttribute("aria-selected", "true");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(compactViewTab).toHaveCount(0);
+  await expect(page.locator('[data-schedule-view="list"]')).toBeVisible();
+  await page.setViewportSize({ width: 768, height: 900 });
+  await expect(listViewTab).toHaveAttribute("aria-selected", "true");
+  await page.reload();
+  await expect(compactViewTab).toHaveAttribute("aria-selected", "true");
 
   await expect(page.getByRole("button", { name: "基建计算器" })).toBeVisible();
   await expect(page.getByRole("button", { name: "练卡建议" })).toBeVisible();
