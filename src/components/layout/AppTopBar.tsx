@@ -2,7 +2,9 @@
 
 import { UserPlus } from "lucide-react";
 
+import { accountOrbColor } from "@/account-orb";
 import { Button } from "@/components/ui/button";
+import { FluidOrb } from "@/components/ui/fluid-orb";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import type { SklandAccountSummary, SklandStatusSnapshot } from "@/types";
 
@@ -39,6 +41,7 @@ export function SklandAccountControl({
 
   const selectedRole = account?.roles.find((role) => role.uid === account.selectedUid) ?? account?.roles[0] ?? null;
   const nickname = statusSnapshot?.player.nickname ?? selectedRole?.nickname ?? null;
+  const placeholderColor = account ? accountOrbColor(account.accountId) : null;
   const accountLabel = account
     ? `${nickname ?? "已登录账号"}，进入森空岛状态中心`
     : "进入森空岛状态中心绑定账号";
@@ -58,8 +61,8 @@ export function SklandAccountControl({
     <Button
       type="button"
       size="icon-lg"
-      variant={account ? "default" : "outline"}
-      className={`relative -ms-px size-9 overflow-hidden rounded-l-none rounded-r-lg max-sm:size-11 ${account ? "max-sm:border-transparent max-sm:bg-transparent" : ""}`}
+      variant="outline"
+      className="relative -ms-px size-9 overflow-hidden rounded-l-none rounded-r-lg bg-background p-0 hover:bg-muted max-sm:size-11"
       onClick={onOpenSkland}
       aria-label={accountLabel}
       title={nickname ?? "森空岛状态中心"}
@@ -80,7 +83,14 @@ export function SklandAccountControl({
               referrerPolicy="no-referrer"
               className="size-full object-cover"
             />
-          ) : nickname?.slice(0, 1) ?? "森"}
+          ) : (
+            <FluidOrb
+              size={44}
+              color={placeholderColor ?? undefined}
+              style={{ width: "100%", height: "100%" }}
+              data-skland-account-placeholder
+            />
+          )}
         </span>
       ) : <UserPlus aria-hidden="true" />}
     </Button>

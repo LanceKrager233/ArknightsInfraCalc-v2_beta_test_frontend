@@ -9,85 +9,109 @@ export type FluidOrbProps = ComponentProps<"div"> & {
   color?: string;
 };
 
-type RgbColor = readonly [red: number, green: number, blue: number];
+// RareUI Fluid Orb shader, provided by the project owner:
+// https://www.rareui.com/components/fluidorb
+const VERT = `
+attribute vec2 a_pos;
+void main() {
+  gl_Position = vec4(a_pos, 0.0, 1.0);
+}
+`;
 
-function colorComponents(hex: string): RgbColor {
-  const normalized = hex.replace("#", "").trim();
-  const expanded = normalized.length === 3
-    ? normalized.split("").map((character) => `${character}${character}`).join("")
-    : normalized;
-  const value = Number.parseInt(expanded, 16);
-  if (expanded.length !== 6 || Number.isNaN(value)) return [26, 115, 242];
+const FRAG = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec3 u_color;
+
+float hash(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+
+float noise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(
+    mix(hash(i + vec2(0.0, 0.0)), hash(i + vec2(1.0, 0.0)), u.x),
+    mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x),
+    u.y
+  );
+}
+
+float fbm(vec2 p) {
+  float v = 0.0;
+  float a = 0.6;
+  for (int i = 0; i < 3; i++) {
+    v += a * noise(p);
+    p *= 2.0;
+    a *= 0.5;
+  }
+  return v;
+}
+
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_resolution.xy;
+  float t = u_time * 0.22;
+
+  vec2 drift = vec2(
+    sin(t) + 0.6 * sin(t * 1.7 + 1.3),
+    cos(t * 0.8) + 0.6 * cos(t * 1.3 + 2.1)
+  );
+
+  vec2 p = vec2(uv.x * 1.8, uv.y * 1.0) + drift * 0.7;
+
+  vec2 q = vec2(fbm(p + drift), fbm(p + vec2(3.2, 1.5) - drift));
+  float f = fbm(p + 1.2 * q);
+
+  float g = clamp(1.0 - uv.y, 0.0, 1.0);
+  float anchor = smoothstep(0.0, 0.3, uv.y);
+  float shade = clamp(g + (f - 0.5) * 0.8 * anchor, 0.0, 1.0);
+
+  vec3 white = vec3(0.99, 1.0, 1.0);
+  vec3 light = mix(white, u_color, 0.5);
+  vec3 dark = u_color;
+
+  vec3 col = white;
+  col = mix(col, light, smoothstep(0.28, 0.52, shade));
+  col = mix(col, dark, smoothstep(0.58, 0.88, shade));
+
+  float edge = smoothstep(0.5, 0.49, distance(uv, vec2(0.5)));
+
+  gl_FragColor = vec4(col * edge, edge);
+}
+`;
+
+function hexToRgb(hex: string): [number, number, number] {
+  let value = hex.replace("#", "").trim();
+  if (value.length === 3) {
+    value = value[0] + value[0] + value[1] + value[1] + value[2] + value[2];
+  }
+  const parsed = Number.parseInt(value, 16);
+  if (value.length !== 6 || Number.isNaN(parsed)) return [0.1, 0.45, 0.95];
   return [
-    (value >> 16) & 255,
-    (value >> 8) & 255,
-    value & 255,
+    ((parsed >> 16) & 255) / 255,
+    ((parsed >> 8) & 255) / 255,
+    (parsed & 255) / 255,
   ];
 }
 
-function rgba(color: RgbColor, alpha: number): string {
-  return `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${alpha})`;
-}
-
-function drawFluidOrb(
-  context: CanvasRenderingContext2D,
-  pixels: number,
-  color: RgbColor,
-  elapsedSeconds: number,
-) {
-  const center = pixels / 2;
-  const radius = pixels / 2;
-  const phase = elapsedSeconds * 0.9;
-
-  context.clearRect(0, 0, pixels, pixels);
-  context.save();
-  context.beginPath();
-  context.arc(center, center, radius, 0, Math.PI * 2);
-  context.clip();
-
-  const atmosphere = context.createLinearGradient(0, 0, 0, pixels);
-  atmosphere.addColorStop(0, "#fbffff");
-  atmosphere.addColorStop(0.54, "#f7fbfa");
-  atmosphere.addColorStop(1, rgba(color, 0.28));
-  context.fillStyle = atmosphere;
-  context.fillRect(0, 0, pixels, pixels);
-
-  const liquid = context.createLinearGradient(0, pixels * 0.38, 0, pixels);
-  liquid.addColorStop(0, rgba(color, 0.38));
-  liquid.addColorStop(0.45, rgba(color, 0.78));
-  liquid.addColorStop(1, rgba(color, 1));
-  context.fillStyle = liquid;
-  context.beginPath();
-  context.moveTo(0, pixels);
-  for (let point = 0; point <= 48; point += 1) {
-    const progress = point / 48;
-    const x = progress * pixels;
-    const primaryWave = Math.sin(progress * Math.PI * 2.2 + phase) * pixels * 0.055;
-    const secondaryWave = Math.sin(progress * Math.PI * 4.7 - phase * 0.72 + 1.1) * pixels * 0.026;
-    const drift = Math.sin(phase * 0.54 + 0.8) * pixels * 0.026;
-    context.lineTo(x, pixels * 0.56 + primaryWave + secondaryWave + drift);
+function compile(gl: WebGLRenderingContext, type: number, source: string): WebGLShader | null {
+  const shader = gl.createShader(type);
+  if (!shader) return null;
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    console.error(gl.getShaderInfoLog(shader));
+    gl.deleteShader(shader);
+    return null;
   }
-  context.lineTo(pixels, pixels);
-  context.closePath();
-  context.fill();
-
-  const lightX = pixels * (0.28 + Math.sin(phase * 0.43) * 0.055);
-  const lightY = pixels * (0.24 + Math.cos(phase * 0.37) * 0.035);
-  const highlight = context.createRadialGradient(lightX, lightY, 0, lightX, lightY, pixels * 0.48);
-  highlight.addColorStop(0, "rgba(255, 255, 255, 0.74)");
-  highlight.addColorStop(0.55, "rgba(255, 255, 255, 0.18)");
-  highlight.addColorStop(1, "rgba(255, 255, 255, 0)");
-  context.fillStyle = highlight;
-  context.fillRect(0, 0, pixels, pixels);
-
-  const depthX = pixels * (0.68 + Math.cos(phase * 0.39) * 0.08);
-  const depthY = pixels * (0.72 + Math.sin(phase * 0.31) * 0.05);
-  const depth = context.createRadialGradient(depthX, depthY, 0, depthX, depthY, pixels * 0.52);
-  depth.addColorStop(0, rgba(color, 0.24));
-  depth.addColorStop(1, rgba(color, 0));
-  context.fillStyle = depth;
-  context.fillRect(0, 0, pixels, pixels);
-  context.restore();
+  return shader;
 }
 
 export function FluidOrb({
@@ -98,39 +122,95 @@ export function FluidOrb({
   ...props
 }: FluidOrbProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fallbackRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
+    const fallback = fallbackRef.current;
     const root = canvas?.parentElement;
     if (!canvas || !root) return;
 
-    const context = canvas.getContext("2d", { alpha: true });
-    if (!context) {
+    const showFallback = () => {
+      if (fallback) fallback.style.opacity = "1";
       root.dataset.fluidOrbMotion = "fallback";
+    };
+    const gl = canvas.getContext("webgl", { antialias: true, alpha: true });
+    if (!gl) {
+      showFallback();
       return;
     }
 
+    const program = gl.createProgram();
+    const vert = compile(gl, gl.VERTEX_SHADER, VERT);
+    const frag = compile(gl, gl.FRAGMENT_SHADER, FRAG);
+    if (!program || !vert || !frag) {
+      if (program) gl.deleteProgram(program);
+      if (vert) gl.deleteShader(vert);
+      if (frag) gl.deleteShader(frag);
+      showFallback();
+      return;
+    }
+
+    gl.attachShader(program, vert);
+    gl.attachShader(program, frag);
+    gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      console.error(gl.getProgramInfoLog(program));
+      gl.deleteProgram(program);
+      gl.deleteShader(vert);
+      gl.deleteShader(frag);
+      showFallback();
+      return;
+    }
+    gl.useProgram(program);
+
+    const buffer = gl.createBuffer();
+    const aPos = gl.getAttribLocation(program, "a_pos");
+    const uResolution = gl.getUniformLocation(program, "u_resolution");
+    const uTime = gl.getUniformLocation(program, "u_time");
+    const uColor = gl.getUniformLocation(program, "u_color");
+    if (!buffer || aPos < 0 || !uResolution || !uTime || !uColor) {
+      if (buffer) gl.deleteBuffer(buffer);
+      gl.deleteProgram(program);
+      gl.deleteShader(vert);
+      gl.deleteShader(frag);
+      showFallback();
+      return;
+    }
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(
+      gl.ARRAY_BUFFER,
+      new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]),
+      gl.STATIC_DRAW,
+    );
+    gl.enableVertexAttribArray(aPos);
+    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+    gl.uniform3f(uColor, ...hexToRgb(color));
+
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const pixels = Math.max(1, Math.round(size * dpr));
-    const components = colorComponents(color);
-    const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const startedAt = performance.now();
     canvas.width = pixels;
     canvas.height = pixels;
+    gl.viewport(0, 0, pixels, pixels);
+    gl.uniform2f(uResolution, pixels, pixels);
+    if (fallback) fallback.style.opacity = "0";
 
+    const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const startedAt = performance.now();
     let reduceMotion = motionQuery.matches;
     let inViewport = true;
     let frame = 0;
 
     const render = (now: number) => {
       frame = 0;
-      drawFluidOrb(context, pixels, components, reduceMotion ? 0 : (now - startedAt) / 1_000);
+      gl.uniform1f(uTime, reduceMotion ? 0 : (now - startedAt) / 1_000);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
       root.dataset.fluidOrbMotion = reduceMotion ? "still" : "animated";
       if (!reduceMotion && inViewport && !document.hidden) {
         frame = window.requestAnimationFrame(render);
       }
     };
-
     const restart = () => {
       window.cancelAnimationFrame(frame);
       frame = 0;
@@ -144,17 +224,27 @@ export function FluidOrb({
       reduceMotion = event.matches;
       restart();
     };
+    const handleContextLost = (event: Event) => {
+      event.preventDefault();
+      showFallback();
+    };
 
     observer.observe(root);
     motionQuery.addEventListener("change", handleMotionChange);
     document.addEventListener("visibilitychange", restart);
-    restart();
+    canvas.addEventListener("webglcontextlost", handleContextLost);
+    render(startedAt);
 
     return () => {
       window.cancelAnimationFrame(frame);
       observer.disconnect();
       motionQuery.removeEventListener("change", handleMotionChange);
       document.removeEventListener("visibilitychange", restart);
+      canvas.removeEventListener("webglcontextlost", handleContextLost);
+      gl.deleteProgram(program);
+      gl.deleteShader(vert);
+      gl.deleteShader(frag);
+      gl.deleteBuffer(buffer);
     };
   }, [color, size]);
 
@@ -167,6 +257,7 @@ export function FluidOrb({
       {...props}
     >
       <span
+        ref={fallbackRef}
         className="absolute inset-0 rounded-[inherit]"
         style={{
           backgroundColor: color,
@@ -175,8 +266,7 @@ export function FluidOrb({
         aria-hidden="true"
         data-fluid-orb-fallback
       />
-      <canvas ref={canvasRef} className="absolute inset-0 size-full" aria-hidden="true" />
-      <span className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-black/6" aria-hidden="true" />
+      <canvas ref={canvasRef} className="relative size-full" aria-hidden="true" />
     </div>
   );
 }

@@ -192,7 +192,7 @@ export function SklandLoginPanel({
       ? "正在连接登录服务，请稍候…"
       : "正在生成二维码…"
     : scanState === "scanned"
-      ? "已扫码，请在森空岛 App 中确认"
+      ? "已扫码，正在等待森空岛 App 确认并完成登录…"
       : scanState === "expired"
         ? "二维码已过期，正在刷新…"
         : scanUrl
@@ -217,7 +217,13 @@ export function SklandLoginPanel({
               className="grid size-52 place-items-center rounded-xl bg-white p-3 ring-1 ring-black/10 sm:size-56"
               data-skland-qr-visual
             >
-              {scanUrl ? (
+              {scanState === "scanned" ? (
+                <LoaderCircle
+                  className="size-9 animate-spin text-muted-foreground motion-reduce:animate-none"
+                  aria-hidden="true"
+                  data-skland-login-progress
+                />
+              ) : scanUrl ? (
                 <QRCodeSVG
                   value={scanUrl}
                   size={196}
@@ -284,7 +290,7 @@ export function SklandLoginPanel({
       ? "正在连接鹰角登录服务，首次准备可能需要更久。"
       : "正在生成二维码…"
     : scanState === "scanned"
-      ? "已扫码，请在森空岛中确认登录。"
+      ? "已扫码，正在等待森空岛确认并完成登录。"
       : scanState === "expired"
         ? "二维码已过期，请重新生成。"
         : scanUrl
@@ -295,7 +301,7 @@ export function SklandLoginPanel({
       ? "正在连接登录服务…"
       : "正在生成二维码…"
     : scanState === "scanned"
-      ? "已扫码，请在 App 中确认。"
+      ? "已扫码，正在等待确认并完成登录…"
       : scanState === "expired"
         ? "二维码已过期，请重新生成。"
         : scanUrl
@@ -346,7 +352,13 @@ export function SklandLoginPanel({
             <div className="grid w-full place-items-center gap-4">
               {scanUrl || scanState === "loading" ? (
                 <div className="grid size-52 place-items-center rounded-xl bg-white p-3 ring-1 ring-black/10 sm:size-56">
-                  {scanUrl ? (
+                  {scanState === "scanned" ? (
+                    <LoaderCircle
+                      className="size-9 animate-spin text-muted-foreground motion-reduce:animate-none"
+                      aria-hidden="true"
+                      data-skland-login-progress
+                    />
+                  ) : scanUrl ? (
                     <QRCodeSVG
                       value={scanUrl}
                       size={196}

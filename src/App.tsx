@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { WebsiteAccountDialogSkeleton } from "@/components/auth/WebsiteAccountDialogSkeleton";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { AppTopBar, SklandAccountControl } from "@/components/layout/AppTopBar";
 import { AppMotionProvider } from "@/components/MotionProvider";
@@ -1428,7 +1429,12 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         ) : null}
       </footer>
 
-      {websiteAuthDialogMounted ? <Suspense fallback={null}><WebsiteAccountDialog
+      {websiteAuthDialogMounted ? <Suspense fallback={(
+        <WebsiteAccountDialogSkeleton
+          open={websiteAuthDialogOpen}
+          onOpenChange={setWebsiteAuthDialogOpen}
+        />
+      )}><WebsiteAccountDialog
           open={websiteAuthDialogOpen}
           onOpenChange={setWebsiteAuthDialogOpen}
           onSessionChanged={handleWebsiteSessionChanged}
