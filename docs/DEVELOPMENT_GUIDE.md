@@ -107,7 +107,7 @@ type ApiFailure = {
 
 `/api/auth/*` 是统一响应信封的唯一例外。Better Auth 原生 admin 路由全部返回 404；管理员只能使用应用自有的中文用户管理接口。`BETTER_AUTH_ADMIN_USER_IDS` 定义不可由网页降级的初始管理员；只有初始管理员能在该接口中授予或撤销数据库管理员角色，受委派管理员不能继续扩权。
 
-`/api/plan`只返回 `profile`、`maa`、`rotation`、`durationMs`、`diagnosticId`。CLI 路径、命令、stdout、stderr、运行目录和内部协议对象只能进入服务端运行记录；调试模式允许它们位于 `data.debug`，但必须由服务端环境变量开启。
+`/api/plan`默认只返回 `profile`、`maa`、`rotation`、`durationMs`、`diagnosticId`。CLI 路径、命令、stdout、stderr、运行目录和内部协议对象只能进入服务端运行记录；只有服务端环境变量开启且本次请求显式带 `?beta=1` 时，调试模式才允许它们位于 `data.debug`。
 
 `/api/feedback`请求只包含诊断编号、房间摘要、1–1000 字说明和明确 consent。它不再重复上传完整干员数据或调试包，响应只返回反馈编号和保存时间。
 
@@ -186,7 +186,7 @@ npm run dev
 http://127.0.0.1:5174/?beta
 ```
 
-调试 UI 只有在服务端 feature flag 为 true 且 URL 同时带 `?beta` 时出现。dev 开关启用后，页脚提供“开启/退出调试工具”入口；production 无论环境变量如何都强制隐藏入口并禁止调试字段。单独添加 `?beta`不能开启调试工具。调试字段也不得写入 v5 本地数据。
+调试 UI 只有在服务端 feature flag 为 true 且页面 URL 同时带 `?beta` 时出现；该页面会把显式选择传播为 `/api/plan?beta=1`。dev 开关启用后，普通页面仍请求无调试数据的五字段白名单响应，页脚提供“开启/退出调试工具”入口；production 无论环境变量如何都强制隐藏入口并禁止调试字段。单独添加 `?beta`不能绕过关闭的服务端开关。调试字段也不得写入 v5 本地数据。
 
 详细的 DevTools 排查顺序、接口泄露检查和错误模拟方法见[上线产品化报告的开发调试环境使用指南](./FRONTEND_PRODUCTION_READINESS_REPORT.md#开发调试环境使用指南)。
 

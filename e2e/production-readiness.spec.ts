@@ -1790,6 +1790,38 @@ test("the development debug entry manages the URL and debug panels", async ({ pa
   await expect(page.getByText("开启调试工具", { exact: true })).toBeVisible();
 });
 
+test("plan requests opt into debug data only while the beta tools are active", async ({ page }) => {
+  await mockApis(page, { debugTools: true });
+  await seedV4Session(page);
+  const planRequests: URL[] = [];
+  await page.route(/\/api\/plan(?:\?.*)?$/, (route) => {
+    const requestUrl = new URL(route.request().url());
+    planRequests.push(requestUrl);
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: requestUrl.searchParams.get("beta") === "1"
+          ? { ...planData, debug: { command: "infra-cli serve", stdout: "test output", stderr: "" } }
+          : planData,
+        requestId,
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "生成排班" }).click();
+  await expect.poll(() => planRequests.length).toBe(1);
+  expect(planRequests[0].searchParams.has("beta")).toBe(false);
+
+  await page.getByText("开启调试工具", { exact: true }).click();
+  await expect(page).toHaveURL(/\?beta$/);
+  await page.getByRole("button", { name: "生成排班" }).click();
+  await expect.poll(() => planRequests.length).toBe(2);
+  expect(planRequests[1].searchParams.get("beta")).toBe("1");
+});
+
 test("shows the thinking activity and indeterminate progress only while a plan request is running", async ({ page }) => {
   await mockApis(page);
   let releasePlan!: () => void;

@@ -797,7 +797,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         boxSource,
         rotation: rotationProfile,
         fiammetta_enable: effectiveFiammettaEnabled,
-      }, controller.signal);
+      }, { signal: controller.signal, includeDebug: showBetaPanels });
       setCliReady(true);
       setActiveShift(0);
       const finalizedResult = response;

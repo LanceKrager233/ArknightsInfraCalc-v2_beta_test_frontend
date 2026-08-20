@@ -19,6 +19,10 @@ const SOLVER_DIAGNOSTIC_FIELDS = new Set([
   "solver_executable_sha256",
 ]);
 
+type PublicPlanOptions = {
+  includeDebug?: boolean;
+};
+
 function safeDuration(value: unknown): number {
   const duration = Number(value);
   return Number.isFinite(duration) ? Math.max(0, duration) : 0;
@@ -84,7 +88,8 @@ function sanitizePublicDebugBundle(
 export function toPublicPlanData(
   result: PlanApiResponse,
   input: { layoutLabel: string; sourceName: string },
-  requestId: string
+  requestId: string,
+  options: PublicPlanOptions = {}
 ): PublicPlanData {
   if (!result.success || !result.profileJson || !result.maaJson || !result.rotationJson) {
     const message = result.error?.toLowerCase() ?? "";
@@ -109,7 +114,7 @@ export function toPublicPlanData(
     diagnosticId: result.runId ?? requestId,
   };
 
-  if (isDebugToolsEnabled()) {
+  if (options.includeDebug && isDebugToolsEnabled()) {
     data.debug = {
       command: result.command,
       stdout: result.stdout,
