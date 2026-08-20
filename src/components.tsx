@@ -15,7 +15,7 @@ import {
   Upload,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { CSSProperties, ChangeEvent, ReactElement, ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { CSSProperties, ChangeEvent, lazy, ReactElement, ReactNode, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { AnimatedNumber, AnimatedText } from "@/components/AnimatedText";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -44,13 +44,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
-import { OperatorSkillTooltip } from "@/components/OperatorSkillTooltip";
 import {
   BUILDING_SKILL_ENHANCED_WORD,
   buildingSkillUnlockLabel,
   buildingSkillUnlockPrefix,
-  operatorProfessionPresentation,
-} from "@/operatorPortraits";
+  operatorProfessionPresentationForCode,
+} from "@/operator-presentation";
 import { roomVisualFor } from "@/room-visuals";
 import {
   MOTION_DURATION,
@@ -72,7 +71,6 @@ import {
   roomKindLabel,
   tradeOrderFor,
 } from "./blueprint";
-import { CompactScheduleView } from "@/components/CompactScheduleView";
 import { manufacturePoolReady, presentRoomEfficiency, profileEfficiency, RoomEfficiencyPresentation } from "./efficiency";
 import {
   relativeMetricDelta,
@@ -113,6 +111,25 @@ import {
   RotationJson,
   UserProfile,
 } from "./types";
+
+const OperatorSkillTooltip = lazy(() => import("@/components/OperatorSkillTooltip").then((module) => ({
+  default: module.OperatorSkillTooltip,
+})));
+
+function CompactScheduleLoading() {
+  return (
+    <div
+      className="grid min-h-[560px] place-items-center border-y border-dashed border-border/70 text-sm text-muted-foreground"
+      data-compact-schedule-loading
+      role="status"
+    >
+      正在准备一图流布局
+    </div>
+  );
+}
+
+type ScheduleViewMode = "list" | "compact";
+type CompactScheduleComponent = typeof import("@/components/CompactScheduleView").CompactScheduleView;
 
 type Option<T extends string> = {
   value: T;
@@ -1194,7 +1211,7 @@ export function OperatorSlot({
   const shouldReduceMotion = useReducedMotion();
   const identity = slot?.name ?? (autofill ? "autofill" : "empty");
   const suppressNativeTitles = showSkillTooltip && slot !== undefined;
-  const profession = slot ? operatorProfessionPresentation(slot.name) : null;
+  const profession = slot ? operatorProfessionPresentationForCode(slot.profession) : undefined;
   const enterX = shouldReduceMotion ? 0 : shiftDirection * 6;
   const exitX = shouldReduceMotion ? 0 : shiftDirection * -4;
   const ariaLabel = slot?.name ?? (autofill ? "自动补位" : "空置");
@@ -1295,7 +1312,11 @@ export function OperatorSlot({
           </motion.div>
         </AnimatePresence>
       }
-      frameWrapper={showSkillTooltip && slot ? (frame) => <OperatorSkillTooltip name={slot.name} trigger={frame} /> : undefined}
+      frameWrapper={showSkillTooltip && slot ? (frame) => (
+        <Suspense fallback={frame}>
+          <OperatorSkillTooltip name={slot.name} trigger={frame} />
+        </Suspense>
+      ) : undefined}
       label={slot ? <AnimatedText value={slot.name} trend={shiftDirection} /> : autofill ? "自动补位" : "占"}
       labelClassName={slot ? (searchMatched ? "bg-[#FFD501] px-1 text-[#202020]" : "text-white") : autofill ? "text-white/55" : "text-transparent select-none"}
       title={suppressNativeTitles ? undefined : slot?.label}
@@ -1342,13 +1363,11 @@ export function ScheduleBoard({
 }) {
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [hiddenGroups, setHiddenGroups] = useState<Record<string, boolean>>({});
-  const [viewMode, setViewMode] = useState<"list" | "compact">(() => (
-    typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches
-      ? "compact"
-      : "list"
-  ));
-  const [supportsCompactLayout, setSupportsCompactLayout] = useState(viewMode === "compact");
-  const preferredViewMode = useRef<"list" | "compact" | null>(null);
+  const [viewMode, setViewMode] = useState<ScheduleViewMode | null>(null);
+  const [supportsCompactLayout, setSupportsCompactLayout] = useState<boolean | null>(null);
+  const [CompactScheduleView, setCompactScheduleView] = useState<CompactScheduleComponent | null>(null);
+  const [compactScheduleLoadFailed, setCompactScheduleLoadFailed] = useState(false);
+  const preferredViewMode = useRef<ScheduleViewMode | null>(null);
   const shouldReduceMotion = useReducedMotion();
 
   useLayoutEffect(() => {
@@ -1367,6 +1386,21 @@ export function ScheduleBoard({
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
   }, [onViewModeChange]);
+
+  useEffect(() => {
+    if (viewMode !== "compact" || CompactScheduleView || compactScheduleLoadFailed) return;
+
+    let cancelled = false;
+    void import("@/components/CompactScheduleView").then(
+      (module) => {
+        if (!cancelled) setCompactScheduleView(() => module.CompactScheduleView);
+      },
+      () => {
+        if (!cancelled) setCompactScheduleLoadFailed(true);
+      },
+    );
+    return () => { cancelled = true; };
+  }, [CompactScheduleView, compactScheduleLoadFailed, viewMode]);
 
   if (rows.length === 0) {
     return (
@@ -1429,23 +1463,23 @@ export function ScheduleBoard({
     <div className="flex flex-col gap-7">
       <div className="flex flex-wrap items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch">
         <div className="flex flex-wrap items-center gap-2">
-          <Tabs
-            className="max-md:hidden"
-            value={viewMode}
-            onValueChange={(value) => {
-              const nextViewMode = value as "list" | "compact";
-              preferredViewMode.current = nextViewMode;
-              setViewMode(nextViewMode);
-              onViewModeChange?.(nextViewMode);
-            }}
-          >
-            <TabsList>
-              <TabsTrigger value="compact" disabled={!supportsCompactLayout} className={!supportsCompactLayout ? "line-through" : ""}>
-                一图流布局
-              </TabsTrigger>
-              <TabsTrigger value="list">列表式布局</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          {supportsCompactLayout && viewMode ? (
+            <Tabs
+              className="max-md:hidden"
+              value={viewMode}
+              onValueChange={(value) => {
+                const nextViewMode = value as ScheduleViewMode;
+                preferredViewMode.current = nextViewMode;
+                setViewMode(nextViewMode);
+                onViewModeChange?.(nextViewMode);
+              }}
+            >
+              <TabsList>
+                <TabsTrigger value="compact">一图流布局</TabsTrigger>
+                <TabsTrigger value="list">列表式布局</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          ) : null}
           {viewControlsSlot}
           {viewMode === "list" && hiddenAuxiliaryCount ? (
             <Button type="button" variant="ghost" size="sm" onClick={restoreHiddenAuxiliaryGroups}>
@@ -1478,7 +1512,7 @@ export function ScheduleBoard({
           <AnimatePresence initial={animateInitialView && !shouldReduceMotion} mode="wait">
             <motion.div
               key={viewMode}
-              data-schedule-view={viewMode}
+              data-schedule-view={viewMode || undefined}
               initial={{
                 opacity: 0,
                 y: shouldReduceMotion ? 0 : 8,
@@ -1689,16 +1723,26 @@ export function ScheduleBoard({
         );
       })}
           </>
+        ) : viewMode === "compact" ? (
+          CompactScheduleView ? (
+            <CompactScheduleView
+              rows={visibleRows}
+              layout={layout}
+              currentMoraleByOperator={currentMoraleByOperator}
+              activeShift={activeShift}
+              activePlan={activePlan}
+              shiftDirection={shiftDirection}
+              onIssue={onIssue}
+            />
+          ) : compactScheduleLoadFailed ? (
+            <div className="grid min-h-[420px] place-items-center border-y border-destructive/35 text-sm text-destructive" role="alert">
+              一图流布局加载失败，请切换到列表式布局。
+            </div>
+          ) : (
+            <CompactScheduleLoading />
+          )
         ) : (
-          <CompactScheduleView
-            rows={visibleRows}
-            layout={layout}
-            currentMoraleByOperator={currentMoraleByOperator}
-            activeShift={activeShift}
-            activePlan={activePlan}
-            shiftDirection={shiftDirection}
-            onIssue={onIssue}
-          />
+          <div className="min-h-[420px]" data-schedule-view-pending aria-hidden="true" />
         )}
             </motion.div>
           </AnimatePresence>

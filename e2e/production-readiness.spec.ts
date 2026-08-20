@@ -31,7 +31,63 @@ test("cold HTML contains the workbench shell instead of only the client loading 
   expect(response.status()).toBe(200);
   const html = await response.text();
   expect(html).toContain("data-calculator-controls");
+  expect(html).toContain("data-schedule-view-pending");
+  expect(html).not.toContain('data-schedule-view="compact"');
+  expect(html).not.toContain('data-schedule-view="list"');
   expect(html).not.toContain("正在加载基建计算器");
+});
+
+test("a 768px cold start keeps the compact workbench inside the viewport", async ({ page }) => {
+  await mockApis(page);
+  await page.setViewportSize({ width: 768, height: 900 });
+  await page.goto("/");
+  await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
+  await expect(page.getByRole("tab", { name: "一图流布局" })).toHaveAttribute("aria-selected", "true");
+
+  const dimensions = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1);
+});
+
+test("primary pages use independent routes without eagerly loading every view", async ({ page }) => {
+  const trainingRouteRequests: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/training") {
+      trainingRouteRequests.push(request.url());
+    }
+  });
+  await mockApis(page, { sklandConfigured: true, sklandSnapshot: authenticatedSklandSnapshot });
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  const destinations = [
+    { name: "练卡建议", href: "/training", root: "[data-training-page]" },
+    { name: "技能查询", href: "/skills", root: "[data-skill-query-page]" },
+    { name: "森空岛状态中心", href: "/skland", root: "[data-skland-page]" },
+    { name: "账号管理", href: "/account", root: "[data-account-management]" },
+  ];
+  for (const destination of destinations) {
+    await expect(page.getByRole("button", { name: destination.name, exact: true })).toHaveAttribute("href", destination.href);
+  }
+  expect(trainingRouteRequests).toEqual([]);
+
+  const trainingLink = page.getByRole("button", { name: "练卡建议", exact: true });
+  await trainingLink.hover();
+
+  for (const destination of destinations) {
+    await page.getByRole("button", { name: destination.name, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`${destination.href.replace("/", "\\/")}$`));
+    await expect(page.locator(destination.root)).toBeVisible({ timeout: 45_000 });
+    if (destination.href === "/training") expect(trainingRouteRequests.length).toBeGreaterThan(0);
+  }
+
+  await page.getByRole("button", { name: "基建计算器", exact: true }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.locator("[data-calculator-controls]")).toBeVisible();
 });
 
 async function expectUnifiedDialogTypography(dialog: Locator, radius: "24px" | "32px" = "32px") {
@@ -1109,6 +1165,55 @@ for (const viewport of [
   });
 }
 
+test("website login keeps a stable dialog skeleton while its deferred UI loads", async ({ page }) => {
+  await page.unroute("**/api/auth/get-session");
+  await page.route("**/api/auth/get-session", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: "null",
+  }));
+  await mockApis(page);
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  let releaseChunks: (() => void) | undefined;
+  const chunkGate = new Promise<void>((resolve) => {
+    releaseChunks = resolve;
+  });
+  let deferredChunkRequests = 0;
+  await page.route("**/_next/static/chunks/*.js", async (route) => {
+    deferredChunkRequests += 1;
+    await chunkGate;
+    await route.continue();
+  });
+
+  await page.getByRole("button", { name: "账号管理", exact: true }).click();
+  const skeleton = page.locator("[data-website-account-dialog-skeleton]");
+  await expect(skeleton).toBeVisible();
+  await expect(skeleton.getByRole("status", { name: "正在加载登录界面" })).toBeVisible();
+  await expect(page.locator("[data-website-account-panel]")).toHaveCount(0);
+  await expect.poll(() => deferredChunkRequests).toBeGreaterThan(0);
+
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 768, height: 900 },
+    { width: 1440, height: 900 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(skeleton).toBeVisible();
+    const box = await skeleton.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box?.width ?? 0).toBeLessThanOrEqual(viewport.width - 16);
+    expect(box?.height ?? 0).toBeLessThanOrEqual(viewport.height - 16);
+  }
+
+  releaseChunks?.();
+  await page.unroute("**/_next/static/chunks/*.js");
+  await expect(page.locator("[data-website-account-panel]")).toBeVisible();
+  await expect(skeleton).toHaveCount(0);
+});
+
 test("website login opens account management after the gated navigation dialog", async ({ page }) => {
   let authenticated = false;
   await page.unroute("**/api/auth/get-session");
@@ -1137,6 +1242,40 @@ test("website login opens account management after the gated navigation dialog",
   await expect(page.getByRole("button", { name: "账号管理", exact: true })).toHaveAttribute("data-active", "");
   await expect(page.locator("[data-account-management]")).toBeVisible();
   await expect(page.getByText("signed-in@example.test", { exact: true })).toBeVisible();
+  const websiteAvatar = page.locator("[data-website-account-avatar]");
+  await expect(websiteAvatar).toBeVisible();
+  await expect(websiteAvatar).toHaveAttribute("data-account-orb-color", /^#[0-9A-F]{6}$/);
+  await expect(websiteAvatar.locator("canvas")).toBeVisible();
+  await expect(websiteAvatar.locator("[data-fluid-orb-fallback]")).toBeVisible();
+  await expect(websiteAvatar.locator("[data-fluid-orb-fallback]")).toHaveCSS("opacity", "0");
+  await expect(websiteAvatar).not.toContainText("新");
+  const websiteAvatarBox = await websiteAvatar.boundingBox();
+  expect(websiteAvatarBox?.width).toBeCloseTo(56, 0);
+  expect(websiteAvatarBox?.height).toBeCloseTo(56, 0);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(websiteAvatar).toHaveAttribute("data-fluid-orb-motion", /^(still|fallback)$/);
+});
+
+test("website account Fluid Orb keeps its CSS fallback without WebGL", async ({ page }) => {
+  await page.addInitScript(() => {
+    const originalGetContext = HTMLCanvasElement.prototype.getContext;
+    Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+      configurable: true,
+      value(contextId: string, ...args: unknown[]) {
+        if (contextId === "webgl") return null;
+        return Reflect.apply(originalGetContext, this, [contextId, ...args]);
+      },
+    });
+  });
+  await mockApis(page, { sklandConfigured: true });
+  await seedPreferences(page);
+  await page.goto("/account");
+
+  const websiteAvatar = page.locator("[data-website-account-avatar]");
+  await expect(websiteAvatar).toBeVisible();
+  await expect(websiteAvatar).toHaveAttribute("data-fluid-orb-motion", "fallback");
+  await expect(websiteAvatar.locator("[data-fluid-orb-fallback]")).toBeVisible();
+  await expect(websiteAvatar.locator("[data-fluid-orb-fallback]")).toHaveCSS("opacity", "1");
 });
 
 test("seven-day bindings stay visible and require QR renewal", async ({ page }) => {
@@ -1199,7 +1338,9 @@ test("account settings revokes every session and returns to the app", async ({ p
   await expect(page.locator("[data-account-management]")).toHaveCount(0);
   await expect(page.locator("[data-calculator-controls]")).toBeVisible();
   await expect(page.getByRole("dialog", { name: "登录网站账号" })).toHaveCount(0);
-  expect((await page.request.get("/account")).status()).toBe(404);
+  const accountRoute = await page.request.get("/account");
+  expect(accountRoute.status()).toBe(200);
+  expect(await accountRoute.text()).toContain("data-workbench-hydrated");
 });
 
 test("password reset rejects a link without a token before making a request", async ({ page }) => {
@@ -1421,6 +1562,10 @@ test("a failed complete Skland restore keeps the independently restored identity
 
   const accountControl = page.locator("[data-skland-account-control]");
   await expect(accountControl).toHaveAttribute("aria-label", "测试博士，进入森空岛状态中心");
+  const accountPlaceholder = accountControl.locator("[data-skland-account-placeholder]");
+  await expect(accountPlaceholder).toBeVisible();
+  await expect(accountPlaceholder).toHaveAttribute("data-fluid-orb-color", /^#[0-9A-F]{6}$/);
+  await expect(accountControl).not.toContainText("测");
   await fullRestoreFailed;
   await accountControl.click();
   await expect(page.getByText(/森空岛会话恢复失败，请稍后刷新。/)).toBeVisible();
@@ -2455,6 +2600,16 @@ test("scheduled product changes require destructive confirmation and rerun with 
 
 test("responsive navigation and the two locked areas keep their current behavior", async ({ page }) => {
   test.setTimeout(60_000);
+  await page.addInitScript(() => {
+    const history: string[] = [];
+    Object.defineProperty(window, "__scheduleViewHistory", { value: history, configurable: true });
+    const capture = () => {
+      const mode = document.querySelector<HTMLElement>("[data-schedule-view]")?.dataset.scheduleView;
+      if (mode && history.at(-1) !== mode) history.push(mode);
+    };
+    const observer = new MutationObserver(capture);
+    observer.observe(document, { attributes: true, childList: true, subtree: true });
+  });
   await mockApis(page);
   await seedV4Session(page);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -2464,6 +2619,13 @@ test("responsive navigation and the two locked areas keep their current behavior
   const compactViewTab = page.getByRole("tab", { name: "一图流布局" });
   await expect(compactViewTab).toHaveCount(0);
   await expect(listViewTab).toHaveCount(0);
+  await expect(page.locator('[data-schedule-view="list"]')).toBeVisible();
+  await expect(page.locator('[data-schedule-view="compact"]')).toHaveCount(0);
+  await expect(page.locator("[data-compact-schedule-loading]")).toHaveCount(0);
+  const mobileViewHistory = await page.evaluate(() => (
+    (window as Window & { __scheduleViewHistory?: string[] }).__scheduleViewHistory ?? []
+  ));
+  expect(mobileViewHistory).toEqual(["list"]);
   await expect(page.getByText("加工站")).toBeVisible();
 
   await page.getByRole("button", { name: /功能设施/ }).click();
@@ -2484,6 +2646,15 @@ test("responsive navigation and the two locked areas keep their current behavior
     await expect(compactViewTab).toBeEnabled();
     await expect(compactViewTab).toHaveAttribute("aria-selected", "true");
   }
+  await listViewTab.click();
+  await expect(listViewTab).toHaveAttribute("aria-selected", "true");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(compactViewTab).toHaveCount(0);
+  await expect(page.locator('[data-schedule-view="list"]')).toBeVisible();
+  await page.setViewportSize({ width: 768, height: 900 });
+  await expect(listViewTab).toHaveAttribute("aria-selected", "true");
+  await page.reload();
+  await expect(compactViewTab).toHaveAttribute("aria-selected", "true");
 
   await expect(page.getByRole("button", { name: "基建计算器" })).toBeVisible();
   await expect(page.getByRole("button", { name: "练卡建议" })).toBeVisible();
@@ -2943,6 +3114,7 @@ test("calculator owns scheduling controls and training advice uses a single tech
   await seedV4Session(page, adviceResult);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
+  await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
 
   const calculatorControls = page.locator("[data-calculator-controls]");
   const fullE2 = page.locator('[data-calculator-export-actions="desktop"] [data-full-e2]');
@@ -3010,6 +3182,7 @@ test("schedule visuals use a stable technical canvas and responsive level marker
   await expect(roomSurface).toBeVisible();
   await expect(compactViewTab).toHaveAttribute("aria-selected", "true");
   await listViewTab.click();
+  await expect(listViewTab).toHaveAttribute("aria-selected", "true");
   await expect(listDiamonds).toBeVisible();
 
   const buildingSkillBadge = page.getByRole("button", { name: /基建技能 S1：合作协议/ }).first();
@@ -3341,6 +3514,44 @@ test("Skland login waits for explicit consent and explains slow preparation", as
   expect(qrStartRequests).toBe(1);
 });
 
+test("Skland login replaces a scanned QR with progress while authentication finishes", async ({ page }) => {
+  await mockApis(page, { sklandConfigured: true });
+  await page.route("**/api/skland/auth/qr", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      success: true,
+      data: {
+        scanId: "scan-login-confirming",
+        scanUrl: "hypergryph://scan_login?scanId=scan-login-confirming",
+        expiresInSeconds: 600,
+      },
+      requestId,
+    }),
+  }));
+  await page.route("**/api/skland/auth/qr/status", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      success: true,
+      data: { status: "scanned" },
+      requestId,
+    }),
+  }));
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+  await openSklandOverview(page);
+  await page.getByRole("checkbox").nth(0).check();
+  await page.getByRole("checkbox").nth(1).check();
+  await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
+  await expect(page.locator("[data-skland-login-progress]")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toHaveCount(0);
+  await expect(page.getByRole("status")).toContainText("已扫码，正在等待森空岛 App 确认并完成登录…");
+});
+
 test("Skland login loads full status by default and deletion preserves non-Skland data", async ({ page }) => {
   const statusMethods: string[] = [];
   const snapshotWithAvatar = {
@@ -3364,6 +3575,7 @@ test("Skland login loads full status by default and deletion preserves non-Sklan
     "src",
     snapshotWithAvatar.player.avatarUrl
   );
+  await expect(page.locator("[data-skland-account-avatar] [data-slot=\"fluid-orb\"]")).toHaveCount(0);
   await page.getByRole("button", { name: "Toggle Sidebar" }).click();
   await openSklandOverview(page);
 
@@ -3470,8 +3682,10 @@ test("Skland status center keeps profile and recruitment in overview and support
   await seedPreferences(page);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
-  const scheduleViewTabHeight = await page.getByRole("tab", { name: "列表式布局" })
-    .evaluate((element) => element.getBoundingClientRect().height);
+  await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
+  const scheduleViewTab = page.getByRole("tab", { name: "列表式布局" });
+  await expect(scheduleViewTab).toBeVisible();
+  const scheduleViewTabHeight = await scheduleViewTab.evaluate((element) => element.getBoundingClientRect().height);
   await openSklandOverview(page);
   await expect(page.locator("[data-calculator-controls]")).toHaveCount(0);
 

@@ -27,13 +27,17 @@ test("CI enforces route and document preload JavaScript budgets after building",
 
   assert.equal(packageJson.scripts["test:bundle-budget"], "node scripts/check-bundle-budget.mjs");
   assert.match(workflow, /Production build[\s\S]+npm run test:bundle-budget/);
-  assert.match(budgetCheck, /MAX_ROUTE_INITIAL_JS_BYTES = 1_100_000/);
-  assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_JS_BYTES = 1_450_000/);
-  assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_GZIP_JS_BYTES = 410_000/);
-  assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_JS_FILES = 20/);
+  assert.match(budgetCheck, /MAX_ROUTE_INITIAL_JS_BYTES = 1_130_000/);
+  assert.match(budgetCheck, /MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_525_000/);
+  assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_JS_BYTES = 1_240_000/);
+  assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_GZIP_JS_BYTES = 395_000/);
+  assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_JS_FILES = 18/);
+  assert.match(budgetCheck, /WORKBENCH_ROUTES = \["\/", "\/training", "\/skills", "\/skland", "\/account"\]/);
   assert.match(budgetCheck, /firstLoadUncompressedJsBytes/);
   assert.match(budgetCheck, /\.next\/server\/app\/index\.html/);
   assert.match(budgetCheck, /gzipSync/);
+  assert.match(budgetCheck, /COMPACT_SCHEDULE_MARKER = "data-compact-schedule-view"/);
+  assert.match(budgetCheck, /compact schedule code leaked into the initially loaded application chunk/);
 });
 
 test("Next and the verified deployment keep real public GET responses compressed", async () => {
@@ -74,26 +78,82 @@ test("CI browser jobs use the matching pinned Playwright image without runtime a
 test("production injects the client feature flag at every browser boundary", async () => {
   const nextConfig = await readRepoFile("next.config.ts");
   const app = await readRepoFile("src/App.tsx");
+  const sklandPage = await readRepoFile("src/app/(workbench)/skland/page.tsx");
   const developmentSklandCenter = await readRepoFile("src/components/pages/DevelopmentSklandStatusCenter.tsx");
   const setupDialog = await readRepoFile("src/setup-dialog.tsx");
   const workflow = await readRepoFile(".github/workflows/frontend-quality.yml");
 
   assert.match(nextConfig, /APP_CLIENT_SKLAND_ENABLED: isSklandFeatureEnabled\(\) \? "1" : "0"/);
   assert.match(nextConfig, /APP_CLIENT_SKLAND_API_PREFIX: isSklandFeatureEnabled\(\) \? "\/api\/skland" : ""/);
+  assert.match(nextConfig, /"workbench-skland-route": isSklandFeatureEnabled\(\)/);
+  assert.match(nextConfig, /SklandRoute\.disabled\.tsx/);
   assert.match(app, /process\.env\.APP_CLIENT_SKLAND_ENABLED === "1"/);
+  assert.match(sklandPage, /process\.env\.APP_CLIENT_SKLAND_ENABLED !== "1"/);
   assert.match(setupDialog, /process\.env\.APP_CLIENT_SKLAND_ENABLED === "1"/);
   assert.match(developmentSklandCenter, /SklandStatus/);
   assert.match(workflow, /Production build[\s\S]+APP_DEPLOYMENT_ENV: production/);
 });
 
-test("the application entry remains split while the workbench participates in server rendering", async () => {
-  const page = await readRepoFile("src/app/page.tsx");
-  const loader = await readRepoFile("src/AppLoader.tsx");
+test("workbench views use five independent route entries under one persistent layout", async () => {
+  const layout = await readRepoFile("src/app/(workbench)/layout.tsx");
+  const app = await readRepoFile("src/App.tsx");
+  const sidebar = await readRepoFile("src/components/layout/AppSidebar.tsx");
+  const routeMap = await readRepoFile("src/workbench-routes.ts");
+  const pages = await Promise.all([
+    "src/app/(workbench)/page.tsx",
+    "src/app/(workbench)/training/page.tsx",
+    "src/app/(workbench)/skills/page.tsx",
+    "src/app/(workbench)/skland/page.tsx",
+    "src/app/(workbench)/account/page.tsx",
+  ].map(readRepoFile));
 
-  assert.match(page, /import AppLoader from "@\/AppLoader"/);
-  assert.match(loader, /dynamic\(\(\) => import\("@\/App"\)/);
-  assert.doesNotMatch(loader, /ssr: false/);
-  assert.doesNotMatch(loader, /正在加载基建计算器/);
+  assert.match(layout, /import WorkbenchApp from "@\/App"/);
+  assert.match(layout, /<WorkbenchApp>\{children\}<\/WorkbenchApp>/);
+  assert.ok(pages.every((page) => !page.includes("dynamic(")));
+  assert.doesNotMatch(app, /components\/pages\/(?:InfraCalculator|TrainingAdvice|SkillQuery|AccountStatusCenter|DevelopmentSklandStatusCenter)/);
+  assert.match(routeMap, /training: "\/training"/);
+  assert.match(routeMap, /"skill-query": "\/skills"/);
+  assert.match(routeMap, /skland: "\/skland"/);
+  assert.match(routeMap, /account: "\/account"/);
+  assert.match(sidebar, /import Link from "next\/link"/);
+  assert.match(sidebar, /prefetch=\{prefetchOnIntent \? null : false\}/);
+  assert.match(sidebar, /onMouseEnter=\{\(\) => setPrefetchOnIntent\(true\)\}/);
+});
+
+test("the critical calculator board stays initial while the compact view loads on demand", async () => {
+  const calculator = await readRepoFile("src/components/pages/InfraCalculator.tsx");
+  const calculatorRoute = await readRepoFile("src/components/workbench/CalculatorRoute.tsx");
+  const app = await readRepoFile("src/App.tsx");
+
+  assert.match(calculator, /import \{ ScheduleBoard, ShiftTabs \} from "@\/components"/);
+  assert.doesNotMatch(calculator, /const (?:ScheduleBoard|ShiftTabs) = lazy\(/);
+  assert.doesNotMatch(calculator, /const (?:ScheduleBoard|ShiftTabs) = dynamic\(/);
+  assert.doesNotMatch(calculator, /<Suspense fallback=\{<DeferredResultLoading \/>\}><ScheduleBoard/);
+  assert.match(calculatorRoute, /import \{ InfraCalculator \} from "@\/components\/pages\/InfraCalculator"/);
+  assert.doesNotMatch(app, /PageScrollbar/);
+  const components = await readRepoFile("src/components.tsx");
+  assert.match(components, /useState<ScheduleViewMode \| null>\(null\)/);
+  assert.match(components, /useState<boolean \| null>\(null\)/);
+  assert.match(components, /window\.matchMedia\("\(min-width: 768px\)"\)/);
+  assert.match(components, /viewMode !== "compact"[\s\S]{0,300}import\("@\/components\/CompactScheduleView"\)/);
+  assert.doesNotMatch(components, /import \{ CompactScheduleView \} from "@\/components\/CompactScheduleView"/);
+  assert.match(calculator, /useState<"list" \| "compact">\("compact"\)/);
+  assert.match(app, /const hasRenderedCalculator = useRef\(false\)/);
+  assert.match(calculator, /animateInitialView=\{!scheduleResult && animateEmptyScheduleEntrance\}/);
+  assert.doesNotMatch(calculator, /animateInitialView=\{!scheduleResult\}/);
+});
+
+test("heavy account, operator, and scrollbar modules stay behind runtime boundaries", async () => {
+  const app = await readRepoFile("src/App.tsx");
+  const schedule = await readRepoFile("src/schedule.ts");
+  const components = await readRepoFile("src/components.tsx");
+  const scrollbar = await readRepoFile("src/components/ui/page-scrollbar.tsx");
+
+  assert.match(app, /useWebsiteSessionIdentity/);
+  assert.doesNotMatch(app, /authClient\.useSession/);
+  assert.doesNotMatch(schedule, /operatorPresentationFor/);
+  assert.doesNotMatch(components, /from "@\/operatorPortraits"/);
+  assert.match(scrollbar, /import\("overlayscrollbars"\)/);
 });
 
 test("versioned product assets receive immutable cache headers", async () => {

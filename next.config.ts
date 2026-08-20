@@ -29,6 +29,13 @@ const nextConfig: NextConfig = {
     APP_CLIENT_SKLAND_ENABLED: isSklandFeatureEnabled() ? "1" : "0",
     APP_CLIENT_SKLAND_API_PREFIX: isSklandFeatureEnabled() ? "/api/skland" : "",
   },
+  turbopack: {
+    resolveAlias: {
+      "workbench-skland-route": isSklandFeatureEnabled()
+        ? "./src/components/workbench/SklandRoute.tsx"
+        : "./src/components/workbench/SklandRoute.disabled.tsx",
+    },
+  },
   outputFileTracingExcludes: {
     "/*": outputFileTracingExcludes,
   },

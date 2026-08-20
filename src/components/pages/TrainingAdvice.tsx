@@ -6,7 +6,7 @@ import { RecommendationCard } from "@/components/RecommendationCard";
 import { Button } from "@/components/ui/button";
 import type { BaseBlueprint, OperBoxEntry, UserProfile, UserProfileAction } from "@/types";
 
-type TrainingAdviceProps = {
+export type TrainingAdviceProps = {
   operbox?: OperBoxEntry[] | null;
   layout?: BaseBlueprint | null;
   profile?: UserProfile | null;
