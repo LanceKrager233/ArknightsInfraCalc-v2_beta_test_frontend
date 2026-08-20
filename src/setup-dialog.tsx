@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronRight, Database, FileJson, ScanLine, Trash2, Upload } from "lucide-react";
+import { Check, Database, FileJson, ScanLine, Trash2, Upload } from "lucide-react";
+import { motion, useReducedMotion } from "motion/react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { RotationSettings } from "@/components/RotationSettings";
-import { CLIENT_SKLAND_ENABLED } from "@/client-features";
+import { FiammettaSettings } from "@/components/FiammettaSettings";
+import { WizardSteps } from "@/components/interior/wizard-steps";
+import { hasSetupConfigurationChanged } from "@/setup-configuration";
+import { authClient } from "@/lib/auth-client";
 
 import type { FactoryRecipe, PowerBudget, TradeOrder } from "./blueprint";
 import { FileDrop, LayoutEditor, PresetSelector } from "./components";
@@ -19,7 +23,10 @@ import { countOwned } from "./operbox";
 import type { SetupStep } from "./onboarding";
 import type { BaseBlueprint, BoxSource, DisplayError, OperBoxEntry, PresetDef, RotationProfile, SklandScheduleSnapshot } from "./types";
 
-type LayoutSection = "basics" | "facilities";
+const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
+
+const SETUP_STEP_ORDER: SetupStep[] = ["box", "layout", "facilities"];
+const PANEL_TRANSITION = { type: "spring", stiffness: 420, damping: 38, mass: 0.55 } as const;
 
 type SetupDialogProps = {
   open: boolean;
@@ -35,6 +42,7 @@ type SetupDialogProps = {
   inputError: string | null;
   resultClearWarningDismissed: boolean;
   sklandSnapshot?: SklandScheduleSnapshot | null;
+  sklandBindingCount?: number;
   sklandConfigured?: boolean;
   sklandDisabledReason?: string | null;
   onOpenSkland?: () => void;
@@ -44,8 +52,11 @@ type SetupDialogProps = {
   presets: PresetDef[];
   preset: PresetDef;
   layout: BaseBlueprint;
+  configurationKey: string;
   rotationProfile: RotationProfile;
   onRotationProfileChange: (value: RotationProfile) => void;
+  fiammettaEnabled: boolean;
+  onFiammettaEnabledChange: (enabled: boolean) => void;
   onPresetSelect: (preset: PresetDef) => void;
   onLayoutFile: (file: File) => Promise<void>;
   onDownloadLayout: () => void;
@@ -86,6 +97,7 @@ export function SetupDialog({
   inputError,
   resultClearWarningDismissed,
   sklandSnapshot,
+  sklandBindingCount = 0,
   sklandConfigured,
   sklandDisabledReason,
   onOpenSkland,
@@ -95,8 +107,11 @@ export function SetupDialog({
   presets,
   preset,
   layout,
+  configurationKey,
   rotationProfile,
   onRotationProfileChange,
+  fiammettaEnabled,
+  onFiammettaEnabledChange,
   onPresetSelect,
   onLayoutFile,
   onDownloadLayout,
@@ -110,12 +125,16 @@ export function SetupDialog({
   onFinish,
   onSkip,
 }: SetupDialogProps) {
+  const { data: websiteSession } = authClient.useSession();
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [step, setStep] = useState<SetupStep>(initialStep);
-  const [layoutSection, setLayoutSection] = useState<LayoutSection>("basics");
+  const [stepDirection, setStepDirection] = useState(0);
   const [needsFacilityReview, setNeedsFacilityReview] = useState(false);
   const [showImportOptions, setShowImportOptions] = useState(false);
   const [showMaaPaste, setShowMaaPaste] = useState(false);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
+  const [openingConfigurationKey, setOpeningConfigurationKey] = useState(configurationKey);
   const wasOpenRef = useRef(false);
   const pendingExternalReviewRef = useRef(false);
   const boxPanelRef = useRef<HTMLDivElement>(null);
@@ -124,19 +143,25 @@ export function SetupDialog({
   const hasBox = Boolean(operbox?.length);
   const ownedCount = countOwned(operbox);
   const mustReviewFacilities = needsFacilityReview || !powerBudget.ok;
-  const currentDataLabel = fileName || sourceLabel(boxSource);
+  const currentDataLabel = CLIENT_SKLAND_ENABLED && boxSource === "skland" && !sklandSnapshot
+    ? "上次同步的森空岛数据"
+    : fileName || sourceLabel(boxSource);
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
     const justOpened = open && !wasOpenRef.current;
     wasOpenRef.current = open;
     if (!justOpened) return;
     setStep(initialStep);
-    setLayoutSection("basics");
+    setStepDirection(0);
     setNeedsFacilityReview(pendingExternalReviewRef.current);
     pendingExternalReviewRef.current = false;
     setShowImportOptions(!hasBox);
     setShowMaaPaste(false);
-  }, [hasBox, initialStep, open]);
+    setOpeningConfigurationKey(configurationKey);
+  }, [configurationKey, hasBox, initialStep, open]);
+
+  const configurationChanged = open && hasSetupConfigurationChanged(openingConfigurationKey, configurationKey);
 
   useEffect(() => {
     if (open && !hasBox) setShowImportOptions(true);
@@ -146,24 +171,32 @@ export function SetupDialog({
     window.requestAnimationFrame(() => ref.current?.focus());
   }
 
+  function moveToStep(nextStep: SetupStep) {
+    setStepDirection(SETUP_STEP_ORDER.indexOf(nextStep) - SETUP_STEP_ORDER.indexOf(step));
+    setStep(nextStep);
+  }
+
   function goToBox() {
-    setStep("box");
+    moveToStep("box");
     focusPanel(boxPanelRef);
   }
 
   function goToBasics() {
-    setStep("layout");
-    setLayoutSection("basics");
+    moveToStep("layout");
     focusPanel(basicsPanelRef);
   }
 
   function reviewFacilities() {
-    setLayoutSection("facilities");
+    moveToStep("facilities");
     setNeedsFacilityReview(false);
     focusPanel(facilitiesPanelRef);
   }
 
   async function importMaaFile(file: File) {
+    if (!websiteSession) {
+      setAuthNotice("请先前往账号管理登录，再导入 MAA 数据。");
+      return;
+    }
     if (await onMaaFile(file)) {
       setNeedsFacilityReview(true);
       setShowImportOptions(false);
@@ -172,6 +205,10 @@ export function SetupDialog({
   }
 
   function importMaaPaste() {
+    if (!websiteSession) {
+      setAuthNotice("请先前往账号管理登录，再导入 MAA 数据。");
+      return;
+    }
     if (onMaaPaste()) {
       setNeedsFacilityReview(true);
       setShowImportOptions(false);
@@ -190,6 +227,10 @@ export function SetupDialog({
   }
 
   function handleOpenSkland() {
+    if (!websiteSession) {
+      setAuthNotice("请先登录网站账号，再使用第三方同步。");
+      return;
+    }
     pendingExternalReviewRef.current = true;
     onOpenSkland?.();
   }
@@ -202,60 +243,59 @@ export function SetupDialog({
     goToBasics();
   }
 
-  function handleLayoutSectionChange(value: string) {
-    if (value !== "basics" && value !== "facilities") return;
-    setLayoutSection(value);
-    if (value === "facilities") setNeedsFacilityReview(false);
-  }
-
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent data-setup-dialog className="max-h-[min(820px,calc(100dvh-1rem))] max-w-[calc(100%-1rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-[24px] p-0 sm:max-w-[min(880px,calc(100%-2rem))] sm:rounded-[32px]">
+    <Dialog open={open} onOpenChange={(nextOpen) => {
+      if (!nextOpen && configurationChanged) {
+        setCloseConfirmOpen(true);
+        return;
+      }
+      onOpenChange(nextOpen);
+    }}>
+      <DialogContent data-setup-dialog className="h-[min(660px,calc(100dvh-1rem))] max-w-[calc(100%-1rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-[24px] p-0 sm:max-w-[min(880px,calc(100%-2rem))] sm:rounded-[32px]">
         <Tabs
-          value={step}
+          value={step === "facilities" ? "layout" : step}
           onValueChange={(value) => {
-            if (value === "box") setStep("box");
+            if (value === "box") moveToStep("box");
             if (value === "layout" && hasBox) {
-              setStep("layout");
-              setLayoutSection("basics");
+              moveToStep("layout");
             }
           }}
           className="contents"
         >
           <div data-setup-top className="px-4 pb-3 pt-4 sm:px-7 sm:pb-4 sm:pt-6">
-            <DialogTitle className="min-h-9 pr-12">排班设置</DialogTitle>
-            <TabsList
-              data-setup-step-list
-              variant="line"
-              aria-label="设置步骤"
-              className="setup-step-list mt-1 flex w-fit max-w-full items-center justify-start gap-0 p-0"
-            >
-              <TabsTrigger
-                value="box"
-                className={`setup-step-trigger h-9 min-h-0 flex-none justify-start rounded-none border-0 px-0.5 py-0 text-base font-semibold after:hidden sm:px-0.5 ${step === "layout" && hasBox ? "text-emerald-700 hover:text-emerald-700" : ""}`}
-              >
-                干员数据
-              </TabsTrigger>
-              <ChevronRight className="mx-1 size-3.5 shrink-0 text-muted-foreground/55" aria-hidden="true" />
-              <TabsTrigger
-                value="layout"
-                disabled={!hasBox}
-                className="setup-step-trigger h-9 min-h-0 flex-none justify-start rounded-none border-0 px-0.5 py-0 text-base font-semibold after:hidden sm:px-0.5"
-              >
-                基建与换班
-              </TabsTrigger>
-            </TabsList>
+            <div className="flex min-h-9 items-center gap-3 pr-12">
+              <DialogTitle>排班设置</DialogTitle>
+              {configurationChanged ? <span className="border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">配置已修改</span> : null}
+            </div>
+            <WizardSteps
+              steps={[
+                { id: "box", label: "干员数据" },
+                { id: "layout", label: "布局" },
+                { id: "facilities", label: "设施" },
+              ]}
+              value={step}
+              onValueChange={(value) => {
+                if (value === "box") goToBox();
+                if (value === "layout" && hasBox) goToBasics();
+                if (value === "facilities" && hasBox) reviewFacilities();
+              }}
+              className="mt-3"
+            />
           </div>
 
           <TabsContent value="box" className="min-h-0 overflow-hidden overscroll-contain">
-            <ScrollArea className="h-full">
-              <div
+            <ScrollArea className="h-full" viewportClassName="overflow-x-hidden">
+              <motion.div
+                key={`box-${step}`}
                 ref={boxPanelRef}
                 data-setup-box-content
                 role="region"
                 aria-label="干员数据"
                 tabIndex={-1}
                 className="grid w-full gap-4 px-4 py-4 outline-none sm:px-7 sm:py-6"
+                initial={reducedMotion ? false : { x: stepDirection * 28, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                transition={reducedMotion ? { duration: 0 } : PANEL_TRANSITION}
               >
                 {hasBox ? (
                   <section className="setup-data-summary flex min-w-0 items-center justify-between gap-4 px-4 py-3.5" aria-labelledby="setup-current-data-title">
@@ -307,6 +347,8 @@ export function SetupDialog({
                               </span>
                             ) : !sklandConfigured && sklandDisabledReason ? (
                               <span className="mt-0.5 block text-xs text-muted-foreground">{sklandDisabledReason}</span>
+                            ) : sklandBindingCount > 0 ? (
+                              <span className="mt-0.5 block text-xs text-muted-foreground">网站账号已绑定，当前浏览器需要重新扫码授权</span>
                             ) : null}
                           </div>
                           {sklandSnapshot && boxSource !== "skland" ? (
@@ -331,6 +373,7 @@ export function SetupDialog({
                         ) : null}
                       </TabsContent> : null}
                       <TabsContent value="maa" className="grid gap-3 pt-4">
+                        {!websiteSession ? <Alert><AlertDescription>MAA 导入需要先登录已验证的网站账号；全角色导入和技能查询仍可匿名使用。</AlertDescription></Alert> : null}
                         <FileDrop fileName={boxSource === "maa" ? fileName : null} onFile={(file) => void importMaaFile(file)} />
                         <Button
                           type="button"
@@ -362,6 +405,7 @@ export function SetupDialog({
                       </TabsContent>
                     </Tabs>
                     {inputError ? <p id="setup-box-error" className="mt-3 text-sm text-destructive" role="alert">{inputError}</p> : null}
+                    {authNotice ? <p className="mt-3 text-sm text-destructive" role="alert">{authNotice}</p> : null}
                   </section>
                 ) : null}
 
@@ -382,32 +426,28 @@ export function SetupDialog({
                     </Button>
                   </div>
                 </details>
-              </div>
+              </motion.div>
             </ScrollArea>
           </TabsContent>
 
           <TabsContent value="layout" className="min-h-0 overflow-hidden overscroll-contain">
             <Tabs
-              value={layoutSection}
-              onValueChange={handleLayoutSectionChange}
-              className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-0"
+              value={step === "facilities" ? "facilities" : "basics"}
+              className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)] gap-0"
             >
-              <div className="px-4 pb-3 pt-1 sm:px-7">
-                <TabsList variant="line" className="w-full justify-start gap-5 p-0 sm:w-fit" aria-label="基建设置内容">
-                  <TabsTrigger value="basics" className="min-h-10 flex-none px-0 text-[13px] sm:px-0">布局与换班</TabsTrigger>
-                  <TabsTrigger value="facilities" className="min-h-10 flex-none px-0 text-[13px] sm:px-0">设施设置</TabsTrigger>
-                </TabsList>
-              </div>
-
               <TabsContent value="basics" className="min-h-0 overflow-hidden">
-                <ScrollArea className="h-full">
-                  <div
+                <ScrollArea className="h-full" viewportClassName="overflow-x-hidden">
+                  <motion.div
+                    key={`layout-${step}`}
                     ref={basicsPanelRef}
                     data-setup-layout-basics
                     role="region"
                     aria-label="布局与换班"
                     tabIndex={-1}
                     className="grid gap-6 px-4 py-5 outline-none sm:px-7 sm:py-6"
+                    initial={reducedMotion ? false : { x: stepDirection * 28, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={reducedMotion ? { duration: 0 } : PANEL_TRANSITION}
                   >
                     <section className="grid gap-3" aria-labelledby="setup-preset-title">
                       <h3 id="setup-preset-title" className="text-sm font-semibold">布局预设</h3>
@@ -416,6 +456,15 @@ export function SetupDialog({
 
                     <div className="pt-1">
                       <RotationSettings value={rotationProfile} onChange={onRotationProfileChange} />
+                    </div>
+
+                    <div className="border-t border-border/70 pt-5">
+                      <FiammettaSettings
+                        enabled={fiammettaEnabled}
+                        operbox={operbox}
+                        rotation={rotationProfile}
+                        onEnabledChange={onFiammettaEnabledChange}
+                      />
                     </div>
 
                     <details className="setup-quiet-details pt-1">
@@ -445,19 +494,23 @@ export function SetupDialog({
                       </div>
                     </details>
                     {inputError ? <p id="setup-layout-error" className="text-sm text-destructive" role="alert">{inputError}</p> : null}
-                  </div>
+                  </motion.div>
                 </ScrollArea>
               </TabsContent>
 
               <TabsContent value="facilities" className="min-h-0 overflow-hidden">
-                <ScrollArea className="h-full">
-                  <div
+                <ScrollArea className="h-full" viewportClassName="overflow-x-hidden">
+                  <motion.div
+                    key={`facilities-${step}`}
                     ref={facilitiesPanelRef}
                     data-setup-facilities
                     role="region"
                     aria-label="设施设置"
                     tabIndex={-1}
                     className="px-4 py-5 outline-none sm:px-7 sm:py-6"
+                    initial={reducedMotion ? false : { x: stepDirection * 28, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={reducedMotion ? { duration: 0 } : PANEL_TRANSITION}
                   >
                     <LayoutEditor
                       layout={layout}
@@ -466,36 +519,30 @@ export function SetupDialog({
                       onRoomLevelChange={onRoomLevelChange}
                     />
                     {inputError ? <p className="mt-3 text-sm text-destructive" role="alert">{inputError}</p> : null}
-                  </div>
+                  </motion.div>
                 </ScrollArea>
               </TabsContent>
             </Tabs>
           </TabsContent>
         </Tabs>
 
-        <footer data-setup-footer className="setup-dialog-footer flex min-h-14 w-full min-w-0 flex-nowrap items-center justify-end gap-1.5 px-2 py-1.5 sm:min-h-16 sm:gap-2 sm:px-7">
+        <footer data-setup-footer className="setup-dialog-footer flex w-full min-w-0 flex-nowrap items-center justify-end gap-1.5 px-4 pb-4 pt-2 sm:gap-2 sm:px-7 sm:pb-7 sm:pt-3">
           {step === "box" ? (
             <>
               <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={onSkip}>稍后</Button>
               <Button size="dialog" type="button" disabled={!hasBox} onClick={goToBasics}>继续</Button>
             </>
-          ) : layoutSection === "basics" ? (
+          ) : step === "layout" ? (
             <>
               <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={goToBox}>返回</Button>
-              {mustReviewFacilities ? (
-                <Button size="dialog" type="button" onClick={reviewFacilities}>检查设施</Button>
-              ) : (
-                <Button size="dialog" type="button" onClick={onFinish}><Check />完成</Button>
-              )}
+              <Button size="dialog" type="button" onClick={reviewFacilities}>
+                {mustReviewFacilities ? "检查设施" : "继续"}
+              </Button>
             </>
           ) : (
             <>
-              <Button className="shrink-0 px-4 max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={goToBasics}>
-                <span className="sm:hidden">返回</span>
-                <span className="max-sm:hidden">返回布局</span>
-              </Button>
               <span
-                className={`min-w-0 flex-1 truncate text-right text-xs tabular-nums sm:text-sm ${powerBudget.ok ? "text-emerald-700" : "text-red-600"}`}
+                className={`mr-auto min-w-0 truncate text-left text-xs tabular-nums sm:text-sm ${powerBudget.ok ? "text-emerald-700" : "text-red-600"}`}
                 role="status"
               >
                 <span className={`sm:hidden ${powerBudget.ok ? "text-emerald-700" : "text-red-600"}`}>
@@ -503,10 +550,11 @@ export function SetupDialog({
                 </span>
                 <span className={`max-sm:hidden ${powerBudget.ok ? "text-emerald-700" : "text-red-600"}`}>
                   {powerBudget.ok
-                    ? `电力正常 · ${powerBudget.generated}/${powerBudget.consumed}`
-                    : `电力不足 ${powerBudget.consumed - powerBudget.generated} · ${powerBudget.generated}/${powerBudget.consumed}`}
+                    ? `电力正常 · ${powerBudget.consumed}/${powerBudget.generated}`
+                    : `电力不足 ${powerBudget.consumed - powerBudget.generated} · ${powerBudget.consumed}/${powerBudget.generated}`}
                 </span>
               </span>
+              <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={goToBasics}>返回</Button>
               <Button className="shrink-0" size="dialog" type="button" disabled={!powerBudget.ok} onClick={onFinish}><Check />完成</Button>
             </>
           )}
@@ -536,6 +584,18 @@ export function SetupDialog({
             >
               清除本地数据
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={closeConfirmOpen} onOpenChange={setCloseConfirmOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>关闭排班设置？</DialogTitle>
+            <DialogDescription>配置修改已保存在本地。关闭后需要重新生成排班，结果才会按新配置更新。</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setCloseConfirmOpen(false)}>继续编辑</Button>
+            <Button type="button" onClick={() => { setCloseConfirmOpen(false); onOpenChange(false); }}>关闭设置</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

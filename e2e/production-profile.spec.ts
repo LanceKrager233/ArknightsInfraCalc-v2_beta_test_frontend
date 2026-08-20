@@ -18,10 +18,23 @@ test("production profile removes Skland UI, requests, health data, and API acces
   await expect(page.getByText("调试工具", { exact: false })).toHaveCount(0);
   expect(sklandRequests).toEqual([]);
 
+  await page.getByRole("button", { name: "账号管理", exact: true }).click();
+  await expect(page.locator("[data-account-management]")).toHaveCount(0);
+  const accountDialog = page.getByRole("dialog", { name: "登录网站账号" });
+  await expect(accountDialog).toBeVisible();
+  await expect(accountDialog.locator("[data-website-account-panel]")).toBeVisible();
+  await expect(page.getByText("森空岛", { exact: false })).toHaveCount(0);
+  await accountDialog.getByRole("button", { name: "Close" }).click();
+  await page.getByRole("button", { name: "基建计算器", exact: true }).click();
+
   await page.getByRole("button", { name: "配置Box与布局" }).first().click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.getByText("森空岛", { exact: false })).toHaveCount(0);
   await expect(page.getByText("上传练度 JSON / XLSX", { exact: true })).toBeVisible();
+
+  const sklandPageResponse = await request.get("/skland");
+  expect(sklandPageResponse.status()).toBe(404);
+  expect(await sklandPageResponse.text()).not.toContain("森空岛");
 
   const healthResponse = await request.get("/api/health");
   expect([200, 503]).toContain(healthResponse.status());

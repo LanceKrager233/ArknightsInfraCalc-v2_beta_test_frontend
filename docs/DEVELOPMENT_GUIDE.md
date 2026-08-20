@@ -33,7 +33,7 @@ npm run test:e2e:production-profile
 npm run test:e2e:webkit
 ```
 
-`npm run check`依次运行 lint、单元/持久化测试和公开 API 契约测试。`npm run test:e2e`运行默认 Chromium 门禁；涉及响应式、触控或 Safari 兼容性的 UI 改动还应运行独立 WebKit 门禁。完整合并门禁还包括生产构建和 Playwright E2E。
+`npm run check`依次运行 lint、单元/持久化测试和公开 API 契约测试。`npm run test:e2e`运行默认 Chromium 发布门禁；涉及响应式、触控或 Safari 兼容性的 UI 改动还应在本地运行独立 WebKit 回归。CI 每日定时运行完整 WebKit 套件，也可从 Actions 手动触发。
 
 Windows 前端命令使用 PowerShell。部署 shell 测试只以 Linux CI 或显式 WSL Ubuntu 结果为准；裸`bash`可能被 Windows 解析到 Docker WSL、Git Bash 或系统 shim。行尾、平台二进制和 helper 生命周期见[开发与发布维护准则](./DEVELOPMENT_RELEASE_GUARDRAILS.md)。
 
@@ -56,7 +56,8 @@ Windows 前端命令使用 PowerShell。部署 shell 测试只以 Linux CI 或�
 | `src/app/api/*/route.ts` | 公开 HTTP 路由 |
 | `e2e/production-readiness.spec.ts` | hydration、产品主流程和锁定区域回归 |
 | `scripts/extract-room-emblems.mjs` | 从现有 WebP 确定性提取透明高清设施徽记 |
-| `.github/workflows/frontend-quality.yml` | PR 与 main push 质量门禁 |
+| `scripts/ci-change-scope.mjs` | CI 变更范围分类、失败关闭和部署判定 |
+| `.github/workflows/frontend-quality.yml` | PR 与 main/develop push 的并行质量门禁、部署汇总及定时 WebKit 回归 |
 
 ## 公开 API 契约
 
@@ -102,8 +103,12 @@ type ApiFailure = {
 - `POST /api/skland/auth/qr/status`
 - `POST /api/skland/sync`
 - `POST /api/skland/role`
+- `GET/POST /api/auth/*`（Better Auth 原生协议，不使用公共响应信封）
+- `GET/POST /api/admin/users`
 
-`/api/plan`只返回 `profile`、`maa`、`rotation`、`durationMs`、`diagnosticId`。CLI 路径、命令、stdout、stderr、运行目录和内部协议对象只能进入服务端运行记录；调试模式允许它们位于 `data.debug`，但必须由服务端环境变量开启。
+`/api/auth/*` 是统一响应信封的唯一例外。Better Auth 原生 admin 路由全部返回 404；管理员只能使用应用自有的中文用户管理接口。`BETTER_AUTH_ADMIN_USER_IDS` 定义不可由网页降级的初始管理员；只有初始管理员能在该接口中授予或撤销数据库管理员角色，受委派管理员不能继续扩权。
+
+`/api/plan`默认只返回 `profile`、`maa`、`rotation`、`durationMs`、`diagnosticId`。CLI 路径、命令、stdout、stderr、运行目录和内部协议对象只能进入服务端运行记录；只有服务端环境变量开启且本次请求显式带 `?beta=1` 时，调试模式才允许它们位于 `data.debug`。
 
 `/api/feedback`请求只包含诊断编号、房间摘要、1–1000 字说明和明确 consent。它不再重复上传完整干员数据或调试包，响应只返回反馈编号和保存时间。
 
@@ -143,6 +148,13 @@ POST 和 DELETE 路由执行同源检查。生产部署在 Nginx 后时启用受
 | `SKLAND_ALLOW_INSECURE_HTTP` | 仅限可信临时环境；允许非 localhost 使用不安全 HTTP |
 | `APP_DEPLOYMENT_ENV` | `production`或`development`；production 强制移除森空岛访问面 |
 | `SKLAND_FEATURE_ENABLED` | dev/local 可设为`0`主动关闭；不能在 production 开启 |
+| `DATABASE_URL` | 网站认证 runtime PostgreSQL 连接串，仅授予认证表 DML |
+| `DATABASE_MIGRATION_URL` | release 执行仓库内 migration 的 DDL 连接串 |
+| `BETTER_AUTH_SECRET` | 网站 Session 签名密钥，至少 32 字节且长期稳定 |
+| `BETTER_AUTH_URL` | 浏览器实际访问的完整 HTTPS Origin |
+| `BETTER_AUTH_ADMIN_USER_IDS` | 逗号分隔的初始管理员 Better Auth user ID；作为网页角色委派的信任根 |
+| `RESEND_API_KEY` | 验证与密码重置邮件的 Resend API key |
+| `AUTH_EMAIL_FROM` | 已验证独立发信子域的 From 地址 |
 
 建议的生产配置：
 
@@ -156,6 +168,8 @@ SKLAND_FEATURE_ENABLED=0
 ```
 
 dev 站点使用`APP_DEPLOYMENT_ENV=development`与`SKLAND_FEATURE_ENABLED=1`，并额外配置`SKLAND_SESSION_SECRET`、`SKLAND_PUBLIC_ORIGIN`。两个站点必须使用不同的应用根目录、systemd 服务、内部端口、公开 Origin 和持久化目录。
+
+认证与数据库的首次上线、最小权限和恢复演练见[网站账号与 PostgreSQL 上线手册](./AUTHENTICATION_DATABASE.md)。CI 使用临时 PostgreSQL 先执行已提交 migration，再运行注册、验证、登录、密码重置、Session 撤销与封禁集成测试；邮件由测试回调捕获，不发送真实邮件。
 
 ## 调试模式
 
@@ -173,7 +187,7 @@ npm run dev
 http://127.0.0.1:5174/?beta
 ```
 
-调试 UI 只有在服务端 feature flag 为 true 且 URL 同时带 `?beta` 时出现。dev 开关启用后，页脚提供“开启/退出调试工具”入口；production 无论环境变量如何都强制隐藏入口并禁止调试字段。单独添加 `?beta`不能开启调试工具。调试字段也不得写入 v5 本地数据。
+调试 UI 只有在服务端 feature flag 为 true 且页面 URL 同时带 `?beta` 时出现；该页面会把显式选择传播为 `/api/plan?beta=1`。dev 开关启用后，普通页面仍请求无调试数据的五字段白名单响应，页脚提供“开启/退出调试工具”入口；production 无论环境变量如何都强制隐藏入口并禁止调试字段。单独添加 `?beta`不能绕过关闭的服务端开关。调试字段也不得写入 v5 本地数据。
 
 详细的 DevTools 排查顺序、接口泄露检查和错误模拟方法见[上线产品化报告的开发调试环境使用指南](./FRONTEND_PRODUCTION_READINESS_REPORT.md#开发调试环境使用指南)。
 
@@ -197,21 +211,22 @@ v5 只保存：
 
 ## 测试与合并门禁
 
-GitHub Actions 在面向`main`或`develop`的 PR 和 push 上使用 Node 22，顺序执行：
+GitHub Actions 在面向`main`或`develop`的 PR 和 push 上使用 Node 22。`Change scope`先从 PR base/head 或 push before/head 生成 NUL 分隔路径列表，再调用`scripts/ci-change-scope.mjs`选择门禁：
 
-1. `npm ci`
-2. `npm run lint`
-3. `npm test`
-4. `npm run test:api-contract`
-5. `npm run test:deploy`
-6. `npm run build`
-7. `npm run test:production-client`
-8. `npx playwright install --with-deps chromium`
-9. `npm run test:e2e`
-10. `npm run test:e2e:production-profile`
+| 范围 | Core | Chromium | Deploy |
+| --- | --- | --- | --- |
+| 纯文档和仓库文本元数据 | 跳过 | 跳过 | 跳过 |
+| 单元测试或非发布型 CI 配置 | 执行 | 跳过 | 跳过 |
+| 浏览器测试或 Playwright 配置 | 执行 | 执行 | 跳过 |
+| 两个发布工作流 | 执行 | 跳过 | push 时执行 |
+| 运行时、依赖、部署脚本、未知路径 | 执行 | 执行 | push 时执行 |
 
-`main`和`develop`都执行相同质量门禁。通过 push 门禁后，部署工作流分别使用 GitHub Environments `production`和`development`中的 SSH Secrets 与部署 Variables 发布对应站点；PR 不部署。工作流先验证两个服务器 helper 是`root:root 0755`普通文件且显式契约版本兼容，再从`/var/cache/arknights-infra-deploy/repository.git`增量准备准确 SHA 的发布包；production/development 使用独立 refs 和共享`flock`。helper 在 GitHub 网络、缓存或锁的临时故障时返回`75`；Runner 随后优先读取对应服务器缓存 ref，并发送从该 ref 到已验证 SHA 的增量 Git bundle，缓存 ref 不可用时才使用上一次 push SHA。服务器校验并导入缓存，只有 bundle 基线或传输不可用时才上传完整发布包。SHA、tree、路径、helper 契约和 bundle HEAD 等完整性错误都直接失败。`DEPLOY_DEBUG_TOOLS_ENABLED`和`DEPLOY_RATE_LIMIT_ENABLED`集中管理 dev 的调试入口与限流，production 则固定为调试关闭、限流开启。production-profile 门禁会故意反向设置森空岛、调试和限流变量，确认 production 的强制策略不可被误配置绕过。
-Production client isolation scans static JavaScript and public HTML/RSC; production-profile separately verifies hidden UI, absent requests and health fields, and the API 404 boundary. Both gates are required.
+无法读取可靠 commit、空差异和手动触发都按完整范围处理。Core 包含数据库权限与 migration、security audit、lint、单元与契约测试、求解器/部署脚本测试、production build 和客户端隔离检查；Chromium 包含完整 E2E 与 production profile 隔离测试。保持原状态名称的`quality`汇总门禁始终运行，逐项验证必需 Job 成功或按分类预期跳过。不得对整个 workflow 使用`paths-ignore`，否则受保护分支可能等不到必需检查。PR 的新提交会取消同一 PR 的旧运行，push 与已经开始的部署不会被取消。
+
+完整 WebKit E2E 作为 Safari 兼容性回归每日定时运行，也可通过`workflow_dispatch`手动触发。它不阻塞逐次 PR 与发布；涉及响应式、触控或 Safari 行为的改动仍应在提交前运行`npm run test:e2e:webkit`。
+
+`main`和`develop`使用相同分类规则。只有受保护分支 push、`quality`成功且`deploy_required=true`时，部署工作流才使用 GitHub Environments `production`和`development`中的 SSH Secrets 与部署 Variables 发布对应站点；PR、文档、测试和非发布型 CI 变更不创建服务器 release。工作流先验证两个服务器 helper 是`root:root 0755`普通文件且显式契约版本兼容，再从`/var/cache/arknights-infra-deploy/repository.git`增量准备准确 SHA 的发布包；production/development 使用独立 refs 和共享`flock`。helper 在 GitHub 网络、缓存或锁的临时故障时返回`75`；Runner 随后优先读取对应服务器缓存 ref，并发送从该 ref 到已验证 SHA 的增量 Git bundle，缓存 ref 不可用时才使用上一次 push SHA。服务器校验并导入缓存，只有 bundle 基线或传输不可用时才上传完整发布包。SHA、tree、路径、helper 契约和 bundle HEAD 等完整性错误都直接失败。`DEPLOY_DEBUG_TOOLS_ENABLED`和`DEPLOY_RATE_LIMIT_ENABLED`集中管理 dev 的调试入口与限流，production 则固定为调试关闭、限流开启。production-profile 门禁会故意反向设置森空岛、调试和限流变量，确认 production 的强制策略不可被误配置绕过。
+Production client isolation scans static JavaScript and public HTML/RSC; production-profile separately verifies hidden UI, absent requests and health fields, and the API 404 boundary. Whenever runtime scope selects the full gate, both checks remain required.
 
 production 和 dev 的 Funnel Nginx 分别只监听`127.0.0.1:4176`与`127.0.0.1:4274`。公网访问由 Tailscale Funnel 的 8443 与 443 HTTPS 入口提供；用`tailscale funnel status`核对持久化配置、公开地址和实际目标。production 另有受 Host 限制的`0.0.0.0:4174`直连/IP 兼容 vhost，它不是 Funnel 目标，不得作为公开 Origin 或发布健康检查地址。服务器 80 端口只重定向到 production HTTPS，不要把两个回环应用端口重新暴露到公网。Actions 部署用户使用独立密钥，sudo 只允许固定的`/usr/local/sbin/arknights-infra-deploy`。root 所有的 deploy runner 和`/usr/local/sbin/arknights-infra-prepare-release`必须保持 LF、普通文件和`root:root 0755`；二者用`--contract-version`报告当前接口版本，文件 SHA-256只作安装/回滚审计。prepare helper 以`arkdeploy`运行，不新增 sudo 权限；缓存根必须由该用户拥有且不能被 group/other 写入。
 

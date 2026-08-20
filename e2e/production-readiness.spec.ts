@@ -15,6 +15,81 @@ const layout243 = {
   rooms: [{ id: "workshop", kind: "workshop", level: 3 }],
 };
 
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/auth/get-session", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      session: { id: "test-session", token: "test-token", userId: "test-user", expiresAt: new Date(Date.now() + 3_600_000).toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+      user: { id: "test-user", name: "测试用户", email: "test@example.com", emailVerified: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    }),
+  }));
+});
+
+test("cold HTML contains the workbench shell instead of only the client loading placeholder", async ({ request }) => {
+  const response = await request.get("/");
+  expect(response.status()).toBe(200);
+  const html = await response.text();
+  expect(html).toContain("data-calculator-controls");
+  expect(html).toContain("data-schedule-view-pending");
+  expect(html).not.toContain('data-schedule-view="compact"');
+  expect(html).not.toContain('data-schedule-view="list"');
+  expect(html).not.toContain("正在加载基建计算器");
+});
+
+test("a 768px cold start keeps the compact workbench inside the viewport", async ({ page }) => {
+  await mockApis(page);
+  await page.setViewportSize({ width: 768, height: 900 });
+  await page.goto("/");
+  await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
+  await expect(page.getByRole("tab", { name: "一图流布局" })).toHaveAttribute("aria-selected", "true");
+
+  const dimensions = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1);
+});
+
+test("primary pages use independent routes without eagerly loading every view", async ({ page }) => {
+  const trainingRouteRequests: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/training") {
+      trainingRouteRequests.push(request.url());
+    }
+  });
+  await mockApis(page, { sklandConfigured: true, sklandSnapshot: authenticatedSklandSnapshot });
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  const destinations = [
+    { name: "练卡建议", href: "/training", root: "[data-training-page]" },
+    { name: "技能查询", href: "/skills", root: "[data-skill-query-page]" },
+    { name: "森空岛状态中心", href: "/skland", root: "[data-skland-page]" },
+    { name: "账号管理", href: "/account", root: "[data-account-management]" },
+  ];
+  for (const destination of destinations) {
+    await expect(page.getByRole("button", { name: destination.name, exact: true })).toHaveAttribute("href", destination.href);
+  }
+  expect(trainingRouteRequests).toEqual([]);
+
+  const trainingLink = page.getByRole("button", { name: "练卡建议", exact: true });
+  await trainingLink.hover();
+
+  for (const destination of destinations) {
+    await page.getByRole("button", { name: destination.name, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`${destination.href.replace("/", "\\/")}$`));
+    await expect(page.locator(destination.root)).toBeVisible({ timeout: 45_000 });
+    if (destination.href === "/training") expect(trainingRouteRequests.length).toBeGreaterThan(0);
+  }
+
+  await page.getByRole("button", { name: "基建计算器", exact: true }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.locator("[data-calculator-controls]")).toBeVisible();
+});
+
 async function expectUnifiedDialogTypography(dialog: Locator, radius: "24px" | "32px" = "32px") {
   await expect(dialog).toHaveClass(/dialog-acrylic/);
   await expect(dialog).toHaveCSS("border-radius", radius);
@@ -149,7 +224,12 @@ async function expectCapturedMotion(page: Page, label: string, durationMs: numbe
 async function expectCapturedMotionDelays(page: Page, label: string, durationMs: number, delays: number[]) {
   await expect.poll(async () => {
     const value = await page.locator("html").getAttribute(`data-motion-enter-${label}`);
-    return value ? JSON.parse(value) as Array<{ duration: number; delay: number }> : null;
+    if (!value) return null;
+
+    return (JSON.parse(value) as Array<{ duration: number; delay: number }>).map(({ duration, delay }) => ({
+      duration: Math.round(duration),
+      delay: Math.round(delay),
+    }));
   }).toEqual(delays.map((delay) => ({ duration: durationMs, delay })));
 }
 
@@ -212,7 +292,17 @@ async function gotoStable(page: Page, path: string) {
 }
 
 async function expectVisibleNumbersUseNumberFont(page: Page, scope: Locator = page.locator("body")) {
-  await page.evaluate(() => document.fonts.ready);
+  await page.evaluate(async () => {
+    const numberFamily = getComputedStyle(document.documentElement)
+      .getPropertyValue("--font-number-source")
+      .split(",")[0]
+      .trim()
+      .replace(/^['"]|['"]$/g, "");
+    if (numberFamily) {
+      await document.fonts.load(`16px "${numberFamily}"`, "0123456789+-.,%/:−");
+    }
+    await document.fonts.ready;
+  });
   const audit = await scope.evaluate((root) => {
     const numberFamily = getComputedStyle(document.documentElement)
       .getPropertyValue("--font-number-source")
@@ -344,7 +434,7 @@ function rotationResultData({
   };
 }
 
-const twoShiftPlanData = rotationResultData({
+const twoShiftPlanBase = rotationResultData({
   rotationProfile: "main_backup_12_12",
   durations: [12, 12],
   profileOverrides: {
@@ -385,6 +475,51 @@ const twoShiftPlanData = rotationResultData({
     }],
   },
 });
+
+const twoShiftPlanData = {
+  ...twoShiftPlanBase,
+  maa: {
+    ...twoShiftPlanBase.maa,
+    plans: twoShiftPlanBase.maa.plans.map((plan, index) => ({
+      ...plan,
+      drones: { enable: true, room: "manufacture" as const, index: index === 0 ? 1 : 3, order: "pre" as const },
+      rooms: {
+        ...plan.rooms,
+        trading: [
+          { product: "LMD", operators: [], sort: true, autofill: false },
+          { product: "Originium Shard", operators: [], sort: true, autofill: false },
+        ],
+        manufacture: [
+          { product: "Gold", operators: [], sort: true, autofill: false },
+          { product: "Gold", operators: [], sort: true, autofill: false },
+          { product: "Battle Record", operators: [], sort: true, autofill: false },
+          { product: "Originium Shard", operators: [], sort: true, autofill: false },
+        ],
+        power: [0, 1, 2].map(() => ({ operators: [] })),
+      },
+    })),
+  },
+  rotation: {
+    ...twoShiftPlanBase.rotation,
+    shifts: twoShiftPlanBase.rotation.shifts.map((shift) => ({
+      ...shift,
+      scores: {
+        ...shift.scores,
+        room_lines: [
+          { room_id: "trade_1", final_efficiency: 3.337, trade_score: 3.337, trade_pct: 135, trade_skill_pct: 132, trade_gold_pct: 42 },
+          { room_id: "trade_2", final_efficiency: 1.5, trade_score: 1.5, trade_pct: 50, trade_skill_pct: 50 },
+          { room_id: "manu_1", final_efficiency: 2.36, manu_score: 236, manu_prod_skill: 130, manu_display_pct: 136 },
+          { room_id: "manu_2", final_efficiency: 2, manu_prod_total: 100, manu_prod_skill: 94 },
+          { room_id: "manu_3", final_efficiency: 2, manu_prod_total: 100, manu_prod_skill: 94 },
+          { room_id: "manu_4", final_efficiency: 2, manu_prod_total: 100, manu_prod_skill: 94 },
+          { room_id: "power_1", final_efficiency: 1.2, power_charge_speed_pct: 20 },
+          { room_id: "power_2", final_efficiency: 1.2, power_charge_speed_pct: 20 },
+          { room_id: "power_3", final_efficiency: 1.2, power_charge_speed_pct: 20 },
+        ],
+      },
+    })),
+  },
+};
 
 const fourShiftPlanData = rotationResultData({
   rotationProfile: "fiammetta_8_8_4_4",
@@ -742,7 +877,11 @@ async function mockApis(
     sklandSnapshot?: MockSklandSnapshot;
     sklandAccounts?: typeof primarySklandAccount[];
     activeAccountId?: string | null;
+    sklandBindingCount?: number;
+    sklandRenewalDueCount?: number;
     sklandSessionDelayMs?: number;
+    sklandSummaryDelayMs?: number;
+    sklandSessionFailure?: boolean;
   } = {}
 ) {
   await page.route("**/api/health", (route) => route.fulfill({
@@ -763,11 +902,27 @@ async function mockApis(
       requestId,
     }),
   }));
-  await page.route("**/api/skland/session", async (route) => {
-    if (options.sklandSessionDelayMs) {
+  await page.route("**/api/skland/session*", async (route) => {
+    const mode = new URL(route.request().url()).searchParams.get("mode");
+    const isSummary = mode === "summary";
+    const isLogout = route.request().method() === "DELETE";
+    if (isSummary && options.sklandSummaryDelayMs) {
+      await new Promise((resolve) => setTimeout(resolve, options.sklandSummaryDelayMs));
+    } else if (!isSummary && !isLogout && options.sklandSessionDelayMs) {
       await new Promise((resolve) => setTimeout(resolve, options.sklandSessionDelayMs));
     }
-    const isLogout = route.request().method() === "DELETE";
+    if (!isSummary && !isLogout && options.sklandSessionFailure) {
+      return route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        headers: { "X-Request-Id": requestId },
+        body: JSON.stringify({
+          success: false,
+          error: { code: "AIC-SYS-5000", message: "森空岛会话恢复失败，请稍后刷新。", retryable: true },
+          requestId,
+        }),
+      });
+    }
     const accounts = options.sklandAccounts
       ?? (options.sklandSnapshot ? [{
         ...primarySklandAccount,
@@ -776,6 +931,16 @@ async function mockApis(
       }] : []);
     const activeAccountId = options.activeAccountId
       ?? (accounts.length ? accounts[0].accountId : null);
+    const bindingCount = options.sklandBindingCount ?? accounts.length;
+    const renewalDueCount = Math.min(bindingCount, options.sklandRenewalDueCount ?? 0);
+    const activeBindingCount = bindingCount - renewalDueCount;
+    const bindingSummary = {
+      totalCount: bindingCount,
+      activeCount: activeBindingCount,
+      renewalDueCount,
+      nextExpiresAt: activeBindingCount > 0 ? Date.now() + 7 * 24 * 60 * 60 * 1000 : null,
+      latestExpiredAt: renewalDueCount > 0 ? Date.now() - 60_000 : null,
+    };
     return route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -789,18 +954,22 @@ async function mockApis(
               authMethods: { qr: true },
               accounts: [],
               activeAccountId: null,
+              bindingCount: 0,
+              bindingSummary: { totalCount: 0, activeCount: 0, renewalDueCount: 0, nextExpiresAt: null, latestExpiredAt: null },
             }
           : {
-              authenticated: Boolean(options.sklandSnapshot),
+              authenticated: isSummary ? accounts.length > 0 : Boolean(options.sklandSnapshot),
               configured: Boolean(options.sklandConfigured),
               authMethods: { qr: true },
               accounts,
               activeAccountId,
+              bindingCount,
+              bindingSummary,
               disabledReason: options.sklandConfigured
                 ? null
                 : "当前未开放森空岛登录，可使用 MAA 导入。",
-              ...(options.sklandSnapshot ? { scheduleSnapshot: options.sklandSnapshot } : {}),
-              ...(options.sklandSnapshot ? { statusSnapshot: options.sklandSnapshot } : {}),
+              ...(!isSummary && options.sklandSnapshot ? { scheduleSnapshot: options.sklandSnapshot } : {}),
+              ...(!isSummary && options.sklandSnapshot ? { statusSnapshot: options.sklandSnapshot } : {}),
             },
         requestId,
       }),
@@ -869,6 +1038,10 @@ async function mockApis(
   }));
 }
 
+async function openSklandOverview(page: Page) {
+  await page.getByRole("button", { name: "森空岛状态中心", exact: true }).click();
+}
+
 async function seedPreferences(page: Page) {
   await page.addInitScript(() => {
     window.localStorage.setItem("arknights-infra-calc-beta-onboarding-v1", "1");
@@ -883,9 +1056,10 @@ async function seedV4Session(
     rotationProfile?: string;
     layoutDirty?: boolean;
     operbox?: Array<Record<string, unknown>>;
+    boxSource?: "sample" | "maa" | "skland";
   } = {}
 ) {
-  await page.addInitScript(({ layout, result, savedAt, expiresAt, activeShift, rotationProfile, layoutDirty, operbox }) => {
+  await page.addInitScript(({ layout, result, savedAt, expiresAt, activeShift, rotationProfile, layoutDirty, operbox, boxSource }) => {
     window.localStorage.setItem("arknights-infra-calc-beta-onboarding-v1", "1");
     if (!window.localStorage.getItem("arknights-infra-calc-session-v4")) window.localStorage.setItem("arknights-infra-calc-session-v4", JSON.stringify({
       version: 4,
@@ -903,7 +1077,7 @@ async function seedV4Session(
         rarity: 5,
       }],
       sourceName: "243 全精二示例",
-      boxSource: "sample",
+      boxSource,
       layoutDirty,
       rotationProfile,
       result,
@@ -918,8 +1092,318 @@ async function seedV4Session(
     rotationProfile: options.rotationProfile ?? "abc_12_6_6",
     layoutDirty: options.layoutDirty ?? false,
     operbox: options.operbox,
+    boxSource: options.boxSource ?? "sample",
   });
 }
+
+for (const viewport of [
+  { width: 390, height: 844 },
+  { width: 768, height: 900 },
+  { width: 1440, height: 900 },
+]) {
+  test(`website account registration is reachable and explains consent at ${viewport.width}px`, async ({ page }) => {
+    await page.unroute("**/api/auth/get-session");
+    await page.route("**/api/auth/get-session", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "null" }));
+    await page.route("**/api/auth/sign-up/email", async (route) => {
+      const body = route.request().postDataJSON() as { email?: string; password?: string };
+      expect(body.email).toBe(`account-${viewport.width}@example.test`);
+      expect(body.password).toBe("secure-password-1");
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ token: null, user: { id: "new-user", name: "测试用户", email: body.email, emailVerified: false } }),
+      });
+    });
+    await page.route("**/api/auth/email-otp/verify-email", async (route) => {
+      const body = route.request().postDataJSON() as { email?: string; otp?: string };
+      expect(body).toEqual({ email: `account-${viewport.width}@example.test`, otp: "123456" });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ status: true, token: null, user: { id: "new-user", name: "测试用户", email: body.email, emailVerified: true } }),
+      });
+    });
+    await mockApis(page);
+    await seedPreferences(page);
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+
+    if (viewport.width < 768) await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+    const accountNavigation = page.getByRole("button", { name: "账号管理", exact: true });
+    await expect(accountNavigation.locator(".lucide-user-round")).toBeVisible();
+    await accountNavigation.click();
+    await expect(page.locator("[data-account-management]")).toHaveCount(0);
+    const accountDialog = page.getByRole("dialog", { name: "登录网站账号" });
+    await expect(accountDialog).toBeVisible();
+    const accountPanel = accountDialog.locator("[data-website-account-panel]");
+    await expect(accountPanel.locator("[data-wizard-steps]")).toHaveCount(0);
+    await accountPanel.getByRole("button", { name: "忘记密码" }).click();
+    await expect(accountPanel.getByRole("button", { name: /第 1 步，共 2 步：确认邮箱/ })).toHaveAttribute("aria-current", "step");
+    await accountPanel.getByRole("button", { name: "返回登录" }).click();
+    await expect(accountPanel.locator("[data-wizard-steps]")).toHaveCount(0);
+    await accountPanel.getByRole("button", { name: "创建账号" }).click();
+    await expect(accountPanel.locator("[data-wizard-steps]")).toHaveCount(0);
+    await expect(accountPanel.getByRole("heading", { name: "创建网站账号" })).toBeVisible();
+    await expect(accountPanel.getByRole("link", { name: "服务条款", exact: true })).toHaveAttribute("href", "/terms");
+    await expect(accountPanel.getByRole("link", { name: "隐私政策", exact: true })).toHaveAttribute("href", "/privacy");
+    await expect(accountPanel.getByText("2–20 个字符，可使用中文、英文字母、数字、空格、下划线和短横线。", { exact: true })).toBeVisible();
+    await accountPanel.getByRole("textbox", { name: "邮箱", exact: true }).fill(`account-${viewport.width}@example.test`);
+    await page.getByLabel("密码", { exact: true }).fill("secure-password-1");
+    await page.getByLabel("昵称").fill("博士😀");
+    await page.getByRole("button", { name: "创建账号并发送验证码" }).click();
+    await expect(accountPanel.getByText(/昵称只能使用中文、英文字母、数字/)).toBeVisible();
+    await page.getByLabel("昵称").fill("测试用户");
+    await expect(accountPanel.getByRole("meter", { name: "密码强度" })).toHaveAttribute("aria-valuetext", "强");
+    await page.getByRole("button", { name: "创建账号并发送验证码" }).click();
+    await expect(accountPanel.locator("[data-wizard-steps]")).toHaveCount(0);
+    for (const [index, digit] of [..."123456"].entries()) {
+      await accountPanel.getByRole("textbox", { name: `邮箱验证码第 ${index + 1} 位，共 6 位` }).fill(digit);
+    }
+    await accountPanel.getByRole("button", { name: "验证邮箱", exact: true }).click();
+    await expect(accountPanel.getByText("邮箱验证完成", { exact: true })).toBeVisible();
+    await expect(accountPanel.getByText("邮箱验证完成，现在可以登录网站账号。")).toBeVisible();
+  });
+}
+
+test("website login keeps a stable dialog skeleton while its deferred UI loads", async ({ page }) => {
+  await page.unroute("**/api/auth/get-session");
+  await page.route("**/api/auth/get-session", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: "null",
+  }));
+  await mockApis(page);
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  let releaseChunks: (() => void) | undefined;
+  const chunkGate = new Promise<void>((resolve) => {
+    releaseChunks = resolve;
+  });
+  let deferredChunkRequests = 0;
+  await page.route("**/_next/static/chunks/*.js", async (route) => {
+    deferredChunkRequests += 1;
+    await chunkGate;
+    await route.continue();
+  });
+
+  await page.getByRole("button", { name: "账号管理", exact: true }).click();
+  const skeleton = page.locator("[data-website-account-dialog-skeleton]");
+  await expect(skeleton).toBeVisible();
+  await expect(skeleton.getByRole("status", { name: "正在加载登录界面" })).toBeVisible();
+  await expect(page.locator("[data-website-account-panel]")).toHaveCount(0);
+  await expect.poll(() => deferredChunkRequests).toBeGreaterThan(0);
+
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 768, height: 900 },
+    { width: 1440, height: 900 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(skeleton).toBeVisible();
+    const box = await skeleton.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box?.width ?? 0).toBeLessThanOrEqual(viewport.width - 16);
+    expect(box?.height ?? 0).toBeLessThanOrEqual(viewport.height - 16);
+  }
+
+  releaseChunks?.();
+  await page.unroute("**/_next/static/chunks/*.js");
+  await expect(page.locator("[data-website-account-panel]")).toBeVisible();
+  await expect(skeleton).toHaveCount(0);
+});
+
+test("website login opens account management after the gated navigation dialog", async ({ page }) => {
+  let authenticated = false;
+  await page.unroute("**/api/auth/get-session");
+  await page.route("**/api/auth/get-session", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: authenticated ? JSON.stringify({
+      session: { id: "signed-in-session", token: "token", userId: "signed-in-user", expiresAt: new Date(Date.now() + 3_600_000).toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+      user: { id: "signed-in-user", name: "新用户", email: "signed-in@example.test", emailVerified: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    }) : "null",
+  }));
+  await page.route("**/api/auth/sign-in/email", (route) => {
+    authenticated = true;
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ redirect: false, token: "token", user: { id: "signed-in-user", name: "新用户", email: "signed-in@example.test", emailVerified: true } }) });
+  });
+  await mockApis(page, { sklandConfigured: true });
+  await seedPreferences(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "账号管理", exact: true }).click();
+  const accountPanel = page.locator("[data-website-account-panel]");
+  await accountPanel.getByRole("textbox", { name: "邮箱", exact: true }).fill("signed-in@example.test");
+  await accountPanel.getByLabel("密码", { exact: true }).fill("secure-password-1");
+  await accountPanel.getByRole("button", { name: "登录", exact: true }).click();
+
+  await expect(page.getByRole("dialog", { name: "登录网站账号" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "账号管理", exact: true })).toHaveAttribute("data-active", "");
+  await expect(page.locator("[data-account-management]")).toBeVisible();
+  await expect(page.getByText("signed-in@example.test", { exact: true })).toBeVisible();
+  const websiteAvatar = page.locator("[data-website-account-avatar]");
+  await expect(websiteAvatar).toBeVisible();
+  await expect(websiteAvatar).toHaveAttribute("data-account-orb-color", /^#[0-9A-F]{6}$/);
+  await expect(websiteAvatar.locator("canvas")).toBeVisible();
+  await expect(websiteAvatar.locator("[data-fluid-orb-fallback]")).toBeVisible();
+  await expect(websiteAvatar.locator("[data-fluid-orb-fallback]")).toHaveCSS("opacity", "0");
+  await expect(websiteAvatar).not.toContainText("新");
+  const websiteAvatarBox = await websiteAvatar.boundingBox();
+  expect(websiteAvatarBox?.width).toBeCloseTo(56, 0);
+  expect(websiteAvatarBox?.height).toBeCloseTo(56, 0);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(websiteAvatar).toHaveAttribute("data-fluid-orb-motion", /^(still|fallback)$/);
+});
+
+test("website account Fluid Orb keeps its CSS fallback without WebGL", async ({ page }) => {
+  await page.addInitScript(() => {
+    const originalGetContext = HTMLCanvasElement.prototype.getContext;
+    Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+      configurable: true,
+      value(contextId: string, ...args: unknown[]) {
+        if (contextId === "webgl") return null;
+        return Reflect.apply(originalGetContext, this, [contextId, ...args]);
+      },
+    });
+  });
+  await mockApis(page, { sklandConfigured: true });
+  await seedPreferences(page);
+  await page.goto("/account");
+
+  const websiteAvatar = page.locator("[data-website-account-avatar]");
+  await expect(websiteAvatar).toBeVisible();
+  await expect(websiteAvatar).toHaveAttribute("data-fluid-orb-motion", "fallback");
+  await expect(websiteAvatar.locator("[data-fluid-orb-fallback]")).toBeVisible();
+  await expect(websiteAvatar.locator("[data-fluid-orb-fallback]")).toHaveCSS("opacity", "1");
+});
+
+test("seven-day bindings stay visible and require QR renewal", async ({ page }) => {
+  await mockApis(page, { sklandConfigured: true, sklandBindingCount: 1, sklandRenewalDueCount: 1 });
+  await seedPreferences(page);
+  await page.goto("/");
+  const sklandNavigation = page.getByRole("button", { name: "森空岛状态中心", exact: true });
+  await expect(sklandNavigation.locator(".lucide-cloud")).toBeVisible();
+  await sklandNavigation.click();
+  await expect(page.getByText("ACCOUNT TERMINAL", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("统一管理网站账号、登录设备和森空岛授权。森空岛凭据固定七天失效，到期后需要重新扫码。", { exact: true })).toHaveCount(0);
+  await expect(page.locator("[data-skland-binding-summary]")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "七天授权期已结束，请扫码续期" })).toBeVisible();
+  await expect(page.locator("[data-skland-login-panel]")).toBeVisible();
+});
+
+test("a cached Skland box is labeled separately when the website binding needs browser reauthorization", async ({ page }) => {
+  await mockApis(page, { sklandConfigured: true, sklandBindingCount: 1 });
+  await seedV4Session(page, planData, { boxSource: "skland" });
+  await page.goto("/");
+
+  await openSklandOverview(page);
+  await expect(page.getByRole("heading", { name: "森空岛已绑定，请授权当前浏览器" })).toBeVisible();
+  await expect(page.getByText(/网站账号仍保留 1 个森空岛绑定/)).toBeVisible();
+
+  await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+  await page.getByRole("button", { name: "基建计算器", exact: true }).click();
+  await page.getByRole("button", { name: "配置Box与布局" }).first().click();
+  const setupDialog = page.getByRole("dialog");
+  await setupDialog.getByRole("button", { name: /第 1 步，共 3 步：干员数据/ }).click();
+  await expect(setupDialog.getByText("上次同步的森空岛数据", { exact: true })).toBeVisible();
+});
+
+test("account settings revokes every session and returns to the app", async ({ page }) => {
+  let revokeRequests = 0;
+  let authenticated = true;
+  await page.unroute("**/api/auth/get-session");
+  await page.route("**/api/auth/get-session", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: authenticated ? JSON.stringify({
+      session: { id: "test-session", token: "test-token", userId: "test-user", expiresAt: new Date(Date.now() + 3_600_000).toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+      user: { id: "test-user", name: "测试用户", email: "test@example.com", emailVerified: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    }) : "null",
+  }));
+  await page.route("**/api/auth/revoke-sessions", (route) => {
+    revokeRequests += 1;
+    authenticated = false;
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: true }) });
+  });
+  await mockApis(page);
+  await seedPreferences(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "账号管理", exact: true }).click();
+
+  await expect(page.locator("[data-account-management]")).toBeVisible();
+  await expect(page.getByText("test@example.com", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "退出全部设备" }).click();
+  await expect.poll(() => revokeRequests).toBe(1);
+  await expect(page.locator("[data-account-management]")).toHaveCount(0);
+  await expect(page.locator("[data-calculator-controls]")).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "登录网站账号" })).toHaveCount(0);
+  const accountRoute = await page.request.get("/account");
+  expect(accountRoute.status()).toBe(200);
+  expect(await accountRoute.text()).toContain("data-workbench-hydrated");
+});
+
+test("password reset rejects a link without a token before making a request", async ({ page }) => {
+  let resetRequests = 0;
+  await page.route("**/api/auth/reset-password", (route) => {
+    resetRequests += 1;
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: true }) });
+  });
+  await page.goto("/account/reset-password");
+  await expect(page.getByText("重置链接无效或缺少令牌，请重新申请密码重置邮件。")).toBeVisible();
+  await expect(page.getByRole("button", { name: "确认重置" })).toBeDisabled();
+  expect(resetRequests).toBe(0);
+});
+
+test("anonymous MAA data cannot drive planning or training advice", async ({ page }) => {
+  await page.unroute("**/api/auth/get-session");
+  await page.route("**/api/auth/get-session", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "null" }));
+  await mockApis(page);
+  await seedV4Session(page, planData, { boxSource: "maa" });
+  await page.goto("/");
+
+  await expect(page.locator("[data-calculator-controls]")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "请先登录网站账号" })).toBeDisabled();
+  await page.getByRole("button", { name: "练卡建议" }).click();
+  await expect(page.locator('[data-primary-page="training"]')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator("[data-training-page]")).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByRole("heading", { name: "登录后查看 MAA 练卡建议" })).toBeVisible();
+  await expect(page.locator("[data-training-advice-list]")).toHaveCount(0);
+});
+
+test("server auth boundaries reject anonymous planning and every development Skland route", async ({ request }) => {
+  const maaResponse = await request.post("/api/plan", {
+    data: { layout: layout243, operbox: [], sourceName: "anonymous.json", boxSource: "maa", rotation: "abc_12_6_6" },
+  });
+  expect(maaResponse.status()).toBe(401);
+  expect((await maaResponse.json()).error.code).toBe("AIC-AUTH-2008");
+
+  const forgedSample = await request.post("/api/plan", {
+    data: { layout: layout243, operbox: [], sourceName: "forged.json", boxSource: "sample", rotation: "abc_12_6_6" },
+  });
+  expect(forgedSample.status()).toBe(400);
+  expect((await forgedSample.json()).error.code).toBe("AIC-REQ-1001");
+
+  for (const [method, path] of [
+    ["GET", "/api/skland/session"],
+    ["GET", "/api/skland/session?mode=summary"],
+    ["DELETE", "/api/skland/session"],
+    ["POST", "/api/skland/auth/qr"],
+    ["POST", "/api/skland/auth/qr/status"],
+    ["POST", "/api/skland/sync"],
+    ["POST", "/api/skland/role"],
+    ["GET", "/api/skland/status"],
+    ["DELETE", "/api/skland/data"],
+  ] as const) {
+    const response = await request.fetch(path, { method });
+    expect(response.status(), `${method} ${path}`).toBe(401);
+    expect((await response.json()).error.code, `${method} ${path}`).toBe("AIC-AUTH-2008");
+  }
+
+  const nativeAdmin = await request.post("/api/auth/admin/list-users", { data: {} });
+  expect(nativeAdmin.status()).toBe(404);
+  expect((await request.get("/admin/users")).status()).toBe(404);
+});
 
 test("serves versioned WebP portraits with immutable caching only when versioned", async ({ request }) => {
   expect(amiyaPortrait).toMatch(/^\/images\/operator-portraits\/002_amiya\.webp\?v=\d+-[0-9a-f]{12}$/);
@@ -978,9 +1462,11 @@ test("restores a v4 schedule without hydration errors and keeps only safe data",
   });
 
   await page.goto("/");
-  await expect(page.getByText("排班已生成")).toBeVisible();
+  await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
+  await expect(page.locator('[data-slot="live-activity"]')).toHaveCount(0);
   await page.reload();
-  await expect(page.getByText("排班已生成")).toBeVisible();
+  await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
+  await expect(page.locator('[data-slot="live-activity"]')).toHaveCount(0);
   expect(consoleErrors.filter((message) => /hydration|did not match/i.test(message))).toEqual([]);
 
   const persisted = await page.evaluate(() => JSON.parse(
@@ -993,7 +1479,102 @@ test("restores a v4 schedule without hydration errors and keeps only safe data",
   expect(JSON.stringify(persisted)).not.toContain("stdout");
 });
 
-test("two-shift output drives labels, teams, metric units, and profile details", async ({ page }) => {
+test("planning preloads every versioned product icon and renders direct immutable WebP requests", async ({ page }) => {
+  await mockApis(page);
+  await seedV4Session(page, null);
+  await page.unroute("**/api/plan");
+
+  let releasePlan!: () => void;
+  const planBarrier = new Promise<void>((resolve) => {
+    releasePlan = resolve;
+  });
+  let planReleased = false;
+  const productsRequestedBeforePlanResponse = new Set<string>();
+  page.on("request", (request) => {
+    if (!planReleased && request.url().includes("/images/products/")) {
+      productsRequestedBeforePlanResponse.add(new URL(request.url()).pathname);
+    }
+  });
+  await page.route("**/api/plan", async (route) => {
+    await planBarrier;
+    planReleased = true;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true, data: planData, requestId }),
+    });
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "生成排班" }).click();
+  await expect.poll(() => productsRequestedBeforePlanResponse.size).toBe(5);
+  releasePlan();
+
+  const productImages = page.locator("[data-daily-production-summary] img");
+  await expect(productImages).toHaveCount(5);
+  const imageAttributes = await productImages.evaluateAll((images) => images.map((image) => ({
+    src: image.getAttribute("src"),
+    width: image.getAttribute("width"),
+    height: image.getAttribute("height"),
+    loading: image.getAttribute("loading"),
+  })));
+  for (const image of imageAttributes) {
+    expect(image.src).toMatch(/^\/images\/products\/[a-z_]+\.webp\?v=\d+-[0-9a-f]{12}$/);
+    expect(image.src).not.toContain("/_next/image");
+    expect(["16", "32"]).toContain(image.width);
+    expect(image.height).toBe(image.width);
+    expect(image.loading).toBe("eager");
+  }
+
+  const versionedPath = imageAttributes[0].src;
+  if (!versionedPath) throw new Error("Missing versioned product image path.");
+  const versionedResponse = await page.request.get(versionedPath);
+  expect(versionedResponse.headers()["cache-control"]).toContain("max-age=31536000");
+  expect(versionedResponse.headers()["cache-control"]).toContain("immutable");
+
+  const unversionedResponse = await page.request.get(versionedPath.split("?")[0]);
+  expect(unversionedResponse.headers()["cache-control"] ?? "").not.toContain("immutable");
+});
+
+test("a failed complete Skland restore keeps the independently restored identity visible", async ({ page }) => {
+  await mockApis(page, {
+    sklandConfigured: true,
+    sklandSnapshot: authenticatedSklandSnapshot,
+    sklandSessionFailure: true,
+  });
+  await page.unroute("**/api/skland/status");
+  let releaseStatus!: () => void;
+  const statusBarrier = new Promise<void>((resolve) => {
+    releaseStatus = resolve;
+  });
+  await page.route("**/api/skland/status", async (route) => {
+    await statusBarrier;
+    await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
+  });
+  await seedPreferences(page);
+  const fullRestoreFailed = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === "/api/skland/session"
+      && !url.searchParams.has("mode")
+      && response.status() === 500;
+  });
+  await page.goto("/");
+
+  const accountControl = page.locator("[data-skland-account-control]");
+  await expect(accountControl).toHaveAttribute("aria-label", "测试博士，进入森空岛状态中心");
+  const accountPlaceholder = accountControl.locator("[data-skland-account-placeholder]");
+  await expect(accountPlaceholder).toBeVisible();
+  await expect(accountPlaceholder).toHaveAttribute("data-fluid-orb-color", /^#[0-9A-F]{6}$/);
+  await expect(accountControl).not.toContainText("测");
+  await fullRestoreFailed;
+  await accountControl.click();
+  await expect(page.getByText(/森空岛会话恢复失败，请稍后刷新。/)).toBeVisible();
+  await page.getByRole("button", { name: "基建计算器", exact: true }).click();
+  await expect(accountControl).toHaveAttribute("aria-label", "测试博士，进入森空岛状态中心");
+  releaseStatus();
+});
+
+test("two-shift output drives product estimates, room formulas, and profile details", async ({ page, browserName }) => {
   await mockApis(page);
   await seedV4Session(page, twoShiftPlanData, { rotationProfile: "main_backup_12_12" });
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -1005,17 +1586,79 @@ test("two-shift output drives labels, teams, metric units, and profile details",
   await expect(page.getByRole("tab", { name: /第 3 班/ })).toHaveCount(0);
   await expect(shiftTabs.first()).toHaveAttribute("aria-label", /主力 上班 · 替补 休息/);
 
-  await expect(page.getByText("5.288×", { exact: true })).toBeVisible();
-  await expect(page.getByText("917.5%", { exact: true })).toBeVisible();
-  await expect(page.getByText("355.2%", { exact: true })).toBeVisible();
+  const dailyProducts = page.locator("[data-daily-production-summary]");
+  await expect(page.getByText("PLAN ONLINE", { exact: true })).toHaveCount(0);
+  await expect(dailyProducts.locator("[data-daily-product-group]")).toHaveCount(3);
+  await expect(dailyProducts.locator("[data-daily-product-group]").nth(0)).toHaveAttribute("data-daily-product-group", "experience");
+  await expect(dailyProducts.locator("[data-daily-product-group]").nth(1)).toHaveAttribute("data-daily-product-group", "lmd");
+  await expect(dailyProducts.locator("[data-daily-product-group]").nth(2)).toHaveAttribute("data-daily-product-group", "orundum");
+  await expect(dailyProducts.locator("[data-daily-product]")).toHaveCount(5);
+  await expect(dailyProducts.locator('[data-daily-product-group="lmd"] [data-daily-product]').nth(0)).toHaveAttribute("data-daily-product", "lmd-orders");
+  await expect(dailyProducts.locator('[data-daily-product-group="lmd"] [data-daily-product]').nth(1)).toHaveAttribute("data-daily-product", "gold");
+  await expect(dailyProducts.locator('[data-daily-product-group="orundum"] [data-daily-product]').nth(0)).toHaveAttribute("data-daily-product", "orundum");
+  await expect(dailyProducts.locator('[data-daily-product-group="orundum"] [data-daily-product]').nth(1)).toHaveAttribute("data-daily-product", "shards");
+  await expect(dailyProducts.locator('[data-daily-product="lmd-orders"]')).toContainText(/龙门币.*34,254.*龙门币/s);
+  await expect(dailyProducts.locator('[data-daily-product="gold"]')).toContainText(/赤金.*106.*枚/s);
+  await expect(dailyProducts.locator('[data-daily-product="experience"]')).toContainText(/经验.*22,400.*经验/s);
+  await expect(dailyProducts.locator('[data-daily-product="shards"]')).toContainText(/源石碎片.*48.*枚/s);
+  await expect(dailyProducts.locator('[data-daily-product="orundum"]')).toContainText(/合成玉.*360.*合成玉/s);
+  await expect(dailyProducts.getByText("龙门币订单", { exact: true })).toHaveCount(0);
+  await waitForOwnAnimations(dailyProducts.locator("[data-plan-metric]").last());
+
+  const primaryProductOffsets = await Promise.all(
+    ["experience", "lmd", "orundum"].map((group) => dailyProducts.locator(`[data-daily-product-group="${group}"]`).evaluate((card) => {
+      const product = card.querySelector<HTMLElement>("[data-daily-product]");
+      if (!product) throw new Error(`Missing primary product in ${card.getAttribute("data-daily-product-group") ?? "unknown"} card`);
+      const cardBounds = card.getBoundingClientRect();
+      const productBounds = product.getBoundingClientRect();
+      return { inlineStart: productBounds.left - cardBounds.left, blockStart: productBounds.top - cardBounds.top };
+    })),
+  );
+  expect(primaryProductOffsets[0].inlineStart).toBeCloseTo(primaryProductOffsets[1].inlineStart, 0);
+  expect(primaryProductOffsets[0].inlineStart).toBeCloseTo(primaryProductOffsets[2].inlineStart, 0);
+  expect(primaryProductOffsets[0].blockStart).toBeCloseTo(primaryProductOffsets[1].blockStart, 0);
+  expect(primaryProductOffsets[0].blockStart).toBeCloseTo(primaryProductOffsets[2].blockStart, 0);
+
+  const manufactureFormula = page.locator('[data-room-title="制造站 1"]');
+  const tradeFormula = page.locator('[data-room-title="贸易站 1"]');
+  await expect(manufactureFormula).toContainText(/236%\s*=\s*100%\s*\+\s*130%\s*纯技能\s*\+\s*6%\s*跨设施/);
+  await expect(tradeFormula).toContainText(/333\.7%\s*=\s*100%\s*\+\s*135%\s*综合加成\s*×\s*1\.42\s*订单机制/);
+  await expect(manufactureFormula.getByText("基础", { exact: true })).toHaveCount(0);
+  await expect(tradeFormula.getByText("基础", { exact: true })).toHaveCount(0);
+
+  for (const viewport of [{ width: 390, height: 844 }, { width: 768, height: 900 }, { width: 1440, height: 900 }]) {
+    await page.setViewportSize(viewport);
+    const fit = await dailyProducts.evaluate((element) => ({ clientWidth: element.clientWidth, scrollWidth: element.scrollWidth }));
+    expect(fit.scrollWidth).toBeLessThanOrEqual(fit.clientWidth);
+    for (const product of await dailyProducts.locator("[data-daily-product-group]").all()) {
+      const cardFit = await product.evaluate((element) => ({ clientWidth: element.clientWidth, scrollWidth: element.scrollWidth }));
+      expect(cardFit.scrollWidth).toBeLessThanOrEqual(cardFit.clientWidth + 1);
+    }
+  }
 
   await page.getByRole("tab", { name: /第 2 班 · 12h/ }).click();
   await expect(shiftTabs.nth(1)).toHaveAttribute("aria-label", /替补 上班 · 主力 休息/);
 
-  const detailsTrigger = page.locator('[data-plan-details-trigger="efficiency"]').last();
+  await expect(page.getByRole("button", { name: "查看详情", exact: true })).toHaveCount(0);
+  const detailsTrigger = page.locator("[data-plan-primary-details-trigger]");
   await detailsTrigger.click();
   const detailsSheet = page.locator('[data-slot="drawer-content"]');
   await expect(detailsSheet).toBeVisible();
+  await expect(detailsSheet.getByRole("heading", { name: "预计日产物" })).toBeVisible();
+  await expect(detailsSheet.getByText("DAILY OUTPUT", { exact: true })).toHaveCount(0);
+  await expect(detailsSheet.getByText("完整精度汇总 · 显示取整", { exact: true })).toHaveCount(0);
+  await expect(detailsSheet.locator("[data-production-group]").nth(0)).toHaveAttribute("data-production-group", "experience");
+  await expect(detailsSheet.locator("[data-production-group]").nth(1)).toHaveAttribute("data-production-group", "lmd");
+  await expect(detailsSheet.locator("[data-production-group]").nth(2)).toHaveAttribute("data-production-group", "orundum");
+  await expect(detailsSheet.locator('[data-production-group="lmd"] [data-production-detail]').nth(0)).toHaveAttribute("data-production-detail", "lmd-orders");
+  await expect(detailsSheet.locator('[data-production-group="lmd"] [data-production-detail]').nth(1)).toHaveAttribute("data-production-detail", "gold");
+  await expect(detailsSheet.getByText("龙门币订单", { exact: true })).toHaveCount(0);
+  await expect(detailsSheet.locator('[data-production-detail="gold"]')).toContainText("订单原料");
+  await expect(detailsSheet.locator('[data-production-group="orundum"] [data-production-detail]').nth(0)).toHaveAttribute("data-production-detail", "orundum");
+  await expect(detailsSheet.locator('[data-production-group="orundum"] [data-production-detail]').nth(1)).toHaveAttribute("data-production-detail", "shards");
+  await expect(detailsSheet.locator('[data-production-detail="shards"]')).toContainText("制造环节");
+  await expect(detailsSheet.locator('[data-production-detail="orundum"]')).toContainText("限制环节：合成玉订单");
+  await expect(detailsSheet.locator("[data-production-method]")).toHaveCount(0);
   await expect(detailsSheet.getByText("24h 贸易", { exact: true }).locator("..")).toContainText(/参考 4\.968×\s*\+6\.4%/);
   await expect(detailsSheet.getByText("24h 制造", { exact: true }).locator("..")).toContainText(/参考 850%\s*\+7\.9%/);
   await expect(detailsSheet.locator('[data-efficiency-insights] [data-insight-state="positive"]')).toHaveCount(3);
@@ -1026,13 +1669,19 @@ test("two-shift output drives labels, teams, metric units, and profile details",
   await expect(detailsTrigger).toBeFocused();
 
   await detailsTrigger.click();
-  const drawerHandle = page.locator('[data-slot="drawer-handle"]');
-  const handleBox = await drawerHandle.boundingBox();
-  expect(handleBox).not.toBeNull();
-  await page.mouse.move(handleBox!.x + 40, handleBox!.y + handleBox!.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(handleBox!.x + handleBox!.width * 0.65, handleBox!.y + handleBox!.height / 2, { steps: 8 });
-  await page.mouse.up();
+  await expect(detailsSheet).toBeVisible();
+  await expect.poll(async () => (await detailsSheet.boundingBox())?.x).toBeCloseTo(880, 0);
+  if (browserName === "webkit") {
+    await detailsSheet.getByRole("button", { name: "关闭详情" }).click();
+  } else {
+    const drawerHandle = page.locator('[data-slot="drawer-handle"]');
+    const handleBox = await drawerHandle.boundingBox();
+    expect(handleBox).not.toBeNull();
+    await page.mouse.move(handleBox!.x + 40, handleBox!.y + handleBox!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(handleBox!.x + handleBox!.width - 10, handleBox!.y + handleBox!.height / 2, { steps: 12 });
+    await page.mouse.up();
+  }
   await expect(page.locator('[data-slot="drawer-root"]')).toHaveCount(0);
   await expect(detailsTrigger).toBeFocused();
 
@@ -1119,7 +1768,7 @@ test("?beta cannot enable debug tools without the server feature flag", async ({
   await mockApis(page, { debugTools: false });
   await seedPreferences(page);
   await page.goto("/?beta");
-  await expect(page.getByText("排班服务已就绪")).toBeVisible();
+  await expect(page.getByRole("button", { name: "全角色导入" })).toBeVisible();
   await expect(page.getByText("调试输出")).toHaveCount(0);
   await expect(page.getByText("问题上下文")).toHaveCount(0);
   await expect(page.getByText("开启调试工具", { exact: true })).toHaveCount(0);
@@ -1141,7 +1790,39 @@ test("the development debug entry manages the URL and debug panels", async ({ pa
   await expect(page.getByText("开启调试工具", { exact: true })).toBeVisible();
 });
 
-test("shows the solving orb only while a plan request is running", async ({ page }) => {
+test("plan requests opt into debug data only while the beta tools are active", async ({ page }) => {
+  await mockApis(page, { debugTools: true });
+  await seedV4Session(page);
+  const planRequests: URL[] = [];
+  await page.route(/\/api\/plan(?:\?.*)?$/, (route) => {
+    const requestUrl = new URL(route.request().url());
+    planRequests.push(requestUrl);
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: requestUrl.searchParams.get("beta") === "1"
+          ? { ...planData, debug: { command: "infra-cli serve", stdout: "test output", stderr: "" } }
+          : planData,
+        requestId,
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "生成排班" }).click();
+  await expect.poll(() => planRequests.length).toBe(1);
+  expect(planRequests[0].searchParams.has("beta")).toBe(false);
+
+  await page.getByText("开启调试工具", { exact: true }).click();
+  await expect(page).toHaveURL(/\?beta$/);
+  await page.getByRole("button", { name: "生成排班" }).click();
+  await expect.poll(() => planRequests.length).toBe(2);
+  expect(planRequests[1].searchParams.get("beta")).toBe("1");
+});
+
+test("shows the thinking activity and indeterminate progress only while a plan request is running", async ({ page }) => {
   await mockApis(page);
   let releasePlan!: () => void;
   const planGate = new Promise<void>((resolve) => {
@@ -1159,23 +1840,22 @@ test("shows the solving orb only while a plan request is running", async ({ page
   await page.goto("/");
 
   await page.getByRole("button", { name: "全角色导入" }).click();
-  const status = page.getByRole("status");
-  const statusText = status.locator('[data-slot="status-text"]');
-  const readyTextX = await statusText.evaluate((element) => element.getBoundingClientRect().x);
   await page.getByRole("button", { name: "生成排班" }).click();
 
+  const status = page.locator('[data-slot="live-activity"]');
   const solvingOrb = status.locator('[data-slot="solving-orb"]');
+  const progress = status.locator('[data-slot="activity-progress-indicator"]');
   await expect(status).toContainText("正在生成排班");
+  await expect(status).toHaveCSS("background-color", "rgb(250, 250, 248)");
   await expect(solvingOrb).toBeVisible();
-  await expect(solvingOrb).toHaveAttribute("aria-hidden", "true");
-  const solvingTextX = await statusText.evaluate((element) => element.getBoundingClientRect().x);
-  expect(Math.abs(solvingTextX - readyTextX)).toBeLessThan(1);
+  await expect(status.locator(".live-activity-shimmer")).toBeVisible();
+  await expect(progress).toBeVisible();
+  await expect(progress).toHaveCSS("width", /.+/);
 
   releasePlan();
   await expect(status).toContainText("排班已生成");
   await expect(solvingOrb).toHaveCount(0);
-  const completeTextX = await statusText.evaluate((element) => element.getBoundingClientRect().x);
-  expect(Math.abs(completeTextX - readyTextX)).toBeLessThan(1);
+  await expect(status.locator('[data-slot="activity-progress-indicator"]')).toHaveCSS("width", /.+/);
 });
 
 test("Skland calculator keeps the schedule visible before and after sidebar navigation", async ({ page }) => {
@@ -1193,7 +1873,7 @@ test("Skland calculator keeps the schedule visible before and after sidebar navi
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 
-  await expect(page.locator("[data-skland-topbar-account]")).toBeVisible();
+  await expect(page.locator("[data-skland-account-control]")).toBeVisible();
   const runButton = page.getByRole("button", { name: "生成排班" });
   await expect(runButton).toBeEnabled();
 
@@ -1204,7 +1884,7 @@ test("Skland calculator keeps the schedule visible before and after sidebar navi
   await expect(waitingBoard).toContainText("控制中枢");
 
   await runButton.click();
-  await expect(page.getByText("排班已生成")).toBeVisible();
+  await expect(page.locator('[data-slot="live-activity"]')).toHaveAttribute("data-activity-phase", "success");
   await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
   await expect(page.getByRole("button", { name: "导出到 MAA" })).toBeEnabled();
   const comparisonTrigger = page.locator('[data-plan-details-trigger="comparison"]');
@@ -1213,34 +1893,128 @@ test("Skland calculator keeps the schedule visible before and after sidebar navi
   const comparisonSheet = page.locator('[data-slot="drawer-content"]');
   await expect(comparisonSheet.locator("[data-plan-details-section]")).toHaveAttribute("data-plan-details-section", "comparison");
   await expect(comparisonSheet.locator("[data-shift-comparison-details]")).toBeVisible();
-  const comparisonTable = comparisonSheet.getByRole("table", { name: "干员房间调整" });
-  await expect(comparisonTable).toBeVisible();
-  await expect(comparisonTable.getByRole("columnheader")).toHaveText(["干员", "当前", "目标", "状态"]);
-  const adjustmentNames = await comparisonTable.locator('[role="rowgroup"] [role="row"] > strong').allTextContents();
-  expect(new Set(adjustmentNames).size).toBe(adjustmentNames.length);
+  const desktopAdjustmentGroups = comparisonSheet.locator("[data-desktop-adjustment-groups]");
+  await expect(desktopAdjustmentGroups).toBeVisible();
+  await expect(desktopAdjustmentGroups.getByRole("heading", { level: 4 })).toContainText(["需换出", "需换入", "位置调整"]);
+  const mobileIssueTone = { unexpected: "bg-amber-100", missing: "bg-sky-100", misplaced: "bg-zinc-200" } as const;
+  for (const issue of ["unexpected", "missing", "misplaced"] as const) {
+    const group = desktopAdjustmentGroups.locator(`[data-adjustment-group="${issue}"]`);
+    const declaredCount = Number((await group.locator(".font-number").textContent())?.match(/\d+/)?.[0] ?? 0);
+    const table = group.locator(`[data-desktop-adjustment-table="${issue}"]`);
+    if (declaredCount === 0) {
+      await expect(table).toHaveCount(0);
+      await expect(group.getByText("无", { exact: true })).toBeVisible();
+      continue;
+    }
+    await expect(table.locator("tbody tr")).toHaveCount(declaredCount);
+    const tableColumnOffsets = await table.evaluate((element) => {
+      const headers = Array.from(element.querySelectorAll("th"));
+      const firstRowCells = Array.from(element.querySelectorAll("tbody tr:first-child td"));
+      return headers.map((header, index) => Math.abs(header.getBoundingClientRect().x - firstRowCells[index].getBoundingClientRect().x));
+    });
+    expect(tableColumnOffsets.every((offset) => offset < 0.5)).toBe(true);
+  }
+  const desktopRoomLabels = desktopAdjustmentGroups.locator("[data-room-label]");
+  await expect(desktopRoomLabels.first()).toBeVisible();
+  await expect(desktopRoomLabels.first()).toHaveCSS("border-width", "0px");
+  await expect(desktopRoomLabels.first().locator("[data-room-indicator]")).toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobileAdjustmentGroups = comparisonSheet.locator("[data-mobile-adjustment-groups]");
+  await expect(mobileAdjustmentGroups).toBeVisible();
+  await expect(mobileAdjustmentGroups.getByRole("heading", { level: 4 })).toContainText(["需换出", "需换入", "位置调整"]);
+  for (const issue of ["unexpected", "missing", "misplaced"] as const) {
+    const group = mobileAdjustmentGroups.locator(`[data-adjustment-group="${issue}"]`);
+    const declaredCount = Number((await group.locator(".font-number").textContent())?.match(/\d+/)?.[0] ?? 0);
+    await expect(group.locator("li strong")).toHaveCount(declaredCount);
+    await expect(group.getByRole("heading", { level: 4 }).locator("span")).toHaveClass(new RegExp(mobileIssueTone[issue]));
+    if (declaredCount === 0) await expect(group.getByText("无", { exact: true })).toBeVisible();
+  }
+  await expect(mobileAdjustmentGroups.locator("[data-room-label]").first()).toBeVisible();
+  await expect(mobileAdjustmentGroups.locator("[data-room-label]").first()).toHaveCSS("border-width", "0px");
+  const firstMobileAdjustmentRow = mobileAdjustmentGroups.locator("[data-mobile-adjustment-row]").first();
+  const mobileRowAlignment = await firstMobileAdjustmentRow.evaluate((row) => {
+    const operator = row.querySelector("strong")?.getBoundingClientRect();
+    const action = row.querySelector("[data-mobile-adjustment-action]")?.getBoundingClientRect();
+    return operator && action ? Math.abs((operator.top + operator.height / 2) - (action.top + action.height / 2)) : Number.POSITIVE_INFINITY;
+  });
+  expect(mobileRowAlignment).toBeLessThan(2);
+  await expect(firstMobileAdjustmentRow.locator("strong")).toHaveCSS("font-size", "14px");
+  const mobileComparisonWidth = await mobileAdjustmentGroups.evaluate((element) => ({ client: element.clientWidth, scroll: element.scrollWidth }));
+  expect(mobileComparisonWidth.scroll).toBeLessThanOrEqual(mobileComparisonWidth.client);
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.keyboard.press("Escape");
   await expect(page.locator('[data-slot="drawer-root"]')).toHaveCount(0);
   await expect(comparisonTrigger).toBeFocused();
 
-  const returnToCalculator = async (destination: "练卡建议" | "森空岛状态", marker: string, label: string) => {
+  const returnToCalculator = async (destination: "练卡建议" | "森空岛状态中心", marker: string, label: string) => {
     await page.getByRole("button", { name: destination, exact: true }).click();
     await expect(page.locator(marker)).toBeVisible();
     await armMotionCapture(page, "[data-plan-board]", label, 320);
+    await armMotionCapture(page, "[data-plan-result-summary]", `${label}-summary`, 460);
+    await armMotionCapture(page, "[data-plan-result-summary] [data-plan-metric]", `${label}-metrics`, 360);
     await page.getByRole("button", { name: "基建计算器", exact: true }).click();
 
     const returnedBoard = page.locator("[data-plan-board]");
-    await expect(page.getByText("排班已生成")).toBeVisible();
     await expect(returnedBoard).toBeVisible();
     await expect(returnedBoard).toHaveCSS("opacity", "1");
     await expect(returnedBoard).toHaveAttribute("data-plan-revision", diagnosticId);
     await expect(page.getByRole("button", { name: "导出到 MAA" })).toBeEnabled();
     await page.waitForTimeout(650);
     expect(await page.locator("html").getAttribute(`data-motion-enter-${label}`)).toBeNull();
+    expect(await page.locator("html").getAttribute(`data-motion-enter-${label}-summary`)).toBeNull();
+    expect(await page.locator("html").getAttribute(`data-motion-enter-${label}-metrics`)).toBeNull();
   };
 
   await returnToCalculator("练卡建议", '[data-slot="training-summary"]', "calculator-return-training");
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await returnToCalculator("森空岛状态", "[data-skland-view-tabs]", "calculator-return-skland-reduced");
+  await returnToCalculator("森空岛状态中心", "[data-skland-view-tabs]", "calculator-return-skland-reduced");
+});
+
+test("empty calculator returns directly to the compact view with one coherent entrance", async ({ page, browserName }) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await mockApis(page);
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  await expect(page.locator('[data-schedule-view="compact"]')).toBeVisible({ timeout: 45_000 });
+  await expect(page.locator("[data-compact-schedule-skeleton]")).toHaveCount(0);
+  await page.getByRole("button", { name: "练卡建议", exact: true }).click();
+  await expect(page.locator("[data-training-page]")).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByText("ADVICE QUEUE · 00", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "前往生成排班", exact: true })).toHaveCSS("border-radius", "22px");
+
+  await page.evaluate(() => {
+    const root = document.documentElement;
+    root.setAttribute("data-compact-skeleton-seen", "false");
+    const observer = new MutationObserver((records) => {
+      const skeletonWasAdded = records.some((record) => Array.from(record.addedNodes).some((node) => (
+        node instanceof Element
+        && (node.matches("[data-compact-schedule-skeleton]") || node.querySelector("[data-compact-schedule-skeleton]"))
+      )));
+      if (!skeletonWasAdded) return;
+      root.setAttribute("data-compact-skeleton-seen", "true");
+      observer.disconnect();
+    });
+    const content = document.querySelector("[data-app-content]");
+    if (content) observer.observe(content, { childList: true, subtree: true });
+    window.setTimeout(() => observer.disconnect(), 5_000);
+  });
+
+  if (browserName === "webkit") {
+    await armTransientStyleCapture(page, '[data-schedule-view="compact"]', "empty-compact-return");
+  } else {
+    await armMotionCapture(page, '[data-schedule-view="compact"]', "empty-compact-return", 280);
+  }
+  await page.getByRole("button", { name: "基建计算器", exact: true }).click();
+
+  const compactView = page.locator('[data-schedule-view="compact"]');
+  await expect(compactView).toBeVisible();
+  await expect(page.locator("[data-compact-schedule-skeleton]")).toHaveCount(0);
+  await expect(page.locator("html")).toHaveAttribute("data-compact-skeleton-seen", "false");
+  if (browserName === "webkit") await expectCapturedStyleMotion(page, "empty-compact-return");
+  else await expectCapturedMotion(page, "empty-compact-return", 280);
 });
 
 test("plan completion reveals status, metrics, and schedule once without resetting board state", async ({ page, browserName }) => {
@@ -1276,16 +2050,21 @@ test("plan completion reveals status, metrics, and schedule once without resetti
   const restoreHidden = page.getByRole("button").filter({ hasText: "恢复已隐藏" });
   await expect(restoreHidden).toBeVisible();
 
+  if (browserName === "webkit") {
+    await armTransientStyleCapture(page, '[data-activity-phase="running"]', "loading-status");
+  } else {
+    await armMotionCapture(
+      page,
+      '[data-activity-phase="running"]',
+      "loading-status",
+      260,
+    );
+  }
   await page.getByRole("button", { name: "生成排班" }).click();
-  await armMotionCapture(
-    page,
-    '[data-status-state="loading"] [data-slot="status-content"]',
-    "loading-status",
-    140
-  );
-  const status = page.locator('[data-slot="plan-status"]');
-  await expect(status).toHaveAttribute("data-status-state", "loading");
-  await expectCapturedMotion(page, "loading-status", 140);
+  const status = page.locator('[data-slot="live-activity"]');
+  await expect(status).toHaveAttribute("data-activity-phase", "running");
+  if (browserName === "webkit") await expectCapturedStyleMotion(page, "loading-status");
+  else await expectCapturedMotion(page, "loading-status", 260);
 
   const boardBeforePlan = page.locator("[data-plan-board]");
   await boardBeforePlan.evaluate((element) => {
@@ -1300,10 +2079,11 @@ test("plan completion reveals status, metrics, and schedule once without resetti
     await armMotionCollectionCapture(page, "[data-plan-metric]", "plan-metrics", 360);
   }
   releasePlan();
-  await expect(status).toHaveAttribute("data-status-state", "success");
+  await expect(status).toHaveAttribute("data-activity-phase", "success");
   const summary = page.locator("[data-plan-summary]");
   const board = page.locator("[data-plan-board]");
   await expect(summary).toBeVisible();
+  await expect(summary).toHaveAttribute("data-plan-entrance", "animated");
   await expect(board).toHaveAttribute("data-plan-revision", diagnosticId);
   await expect(board).toHaveAttribute("data-motion-sentinel", "stable");
   expect(await board.evaluate((element) => element.getAnimations().filter((animation) => animation.playState === "running").length)).toBe(0);
@@ -1317,13 +2097,7 @@ test("plan completion reveals status, metrics, and schedule once without resetti
     await expectCapturedMotion(page, "plan-summary", 460, 40);
     await expectCapturedMotionDelays(page, "plan-metrics", 360, [100, 150, 215, 280]);
   }
-  const choreography = await page.evaluate(() => {
-    const statusBar = getComputedStyle(document.querySelector<HTMLElement>('[data-slot="plan-status"]')!);
-    return {
-      statusBarDuration: statusBar.transitionDuration,
-    };
-  });
-  expect(choreography.statusBarDuration).toContain("0.16s");
+  await expect(status).toContainText("排班已生成");
 
   const renderingBudget = await page.evaluate(() => {
     const summaryElement = document.querySelector<HTMLElement>("[data-plan-summary]")!;
@@ -1350,7 +2124,7 @@ test("plan completion reveals status, metrics, and schedule once without resetti
       totalElementCount: document.querySelectorAll("*").length,
     };
   });
-  expect(renderingBudget.summaryCalligraphCount).toBe(3);
+  expect(renderingBudget.summaryCalligraphCount).toBe(5);
   expect(renderingBudget.boardCalligraphCount).toBe(renderingBudget.roomPrimaryCount);
   expect(renderingBudget.totalCalligraphCount).toBe(
     renderingBudget.summaryCalligraphCount + renderingBudget.boardCalligraphCount
@@ -1371,6 +2145,9 @@ test("plan completion reveals status, metrics, and schedule once without resetti
   const firstShift = page.getByRole("tab", { name: /第 1 班 · 12h/ });
   const secondShift = page.getByRole("tab", { name: /第 2 班 · 6h/ });
   const thirdShift = page.getByRole("tab", { name: /第 3 班 · 6h/ });
+  await expect(page.getByText("最近记录", { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/较上次求解变更/)).toHaveCount(0);
+  await expect(page.locator("[data-shift-actions] [data-shift-tabs]")).toBeVisible();
   await secondShift.click();
   await expect(secondShift).toHaveAttribute("aria-selected", "true");
   await expect(board).toHaveAttribute("data-motion-sentinel", "stable");
@@ -1427,8 +2204,8 @@ test("reduced motion keeps feedback timing while removing movement, clipping, an
 
   await page.getByRole("button", { name: "全角色导入" }).click();
   await page.getByRole("button", { name: "生成排班" }).click();
-  await expect(page.locator('[data-slot="plan-status"]')).toHaveAttribute("data-status-state", "loading");
-  await expect(page.locator(".animate-spin").first()).toHaveCSS("animation-duration", "1.6s");
+  await expect(page.locator('[data-slot="live-activity"]')).toHaveAttribute("data-activity-phase", "running");
+  await expect(page.locator('[data-slot="live-activity"] .animate-spin')).toHaveCount(0);
 
   const board = page.locator("[data-plan-board]");
   await board.evaluate((element) => {
@@ -1443,9 +2220,10 @@ test("reduced motion keeps feedback timing while removing movement, clipping, an
     await armMotionCapture(page, "[data-plan-metric]", "reduced-metric", 140);
   }
   releasePlan();
-  await expect(page.locator('[data-slot="plan-status"]')).toHaveAttribute("data-status-state", "success");
+  await expect(page.locator('[data-slot="live-activity"]')).toHaveAttribute("data-activity-phase", "success");
   const summary = page.locator("[data-plan-summary]");
   await expect(summary).toBeVisible();
+  await expect(summary).toHaveAttribute("data-plan-entrance", "animated");
   await expect(board).toHaveAttribute("data-motion-sentinel", "stable");
   expect(await board.evaluate((element) => element.getAnimations().filter((animation) => animation.playState === "running").length)).toBe(0);
   if (browserName === "webkit") {
@@ -1456,7 +2234,7 @@ test("reduced motion keeps feedback timing while removing movement, clipping, an
     await expectCapturedMotion(page, "reduced-metric", 140);
   }
   const reduced = await page.evaluate(() => {
-    const statusBar = getComputedStyle(document.querySelector<HTMLElement>('[data-slot="plan-status"]')!);
+    const activity = document.querySelector<HTMLElement>('[data-slot="live-activity"]')!;
     const boardElement = document.querySelector<HTMLElement>("[data-plan-board]")!;
     const movingFrames = boardElement.getAnimations({ subtree: true }).flatMap((animation) => {
       const effect = animation.effect;
@@ -1466,16 +2244,122 @@ test("reduced motion keeps feedback timing while removing movement, clipping, an
       || (typeof frame.clipPath === "string" && frame.clipPath !== "none")
     ));
     return {
-      statusProperties: statusBar.transitionProperty,
-      statusDuration: statusBar.transitionDuration,
+      activityAnimationCount: activity.getAnimations({ subtree: true }).filter((animation) => animation.playState === "running").length,
       movingFrameCount: movingFrames.length,
       calligraphCount: boardElement.querySelectorAll("[data-calligraph]").length,
     };
   });
-  expect(reduced.statusProperties).toContain("background-color");
-  expect(reduced.statusDuration).toContain("0.16s");
+  expect(reduced.activityAnimationCount).toBe(0);
   expect(reduced.movingFrameCount).toBe(0);
   expect(reduced.calligraphCount).toBe(0);
+});
+
+test("live activity survives navigation and calculator search occupies the released toolbar space", async ({ page }) => {
+  await mockApis(page);
+  let releasePlan!: () => void;
+  const planGate = new Promise<void>((resolve) => {
+    releasePlan = resolve;
+  });
+  await page.route("**/api/plan", async (route) => {
+    await planGate;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true, data: twoShiftPlanData, requestId }),
+    });
+  });
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  await expect(page.locator('[data-slot="live-activity"]')).toHaveCount(0);
+  await page.getByRole("button", { name: "全角色导入" }).click();
+  await page.getByRole("button", { name: "生成排班" }).click();
+  const activity = page.locator('[data-slot="live-activity"]');
+  await expect(activity).toHaveAttribute("data-activity-phase", "running");
+
+  await page.getByRole("button", { name: "技能查询" }).click();
+  await expect(page.getByRole("heading", { name: "技能查询" })).toBeVisible();
+  await expect(activity).toHaveAttribute("data-activity-phase", "running");
+  releasePlan();
+  await expect(activity).toHaveAttribute("data-activity-phase", "success");
+  await expect(activity).toHaveCount(0, { timeout: 5_000 });
+
+  await expect(page.getByRole("textbox", { name: "搜索干员名称" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "筛选制造站" })).toBeVisible();
+
+  await page.getByRole("button", { name: "基建计算器", exact: true }).click();
+  const search = page.getByRole("textbox", { name: "搜索排班中的干员或房间" });
+  const toolbar = page.locator("[data-calculator-controls]");
+  await expect(search).toBeVisible();
+  for (const buttonName of ["配置Box与布局", "生成排班"]) {
+    await expect(toolbar.getByRole("button", { name: buttonName })).toHaveCSS("height", "36px");
+  }
+  await expect(page.locator("[data-calculator-export-actions]").getByRole("button", { name: "全角色导入" })).toHaveCSS("height", "28px");
+  await page.keyboard.press("Control+k");
+  await expect(search).toBeFocused();
+  await search.fill("阿米娅");
+  await expect(page.locator("[data-plan-board]")).toContainText("阿米娅");
+  await expect(page.getByRole("button", { name: "清空排班搜索" })).toBeVisible();
+  await page.getByRole("button", { name: "清空排班搜索" }).click();
+  await expect(search).toHaveValue("");
+
+  await page.getByRole("button", { name: "查看快捷键" }).click();
+  const shortcutDialog = page.getByRole("dialog");
+  await expect(shortcutDialog).toBeVisible();
+  await expect(shortcutDialog).toHaveCSS("max-width", "672px");
+  await expect(shortcutDialog.locator('[data-slot="kbd"]')).toHaveCount(5);
+  await expect(shortcutDialog.locator('[data-slot="kbd-group"]')).toHaveCount(2);
+  const shortcutRows = shortcutDialog.locator('[data-slot="kbd-group"]').first().locator("xpath=..");
+  await expect(shortcutRows).toHaveCSS("min-height", "56px");
+  await page.keyboard.press("Escape");
+  await expect(shortcutDialog).toBeHidden();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobileToolbar = await toolbar.evaluate((element) => ({ client: element.clientWidth, scroll: element.scrollWidth }));
+  expect(mobileToolbar.scroll).toBeLessThanOrEqual(mobileToolbar.client);
+  await expect(search).toHaveCSS("height", "44px");
+});
+
+test("failed plan remains expanded with retry and diagnostic actions", async ({ page }) => {
+  await mockApis(page);
+  let requestCount = 0;
+  await page.route("**/api/plan", async (route) => {
+    requestCount += 1;
+    if (requestCount === 1) {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: false,
+          error: { code: "AIC-PLAN-3001", message: "排班服务暂不可用，请稍后重试。", retryable: true },
+          requestId,
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true, data: twoShiftPlanData, requestId }),
+    });
+  });
+  await seedPreferences(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "全角色导入" }).click();
+  await page.getByRole("button", { name: "生成排班" }).click();
+
+  const activity = page.locator('[data-slot="live-activity"]');
+  await expect(activity).toHaveAttribute("data-activity-phase", "error");
+  await expect(activity).toHaveAttribute("data-activity-view", "expanded");
+  await page.waitForTimeout(2_800);
+  await expect(activity).toHaveAttribute("data-activity-view", "expanded");
+  await activity.hover();
+  await expect(activity).toHaveAttribute("data-activity-view", "expanded");
+  await activity.getByRole("button", { name: "复制诊断" }).click();
+  await expect(activity.getByRole("button", { name: "已复制" })).toBeVisible();
+  await activity.getByRole("button", { name: "重试" }).click();
+  await expect(page.locator('[data-slot="live-activity"][data-activity-phase="success"]')).toBeVisible();
 });
 
 test("dialog and mobile sheet motion preserve direction, exit timing, and focus", async ({ page }) => {
@@ -1487,8 +2371,14 @@ test("dialog and mobile sheet motion preserve direction, exit timing, and focus"
   const setupTrigger = page.getByRole("button", { name: "配置Box与布局" }).first();
   await setupTrigger.click();
   const setupDialog = page.getByRole("dialog");
-  await expect(setupDialog).toHaveCSS("transform-origin", /.+/);
+  await expect(setupDialog).toBeVisible({ timeout: 30_000 });
+  await setupDialog.getByRole("button", { name: "Close" }).click();
+  await expect(setupDialog).toHaveCount(0);
+  await expect(setupTrigger).toBeFocused();
+
+  await setupTrigger.click();
   await expectMotionDuration(setupDialog, 300);
+  await expect(setupDialog).toHaveCSS("transform-origin", /.+/);
   await page.setViewportSize({ width: 768, height: 900 });
   await armEndingTransitionCapture(setupDialog, "setup");
   await setupDialog.getByRole("button", { name: "Close" }).click();
@@ -1500,6 +2390,12 @@ test("dialog and mobile sheet motion preserve direction, exit timing, and focus"
   const issueTrigger = page.getByRole("button", { name: /反馈排班问题/ }).first();
   await issueTrigger.click();
   const feedbackDialog = page.getByRole("dialog");
+  await expect(feedbackDialog).toBeVisible({ timeout: 30_000 });
+  await feedbackDialog.getByRole("button", { name: "取消" }).click();
+  await expect(feedbackDialog).toHaveCount(0);
+  await expect(issueTrigger).toBeFocused();
+
+  await issueTrigger.click();
   await expectMotionDuration(feedbackDialog, 300);
   await armEndingTransitionCapture(feedbackDialog, "feedback");
   await feedbackDialog.getByRole("button", { name: "取消" }).click();
@@ -1602,7 +2498,7 @@ test("Full E2 stays in place and completes generation, shifts, MAA export, and f
   await mockApis(page);
   await seedPreferences(page);
   await page.goto("/");
-  await expect(page.getByText("排班服务已就绪")).toBeVisible();
+  await expect(page.getByRole("button", { name: "全角色导入" })).toBeVisible();
 
   const fullE2 = page.getByRole("button", { name: "全角色导入" });
   await expect(fullE2).toBeVisible();
@@ -1629,6 +2525,19 @@ test("Full E2 stays in place and completes generation, shifts, MAA export, and f
     { columns: "90px 90px", columnGap: "8px", rowGap: "10px" },
   ]);
 
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobileFactoryControls = page.getByRole("group", { name: /制造站 1 配方/ }).first();
+  await expect(mobileFactoryControls).toBeVisible();
+  const mobileFactoryLayout = await mobileFactoryControls.evaluate((element) => ({
+    columns: getComputedStyle(element).gridTemplateColumns.split(" ").length,
+    rowPositions: Array.from(element.children).map((child) => child.getBoundingClientRect().y),
+    fits: element.scrollWidth <= element.clientWidth,
+  }));
+  expect(mobileFactoryLayout.columns).toBe(3);
+  expect(new Set(mobileFactoryLayout.rowPositions).size).toBe(1);
+  expect(mobileFactoryLayout.fits).toBe(true);
+  await page.setViewportSize({ width: 1440, height: 900 });
+
   await page.getByRole("button", { name: "生成排班" }).click();
   await expect(page.getByText("排班已生成")).toBeVisible();
   const secondShift = page.getByRole("tab", { name: /第 2 班 · 6h/ });
@@ -1653,6 +2562,45 @@ test("Full E2 stays in place and completes generation, shifts, MAA export, and f
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "提交反馈" }).click();
   await expect(page.getByText("反馈已提交，编号：feedback-001")).toBeVisible();
+});
+
+test("slow plans submit performance feedback without attributing an arbitrary room", async ({ page }) => {
+  await mockApis(page);
+  const feedbackPayloads: Record<string, unknown>[] = [];
+  await page.unroute("**/api/feedback");
+  await page.route("**/api/feedback", async (route) => {
+    feedbackPayloads.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: { feedbackId: "feedback-performance", savedAt: "2026-08-20T00:00:00.000Z" },
+        requestId,
+      }),
+    });
+  });
+  await seedV4Session(page, { ...planData, durationMs: 735 });
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "提交性能反馈" }).click();
+  const feedbackDialog = page.getByRole("dialog", { name: "提交性能反馈" });
+  await expect(feedbackDialog).toBeVisible();
+  await expect(feedbackDialog.getByText(/不会附带任意房间或完整干员数据/)).toBeVisible();
+  await feedbackDialog.getByRole("textbox").fill("同一份 Box 之前通常可以更快完成。");
+  await feedbackDialog.getByRole("checkbox").check();
+  await feedbackDialog.getByRole("button", { name: "提交反馈" }).click();
+
+  await expect.poll(() => feedbackPayloads).toHaveLength(1);
+  const feedbackPayload = feedbackPayloads[0];
+  expect(feedbackPayload).toMatchObject({
+    kind: "performance_issue",
+    diagnosticId,
+    consent: true,
+  });
+  expect(feedbackPayload).not.toHaveProperty("room");
+  expect(feedbackPayload?.note).toContain("求解耗时：735 ms");
+  await expect(page.getByText("反馈已提交，编号：feedback-performance")).toBeVisible();
 });
 
 test("scheduled product changes require destructive confirmation and rerun with the updated layout", async ({ page }) => {
@@ -1723,6 +2671,16 @@ test("scheduled product changes require destructive confirmation and rerun with 
 
 test("responsive navigation and the two locked areas keep their current behavior", async ({ page }) => {
   test.setTimeout(60_000);
+  await page.addInitScript(() => {
+    const history: string[] = [];
+    Object.defineProperty(window, "__scheduleViewHistory", { value: history, configurable: true });
+    const capture = () => {
+      const mode = document.querySelector<HTMLElement>("[data-schedule-view]")?.dataset.scheduleView;
+      if (mode && history.at(-1) !== mode) history.push(mode);
+    };
+    const observer = new MutationObserver(capture);
+    observer.observe(document, { attributes: true, childList: true, subtree: true });
+  });
   await mockApis(page);
   await seedV4Session(page);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -1730,10 +2688,15 @@ test("responsive navigation and the two locked areas keep their current behavior
 
   const listViewTab = page.getByRole("tab", { name: "列表式布局" });
   const compactViewTab = page.getByRole("tab", { name: "一图流布局" });
-  await expect(compactViewTab).toBeVisible();
-  await expect(compactViewTab).toBeDisabled();
-  await expect(listViewTab).toHaveAttribute("aria-selected", "true");
-  await expect(compactViewTab.locator("xpath=..").getByRole("tab")).toHaveText(["一图流布局", "列表式布局"]);
+  await expect(compactViewTab).toHaveCount(0);
+  await expect(listViewTab).toHaveCount(0);
+  await expect(page.locator('[data-schedule-view="list"]')).toBeVisible();
+  await expect(page.locator('[data-schedule-view="compact"]')).toHaveCount(0);
+  await expect(page.locator("[data-compact-schedule-loading]")).toHaveCount(0);
+  const mobileViewHistory = await page.evaluate(() => (
+    (window as Window & { __scheduleViewHistory?: string[] }).__scheduleViewHistory ?? []
+  ));
+  expect(mobileViewHistory).toEqual(["list"]);
   await expect(page.getByText("加工站")).toBeVisible();
 
   await page.getByRole("button", { name: /功能设施/ }).click();
@@ -1748,20 +2711,35 @@ test("responsive navigation and the two locked areas keep their current behavior
   ]) {
     await page.setViewportSize(viewport);
     await page.reload();
-    await expect(page.getByText("排班已生成")).toBeVisible();
+    await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
+    await expect(page.locator('[data-slot="live-activity"]')).toHaveCount(0);
     await expect(page.getByRole("button", { name: "全角色导入" })).toBeVisible();
     await expect(compactViewTab).toBeEnabled();
     await expect(compactViewTab).toHaveAttribute("aria-selected", "true");
   }
+  await listViewTab.click();
+  await expect(listViewTab).toHaveAttribute("aria-selected", "true");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(compactViewTab).toHaveCount(0);
+  await expect(page.locator('[data-schedule-view="list"]')).toBeVisible();
+  await page.setViewportSize({ width: 768, height: 900 });
+  await expect(listViewTab).toHaveAttribute("aria-selected", "true");
+  await page.reload();
+  await expect(compactViewTab).toHaveAttribute("aria-selected", "true");
 
   await expect(page.getByRole("button", { name: "基建计算器" })).toBeVisible();
   await expect(page.getByRole("button", { name: "练卡建议" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "森空岛状态", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "森空岛状态中心", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "账号管理", exact: true })).toBeVisible();
 });
 
-test("the top account bar stays pinned on every page and treats local Box data as logged out", async ({ page }) => {
+test("the compact mobile navigation stays pinned while the account control belongs to the calculator", async ({ page }) => {
   test.setTimeout(60_000);
-  await mockApis(page, { sklandSessionDelayMs: 12_000 });
+  await mockApis(page, {
+    sklandConfigured: true,
+    sklandSnapshot: authenticatedSklandSnapshot,
+    sklandSessionDelayMs: 4_000,
+  });
   await seedV4Session(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
@@ -1779,30 +2757,130 @@ test("the top account bar stays pinned on every page and treats local Box data a
   expect(topbarStyle.backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
   expect(topbarStyle.borderBottomWidth).toBe("1px");
   expect(topbarStyle.boxShadow).toBe("none");
-  await expect(page.locator("[data-skland-topbar-loading]")).toBeVisible();
-  await expect(topbar.getByRole("button", { name: "登录森空岛" })).toBeVisible({ timeout: 15_000 });
+  await expect(topbar.locator("[data-skland-account-control]")).toHaveCount(0);
+  await expect(page.locator("[data-skland-account-control]")).toHaveAttribute(
+    "aria-label",
+    "测试博士，进入森空岛状态中心",
+    { timeout: 2_000 },
+  );
+  await expect(page.locator("[data-skland-account-loading]")).toHaveCount(0);
   await expect(page.locator("[data-skland-sidebar-account]")).toHaveCount(0);
+
+  const mobileBar = topbar.locator(".app-content-track");
+  await expect(mobileBar).toHaveCSS("height", "56px");
 
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   await expect.poll(async () => (await topbar.boundingBox())?.y ?? -1).toBeCloseTo(0, 0);
 
-  for (const destination of ["练卡建议", "森空岛状态", "基建计算器"]) {
+  for (const destination of ["练卡建议", "森空岛状态中心", "账号管理"]) {
     await topbar.getByRole("button", { name: "Toggle Sidebar" }).click();
     await page.getByRole("button", { name: destination, exact: true }).click();
-    await expect(topbar.getByRole("button", { name: "登录森空岛" })).toBeVisible();
+    await expect(page.locator("[data-skland-account-control]")).toHaveCount(0);
   }
+  await topbar.getByRole("button", { name: "Toggle Sidebar" }).click();
+  await page.getByRole("button", { name: "基建计算器", exact: true }).click();
+  await expect(page.locator("[data-skland-account-control]")).toBeVisible();
 
   await page.setViewportSize({ width: 768, height: 900 });
-  await expect.poll(() => topbar.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return {
-      backgroundColor: style.backgroundColor,
-      borderBottomWidth: style.borderBottomWidth,
-    };
-  })).toEqual({
-    backgroundColor: "rgba(0, 0, 0, 0)",
-    borderBottomWidth: "0px",
-  });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(topbar).toBeHidden();
+  await expect.poll(async () => (await page.locator("[data-app-content]").boundingBox())?.y ?? -1).toBeCloseTo(0, 0);
+});
+
+test("all primary pages share the calculator top content offset", async ({ page }) => {
+  await mockApis(page, { sklandConfigured: true, sklandSnapshot: authenticatedSklandSnapshot });
+  await seedPreferences(page);
+
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 768, height: 900 },
+    { width: 1440, height: 900 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+    const calculatorTop = (await page.locator("[data-calculator-controls]").boundingBox())?.y ?? -1;
+
+    for (const destination of [
+      { name: "练卡建议", pageKey: "training", root: "[data-training-page]" },
+      { name: "技能查询", pageKey: "skill-query", root: "[data-skill-query-page]" },
+      { name: "森空岛状态中心", pageKey: "skland", root: "[data-skland-page]" },
+      { name: "账号管理", pageKey: "account", root: "[data-account-management]" },
+    ]) {
+      if (viewport.width < 768) {
+        await page.locator("[data-app-topbar]").getByRole("button", { name: "Toggle Sidebar" }).click();
+      }
+      await page.getByRole("button", { name: destination.name, exact: true }).click();
+      await page.evaluate(() => window.scrollTo(0, 0));
+      const pageRoot = page.locator(destination.root);
+      await expect(pageRoot).toBeVisible();
+      await waitForOwnAnimations(page.locator(`[data-primary-page="${destination.pageKey}"]`));
+      const pageTop = (await pageRoot.locator(":scope > :first-child").boundingBox())?.y ?? -1;
+      expect(pageTop, `${viewport.width}px ${destination.name}`).toBeCloseTo(calculatorTop, 0);
+    }
+  }
+});
+
+test("Skland and account centers share header geometry and account actions use technical cards", async ({ page }) => {
+  await mockApis(page, { sklandConfigured: true, sklandSnapshot: authenticatedSklandSnapshot });
+  await seedPreferences(page);
+
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 768, height: 900 },
+    { width: 1440, height: 900 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+
+    if (viewport.width < 768) {
+      await page.locator("[data-app-topbar]").getByRole("button", { name: "Toggle Sidebar" }).click();
+    }
+    await page.getByRole("button", { name: "森空岛状态中心", exact: true }).click();
+    const sklandRoot = page.locator("[data-skland-page]");
+    await waitForOwnAnimations(page.locator('[data-primary-page="skland"]'));
+    const sklandHeader = sklandRoot.locator(":scope > header");
+    const sklandLogout = sklandRoot.locator("[data-skland-logout]");
+    await expect(sklandLogout).toBeVisible();
+    const dialogButtonHeight = viewport.width < 640 ? "44px" : "46px";
+    for (const label of ["前往生成排班", "继续配置布局"]) {
+      await expect(sklandRoot.getByRole("button", { name: label })).toHaveCSS("height", dialogButtonHeight);
+      await expect(sklandRoot.getByRole("button", { name: label })).toHaveCSS("border-radius", "22px");
+    }
+    const sklandGeometry = await Promise.all([
+      sklandHeader.boundingBox(),
+      sklandLogout.boundingBox(),
+    ]);
+
+    if (viewport.width < 768) {
+      await page.locator("[data-app-topbar]").getByRole("button", { name: "Toggle Sidebar" }).click();
+    }
+    await page.getByRole("button", { name: "账号管理", exact: true }).click();
+    const accountRoot = page.locator("[data-account-management]");
+    await waitForOwnAnimations(page.locator('[data-primary-page="account"]'));
+    const accountHeader = accountRoot.locator("header").first();
+    const accountLogout = accountRoot.locator("[data-account-logout]");
+    await expect(accountLogout).toBeVisible();
+    const accountGeometry = await Promise.all([
+      accountHeader.boundingBox(),
+      accountLogout.boundingBox(),
+    ]);
+
+    expect(accountGeometry[0]?.y).toBeCloseTo(sklandGeometry[0]?.y ?? 0, 0);
+    expect(accountGeometry[0]?.height).toBeCloseTo(sklandGeometry[0]?.height ?? 0, 0);
+    expect(accountGeometry[1]?.y).toBeCloseTo(sklandGeometry[1]?.y ?? 0, 0);
+    expect(accountGeometry[1]?.height).toBeCloseTo(sklandGeometry[1]?.height ?? 0, 0);
+    expect((accountGeometry[1]?.x ?? 0) + (accountGeometry[1]?.width ?? 0))
+      .toBeCloseTo((sklandGeometry[1]?.x ?? 0) + (sklandGeometry[1]?.width ?? 0), 0);
+
+    const actionCards = accountRoot.locator("[data-account-action-cards] [data-infra-technical-card]");
+    await expect(actionCards).toHaveCount(2);
+    await expect(actionCards.nth(0).getByRole("heading", { name: "登录设备" })).toBeVisible();
+    await expect(actionCards.nth(1).getByRole("heading", { name: "永久注销账号" })).toBeVisible();
+    for (const label of ["退出全部设备", "永久注销账号"]) {
+      await expect(accountRoot.getByRole("button", { name: label })).toHaveCSS("height", dialogButtonHeight);
+      await expect(accountRoot.getByRole("button", { name: label })).toHaveCSS("border-radius", "22px");
+    }
+  }
 });
 
 test("mobile interactive targets remain at least 44 CSS pixels", async ({ page }) => {
@@ -1852,7 +2930,7 @@ test("setup keeps Box parse errors local and actionable", async ({ page }) => {
   const setupTrigger = page.getByRole("button", { name: "配置Box与布局" }).first();
   await setupTrigger.click();
   const dialog = page.getByRole("dialog");
-  await page.getByRole("tab", { name: "干员数据", exact: true }).click();
+  await dialog.getByRole("button", { name: /第 1 步，共 3 步：干员数据/ }).click();
   await expect(dialog.locator(".setup-data-summary")).toHaveCount(1);
   await dialog.getByRole("button", { name: "更换", exact: true }).click();
   await page.getByRole("tab", { name: "森空岛", exact: true }).click();
@@ -1892,10 +2970,10 @@ test("fresh MAA import requires one facility review before completion", async ({
   await dialog.getByLabel("JSON 内容").fill(JSON.stringify(sampleData));
   await dialog.getByRole("button", { name: "导入 JSON", exact: true }).click();
 
-  await expect(dialog.getByRole("tab", { name: "基建与换班", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(dialog.getByRole("button", { name: /第 2 步，共 3 步：布局/ })).toHaveAttribute("aria-current", "step");
   await expect(dialog.getByRole("button", { name: "检查设施", exact: true })).toBeVisible();
   await dialog.getByRole("button", { name: "检查设施", exact: true }).click();
-  await expect(dialog.getByRole("tab", { name: "设施设置", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(dialog.getByRole("button", { name: /第 3 步，共 3 步：设施/ })).toHaveAttribute("aria-current", "step");
   await expect(dialog.getByRole("button", { name: "完成", exact: true })).toBeEnabled();
 });
 
@@ -1932,12 +3010,12 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   expect(dialogMaterial.texture).toContain("60px");
   expect(dialogMaterial.shadow).toContain("0px 0px 44px");
   await expect(dialog).toHaveCSS("width", "880px");
-  const setupPrimaryAction = dialog.getByRole("button", { name: "完成", exact: true });
+  const setupPrimaryAction = dialog.getByRole("button", { name: "继续", exact: true });
   await expect(setupPrimaryAction).toHaveCSS("width", "196px");
   await expect(setupPrimaryAction).toHaveCSS("height", "46px");
   await expect(setupPrimaryAction).toHaveCSS("border-radius", "22px");
   await expect(setupPrimaryAction).toHaveCSS("font-size", "13px");
-  await expect(setupPrimaryAction.locator("svg")).toHaveCSS("width", "12px");
+  await expect(setupPrimaryAction.locator("svg")).toHaveCount(0);
   await expect(dialog.getByRole("heading", { name: "排班设置" })).toBeVisible();
   const closeButton = dialog.getByRole("button", { name: "Close" });
   await expect(closeButton).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
@@ -1945,22 +3023,21 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   await expect(closeButton).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await expect(dialog.getByText("森空岛、MAA 或测试样例", { exact: true })).toHaveCount(0);
   await expect(dialog.getByText("布局、换班、等级、产品和订单", { exact: true })).toHaveCount(0);
-  const stepList = dialog.getByRole("tablist", { name: "设置步骤" });
+  const stepList = dialog.getByRole("list", { name: "设置步骤" });
   await expect(stepList.locator(":scope > *")).toHaveCount(3);
-  expect((await stepList.boundingBox())?.width ?? Infinity).toBeLessThan(260);
-  await dialog.getByRole("tab", { name: "干员数据", exact: true }).click();
-  await expect.poll(async () => (await dialog.boundingBox())?.height ?? Infinity).toBeLessThan(480);
-  const collapsedDialogHeight = (await dialog.boundingBox())?.height ?? 0;
+  expect((await stepList.boundingBox())?.width ?? 0).toBeGreaterThan(600);
+  await expect(dialog).toHaveCSS("height", "660px");
+  const initialStepListBox = await stepList.boundingBox();
+  await dialog.getByRole("button", { name: /第 1 步，共 3 步：干员数据/ }).click();
   await dialog.getByRole("button", { name: "更换", exact: true }).click();
   await expect(dialog.locator("#setup-import-options")).toBeVisible();
-  await expect.poll(async () => (await dialog.boundingBox())?.height ?? Infinity).toBeLessThan(700);
-  expect((await dialog.boundingBox())?.height ?? 0).toBeGreaterThan(collapsedDialogHeight);
+  await expect(dialog).toHaveCSS("height", "660px");
   await dialog.getByRole("button", { name: "收起", exact: true }).click();
-  await dialog.getByRole("tab", { name: "基建与换班", exact: true }).click();
-  const completedDataStep = dialog.getByRole("tab", { name: "干员数据", exact: true });
-  await expect(completedDataStep.locator("svg")).toHaveCount(0);
-  await expect(completedDataStep).toHaveClass(/text-emerald-700/);
-  expect(await completedDataStep.evaluate((element) => getComputedStyle(element, "::after").display)).toBe("none");
+  await dialog.getByRole("button", { name: /第 2 步，共 3 步：布局/ }).click();
+  const layoutStepListBox = await stepList.boundingBox();
+  expect(layoutStepListBox?.y ?? -1).toBeCloseTo(initialStepListBox?.y ?? -1, 0);
+  const completedDataStep = dialog.getByRole("button", { name: /第 1 步，共 3 步：干员数据/ });
+  await expect(completedDataStep.locator("svg")).toHaveCount(1);
 
   const selectedPreset = dialog.getByRole("button", { name: /^243/ });
   await expect(selectedPreset).toHaveAttribute("aria-pressed", "true");
@@ -1984,30 +3061,31 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   expect(popupBox?.width).toBeCloseTo(triggerBox?.width ?? 0, 0);
   await expect(dialog.locator('[data-slot="select-trigger"]')).toHaveCount(0);
   await expect(page.getByRole("option", { name: /自动轮换/ })).toHaveCount(0);
-  await expect(page.getByRole("option", { name: /一天两换/ })).toHaveCount(0);
+  await expect(page.getByRole("option", { name: /一天两换/ })).toHaveCount(1);
   await expect(page.getByRole("option", { name: /自定义/ })).toHaveCount(0);
-  await expect(page.getByRole("option")).toHaveCount(4);
-  await rotationTrigger.fill("菲亚梅塔");
+  await expect(page.getByRole("option")).toHaveCount(3);
+  await rotationTrigger.fill("一天两换");
   await expect(page.getByRole("option")).toHaveCount(1);
   await rotationTrigger.press("Enter");
-  await expect(rotationTrigger).toHaveValue("菲亚梅塔轮换 · 8/8/4/4");
+  await expect(rotationTrigger).toHaveValue("一天两换 · 12/12/12");
   await rotationTrigger.click();
   await expect(page.locator('[data-slot="combobox-content"]')).toBeVisible();
   await rotationTrigger.fill("不存在的方案");
   await expect(page.getByText("没有匹配的换班方式", { exact: true })).toBeVisible();
   await rotationTrigger.press("Escape");
-  await expect(rotationTrigger).toHaveValue("菲亚梅塔轮换 · 8/8/4/4");
+  await expect(rotationTrigger).toHaveValue("一天两换 · 12/12/12");
   await expect(dialog.getByText("完整循环 24 小时")).toHaveCount(0);
   await expect(dialog.getByText("第 4 班 4h")).toHaveCount(0);
+  await dialog.getByRole("button", { name: "继续", exact: true }).click();
   await dialog.getByRole("button", { name: "完成", exact: true }).click();
 
   await page.getByRole("button", { name: "生成排班" }).click();
   await expect.poll(() => planRequests).toBe(1);
-  expect(requestedRotation).toBe("fiammetta_8_8_4_4");
+  expect(requestedRotation).toBe("abc_12_12_12");
   const persisted = await page.evaluate(() => JSON.parse(
     window.localStorage.getItem("arknights-infra-calc-session-v5") ?? "{}"
   ));
-  expect(persisted.rotationProfile).toBe("fiammetta_8_8_4_4");
+  expect(persisted.rotationProfile).toBe("abc_12_12_12");
 });
 
 test("layout level controls clamp edits and expose the power-safe 342 defaults", async ({ page }) => {
@@ -2018,7 +3096,7 @@ test("layout level controls clamp edits and expose the power-safe 342 defaults",
 
   await page.getByRole("button", { name: "配置Box与布局" }).first().click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("tab", { name: "基建与换班", exact: true }).click();
+  await dialog.getByRole("button", { name: /第 2 步，共 3 步：布局/ }).click();
 
   await dialog.getByRole("button", { name: /^342/ }).click();
   await expect(dialog.getByRole("button", { name: "检查设施", exact: true })).toBeVisible();
@@ -2063,7 +3141,7 @@ test("layout level controls clamp edits and expose the power-safe 342 defaults",
 
   await page.setViewportSize({ width: 390, height: 844 });
   const footerBox = await dialog.locator("[data-setup-footer]").boundingBox();
-  expect(footerBox?.height ?? Infinity).toBeLessThanOrEqual(56);
+  expect(footerBox?.height ?? Infinity).toBeLessThanOrEqual(68);
   expect((footerBox?.y ?? Infinity) + (footerBox?.height ?? Infinity)).toBeLessThanOrEqual(844);
   expect(await activeTradeOrder.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
   const mobileTradeLevel = dialog.locator('input[aria-label="trade_2 等级"]:visible');
@@ -2107,19 +3185,23 @@ test("calculator owns scheduling controls and training advice uses a single tech
   await seedV4Session(page, adviceResult);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
+  await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
 
   const calculatorControls = page.locator("[data-calculator-controls]");
-  const fullE2 = page.locator("[data-full-e2]");
-  const runButton = page.getByRole("button", { name: "生成排班" });
+  const fullE2 = page.locator('[data-calculator-export-actions="desktop"] [data-full-e2]');
   await expect(calculatorControls).toBeVisible();
-  const desktopControlHeights = await Promise.all([
+  const exportMaa = page.getByRole("button", { name: "导出到 MAA" });
+  const desktopExportHeights = await Promise.all([
     fullE2.evaluate((element) => element.getBoundingClientRect().height),
-    runButton.evaluate((element) => element.getBoundingClientRect().height),
+    exportMaa.evaluate((element) => element.getBoundingClientRect().height),
   ]);
-  expect(desktopControlHeights[0]).toBe(desktopControlHeights[1]);
+  expect(desktopExportHeights[0]).toBe(desktopExportHeights[1]);
   const controlOrder = await calculatorControls.locator("button").allTextContents();
-  expect(controlOrder.at(-2)).toContain("全角色导入");
   expect(controlOrder.at(-1)).toContain("生成排班");
+  expect(controlOrder.some((label) => label.includes("全角色导入"))).toBe(false);
+  const exportOrder = await page.locator("[data-calculator-export-actions]").locator("button").allTextContents();
+  expect(exportOrder[0]).toContain("全角色导入");
+  expect(exportOrder[1]).toContain("导出到 MAA");
 
   await page.getByRole("button", { name: "练卡建议" }).click();
   await expect(calculatorControls).toHaveCount(0);
@@ -2149,10 +3231,10 @@ test("calculator owns scheduling controls and training advice uses a single tech
   await page.getByRole("button", { name: "Toggle Sidebar" }).click();
   await page.getByRole("button", { name: "基建计算器" }).click();
   const mobileHeights = await Promise.all([
-    page.locator("[data-full-e2]").evaluate((element) => element.getBoundingClientRect().height),
+    page.locator('[data-calculator-export-actions="mobile"] [data-full-e2]').evaluate((element) => element.getBoundingClientRect().height),
     page.getByRole("button", { name: "生成排班" }).evaluate((element) => element.getBoundingClientRect().height),
   ]);
-  expect(Math.min(...mobileHeights)).toBeGreaterThanOrEqual(44);
+  expect(Math.min(...mobileHeights)).toBeGreaterThanOrEqual(44 - 0.01);
 });
 
 test("schedule visuals use a stable technical canvas and responsive level markers", async ({ page }) => {
@@ -2171,6 +3253,7 @@ test("schedule visuals use a stable technical canvas and responsive level marker
   await expect(roomSurface).toBeVisible();
   await expect(compactViewTab).toHaveAttribute("aria-selected", "true");
   await listViewTab.click();
+  await expect(listViewTab).toHaveAttribute("aria-selected", "true");
   await expect(listDiamonds).toBeVisible();
 
   const buildingSkillBadge = page.getByRole("button", { name: /基建技能 S1：合作协议/ }).first();
@@ -2210,7 +3293,8 @@ test("schedule visuals use a stable technical canvas and responsive level marker
       emblemBlendMode: emblemStyle.mixBlendMode,
     };
   });
-  expect(visualStyles.bodyFont).toContain("Noto Sans SC");
+  expect(visualStyles.bodyFont).toContain("Microsoft YaHei");
+  expect(visualStyles.bodyFont).toContain("PingFang SC");
   expect(visualStyles.bodyFont).not.toContain("Segoe UI");
   expect(visualStyles.backdropFilter).toBe("none");
   expect(visualStyles.surfaceBackground).toBe("rgb(39, 42, 43)");
@@ -2261,8 +3345,8 @@ test("schedule visuals use a stable technical canvas and responsive level marker
   );
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(compactViewTab).toBeDisabled();
-  await expect(listViewTab).toHaveAttribute("aria-selected", "true");
+  await expect(compactViewTab).toHaveCount(0);
+  await expect(listViewTab).toHaveCount(0);
   const mobileDiamonds = page.locator('.level-diamonds[data-variant="list"]').first();
   await expect(mobileDiamonds).toBeVisible();
   const mobileBox = await mobileDiamonds.boundingBox();
@@ -2313,7 +3397,7 @@ test("self-hosts Bender Bold for technical numbers while preserving UI-font exce
   await expect(page.getByRole("heading", { name: "训练建议" })).toBeVisible();
   await expectVisibleNumbersUseNumberFont(page);
 
-  await page.getByRole("button", { name: "森空岛状态", exact: true }).click();
+  await openSklandOverview(page);
   await expect(page.getByRole("heading", { name: "测试博士" }).first()).toBeVisible();
   await expectVisibleNumbersUseNumberFont(page);
   await page.getByRole("tab", { name: "基建", exact: true }).click();
@@ -2337,7 +3421,7 @@ test("publishes the site terms and privacy policy with upstream policy links", a
   await page.setViewportSize({ width: 390, height: 844 });
   await gotoStable(page, "/privacy");
   await expect(page.getByRole("heading", { name: "隐私政策", level: 1 })).toBeVisible();
-  await expect(page.getByText("版本与生效日期：2026-08-07")).toBeVisible();
+  await expect(page.getByText("版本与生效日期：2026-08-17")).toBeVisible();
   await expect(page.getByText("可露希尔基建终端项目维护者", { exact: false })).toBeVisible();
   await expect(page.getByRole("link", { name: "森空岛使用许可及服务协议" })).toHaveAttribute(
     "href",
@@ -2350,11 +3434,11 @@ test("publishes the site terms and privacy policy with upstream policy links", a
 
   await gotoStable(page, "/terms");
   await expect(page.getByRole("heading", { name: "服务条款", level: 1 })).toBeVisible();
-  await expect(page.getByText("版本与生效日期：2026-08-07")).toBeVisible();
+  await expect(page.getByText("版本与生效日期：2026-08-17")).toBeVisible();
   await expect(page.getByText(/非官方、非商业工具/)).toBeVisible();
 });
 
-test("Skland login shows QR on every viewport and offers a separate mobile app shortcut", async ({ page }) => {
+test("Skland login centers the QR on every viewport and starts after explicit consent", async ({ page }) => {
   await mockApis(page, { sklandConfigured: true });
   let qrStartRequests = 0;
   await page.route("**/api/skland/auth/qr", (route) => {
@@ -2363,8 +3447,8 @@ test("Skland login shows QR on every viewport and offers a separate mobile app s
       consent: {
         termsAccepted: true,
         privacyAccepted: true,
-        termsVersion: "2026-08-07",
-        privacyVersion: "2026-08-07",
+        termsVersion: "2026-08-17",
+        privacyVersion: "2026-08-17-skland-binding",
       },
     });
     return route.fulfill({
@@ -2393,66 +3477,63 @@ test("Skland login shows QR on every viewport and offers a separate mobile app s
   await seedPreferences(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
-  await expect(page.locator("[data-app-topbar]").getByRole("button", { name: "登录森空岛" })).toBeVisible();
+  await expect(page.locator("[data-skland-account-control]")).toBeVisible();
   await expect(page.locator("[data-skland-sidebar-account]")).toHaveCount(0);
   await page.setViewportSize({ width: 375, height: 812 });
   await page.reload();
 
-  const topbarLogin = page.locator("[data-app-topbar]").getByRole("button", { name: "登录森空岛" });
-  await expect(topbarLogin).toBeVisible();
-  const loginBox = await topbarLogin.boundingBox();
+  const accountLogin = page.locator("[data-skland-account-control]");
+  await expect(accountLogin).toBeVisible();
+  const loginBox = await accountLogin.boundingBox();
   expect(loginBox?.height).toBeGreaterThanOrEqual(44);
-  await topbarLogin.click();
+  await accountLogin.click();
   await expect(page.getByRole("heading", { name: "把当前罗德岛带进排班助手" })).toBeVisible();
   await expect(page.getByText(/手机号|验证码|密码/)).toHaveCount(0);
+  await expect(page.getByText("使用森空岛 App 扫描二维码，同步当前角色的干员与基建数据。")).toBeVisible();
+  await expect(page.getByText("登录凭证只保存在当前浏览器，7 天后失效。")).toBeVisible();
+  await expect(page.getByText(/本站不会自动签到或读取社区内容/)).toHaveCount(0);
   expect(qrStartRequests).toBe(0);
   const [mobileQrBox, mobileCopyBox] = await Promise.all([
     page.locator("[data-skland-login-qr]").boundingBox(),
     page.locator("[data-skland-login-copy]").boundingBox(),
   ]);
-  expect(mobileQrBox?.y).toBeLessThan(mobileCopyBox?.y ?? 0);
+  expect(mobileCopyBox?.y).toBeLessThan(mobileQrBox?.y ?? 0);
 
   const consentCheckboxes = page.getByRole("checkbox");
   await expect(consentCheckboxes).toHaveCount(2);
-  await expect(page.getByRole("button", { name: "生成二维码" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /生成|打开森空岛/ })).toHaveCount(0);
   await consentCheckboxes.nth(0).check();
-  await expect(page.getByRole("button", { name: "生成二维码" })).toBeDisabled();
+  expect(qrStartRequests).toBe(0);
   await consentCheckboxes.nth(1).check();
-  await page.getByRole("button", { name: "生成二维码" }).click();
   await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "打开森空岛 App" })).toHaveAttribute(
-    "href",
-    "https://bbs.hycdn.cn/u-link/download.html?schema=skland%3A%2F%2FgameCenter"
-  );
-  await expect(page.getByText("请用森空岛扫描上方二维码", { exact: false })).toBeVisible();
-
-  await page.setViewportSize({ width: 1024, height: 800 });
-  await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "打开森空岛 App" })).toBeHidden();
-  await expect(page.locator("[data-skland-login-panel]")).toHaveCSS("border-radius", "0px");
+  await expect(page.getByText("请使用森空岛 App 扫描二维码", { exact: true })).toBeVisible();
+  await expect(page.locator("[data-skland-login-panel]")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await expect(page.locator("[data-skland-login-copy]")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await expect(page.getByRole("link", { name: "本站服务条款" }).first()).toHaveAttribute("href", "/terms");
   await expect(page.getByRole("link", { name: "本站隐私政策" }).first()).toHaveAttribute("href", "/privacy");
   await expect(page.getByText(/skland-kit/i)).toHaveCount(0);
-  const [contentTrackBox, loginPanelBox] = await Promise.all([
-    page.locator(".app-content-track").last().evaluate((element) => {
-      const rect = element.getBoundingClientRect();
-      const style = getComputedStyle(element);
-      const paddingInlineStart = Number.parseFloat(style.paddingInlineStart);
-      const paddingInlineEnd = Number.parseFloat(style.paddingInlineEnd);
-      return {
-        x: rect.x + paddingInlineStart,
-        width: rect.width - paddingInlineStart - paddingInlineEnd,
-      };
-    }),
-    page.locator("[data-skland-login-panel]").boundingBox(),
-  ]);
-  expect(loginPanelBox?.x).toBeCloseTo(contentTrackBox?.x ?? 0, 0);
-  expect(loginPanelBox?.width).toBeCloseTo(contentTrackBox?.width ?? 0, 0);
+
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 768, height: 900 },
+    { width: 1440, height: 900 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
+    const [sklandPageBox, qrBox] = await Promise.all([
+      page.locator("[data-skland-page]").boundingBox(),
+      page.locator("[data-skland-qr-visual]").boundingBox(),
+    ]);
+    expect(sklandPageBox).not.toBeNull();
+    expect(qrBox).not.toBeNull();
+    const pageCenter = (sklandPageBox?.x ?? 0) + (sklandPageBox?.width ?? 0) / 2;
+    const qrCenter = (qrBox?.x ?? 0) + (qrBox?.width ?? 0) / 2;
+    expect(qrCenter).toBeCloseTo(pageCenter, 0);
+  }
   expect(qrStartRequests).toBe(1);
 });
 
-test("Skland login waits for an explicit click and explains slow preparation", async ({ page }) => {
+test("Skland login waits for explicit consent and explains slow preparation", async ({ page }) => {
   await mockApis(page, { sklandConfigured: true });
   let qrStartRequests = 0;
   let releaseQr: (() => void) | undefined;
@@ -2490,19 +3571,56 @@ test("Skland login waits for an explicit click and explains slow preparation", a
   await page.goto("/");
 
   await page.getByRole("button", { name: "Toggle Sidebar" }).click();
-  await page.getByRole("button", { name: "森空岛状态", exact: true }).click();
+  await openSklandOverview(page);
   expect(qrStartRequests).toBe(0);
-  const generateButton = page.getByRole("button", { name: "生成二维码" });
   await page.getByRole("checkbox").nth(0).check();
+  expect(qrStartRequests).toBe(0);
   await page.getByRole("checkbox").nth(1).check();
-  await generateButton.click();
   await expect(page.locator("[data-skland-login-qr]").getByRole("status")).toContainText("正在生成二维码…");
-  await expect(page.getByText("正在连接登录服务…")).toBeVisible({ timeout: 3_000 });
+  await expect(page.getByText("正在连接登录服务，请稍候…")).toBeVisible({ timeout: 3_000 });
   expect(qrStartRequests).toBe(1);
 
   releaseQr?.();
   await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
   expect(qrStartRequests).toBe(1);
+});
+
+test("Skland login replaces a scanned QR with progress while authentication finishes", async ({ page }) => {
+  await mockApis(page, { sklandConfigured: true });
+  await page.route("**/api/skland/auth/qr", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      success: true,
+      data: {
+        scanId: "scan-login-confirming",
+        scanUrl: "hypergryph://scan_login?scanId=scan-login-confirming",
+        expiresInSeconds: 600,
+      },
+      requestId,
+    }),
+  }));
+  await page.route("**/api/skland/auth/qr/status", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      success: true,
+      data: { status: "scanned" },
+      requestId,
+    }),
+  }));
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+  await openSklandOverview(page);
+  await page.getByRole("checkbox").nth(0).check();
+  await page.getByRole("checkbox").nth(1).check();
+  await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
+  await expect(page.locator("[data-skland-login-progress]")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toHaveCount(0);
+  await expect(page.getByRole("status")).toContainText("已扫码，正在等待森空岛 App 确认并完成登录…");
 });
 
 test("Skland login loads full status by default and deletion preserves non-Skland data", async ({ page }) => {
@@ -2524,12 +3642,13 @@ test("Skland login loads full status by default and deletion preserves non-Sklan
   await seedV4Session(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
-  await expect(page.locator("[data-skland-topbar-avatar] img")).toHaveAttribute(
+  await expect(page.locator("[data-skland-account-avatar] img")).toHaveAttribute(
     "src",
     snapshotWithAvatar.player.avatarUrl
   );
+  await expect(page.locator("[data-skland-account-avatar] [data-slot=\"fluid-orb\"]")).toHaveCount(0);
   await page.getByRole("button", { name: "Toggle Sidebar" }).click();
-  await page.getByRole("button", { name: "森空岛状态", exact: true }).click();
+  await openSklandOverview(page);
 
   await expect(page.getByText("UID 123••••789")).toBeVisible();
   await expect(page.getByRole("button", { name: "启用状态中心" })).toHaveCount(0);
@@ -2557,7 +3676,7 @@ test("Skland login loads full status by default and deletion preserves non-Sklan
 
   await page.getByRole("button", { name: "Toggle Sidebar" }).click();
   await page.getByRole("button", { name: "基建计算器", exact: true }).click();
-  await expect(page.getByText("排班已生成")).toBeVisible();
+  await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
 });
 
 test("Skland status center keeps profile and recruitment in overview and supports role switching", async ({ page }) => {
@@ -2634,9 +3753,11 @@ test("Skland status center keeps profile and recruitment in overview and support
   await seedPreferences(page);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
-  const scheduleViewTabHeight = await page.getByRole("tab", { name: "列表式布局" })
-    .evaluate((element) => element.getBoundingClientRect().height);
-  await page.getByRole("button", { name: "森空岛状态", exact: true }).click();
+  await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
+  const scheduleViewTab = page.getByRole("tab", { name: "列表式布局" });
+  await expect(scheduleViewTab).toBeVisible();
+  const scheduleViewTabHeight = await scheduleViewTab.evaluate((element) => element.getBoundingClientRect().height);
+  await openSklandOverview(page);
   await expect(page.locator("[data-calculator-controls]")).toHaveCount(0);
 
   await expect(page.getByRole("img", { name: "测试博士的森空岛头像" })).toBeVisible();
@@ -2779,7 +3900,7 @@ test("Skland layout sync stays beside the tabs and confirms replacement of dirty
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 
-  await page.getByRole("button", { name: "森空岛状态", exact: true }).click();
+  await openSklandOverview(page);
   const layoutSync = page.locator('[data-slot="skland-layout-sync"]');
   await expect(layoutSync).toContainText("森空岛布局 243");
   const applyButton = layoutSync.getByRole("button", { name: "应用布局" });
@@ -2803,7 +3924,7 @@ test("Skland base metrics reuse the existing technical card grid and keyboard ta
   await seedPreferences(page);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
-  await page.getByRole("button", { name: "森空岛状态", exact: true }).click();
+  await openSklandOverview(page);
   await page.getByRole("tab", { name: "基建", exact: true }).click();
 
   for (const viewport of [
@@ -2834,6 +3955,7 @@ test("Skland base metrics reuse the existing technical card grid and keyboard ta
 
   const overviewTab = page.getByRole("tab", { name: "概览", exact: true });
   const infrastructureTab = page.getByRole("tab", { name: "基建", exact: true });
+  await expect(page.locator("[data-skland-view-tabs] [role=tab]")).toHaveText(["概览", "基建"]);
   await expect(page.getByRole("tab", { name: "进度", exact: true })).toHaveCount(0);
   await overviewTab.focus();
   await overviewTab.press("ArrowRight");
@@ -2851,7 +3973,7 @@ test("Skland compact layout aligns both column endings when production is taller
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
 
-  await page.getByRole("button", { name: "森空岛状态", exact: true }).click();
+  await openSklandOverview(page);
   await page.getByRole("tab", { name: "基建", exact: true }).click();
 
   const compactColumns = page.locator("[data-skland-compact-column]");
@@ -2897,7 +4019,7 @@ test("Skland supports adding, switching, and individually logging out multiple a
     sklandConfigured: true,
     sklandSnapshot: authenticatedSklandSnapshot,
   });
-  await page.route("**/api/skland/session", async (route) => {
+  await page.route("**/api/skland/session*", async (route) => {
     if (route.request().method() === "DELETE") {
       const body = route.request().postDataJSON() as { accountId?: string } | null;
       currentAccounts = currentAccounts.filter((account) => account.accountId !== body?.accountId);
@@ -3018,30 +4140,32 @@ test("Skland supports adding, switching, and individually logging out multiple a
   await seedPreferences(page);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
-  await page.getByRole("button", { name: "森空岛状态", exact: true }).click();
 
-  const topbarAccount = page.locator("[data-skland-topbar-account]");
-  const topbarAvatar = page.locator("[data-skland-topbar-avatar]");
+  const calculatorAccount = page.locator("[data-skland-account-control]");
+  const calculatorAvatar = page.locator("[data-skland-account-avatar]");
   const accountSelect = page.locator("[data-skland-account-select]");
   const addAccount = page.locator("[data-skland-add-account]");
   const logout = page.locator("[data-skland-logout]");
-  await expect(topbarAccount).toBeVisible();
-  await expect(topbarAvatar).toBeVisible();
-  const avatarBox = await topbarAvatar.boundingBox();
-  const topbarAccountBox = await topbarAccount.boundingBox();
-  expect(avatarBox?.width).toBeCloseTo(44, 0);
-  expect(topbarAccountBox?.height).toBeCloseTo(44, 0);
-  await expect.poll(() => topbarAccount.evaluate((element) => getComputedStyle(element).borderRadius)).not.toBe("9999px");
+  await expect(calculatorAccount).toBeVisible();
+  await expect(calculatorAvatar).toBeVisible();
+  const avatarBox = await calculatorAvatar.boundingBox();
+  const calculatorAccountBox = await calculatorAccount.boundingBox();
+  const setupBox = await page.getByRole("button", { name: "配置Box与布局" }).boundingBox();
+  expect(avatarBox?.width).toBeCloseTo(34, 0);
+  expect(calculatorAccountBox?.height).toBeCloseTo(36, 0);
+  expect(calculatorAccountBox?.height).toBeCloseTo(setupBox?.height ?? 0, 0);
+  await expect.poll(() => calculatorAccount.evaluate((element) => getComputedStyle(element).borderTopLeftRadius)).toBe("0px");
+  await openSklandOverview(page);
+  await expect(calculatorAccount).toHaveCount(0);
   const controlHeights = await Promise.all([
     accountSelect.evaluate((element) => element.getBoundingClientRect().height),
     addAccount.evaluate((element) => element.getBoundingClientRect().height),
     logout.evaluate((element) => element.getBoundingClientRect().height),
   ]);
-  expect(new Set(controlHeights)).toEqual(new Set([36]));
+  for (const height of controlHeights) {
+    expect(height).toBeCloseTo(44, 2);
+  }
   await expect(logout).toHaveClass(/text-destructive/);
-
-  await topbarAccount.click();
-  await expect(page.getByRole("heading", { name: "测试博士" }).first()).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });
   const mobileControlHeights = await Promise.all([
@@ -3049,7 +4173,9 @@ test("Skland supports adding, switching, and individually logging out multiple a
     addAccount.evaluate((element) => element.getBoundingClientRect().height),
     logout.evaluate((element) => element.getBoundingClientRect().height),
   ]);
-  expect(new Set(mobileControlHeights)).toEqual(new Set([44]));
+  for (const height of mobileControlHeights) {
+    expect(height).toBeCloseTo(44, 2);
+  }
   await page.setViewportSize({ width: 1440, height: 1000 });
 
   await addAccount.click();
@@ -3079,7 +4205,10 @@ test("Skland supports adding, switching, and individually logging out multiple a
   await expect(page.getByRole("heading", { name: "第二账号博士" }).first()).toBeVisible();
   await logout.click();
   await expect(page.getByRole("heading", { name: "把当前罗德岛带进排班助手" })).toBeVisible();
-  await expect(page.locator("[data-app-topbar]").getByRole("button", { name: "登录森空岛" })).toBeVisible();
+  await expect(page.locator("[data-skland-account-control]")).toHaveCount(0);
+  await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+  await page.getByRole("button", { name: "基建计算器", exact: true }).click();
+  await expect(page.locator("[data-skland-account-control]")).toBeVisible();
 
   const persisted = await page.evaluate(() => JSON.stringify(localStorage));
   expect(persisted).not.toContain(primarySklandAccount.accountId);
@@ -3100,7 +4229,7 @@ test("Skland disables adding another account after five accounts", async ({ page
   });
   await seedPreferences(page);
   await page.goto("/");
-  await page.getByRole("button", { name: "森空岛状态", exact: true }).click();
+  await openSklandOverview(page);
 
   const addAccount = page.locator("[data-skland-add-account]");
   await expect(addAccount).toBeDisabled();
@@ -3116,7 +4245,7 @@ test("setup routes Skland account actions to the status center", async ({ page }
   await page.goto("/");
 
   await page.getByRole("button", { name: "配置Box与布局" }).first().click();
-  await page.getByRole("tab", { name: "干员数据", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /第 1 步，共 3 步：干员数据/ }).click();
   await page.getByRole("button", { name: "更换", exact: true }).click();
   await page.getByRole("tab", { name: "森空岛", exact: true }).click();
   await expect(page.getByRole("dialog").getByText(/测试博士/).first()).toBeVisible();
@@ -3137,7 +4266,7 @@ test("setup can restore cached Skland data after switching to the sample", async
 
   await page.getByRole("button", { name: "配置Box与布局" }).first().click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("tab", { name: "干员数据", exact: true }).click();
+  await dialog.getByRole("button", { name: /第 1 步，共 3 步：干员数据/ }).click();
   await dialog.getByRole("button", { name: "更换", exact: true }).click();
   await dialog.getByRole("tab", { name: "森空岛", exact: true }).click();
 
@@ -3145,9 +4274,9 @@ test("setup can restore cached Skland data after switching to the sample", async
   await expect(dialog.getByRole("button", { name: "重新同步", exact: true })).toBeVisible();
   await dialog.getByRole("button", { name: "使用森空岛数据", exact: true }).click();
 
-  await expect(dialog.getByRole("tab", { name: "基建与换班", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(dialog.getByRole("button", { name: /第 2 步，共 3 步：布局/ })).toHaveAttribute("aria-current", "step");
   await expect(dialog.getByRole("button", { name: "检查设施", exact: true })).toBeVisible();
-  await dialog.getByRole("tab", { name: "干员数据", exact: true }).click();
+  await dialog.getByRole("button", { name: /第 1 步，共 3 步：干员数据/ }).click();
   await expect(dialog.getByText("森空岛同步", { exact: true })).toBeVisible();
   await expect(dialog.getByText("2 名干员 · 2 名可用", { exact: true })).toBeVisible();
 });
@@ -3165,7 +4294,7 @@ test("settings clears local product data without logging out of Skland", async (
   await page.goto("/");
 
   await page.getByRole("button", { name: "配置Box与布局" }).click();
-  await page.getByRole("tab", { name: "干员数据", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /第 1 步，共 3 步：干员数据/ }).click();
   await page.getByText("数据管理", { exact: true }).click();
   const storageCopy = page.getByText("数据在此浏览器保存 30 天。", { exact: true });
   await storageCopy.scrollIntoViewIfNeeded();

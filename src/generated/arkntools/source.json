@@ -8,10 +8,43 @@
     "repository": "https://github.com/yuanyan3060/ArknightsGameResource",
     "commit": "44d7474aec681cb71d74f97d19c384e0a966adc2"
   },
+  "products": [
+    {
+      "id": "lmd_orders",
+      "output": "/images/products/lmd_orders.webp",
+      "source": "arkntools",
+      "path": "assets/img/item/4001.png"
+    },
+    {
+      "id": "gold",
+      "output": "/images/products/gold.webp",
+      "source": "game-resource",
+      "path": "item/MTL_GOLD3.png"
+    },
+    {
+      "id": "experience",
+      "output": "/images/products/experience.webp",
+      "source": "arkntools",
+      "path": "assets/img/item/2003.png"
+    },
+    {
+      "id": "originium_shard",
+      "output": "/images/products/originium_shard.webp",
+      "source": "game-resource",
+      "path": "item/MTL_DIAMOND_SHD.png"
+    },
+    {
+      "id": "orundum",
+      "output": "/images/products/orundum.webp",
+      "source": "game-resource",
+      "path": "item/DIAMOND_SHD.png"
+    }
+  ],
   "counts": {
     "operators": 425,
     "buildingSkills": 747,
     "portraits": 425,
-    "buildingSkillIcons": 521
+    "buildingSkillIcons": 521,
+    "productIcons": 5
   }
 }

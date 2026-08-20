@@ -5,8 +5,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  CircleHelp,
-  Copy,
   Download,
   FileWarning,
   Loader2,
@@ -17,8 +15,7 @@ import {
   Upload,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { CSSProperties, ChangeEvent, ReactElement, ReactNode, useEffect, useRef, useState } from "react";
-import { ThinkingOrb } from "thinking-orbs";
+import { CSSProperties, ChangeEvent, lazy, ReactElement, ReactNode, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { AnimatedNumber, AnimatedText } from "@/components/AnimatedText";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -47,13 +44,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
-import { OperatorSkillTooltip } from "@/components/OperatorSkillTooltip";
 import {
   BUILDING_SKILL_ENHANCED_WORD,
   buildingSkillUnlockLabel,
   buildingSkillUnlockPrefix,
-  operatorProfessionPresentation,
-} from "@/operatorPortraits";
+  operatorProfessionPresentationForCode,
+} from "@/operator-presentation";
 import { roomVisualFor } from "@/room-visuals";
 import {
   MOTION_DURATION,
@@ -75,7 +71,6 @@ import {
   roomKindLabel,
   tradeOrderFor,
 } from "./blueprint";
-import { CompactScheduleSkeleton, CompactScheduleView } from "@/components/CompactScheduleView";
 import { manufacturePoolReady, presentRoomEfficiency, profileEfficiency, RoomEfficiencyPresentation } from "./efficiency";
 import {
   relativeMetricDelta,
@@ -107,8 +102,8 @@ import {
 } from "./schedule-list-layout";
 import {
   BaseBlueprint,
-  DisplayError,
   FeedbackData,
+  FeedbackKind,
   IssueReport,
   MaaJson,
   MaaPlan,
@@ -117,6 +112,25 @@ import {
   RotationJson,
   UserProfile,
 } from "./types";
+
+const OperatorSkillTooltip = lazy(() => import("@/components/OperatorSkillTooltip").then((module) => ({
+  default: module.OperatorSkillTooltip,
+})));
+
+function CompactScheduleLoading() {
+  return (
+    <div
+      className="grid min-h-[560px] place-items-center border-y border-dashed border-border/70 text-sm text-muted-foreground"
+      data-compact-schedule-loading
+      role="status"
+    >
+      正在准备一图流布局
+    </div>
+  );
+}
+
+type ScheduleViewMode = "list" | "compact";
+type CompactScheduleComponent = typeof import("@/components/CompactScheduleView").CompactScheduleView;
 
 type Option<T extends string> = {
   value: T;
@@ -158,7 +172,9 @@ export function ProductToggleGroup<T extends string>({
       className={cn(
         "grid",
         compactRoomProductControls
-          ? "w-fit grid-cols-[repeat(2,70px)] gap-x-2 gap-y-2.5 sm:grid-cols-[repeat(2,90px)]"
+          ? tone === "factory"
+            ? "w-full grid-cols-3 gap-x-2 gap-y-2.5 sm:w-fit sm:grid-cols-[repeat(2,90px)]"
+            : "w-fit grid-cols-[repeat(2,70px)] gap-x-2 gap-y-2.5 sm:grid-cols-[repeat(2,90px)]"
           : cn(
               "w-full",
               fillRoomProductControls && "gap-x-2 gap-y-2.5",
@@ -182,6 +198,7 @@ export function ProductToggleGroup<T extends string>({
               surface === "room" && "infra-room-control border-white/20 bg-[#3C3C3C]/70 px-1.5 text-xs text-white hover:bg-[#4B4B4B] hover:text-white sm:px-2",
               surface === "default" && "min-h-10",
               compactRoomProductControls && "max-w-[90px] max-sm:max-w-[70px]",
+              compactRoomProductControls && tone === "factory" && "w-full",
               fillRoomProductControls && "w-full",
               tone === "trade" &&
                 "aria-pressed:border-[#22BBFF] aria-pressed:bg-[#22BBFF] aria-pressed:text-[#313131] data-[state=on]:border-[#22BBFF] data-[state=on]:bg-[#22BBFF] data-[state=on]:text-[#313131]",
@@ -570,137 +587,24 @@ export function LayoutEditor({
   );
 }
 
-export function StatusBar({
-  loading,
-  result,
-  error,
-  ready,
-  onRetry,
-  onCopyDiagnostic,
-  className,
-}: {
-  loading: boolean;
-  result: PublicPlanData | null;
-  error: DisplayError | null;
-  ready: boolean;
-  onRetry: () => void;
-  onCopyDiagnostic: () => void;
-  className?: string;
-}) {
-  const content = (() => {
-    if (loading) {
-      return {
-        state: "loading" as const,
-        icon: (
-          <ThinkingOrb
-            state="solving"
-            size={20}
-            theme="light"
-            aria-hidden="true"
-            className="shrink-0"
-            data-slot="solving-orb"
-          />
-        ),
-        text: "正在生成排班",
-        className: "border-blue-200 bg-blue-50 text-blue-700",
-      };
-    }
-    if (error) {
-      return {
-        state: "error" as const,
-        icon: <AlertTriangle className="size-4" />,
-        text: `${error.message}（${error.code}）`,
-        className: "border-destructive/30 bg-destructive/10 text-destructive",
-      };
-    }
-    if (result) {
-      return {
-        state: "success" as const,
-        icon: <CheckCircle2 className="size-4" />,
-        text: "排班已生成",
-        className: "border-emerald-200 bg-emerald-50 text-emerald-700",
-      };
-    }
-    return {
-      state: "ready" as const,
-      icon: <CircleHelp className="size-4" />,
-      text: ready ? "排班服务已就绪" : "排班暂不可用",
-      className: ready
-        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-        : "border-border bg-background text-muted-foreground",
-    };
-  })();
-
-  return (
-    <div
-      data-slot="plan-status"
-      data-status-state={content.state}
-      className={cn(
-        "plan-status-bar surface-shadow flex h-7 min-w-0 items-center gap-2 overflow-hidden rounded-lg px-3 py-0 text-sm max-sm:h-11 max-sm:px-2",
-        content.className,
-        className
-      )}
-      role={error ? "alert" : "status"}
-      aria-live={error ? "assertive" : "polite"}
-    >
-      <AnimatePresence initial={false} mode="wait">
-        <motion.span
-          key={content.state}
-          className="flex min-w-0 flex-1 items-center gap-2"
-          data-slot="status-content"
-          initial={{ opacity: 0, scale: 0.98 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.98 }}
-          transition={{ duration: MOTION_DURATION.feedback, ease: MOTION_EASE_OUT }}
-          style={{ transformOrigin: "left center" }}
-        >
-          <span className="flex size-5 shrink-0 items-center justify-center" aria-hidden="true">
-            {content.icon}
-          </span>
-          <span
-            className={cn(
-              "min-w-0 flex-1 truncate",
-              !error && "tabular-nums",
-              loading && "plan-status-shimmer"
-            )}
-            data-slot="status-text"
-            data-text={loading ? content.text : undefined}
-          >
-            {content.text}
-          </span>
-        </motion.span>
-      </AnimatePresence>
-      {error ? (
-        <span className="flex shrink-0 items-center gap-1">
-          {error.retryable ? (
-            <Button type="button" size="icon-sm" variant="ghost" className="max-sm:size-11" aria-label="重试" onClick={onRetry}>
-              <RotateCcw />
-            </Button>
-          ) : null}
-          <Button type="button" size="icon-sm" variant="ghost" className="max-sm:size-11" aria-label="复制诊断编号" onClick={onCopyDiagnostic}>
-            <Copy />
-          </Button>
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
 export function RunButton({
   canRun,
   loading,
+  plannerReady,
   onRun,
 }: {
   canRun: boolean;
   loading: boolean;
+  plannerReady: boolean;
   onRun: () => void;
 }) {
+  const unavailableLabel = plannerReady ? "请先导入干员数据" : "排班服务暂不可用";
   return (
     <Button
       size="sm"
-      className="min-w-0 max-sm:h-11 max-sm:px-3 max-sm:text-xs"
-      aria-label={loading ? "计算中" : canRun ? "生成排班" : "请先导入干员数据"}
-      title={!canRun ? "请先导入干员数据，并等待排班服务就绪。" : undefined}
+      className="h-9 min-w-0 max-sm:h-11 max-sm:px-3 max-sm:text-xs"
+      aria-label={loading ? "计算中" : canRun ? "生成排班" : unavailableLabel}
+      title={!canRun ? (plannerReady ? "请先导入干员数据。" : "排班服务暂不可用，请稍后重试。") : undefined}
       onClick={onRun}
       disabled={!canRun || loading}
     >
@@ -751,7 +655,7 @@ export function ShiftTabs({
               aria-label={teamSummary ? `${label}，${teamSummary}` : label}
             >
               {label}
-              {closest === index ? <span className="rounded-full bg-primary/10 px-1.5 text-xs text-primary">最接近</span> : null}
+              {closest === index ? <span className="rounded-full bg-primary/10 px-1.5 text-xs text-primary max-md:hidden">最接近</span> : null}
             </TabsTrigger>
           );
         })}
@@ -1052,7 +956,7 @@ export function RoomEfficiencyReadout({
   trend?: ShiftDirection;
 }) {
   return (
-    <div className="min-w-0" title={value.details.map((detail) => `${detail.label} ${detail.value}`).join(" · ")}>
+    <div className="min-w-0" title={value.details.map((detail) => detail.label ? `${detail.label} ${detail.value}` : detail.value).join(" · ")}>
       <div className="flex min-w-0 items-center gap-1.5">
         <strong
           className="infra-room-value font-technical shrink-0 text-base font-semibold tabular-nums tracking-[0.01em] text-[var(--room-accent)] max-sm:text-xs"
@@ -1060,16 +964,17 @@ export function RoomEfficiencyReadout({
         >
           <AnimatedNumber value={value.primaryValue} trend={trend} />
         </strong>
-        <span className="truncate text-xs font-medium text-white/68">
-          <AnimatedText value={value.primaryLabel} trend={trend} />
-        </span>
-        {value.includesCrossStation ? <span className="shrink-0 bg-white/12 px-1 text-xs font-normal text-white/82">含跨设施</span> : null}
+        {value.primaryLabel ? (
+          <span className="truncate text-xs font-medium text-white/68">
+            <AnimatedText value={value.primaryLabel} trend={trend} />
+          </span>
+        ) : null}
       </div>
       {details && value.details.length ? (
         <div className="font-technical mt-1 flex max-h-9 flex-wrap gap-x-2 gap-y-0.5 overflow-hidden text-xs leading-4 tracking-[0.01em] text-white/60 max-sm:max-h-none">
           {value.details.map((detail) => (
             <span key={`${detail.kind}-${detail.label}`} className={detail.kind === "cross-station" ? "font-semibold text-[#C8F75A]" : undefined}>
-              {detail.label} <span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>
+              {value.formula ? <>{detail.operator ? `${detail.operator} ` : ""}<span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>{detail.label ? ` ${detail.label}` : ""}</> : <>{detail.label} <span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span></>}
             </span>
           ))}
         </div>
@@ -1093,9 +998,10 @@ function RoomEfficiencyDetails({
     <div
       className={cn(
         "font-technical ml-6 grid min-w-[160px] max-w-[240px] gap-1 text-sm leading-tight tracking-[0.01em] text-white/68 max-sm:hidden max-[819px]:ml-0 max-[819px]:min-w-0 max-[819px]:max-w-none max-[819px]:grid-cols-3 max-[819px]:text-xs max-[819px]:leading-normal",
-        compactFactory && "min-[1800px]:z-10 min-[1800px]:col-start-1 min-[1800px]:row-start-2 min-[1800px]:ml-0 min-[1800px]:flex min-[1800px]:min-w-0 min-[1800px]:max-w-none min-[1800px]:gap-3 min-[1800px]:text-xs"
+        compactFactory && "min-[1800px]:z-10 min-[1800px]:col-start-1 min-[1800px]:row-start-2 min-[1800px]:ml-0 min-[1800px]:flex min-[1800px]:min-w-0 min-[1800px]:max-w-none min-[1800px]:gap-3 min-[1800px]:text-xs",
+        value.formula && "flex max-w-[340px] flex-wrap items-baseline gap-x-1.5 gap-y-1 max-[819px]:grid max-[819px]:grid-cols-3"
       )}
-      title={value.details.map((detail) => `${detail.label} ${detail.value}`).join(" · ")}
+      title={value.details.map((detail) => detail.label ? `${detail.label} ${detail.value}` : detail.value).join(" · ")}
     >
       {value.details.map((detail) => (
         <span
@@ -1105,7 +1011,7 @@ function RoomEfficiencyDetails({
             detail.kind === "cross-station" && "font-semibold text-[#C8F75A]"
           )}
         >
-          {detail.label} <span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>
+          {value.formula ? <>{detail.operator ? `${detail.operator} ` : ""}<span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>{detail.label ? ` ${detail.label}` : ""}</> : <>{detail.label} <span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span></>}
         </span>
       ))}
     </div>
@@ -1288,6 +1194,7 @@ export function OperatorSlot({
   transitionDelay = 0,
   portraitSize = 180,
   showSkillTooltip = false,
+  searchQuery = "",
 }: {
   slot: RoomRow["operatorSlots"][number] | undefined;
   currentMorale?: number;
@@ -1300,14 +1207,16 @@ export function OperatorSlot({
   portraitSize?: number;
   /** 悬停卡片时展示干员全部基建技能 tooltip，并关闭卡片自身的原生 title hover。 */
   showSkillTooltip?: boolean;
+  searchQuery?: string;
 }) {
   const shouldReduceMotion = useReducedMotion();
   const identity = slot?.name ?? (autofill ? "autofill" : "empty");
   const suppressNativeTitles = showSkillTooltip && slot !== undefined;
-  const profession = slot ? operatorProfessionPresentation(slot.name) : null;
+  const profession = slot ? operatorProfessionPresentationForCode(slot.profession) : undefined;
   const enterX = shouldReduceMotion ? 0 : shiftDirection * 6;
   const exitX = shouldReduceMotion ? 0 : shiftDirection * -4;
   const ariaLabel = slot?.name ?? (autofill ? "自动补位" : "空置");
+  const searchMatched = Boolean(slot && searchQuery && slot.name.toLocaleLowerCase("zh-CN").includes(searchQuery));
   const frameClassName = slot
     ? "border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)]"
     : autofill
@@ -1404,9 +1313,13 @@ export function OperatorSlot({
           </motion.div>
         </AnimatePresence>
       }
-      frameWrapper={showSkillTooltip && slot ? (frame) => <OperatorSkillTooltip name={slot.name} trigger={frame} /> : undefined}
+      frameWrapper={showSkillTooltip && slot ? (frame) => (
+        <Suspense fallback={frame}>
+          <OperatorSkillTooltip name={slot.name} trigger={frame} />
+        </Suspense>
+      ) : undefined}
       label={slot ? <AnimatedText value={slot.name} trend={shiftDirection} /> : autofill ? "自动补位" : "占"}
-      labelClassName={slot ? "text-white" : autofill ? "text-white/55" : "text-transparent select-none"}
+      labelClassName={slot ? (searchMatched ? "bg-[#FFD501] px-1 text-[#202020]" : "text-white") : autofill ? "text-white/55" : "text-transparent select-none"}
       title={suppressNativeTitles ? undefined : slot?.label}
     />
   );
@@ -1419,10 +1332,14 @@ export function ScheduleBoard({
   layout,
   planRevision,
   currentMoraleByOperator,
+  viewControlsSlot,
+  mobileActionsSlot,
   shiftInfoSlot,
   activeShift,
   shiftDirection = 0,
   activePlan,
+  searchQuery = "",
+  animateInitialView = false,
   onIssue,
   onFactoryRecipeChange,
   onTradeOrderChange,
@@ -1432,10 +1349,14 @@ export function ScheduleBoard({
   layout: BaseBlueprint;
   planRevision?: string;
   currentMoraleByOperator?: ReadonlyMap<string, number>;
+  viewControlsSlot?: ReactNode;
+  mobileActionsSlot?: ReactNode;
   shiftInfoSlot?: ReactNode;
   activeShift: number;
   shiftDirection?: ShiftDirection;
   activePlan?: MaaPlan;
+  searchQuery?: string;
+  animateInitialView?: boolean;
   onIssue: (row: RoomRow) => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
@@ -1443,13 +1364,14 @@ export function ScheduleBoard({
 }) {
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [hiddenGroups, setHiddenGroups] = useState<Record<string, boolean>>({});
-  const [viewMode, setViewMode] = useState<"list" | "compact">("list");
-  const [supportsCompactLayout, setSupportsCompactLayout] = useState(false);
-  const [viewModeReady, setViewModeReady] = useState(false);
-  const preferredViewMode = useRef<"list" | "compact" | null>(null);
+  const [viewMode, setViewMode] = useState<ScheduleViewMode | null>(null);
+  const [supportsCompactLayout, setSupportsCompactLayout] = useState<boolean | null>(null);
+  const [CompactScheduleView, setCompactScheduleView] = useState<CompactScheduleComponent | null>(null);
+  const [compactScheduleLoadFailed, setCompactScheduleLoadFailed] = useState(false);
+  const preferredViewMode = useRef<ScheduleViewMode | null>(null);
   const shouldReduceMotion = useReducedMotion();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const mq = window.matchMedia("(min-width: 768px)");
     const syncViewMode = (canUseCompactLayout: boolean) => {
       setSupportsCompactLayout(canUseCompactLayout);
@@ -1458,7 +1380,6 @@ export function ScheduleBoard({
         : "list";
       setViewMode(nextViewMode);
       onViewModeChange?.(nextViewMode);
-      setViewModeReady(true);
     };
 
     syncViewMode(mq.matches);
@@ -1466,6 +1387,21 @@ export function ScheduleBoard({
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
   }, [onViewModeChange]);
+
+  useEffect(() => {
+    if (viewMode !== "compact" || CompactScheduleView || compactScheduleLoadFailed) return;
+
+    let cancelled = false;
+    void import("@/components/CompactScheduleView").then(
+      (module) => {
+        if (!cancelled) setCompactScheduleView(() => module.CompactScheduleView);
+      },
+      () => {
+        if (!cancelled) setCompactScheduleLoadFailed(true);
+      },
+    );
+    return () => { cancelled = true; };
+  }, [CompactScheduleView, compactScheduleLoadFailed, viewMode]);
 
   if (rows.length === 0) {
     return (
@@ -1475,7 +1411,11 @@ export function ScheduleBoard({
     );
   }
 
-  const rowGroups = buildListScheduleGroups(rows);
+  const normalizedQuery = searchQuery.trim().toLocaleLowerCase("zh-CN");
+  const visibleRows = normalizedQuery
+    ? rows.filter((row) => row.title.toLocaleLowerCase("zh-CN").includes(normalizedQuery) || row.operators.some((name) => name.toLocaleLowerCase("zh-CN").includes(normalizedQuery)))
+    : rows;
+  const rowGroups = buildListScheduleGroups(visibleRows);
   const auxiliaryGroups = rowGroups.filter((group) => AUXILIARY_ROOM_GROUPS.has(group.rows[0]?.group ?? ""));
   const hiddenAuxiliaryCount = auxiliaryGroups.filter((group) => hiddenGroups[group.label]).length;
   const allAuxiliaryCollapsed =
@@ -1524,29 +1464,31 @@ export function ScheduleBoard({
     <div className="flex flex-col gap-7">
       <div className="flex flex-wrap items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch">
         <div className="flex flex-wrap items-center gap-2">
-          <Tabs
-            value={viewMode}
-            onValueChange={(value) => {
-              const nextViewMode = value as "list" | "compact";
-              preferredViewMode.current = nextViewMode;
-              setViewMode(nextViewMode);
-              onViewModeChange?.(nextViewMode);
-            }}
-          >
-            <TabsList>
-              <TabsTrigger value="compact" disabled={!supportsCompactLayout} className={!supportsCompactLayout ? "line-through" : ""}>
-                一图流布局
-              </TabsTrigger>
-              <TabsTrigger value="list">列表式布局</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          {supportsCompactLayout && viewMode ? (
+            <Tabs
+              className="max-md:hidden"
+              value={viewMode}
+              onValueChange={(value) => {
+                const nextViewMode = value as ScheduleViewMode;
+                preferredViewMode.current = nextViewMode;
+                setViewMode(nextViewMode);
+                onViewModeChange?.(nextViewMode);
+              }}
+            >
+              <TabsList>
+                <TabsTrigger value="compact">一图流布局</TabsTrigger>
+                <TabsTrigger value="list">列表式布局</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          ) : null}
+          {viewControlsSlot}
+          {viewMode === "list" && hiddenAuxiliaryCount ? (
+            <Button type="button" variant="ghost" size="sm" onClick={restoreHiddenAuxiliaryGroups}>
+              恢复已隐藏（<span className="font-number">{hiddenAuxiliaryCount}</span>）
+            </Button>
+          ) : null}
           {viewMode === "list" && auxiliaryGroups.length ? (
-            <div className="flex flex-wrap justify-end gap-2">
-              {hiddenAuxiliaryCount ? (
-                <Button type="button" variant="ghost" size="sm" onClick={restoreHiddenAuxiliaryGroups}>
-                  恢复已隐藏（<span className="font-number">{hiddenAuxiliaryCount}</span>）
-                </Button>
-              ) : null}
+            <div className="flex flex-wrap justify-end gap-2 max-md:w-full max-md:flex-nowrap max-md:items-center max-md:justify-between">
               <Button type="button" variant="outline" size="sm" onClick={toggleAuxiliaryGroups}>
                 <motion.span
                   className="flex size-4 items-center justify-center"
@@ -1558,8 +1500,9 @@ export function ScheduleBoard({
                 </motion.span>
                 {allAuxiliaryCollapsed ? "展开辅助设施" : "一键折叠辅助设施"}
               </Button>
+              {mobileActionsSlot ? <div className="min-w-0 flex-1 md:hidden">{mobileActionsSlot}</div> : null}
             </div>
-          ) : null}
+          ) : mobileActionsSlot ? <div className="w-full md:hidden">{mobileActionsSlot}</div> : null}
         </div>
         {shiftInfoSlot ? <div className="min-w-0 max-sm:w-full">{shiftInfoSlot}</div> : null}
       </div>
@@ -1567,10 +1510,10 @@ export function ScheduleBoard({
         data-plan-board
         data-plan-revision={planRevision || undefined}
       >
-          <AnimatePresence initial={false} mode="wait">
+          <AnimatePresence initial={animateInitialView && !shouldReduceMotion} mode="wait">
             <motion.div
               key={viewMode}
-              data-schedule-view={viewMode}
+              data-schedule-view={viewMode || undefined}
               initial={{
                 opacity: 0,
                 y: shouldReduceMotion ? 0 : 8,
@@ -1590,9 +1533,7 @@ export function ScheduleBoard({
                 ease: MOTION_EASE_OUT,
               }}
             >
-        {!viewModeReady ? (
-          <CompactScheduleSkeleton />
-        ) : viewMode === "list" ? (
+        {viewMode === "list" ? (
           <>
           {rowGroups.map((group) => {
         const visual = roomVisualFor(group.rows[0]?.group ?? "default");
@@ -1672,7 +1613,7 @@ export function ScheduleBoard({
                       listRoomHeightClass(row.group),
                       compactInlineRoom && "[container-type:inline-size]",
                       listFunctionalRoomSpanClass(row.group),
-                      row.suspicious && "ring-2 ring-destructive ring-offset-2"
+                      row.suspicious && "ring-2 ring-destructive ring-offset-2",
                     )}
                     data-room-group={row.group}
                     data-room-title={row.title}
@@ -1748,6 +1689,7 @@ export function ScheduleBoard({
                             showSkillTooltip
                             shiftDirection={shiftDirection}
                             transitionDelay={Math.min(index, 2) * 0.02}
+                            searchQuery={normalizedQuery}
                           />
                         ))}
                       </div>
@@ -1782,16 +1724,26 @@ export function ScheduleBoard({
         );
       })}
           </>
+        ) : viewMode === "compact" ? (
+          CompactScheduleView ? (
+            <CompactScheduleView
+              rows={visibleRows}
+              layout={layout}
+              currentMoraleByOperator={currentMoraleByOperator}
+              activeShift={activeShift}
+              activePlan={activePlan}
+              shiftDirection={shiftDirection}
+              onIssue={onIssue}
+            />
+          ) : compactScheduleLoadFailed ? (
+            <div className="grid min-h-[420px] place-items-center border-y border-destructive/35 text-sm text-destructive" role="alert">
+              一图流布局加载失败，请切换到列表式布局。
+            </div>
+          ) : (
+            <CompactScheduleLoading />
+          )
         ) : (
-          <CompactScheduleView
-            rows={rows}
-            layout={layout}
-            currentMoraleByOperator={currentMoraleByOperator}
-            activeShift={activeShift}
-            activePlan={activePlan}
-            shiftDirection={shiftDirection}
-            onIssue={onIssue}
-          />
+          <div className="min-h-[420px]" data-schedule-view-pending aria-hidden="true" />
         )}
             </motion.div>
           </AnimatePresence>
@@ -1802,6 +1754,7 @@ export function ScheduleBoard({
 
 export function IssueNoteModal({
   open,
+  kind,
   row,
   note,
   saving,
@@ -1810,6 +1763,7 @@ export function IssueNoteModal({
   onCancel,
 }: {
   open: boolean;
+  kind: FeedbackKind;
   row: RoomRow | null;
   note: string;
   saving: boolean;
@@ -1819,18 +1773,19 @@ export function IssueNoteModal({
 }) {
   const [consented, setConsented] = useState(false);
   const returnFocusId = useRef<string | null>(null);
+  const isPerformance = kind === "performance_issue";
 
   useEffect(() => {
     if (open) setConsented(false);
-  }, [open, row?.key]);
+  }, [kind, open, row?.key]);
 
   useEffect(() => {
-    if (row) returnFocusId.current = scheduleIssueTriggerId(row);
-  }, [row]);
+    returnFocusId.current = row ? scheduleIssueTriggerId(row) : null;
+  }, [kind, row]);
 
   return (
     <Dialog
-      open={open && Boolean(row)}
+      open={open && (isPerformance || Boolean(row))}
       triggerId={row ? scheduleIssueTriggerId(row) : null}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) onCancel();
@@ -1841,18 +1796,20 @@ export function IssueNoteModal({
         finalFocus={() => returnFocusId.current ? document.getElementById(returnFocusId.current) : true}
       >
         <DialogHeader>
-          <DialogTitle>{row?.title ?? "反馈排班问题"}</DialogTitle>
-          <DialogDescription>反馈排班问题</DialogDescription>
+          <DialogTitle>{isPerformance ? "提交性能反馈" : row?.title ?? "反馈排班问题"}</DialogTitle>
+          <DialogDescription>{isPerformance ? "反馈本次求解性能" : "反馈排班问题"}</DialogDescription>
         </DialogHeader>
         <DialogBody>
           <p className="text-[13px] leading-5 text-muted-foreground">
-            将提交本次排班的诊断编号、房间名称、当前干员和你的说明；不会重复上传完整干员数据或调试包。
+            {isPerformance
+              ? "将提交本次排班的诊断编号、求解耗时、换班方式、布局和你的说明；不会附带任意房间或完整干员数据。"
+              : "将提交本次排班的诊断编号、房间名称、当前干员和你的说明；不会重复上传完整干员数据或调试包。"}
           </p>
           <Textarea
             autoFocus
             value={note}
             onChange={(event) => onNoteChange(event.target.value)}
-            placeholder="例如：这组应该换成可露希尔 / 当前站位有误。"
+            placeholder={isPerformance ? "例如：同一份 Box 之前通常可以更快完成。" : "例如：这组应该换成可露希尔 / 当前站位有误。"}
             className="min-h-36 text-[13px]"
             maxLength={1000}
           />
@@ -1863,7 +1820,7 @@ export function IssueNoteModal({
               onChange={(event) => setConsented(event.target.checked)}
               className="size-4"
             />
-            <span>我确认提交以上排班问题信息。</span>
+            <span>我确认提交以上{isPerformance ? "性能" : "排班问题"}信息。</span>
           </label>
         </DialogBody>
         <DialogFooter>

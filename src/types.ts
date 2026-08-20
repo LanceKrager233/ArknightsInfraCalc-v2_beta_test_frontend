@@ -65,12 +65,22 @@ export interface MaaOperatorSlot {
   skill?: number;
 }
 
+export type MaaExecutionOrder = "pre" | "post";
+export type MaaPeriod = [start: string, end: string];
+
+export interface MaaOperatorGroup {
+  name: string;
+  operators: string[];
+}
+
 export interface MaaRoom {
   operators: (string | MaaOperatorSlot | null)[];
   product?: string;
   skip?: boolean;
   sort?: boolean;
   autofill?: boolean;
+  candidates?: string[];
+  use_operator_groups?: boolean;
 }
 
 export interface MaaRooms {
@@ -87,9 +97,19 @@ export interface MaaRooms {
 export interface MaaPlan {
   name: string;
   description?: string;
+  description_post?: string;
+  period?: MaaPeriod[];
+  duration?: number;
+  groups?: MaaOperatorGroup[];
   rooms: MaaRooms;
-  Fiammetta?: { enable: boolean; target?: string | string[]; order?: string };
-  drones?: { enable?: boolean; room: string; index: number; order: string };
+  Fiammetta?: { enable: boolean; target?: string | string[]; order?: MaaExecutionOrder };
+  drones?: {
+    enable?: boolean;
+    room: "trading" | "manufacture";
+    index: number;
+    rule?: string;
+    order: MaaExecutionOrder;
+  };
 }
 
 export interface MaaJson {
@@ -109,6 +129,7 @@ export interface MaaJson {
 }
 
 export interface RoomEfficiency {
+  final_efficiency?: number;
   trade_score?: number;
   trade_pct?: number;
   trade_skill_pct?: number;
@@ -508,6 +529,14 @@ export interface SklandAuthMethods {
   qr: true;
 }
 
+export interface SklandBindingSummary {
+  totalCount: number;
+  activeCount: number;
+  renewalDueCount: number;
+  nextExpiresAt: number | null;
+  latestExpiredAt: number | null;
+}
+
 export interface SklandSessionResponse {
   authenticated: boolean;
   configured: boolean;
@@ -515,6 +544,8 @@ export interface SklandSessionResponse {
   disabledReason?: string | null;
   accounts: SklandAccountSummary[];
   activeAccountId: string | null;
+  bindingCount: number;
+  bindingSummary?: SklandBindingSummary;
   scheduleSnapshot?: SklandScheduleSnapshot;
   statusSnapshot?: SklandStatusSnapshot;
   error?: string;
@@ -534,6 +565,8 @@ export interface SklandQrStatusResponse {
   status: "waiting" | "scanned" | "expired" | "authenticated";
   scheduleSnapshot?: SklandScheduleSnapshot;
   statusSnapshot?: SklandStatusSnapshot;
+  bindingCount?: number;
+  bindingSummary?: SklandBindingSummary;
   error?: string;
   code?: string;
 }
@@ -727,6 +760,7 @@ export interface PlanComputeParams {
 
 export type RotationProfile =
   | "abc_12_6_6"
+  | "abc_12_12_12"
   | "main_backup_12_12"
   | "fiammetta_8_8_4_4"
   | "abyssal_7_5_7_5";
@@ -764,7 +798,10 @@ export type AppErrorCode =
   | "AIC-AUTH-2003"
   | "AIC-AUTH-2004"
   | "AIC-AUTH-2005"
+  | "AIC-AUTH-2006"
   | "AIC-AUTH-2007"
+  | "AIC-AUTH-2008"
+  | "AIC-AUTH-2009"
   | "AIC-PLAN-3001"
   | "AIC-PLAN-3002"
   | "AIC-PLAN-3003"
@@ -843,16 +880,63 @@ export interface FeedbackRoom {
   operators: string[];
 }
 
-export interface FeedbackRequest {
+export type FeedbackKind = "room_issue" | "performance_issue";
+
+type FeedbackRequestBase = {
   diagnosticId: string;
-  room: FeedbackRoom;
   note: string;
   consent: true;
-}
+};
+
+export type FeedbackRequest = FeedbackRequestBase & (
+  | { kind?: "room_issue"; room: FeedbackRoom }
+  | { kind: "performance_issue"; room?: never }
+);
 
 export interface FeedbackData {
   feedbackId: string;
   savedAt: string;
+}
+
+export type AdminUserAction = "ban" | "unban" | "revokeSessions" | "grantAdmin" | "revokeAdmin";
+
+export interface AdminUserData {
+  id: string;
+  name: string;
+  email: string;
+  emailVerified: boolean;
+  banned: boolean | null;
+  banReason: string | null;
+  createdAt: string;
+  isAdmin: boolean;
+  isBootstrapAdmin: boolean;
+  sklandBindingCount: number;
+  sklandActiveBindingCount: number;
+  sklandRenewalDueCount: number;
+}
+
+export interface AdminUsersData {
+  users: AdminUserData[];
+  permissions: {
+    canManageAdminRoles: boolean;
+  };
+}
+
+export interface AdminSessionData {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+}
+
+export interface AdminSessionsData {
+  sessions: AdminSessionData[];
+}
+
+export interface AdminUserUpdateData {
+  updated: true;
 }
 
 export interface SklandSessionData {
@@ -862,6 +946,8 @@ export interface SklandSessionData {
   disabledReason?: string | null;
   accounts: SklandAccountSummary[];
   activeAccountId: string | null;
+  bindingCount: number;
+  bindingSummary?: SklandBindingSummary;
   scheduleSnapshot?: SklandScheduleSnapshot;
   statusSnapshot?: SklandStatusSnapshot;
 }
@@ -882,6 +968,8 @@ export interface SklandQrStatusData {
   status: "waiting" | "scanned" | "expired" | "authenticated";
   accounts?: SklandAccountSummary[];
   activeAccountId?: string | null;
+  bindingCount?: number;
+  bindingSummary?: SklandBindingSummary;
   scheduleSnapshot?: SklandScheduleSnapshot;
   statusSnapshot?: SklandStatusSnapshot;
 }

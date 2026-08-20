@@ -23,6 +23,7 @@ test("uses plan.compute for matching versions regardless of schema byte hash", (
         pong: true,
         protocol_version: 1,
         plan_schema_version: 1,
+        supported_plan_schema_versions: [1, 2, 3],
         plan_contract_sha256: planContractSha256,
       },
     });
@@ -52,7 +53,8 @@ test("keeps incompatible protocol or schema versions on the legacy plan method",
     ok: true,
     result: {
       protocol_version: 1,
-      plan_schema_version: 2,
+      plan_schema_version: 1,
+      supported_plan_schema_versions: [1],
     },
   });
 
@@ -69,6 +71,7 @@ test("normalizes Worker fingerprints and keeps them diagnostic-only", () => {
     result: {
       protocol_version: 1,
       plan_schema_version: 1,
+      supported_plan_schema_versions: [1, 2, 3],
       plan_contract_sha256: "not-a-hash",
       solver_executable_sha256: executableHash,
     },
@@ -84,6 +87,7 @@ test("normalizes Worker fingerprints and keeps them diagnostic-only", () => {
       result: {
         protocol_version: 1,
         plan_schema_version: 1,
+        supported_plan_schema_versions: [1, 2, 3],
         solver_executable_sha256: invalidFingerprint,
       },
     });
@@ -99,6 +103,7 @@ test("deployment readiness requires current versions and the configured artifact
     result: {
       protocol_version: 1,
       plan_schema_version: 1,
+      supported_plan_schema_versions: [1, 2, 3],
       solver_executable_sha256: executableHash,
     },
   });
@@ -119,6 +124,7 @@ test("feedback metadata reuses the matching private run observation and tolerate
     result: {
       protocol_version: 1,
       plan_schema_version: 1,
+      supported_plan_schema_versions: [1, 2, 3],
       plan_contract_sha256: "d".repeat(64),
       solver_executable_sha256: "e".repeat(64),
     },
@@ -140,7 +146,7 @@ test("validates the complete plan.compute success payload", () => {
   const payload = parsePlanComputePayload({
     ok: true,
     result: {
-      schema_version: 1,
+      schema_version: 3,
       profile: { schema_version: 4 },
       rotation: { profile: "abc_12_6_6", daily: {}, shifts: [] },
       maa: { plans: [] },
@@ -153,7 +159,7 @@ test("validates the complete plan.compute success payload", () => {
 
 test("rejects malformed successful plan.compute payloads", () => {
   assert.throws(
-    () => parsePlanComputePayload({ ok: true, result: { schema_version: 1, profile: {}, rotation: { shifts: [] } } }),
+    () => parsePlanComputePayload({ ok: true, result: { schema_version: 3, profile: {}, rotation: { shifts: [] } } }),
     /maa/
   );
 });

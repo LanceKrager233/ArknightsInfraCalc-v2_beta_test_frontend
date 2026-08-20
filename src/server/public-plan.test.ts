@@ -39,14 +39,25 @@ function internalResult(): PlanApiResponse {
       planTimes: 2,
       plans: [{
         name: "班次 1",
+        description_post: "换班后说明",
+        period: [["08:00", "20:00"]],
+        duration: 720,
+        groups: [{ name: "贸易组", operators: ["龙舌兰", "但书"] }],
         Fiammetta: { enable: true, target: "但书", order: "pre" },
-        drones: { enable: true, room: "manufacture", index: 1, order: "pre" },
+        drones: { enable: true, room: "manufacture", index: 1, rule: "all", order: "pre" },
         rooms: {
-          trading: [{ operators: ["龙舌兰"], sort: true, autofill: false }],
+          trading: [{
+            operators: ["龙舌兰"],
+            sort: true,
+            autofill: false,
+            candidates: ["但书", "巫恋"],
+            use_operator_groups: true,
+          }],
         },
       }],
       scheduleType: { planTimes: 2, trading: 2, manufacture: 4, power: 3, dormitory: 4 },
       nestedInternal: {
+        candidates: ["C:\\secret\\infra-cli.exe"],
         solver: { future: true },
         plan_contract_sha256: "a".repeat(64),
         solver_executable_sha256: "b".repeat(64),
@@ -148,11 +159,23 @@ test("production public plan data recursively excludes internal fields", () => {
     assert.equal(publicData.diagnosticId, "diagnostic-1");
     assert.equal(publicData.rotation.profile, "abc_12_6_6");
     assert.deepEqual(publicData.rotation.daily, { trade: 4.2, manu: 8.4, power: 2.2 });
+    assert.equal(publicData.rotation.shifts[0].scores.room_lines[0].final_efficiency, 2.1);
     assert.equal(publicData.rotation.shifts[0].scores.room_lines[0].trade_score, 2.1);
     assert.equal(publicData.maa.planTimes, 2);
     assert.deepEqual(publicData.maa.plans[0].Fiammetta, { enable: true, target: "但书", order: "pre" });
     assert.equal(publicData.maa.plans[0].drones?.enable, true);
+    assert.equal(publicData.maa.plans[0].drones?.rule, "all");
+    assert.deepEqual(publicData.maa.plans[0].period, [["08:00", "20:00"]]);
+    assert.equal(publicData.maa.plans[0].duration, 720);
+    assert.equal(publicData.maa.plans[0].description_post, "换班后说明");
+    assert.deepEqual(publicData.maa.plans[0].groups, [{ name: "贸易组", operators: ["龙舌兰", "但书"] }]);
     assert.equal(publicData.maa.plans[0].rooms.trading?.[0].sort, true);
+    assert.deepEqual(publicData.maa.plans[0].rooms.trading?.[0].candidates, ["但书", "巫恋"]);
+    assert.equal(publicData.maa.plans[0].rooms.trading?.[0].use_operator_groups, true);
+    assert.equal(
+      "candidates" in (publicData.maa as typeof publicData.maa & { nestedInternal: Record<string, unknown> }).nestedInternal,
+      false
+    );
     assert.equal(publicData.maa.scheduleType?.planTimes, 2);
     assert.equal(publicData.profile.baseline_label, "产品推荐基准");
     assert.equal(publicData.profile.layout_label.includes("\\"), false);
@@ -164,20 +187,45 @@ test("production public plan data recursively excludes internal fields", () => {
   }
 });
 
-test("debug fields require the server environment switch", () => {
-  const previous = process.env.BETA_DEBUG_TOOLS_ENABLED;
+test("debug fields require both the server switch and request opt-in", () => {
+  const previousDeploymentEnvironment = process.env.APP_DEPLOYMENT_ENV;
+  const previousDebugTools = process.env.BETA_DEBUG_TOOLS_ENABLED;
+  process.env.APP_DEPLOYMENT_ENV = "development";
   process.env.BETA_DEBUG_TOOLS_ENABLED = "1";
   try {
-    const data = toPublicPlanData(internalResult(), { layoutLabel: "243", sourceName: "示例" }, "request");
+    const ordinaryData = toPublicPlanData(
+      internalResult(),
+      { layoutLabel: "243", sourceName: "示例" },
+      "request"
+    );
+    assert.equal(ordinaryData.debug, undefined);
+
+    const data = toPublicPlanData(
+      internalResult(),
+      { layoutLabel: "243", sourceName: "示例" },
+      "request",
+      { includeDebug: true }
+    );
     assert.equal(data.debug?.command, "infra-cli serve");
     assert.equal(data.debug?.stdout, "secret stdout");
     const keys = keysDeep(data.debug?.debugBundle);
     assert.equal(keys.has("solver"), false);
     assert.equal(keys.has("plan_contract_sha256"), false);
     assert.equal(keys.has("solver_executable_sha256"), false);
+
+    process.env.BETA_DEBUG_TOOLS_ENABLED = "0";
+    const disabledData = toPublicPlanData(
+      internalResult(),
+      { layoutLabel: "243", sourceName: "示例" },
+      "request",
+      { includeDebug: true }
+    );
+    assert.equal(disabledData.debug, undefined);
   } finally {
-    if (previous === undefined) delete process.env.BETA_DEBUG_TOOLS_ENABLED;
-    else process.env.BETA_DEBUG_TOOLS_ENABLED = previous;
+    if (previousDeploymentEnvironment === undefined) delete process.env.APP_DEPLOYMENT_ENV;
+    else process.env.APP_DEPLOYMENT_ENV = previousDeploymentEnvironment;
+    if (previousDebugTools === undefined) delete process.env.BETA_DEBUG_TOOLS_ENABLED;
+    else process.env.BETA_DEBUG_TOOLS_ENABLED = previousDebugTools;
   }
 });
 

@@ -30,7 +30,7 @@ npm run test:e2e:production-profile
 npm run test:e2e:webkit
 ```
 
-`npm run test:e2e`运行默认 Chromium 门禁；涉及响应式、触控或 Safari 兼容性的 UI 改动还应运行独立 WebKit 门禁。
+`npm run test:e2e`运行默认 Chromium 发布门禁；涉及响应式、触控或 Safari 兼容性的 UI 改动还应在本地运行独立 WebKit 回归。CI 每日定时运行完整 WebKit 套件，也可从 Actions 手动触发。
 
 仓库文本由`.gitattributes`和`.editorconfig`统一为 UTF-8/LF。Windows 日常开发使用 PowerShell；部署 shell 测试应在 Linux CI 或显式指定的 WSL Ubuntu 中运行，裸`bash`可能指向 Docker WSL 或 Git Bash。完整跨平台约束见[开发与发布维护准则](./docs/DEVELOPMENT_RELEASE_GUARDRAILS.md)。
 
@@ -60,9 +60,9 @@ http://127.0.0.1:5174/?beta
 
 ## Box 导入与 dev 森空岛登录
 
-所有环境均支持上传或粘贴 MAA 的 `Arknights_OperBox_Export.json`。dev 环境还支持森空岛同步：桌面端使用二维码登录，手机端可通过鹰角官方 `u-link` 包装二维码接口返回的 `scanUrl`，尝试拉起森空岛完成同一授权流程。移动端兼容性取决于森空岛 App 是否转交登录载荷，失败时应改用桌面二维码；本项目不提供账号密码登录。旧的一图流 xlsx 仍保留为兼容入口，243 全精二样例可从首页的“全角色导入”直接载入。
+所有环境均支持上传或粘贴 MAA 的 `Arknights_OperBox_Export.json`。dev 环境还支持森空岛同步：用户分别同意本站服务条款与隐私政策后，页面会自动显示二维码，使用森空岛 App 扫码即可完成授权；本项目不提供账号密码登录。旧的一图流 xlsx 仍保留为兼容入口，243 全精二样例可从首页的“全角色导入”直接载入。
 
-登录、添加账号、账号/角色切换和退出统一位于侧边栏的“森空岛状态”页面；同一浏览器最多保留 5 个森空岛账号。生成二维码前必须分别同意[本站服务条款](./src/app/terms/page.tsx)与[本站隐私政策](./src/app/privacy/page.tsx)。登录成功后，状态中心会按隐私政策列明的白名单直接读取 Box、设施、当前进驻、头像、理智、任务、公招、皮肤、活动和游戏进度等完整状态，并展示已接入界面的数据，不再设置二次授权；传给排班流程的仍只有求解所需最小字段。具体范围与排除项见 [森空岛数据能力矩阵](docs/SKLAND_DATA_CAPABILITIES.md)。
+网站账号与森空岛状态使用两个独立的侧边栏页面：“账号管理”提供注册、登录、邮箱验证码、找回密码、设备退出和销户；development 的“森空岛状态中心”保留“概览 / 基建”页签，并负责扫码绑定与七天续期。同一浏览器最多保留 5 个森空岛账号。生成二维码前必须分别同意[本站服务条款](./src/app/terms/page.tsx)与[本站隐私政策](./src/app/privacy/page.tsx)。登录成功后，状态中心会按隐私政策列明的白名单直接读取 Box、设施、当前进驻、头像、理智、任务、公招、皮肤、活动和游戏进度等完整状态，并展示已接入界面的数据，不再设置二次授权；传给排班流程的仍只有求解所需最小字段。具体范围与排除项见 [森空岛数据能力矩阵](docs/SKLAND_DATA_CAPABILITIES.md)。
 
 启用森空岛登录前必须配置至少 32 字节、长期保持不变的会话密钥：
 
@@ -80,10 +80,16 @@ $env:SKLAND_PUBLIC_ORIGIN = "https://infra.example.com"
 $env:BETA_TRUST_PROXY_HEADERS = "1"
 ```
 
-`BETA_PUBLIC_ORIGIN`保护全部公开写接口，`SKLAND_PUBLIC_ORIGIN`继续保护森空岛会话流。每个森空岛账号的凭证会使用 AES-256-GCM 加密后写入独立的 HttpOnly Cookie，另有一个加密索引 Cookie 记录当前账号；凭证从扫码成功起固定保存 7 天，刷新、读取会话或切换角色不会续期。扫码临时凭据和登录凭证都不会写入浏览器存储、运行记录或反馈包，完整状态快照也只停留在页面内存。状态中心提供退出当前账号和“删除全部森空岛数据”，后者同时清除可关联的服务端运行记录与反馈，并保留独立导入的 MAA 数据和手动布局。localhost 可使用 HTTP 开发；非 localhost 环境默认必须通过 HTTPS 访问，否则只禁用森空岛入口，MAA 导入和求解仍可使用。仅在临时、可信的 HTTP 测试环境中可以显式设置 `SKLAND_ALLOW_INSECURE_HTTP=1`；此时登录流量不会受到 HTTPS 保护。
+`BETA_PUBLIC_ORIGIN`保护全部公开写接口，`SKLAND_PUBLIC_ORIGIN`继续保护森空岛会话流。每个森空岛账号的凭证会使用 AES-256-GCM 加密后写入独立的 HttpOnly Cookie，另有一个加密索引 Cookie 记录当前账号；凭证从扫码成功起固定保存 7 天，刷新、读取会话或切换角色不会续期。PostgreSQL 只额外保存 HMAC 化的森空岛绑定标识、对应网站用户和授权时间，让森空岛状态中心与管理后台区分“有效授权”和“待扫码续期”；绑定标记不会因七天到期自动删除，也不保存森空岛 UID、昵称、Box 或令牌。扫码临时凭据和登录凭证都不会写入浏览器存储、运行记录或反馈包，完整状态快照也只停留在页面内存。状态中心提供退出当前账号和“删除全部森空岛数据”，两者会解除相应绑定，后者还会清除可关联的服务端运行记录与反馈，并保留独立导入的 MAA 数据和手动布局。localhost 可使用 HTTP 开发；非 localhost 环境默认必须通过 HTTPS 访问，否则只禁用森空岛入口，MAA 导入和求解仍可使用。仅在临时、可信的 HTTP 测试环境中可以显式设置 `SKLAND_ALLOW_INSECURE_HTTP=1`；此时登录流量不会受到 HTTPS 保护。
 
 `APP_DEPLOYMENT_ENV=production`会强制关闭森空岛，不能被`SKLAND_FEATURE_ENABLED=1`覆盖。线上构建不会渲染相关入口、不会发起会话请求，公开健康检查不含相关能力字段，`/api/skland/*`统一返回 404。未声明部署目标的`next build`同样按 production 关闭；本地`next dev`默认保持兼容。
 Production compilation also removes Skland copy, API URLs, and the app scheme from browser assets. `npm run test:production-client` scans static JavaScript and public HTML/RSC to prevent regressions.
+
+## 网站账号与数据库
+
+MAA JSON / xlsx 与 development 森空岛能力要求先登录已验证的网站账号；全角色样例、技能查询、配置和样例求解仍可匿名使用。网站账号使用 Better Auth、PostgreSQL 和 Resend；注册邮箱使用 6 位验证码验证，验证码 10 分钟过期且只保存哈希，密码重置继续使用一小时有效链接。数据库与认证实例在真实请求时惰性初始化，因此没有数据库或认证密钥时仍可完成 production build。`/api/auth/*` 使用 Better Auth 原生协议，不套公共 API 信封；应用自有 `/api/admin/users` 仍使用统一信封。
+
+数据库容器、runtime/migration/backup 最小权限账号、邮件域名、固定 deploy helper、管理员初始化、加密备份和 development 验收顺序见[网站账号与 PostgreSQL 上线手册](./docs/AUTHENTICATION_DATABASE.md)。
 
 法律页面默认以“明日方舟基建排班助手项目维护者”署名并链接仓库 Issues，可通过 `LEGAL_OPERATOR_NAME`、`LEGAL_CONTACT_EMAIL`、`LEGAL_CONTACT_URL` 覆盖。修改政策正文时还应同步更新 `src/legal-policy.ts` 中的政策版本，使旧同意失效并要求重新确认。
 
@@ -116,7 +122,19 @@ chmod +x bin/infra-cli
 | `main` | `production` | 线上站点 | 强制关闭 |
 | `develop` | `development` | dev 站点 | 开启，可由环境变量主动关闭 |
 
-推送到两个分支都会先执行`Frontend quality`。只有 push 门禁成功后，`Deploy verified branch`才会发布该次通过验证的 SHA；PR 检查不会触发部署。工作流先确认服务器两个固定 helper 是`root:root 0755`普通文件且`--contract-version`与当前工作流兼容，再从共享 Git 缓存增量取得对象并在服务器本地生成只包含 Git 跟踪内容的发布包。helper 以状态码`75`报告临时 GitHub 网络、缓存或锁故障时，Runner 会读取该环境的服务器缓存 ref，并优先上传从该 ref 到已验证 SHA 的增量 Git bundle；缓存 ref 不可用时才尝试上一次 push SHA。服务器严格校验 bundle 的路径、所有者、HEAD、前置对象、commit tree 和完整对象图后导入缓存。只有 bundle 基线不可用、传输失败或缓存缺少前置对象时才退回完整 SCP；SHA、tree、路径或 helper 契约错误会直接终止。`scripts/deploy-release.sh`负责独立 release 目录、原子切换`current`软链、内部/公网健康检查和失败回滚；它在构建前及成功后都只清理经过严格校验的旧 release，每个环境保留当前版本和两个回滚版本，并在清理后可用空间不足 3 GiB 时于创建新 release 前失败。失败构建的本次目录会自动移除，`shared`和`/var/lib`持久化数据不参与清理。
+推送到两个分支都会先执行`Frontend quality`，但`Change scope`会先用保守白名单判断实际影响范围。`quality`汇总检查始终存在；它要求被选中的 Job 成功，并核对未选中的 Job 确实是`skipped`，因此不会因 workflow 级路径过滤而让受保护分支永久等待。
+
+| 变更范围 | Core checks | Chromium E2E | 服务器部署 |
+| --- | --- | --- | --- |
+| `docs/**`、根 Markdown、`.gitignore`、`.editorconfig`、LICENSE | 跳过 | 跳过 | 跳过 |
+| 单元测试、非发布型 GitHub 配置 | 执行 | 跳过 | 跳过 |
+| E2E 或 Playwright 配置 | 执行 | 执行 | 跳过 |
+| `frontend-quality.yml`、`deploy.yml` | 执行 | 跳过 | 受保护分支 push 执行 |
+| 运行时代码、依赖、部署脚本或未知路径 | 执行 | 执行 | 受保护分支 push 执行 |
+
+手动触发、无法取得可靠基线或空差异都会失败关闭为完整门禁。PR 检查不部署；push 只有在门禁成功且分类输出`deploy_required=true`时，`Deploy verified branch`才会发布该次验证 SHA。部署工作流先确认服务器两个固定 helper 是`root:root 0755`普通文件且`--contract-version`与当前工作流兼容，再从共享 Git 缓存增量取得对象并在服务器本地生成只包含 Git 跟踪内容的发布包。helper 以状态码`75`报告临时 GitHub 网络、缓存或锁故障时，Runner 会读取该环境的服务器缓存 ref，并优先上传从该 ref 到已验证 SHA 的增量 Git bundle；缓存 ref 不可用时才尝试上一次 push SHA。服务器严格校验 bundle 的路径、所有者、HEAD、前置对象、commit tree 和完整对象图后导入缓存。只有 bundle 基线不可用、传输失败或缓存缺少前置对象时才退回完整 SCP；SHA、tree、路径或 helper 契约错误会直接终止。`scripts/deploy-release.sh`负责独立 release 目录、原子切换`current`软链、内部/公网健康检查和失败回滚；它在构建前及成功后都只清理经过严格校验的旧 release，每个环境保留当前版本和两个回滚版本，并在清理后可用空间不足 3 GiB 时于创建新 release 前失败。失败构建的本次目录会自动移除，`shared`和`/var/lib`持久化数据不参与清理。
+
+生产构建同时限制 Next route 统计和首页 HTML 实际引用的全部首轮 JavaScript 文件数、原始体积与 gzip 体积，避免 SSR 动态预加载逃过 bundle 门禁。发布完成后还会用真实 GET 请求核对公网 HTML 与 JavaScript 的 gzip/Brotli 响应；HEAD 不作为压缩验收依据。
 
 需要在 GitHub 仓库创建`production`与`development`两个 Environment，并在每个 Environment 中配置同名、不同值的项目：
 

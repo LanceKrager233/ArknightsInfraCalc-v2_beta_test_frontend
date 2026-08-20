@@ -9,11 +9,14 @@ import {
 import { deleteSklandOwnedData } from "@/server/infra";
 import {
   assertSklandAvailable,
+  assertSklandFeatureEnabled,
   readSklandAccountStore,
   setSklandAccountStoreCookies,
   sklandErrorResponse,
 } from "@/server/skland/http";
 import { sklandDataOwnerTag } from "@/server/skland/session";
+import { requireWebsiteSession } from "@/server/auth/authorization";
+import { removeSklandBindings } from "@/server/skland/bindings";
 
 export const runtime = "nodejs";
 
@@ -21,6 +24,8 @@ export async function DELETE(request: Request) {
   const requestId = createRequestId();
   const startedAt = performance.now();
   try {
+    assertSklandFeatureEnabled();
+    const website = await requireWebsiteSession(request);
     assertSklandAvailable(request);
     assertSameOrigin(request);
     await assertEmptyBody(request, 1024);
@@ -29,6 +34,7 @@ export async function DELETE(request: Request) {
     const deleted = await deleteSklandOwnedData(
       previous.accounts.map((account) => sklandDataOwnerTag(account.session.userId))
     );
+    await removeSklandBindings(website.user.id);
     const next = {
       ...previous,
       accounts: [],

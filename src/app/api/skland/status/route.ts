@@ -9,12 +9,14 @@ import { loadStatusSnapshot, SklandServiceError } from "@/server/skland/adapter"
 import {
   activeSklandAccount,
   assertSklandAvailable,
+  assertSklandFeatureEnabled,
   readSklandAccountStore,
   setSklandAccountStoreCookies,
   sklandAccountSummaries,
   sklandErrorResponse,
   withUpdatedSklandSession,
 } from "@/server/skland/http";
+import { requireWebsiteSession } from "@/server/auth/authorization";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,6 +25,8 @@ export async function GET(request: Request) {
   const requestId = createRequestId();
   const startedAt = performance.now();
   try {
+    assertSklandFeatureEnabled();
+    await requireWebsiteSession(request);
     assertSklandAvailable(request);
     assertSameOrigin(request);
     enforceRateLimit("skland-action", requestClientIp(request), 30, 60 * 60_000);

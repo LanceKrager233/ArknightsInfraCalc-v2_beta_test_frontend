@@ -19,7 +19,9 @@ import type {
 } from "@/types";
 import { isSklandConfigured, sklandDisabledReason } from "@/server/skland/session";
 import { PublicApiError } from "./api-contract";
+import { feedbackDirectoryGroup, toStoredFeedbackIssue } from "./feedback-record";
 import {
+  PLAN_SCHEMA_VERSION,
   createSolverObservation,
   inspectPlanComputeCapability,
   inspectSolverDeploymentReadiness,
@@ -62,6 +64,7 @@ type PlanRequestBody = {
   operbox: OperBoxEntry[];
   sourceName?: string | null;
   rotation: RotationProfile;
+  fiammettaEnable?: boolean;
   dataOwnerTag?: string | null;
 };
 
@@ -208,6 +211,9 @@ function assertPlanBody(body: unknown): asserts body is PlanRequestBody {
   }
   if (!isRotationProfile(body.rotation)) {
     throw new Error("请求缺少受支持的 rotation 参数。");
+  }
+  if (body.fiammettaEnable != null && typeof body.fiammettaEnable !== "boolean") {
+    throw new Error("请求的 fiammetta_enable 参数无效。");
   }
   if (body.dataOwnerTag != null && (typeof body.dataOwnerTag !== "string" || !/^[a-f0-9]{64}$/.test(body.dataOwnerTag))) {
     throw new Error("内部数据归属标识无效。");
@@ -875,7 +881,8 @@ export async function getSampleOperbox() {
 export async function saveFeedback(body: FeedbackRequest): Promise<FeedbackData> {
   const savedAt = new Date().toISOString();
   const feedbackId = randomUUID();
-  const dirName = makeStampedDirName(savedAt, body.room.group, feedbackId);
+  const kind = body.kind ?? "room_issue";
+  const dirName = makeStampedDirName(savedAt, feedbackDirectoryGroup(body), feedbackId);
   const feedbackDir = path.join(feedbackRoot, dirName);
   const metaPath = path.join(feedbackDir, "meta.json");
   const issuePath = path.join(feedbackDir, "issue.json");
@@ -891,19 +898,14 @@ export async function saveFeedback(body: FeedbackRequest): Promise<FeedbackData>
     feedbackId,
     savedAt,
     diagnosticId: body.diagnosticId,
+    kind,
     consent: body.consent,
     solver,
     ...(dataOwnerTag ? { dataOwnerTag } : {}),
   };
 
   await writeJson(metaPath, meta);
-  await writeJson(issuePath, {
-    type: "room_issue",
-    diagnosticId: body.diagnosticId,
-    room: body.room,
-    note: body.note,
-    consent: true,
-  });
+  await writeJson(issuePath, toStoredFeedbackIssue(body));
 
   return {
     feedbackId,
@@ -990,7 +992,7 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
 
     if (planCompute.supported) {
       serveResult = await getServeClient().send("plan.compute", {
-        schema_version: 1,
+        schema_version: PLAN_SCHEMA_VERSION,
         layout: body.layout,
         operbox: body.operbox,
         labels: {
@@ -1002,6 +1004,7 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
           top: 20,
           system_preferences: {},
           maa_title: `${body.sourceName ?? "Arknights InfraCalc"} · ${String(body.layout.template ?? "layout")}`,
+          fiammetta_enable: body.fiammettaEnable ?? true,
         },
       });
 

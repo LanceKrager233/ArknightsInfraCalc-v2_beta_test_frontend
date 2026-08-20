@@ -3,11 +3,13 @@ import { validateLayoutJson } from "@/layout-validation";
 import { assertOperbox } from "@/operbox";
 import {
   acquirePlanSlot,
+  assertFiammettaEnableCompatible,
   assertPlanCollectionLimits,
   assertSameOrigin,
   createRequestId,
   enforceRateLimit,
   failureResponse,
+  normalizeFiammettaEnable,
   PublicApiError,
   readJsonBody,
   requestClientIp,
@@ -18,6 +20,8 @@ import { isRotationProfile } from "@/rotation-settings";
 import type { BaseBlueprint, OperBoxEntry, RotationProfile } from "@/types";
 import { activeSklandAccount, readSklandAccountStore } from "@/server/skland/http";
 import { sklandDataOwnerTag } from "@/server/skland/session";
+import { requireWebsiteSession } from "@/server/auth/authorization";
+import { planAccessMode } from "@/server/plan-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +31,7 @@ export async function POST(request: Request) {
   const startedAt = performance.now();
   let release: (() => void) | undefined;
   try {
+    const includeDebug = new URL(request.url).searchParams.get("beta") === "1";
     assertSameOrigin(request);
     const ip = requestClientIp(request);
     enforceRateLimit("plan", ip, 20, 10 * 60_000, "AIC-PLAN-3002");
@@ -38,7 +43,15 @@ export async function POST(request: Request) {
       sourceName?: unknown;
       rotation?: unknown;
       boxSource?: unknown;
+      fiammetta_enable?: unknown;
     };
+    if (planAccessMode(body.boxSource, body.operbox !== undefined) === "trusted-sample") {
+      const sample = await (await import("@/server/infra")).getSampleOperbox();
+      body.operbox = sample.operbox as OperBoxEntry[];
+      body.sourceName = "243 全精二示例";
+    } else {
+      await requireWebsiteSession(request);
+    }
     const layoutErrors = validateLayoutJson(body?.layout);
     if (layoutErrors.length || !body.layout) {
       throw new PublicApiError("AIC-LAYOUT-1201", {
@@ -71,6 +84,8 @@ export async function POST(request: Request) {
       }
       rotation = body.rotation;
     }
+    const fiammettaEnable = normalizeFiammettaEnable(body.fiammetta_enable);
+    assertFiammettaEnableCompatible(fiammettaEnable, rotation);
     assertPlanCollectionLimits(body.operbox.length, body.layout.rooms.length, body.sourceName);
     let operbox: OperBoxEntry[];
     try {
@@ -86,17 +101,19 @@ export async function POST(request: Request) {
       });
     }
     const sourceName = safeDisplayName(body.sourceName, "已导入的干员数据");
-    if (body.boxSource !== undefined && !["skland", "maa", "sample"].includes(String(body.boxSource))) {
-      throw new PublicApiError("AIC-REQ-1001");
-    }
     let dataOwnerTag: string | null = null;
     if (body.boxSource === "skland") {
       const account = activeSklandAccount(await readSklandAccountStore());
       if (account) dataOwnerTag = sklandDataOwnerTag(account.session.userId);
     }
-    const result = await runPlan({ layout: body.layout, operbox, sourceName, rotation, dataOwnerTag });
+    const result = await runPlan({ layout: body.layout, operbox, sourceName, rotation, fiammettaEnable, dataOwnerTag });
     return successResponse(
-      toPublicPlanData(result, { layoutLabel: body.layout.template, sourceName }, requestId),
+      toPublicPlanData(
+        result,
+        { layoutLabel: body.layout.template, sourceName },
+        requestId,
+        { includeDebug }
+      ),
       requestId
     );
   } catch (error) {
