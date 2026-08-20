@@ -3086,6 +3086,7 @@ test("schedule visuals use a stable technical canvas and responsive level marker
   await expect(roomSurface).toBeVisible();
   await expect(compactViewTab).toHaveAttribute("aria-selected", "true");
   await listViewTab.click();
+  await expect(listViewTab).toHaveAttribute("aria-selected", "true");
   await expect(listDiamonds).toBeVisible();
 
   const buildingSkillBadge = page.getByRole("button", { name: /基建技能 S1：合作协议/ }).first();
