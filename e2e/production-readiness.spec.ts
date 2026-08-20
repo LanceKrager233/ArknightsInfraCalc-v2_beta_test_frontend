@@ -1562,9 +1562,11 @@ test("a failed complete Skland restore keeps the independently restored identity
 
   const accountControl = page.locator("[data-skland-account-control]");
   await expect(accountControl).toHaveAttribute("aria-label", "测试博士，进入森空岛状态中心");
-  const accountPlaceholder = accountControl.locator("[data-skland-account-placeholder]");
-  await expect(accountPlaceholder).toBeVisible();
-  await expect(accountPlaceholder).toHaveAttribute("data-fluid-orb-color", /^#[0-9A-F]{6}$/);
+  const accountAvatar = accountControl.locator("[data-skland-account-avatar]");
+  await expect(accountAvatar).toBeVisible();
+  await expect(accountAvatar.locator("img")).toHaveCount(0);
+  await expect(accountAvatar.locator("[data-slot=\"fluid-orb\"]")).toHaveCount(0);
+  expect(await accountAvatar.evaluate((element) => element.childElementCount)).toBe(0);
   await expect(accountControl).not.toContainText("测");
   await fullRestoreFailed;
   await accountControl.click();
@@ -1572,6 +1574,27 @@ test("a failed complete Skland restore keeps the independently restored identity
   await page.getByRole("button", { name: "基建计算器", exact: true }).click();
   await expect(accountControl).toHaveAttribute("aria-label", "测试博士，进入森空岛状态中心");
   releaseStatus();
+});
+
+test("a failed Skland avatar request leaves the logged-in calculator control blank", async ({ page }) => {
+  const avatarUrl = "https://example.com/unavailable-skland-avatar.png";
+  await page.route(avatarUrl, (route) => route.abort("failed"));
+  await mockApis(page, {
+    sklandConfigured: true,
+    sklandSnapshot: {
+      ...authenticatedSklandSnapshot,
+      player: { ...authenticatedSklandSnapshot.player, avatarUrl },
+    },
+  });
+  await seedPreferences(page);
+  await page.goto("/");
+
+  const accountControl = page.locator("[data-skland-account-control]");
+  const accountAvatar = accountControl.locator("[data-skland-account-avatar]");
+  await expect(accountControl).toBeVisible();
+  await expect(accountControl).toHaveAttribute("aria-label", "测试博士，进入森空岛状态中心");
+  await expect(accountAvatar.locator("img")).toHaveCount(0);
+  expect(await accountAvatar.evaluate((element) => element.childElementCount)).toBe(0);
 });
 
 test("two-shift output drives product estimates, room formulas, and profile details", async ({ page, browserName }) => {
@@ -2583,9 +2606,12 @@ test("slow plans submit performance feedback without attributing an arbitrary ro
   await seedV4Session(page, { ...planData, durationMs: 735 });
   await page.goto("/");
 
-  await page.getByRole("button", { name: "提交性能反馈" }).click();
+  const performancePrompt = page.getByRole("status").filter({ hasText: "本次求解耗时 735 ms" });
+  await expect(performancePrompt).toBeVisible();
+  await performancePrompt.getByRole("button", { name: "提交性能反馈" }).click();
   const feedbackDialog = page.getByRole("dialog", { name: "提交性能反馈" });
   await expect(feedbackDialog).toBeVisible();
+  await expect(performancePrompt).toHaveCount(0);
   await expect(feedbackDialog.getByText(/不会附带任意房间或完整干员数据/)).toBeVisible();
   await feedbackDialog.getByRole("textbox").fill("同一份 Box 之前通常可以更快完成。");
   await feedbackDialog.getByRole("checkbox").check();
@@ -3560,16 +3586,14 @@ test("Skland login centers the QR on every viewport and starts after explicit co
   await seedPreferences(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
-  await expect(page.locator("[data-skland-account-control]")).toBeVisible();
+  await expect(page.locator("[data-skland-account-control]")).toHaveCount(0);
   await expect(page.locator("[data-skland-sidebar-account]")).toHaveCount(0);
+  await openSklandOverview(page);
+  await expect(page.getByRole("heading", { name: "把当前罗德岛带进排班助手" })).toBeVisible();
   await page.setViewportSize({ width: 375, height: 812 });
   await page.reload();
 
-  const accountLogin = page.locator("[data-skland-account-control]");
-  await expect(accountLogin).toBeVisible();
-  const loginBox = await accountLogin.boundingBox();
-  expect(loginBox?.height).toBeGreaterThanOrEqual(44);
-  await accountLogin.click();
+  await expect(page.locator("[data-skland-account-control]")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "把当前罗德岛带进排班助手" })).toBeVisible();
   await expect(page.getByText(/手机号|验证码|密码/)).toHaveCount(0);
   await expect(page.getByText("使用森空岛 App 扫描二维码，同步当前角色的干员与基建数据。")).toBeVisible();
@@ -3715,6 +3739,11 @@ test("Skland login loads full status by default and deletion preserves non-Sklan
       avatarUrl: "https://example.com/skland-avatar.png",
     },
   };
+  await page.route(snapshotWithAvatar.player.avatarUrl, (route) => route.fulfill({
+    status: 200,
+    contentType: "image/svg+xml",
+    body: '<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44"><rect width="44" height="44" fill="#ffd800"/></svg>',
+  }));
   page.on("request", (request) => {
     if (new URL(request.url()).pathname === "/api/skland/status") statusMethods.push(request.method());
   });
@@ -3729,6 +3758,7 @@ test("Skland login loads full status by default and deletion preserves non-Sklan
     "src",
     snapshotWithAvatar.player.avatarUrl
   );
+  await expect(page.locator("[data-skland-account-avatar] img")).toBeVisible();
   await expect(page.locator("[data-skland-account-avatar] [data-slot=\"fluid-orb\"]")).toHaveCount(0);
   await page.getByRole("button", { name: "Toggle Sidebar" }).click();
   await openSklandOverview(page);
@@ -4291,7 +4321,7 @@ test("Skland supports adding, switching, and individually logging out multiple a
   await expect(page.locator("[data-skland-account-control]")).toHaveCount(0);
   await page.getByRole("button", { name: "Toggle Sidebar" }).click();
   await page.getByRole("button", { name: "基建计算器", exact: true }).click();
-  await expect(page.locator("[data-skland-account-control]")).toBeVisible();
+  await expect(page.locator("[data-skland-account-control]")).toHaveCount(0);
 
   const persisted = await page.evaluate(() => JSON.stringify(localStorage));
   expect(persisted).not.toContain(primarySklandAccount.accountId);

@@ -1350,11 +1350,10 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       animateEmptyScheduleEntrance,
       onPlanEntranceConsumed: (revision: string) => revealedPlanRevisions.current.add(revision),
       requiresAccount: !accountCanUseCurrentBox,
-      accountControl: CLIENT_SKLAND_ENABLED ? (
+      accountControl: CLIENT_SKLAND_ENABLED && activeSklandAccount ? (
         <SklandAccountControl
           account={activeSklandAccount}
           statusSnapshot={sklandStatusSnapshot}
-          sessionLoading={sklandSessionLoading}
           onOpenSkland={() => navigateToPage("skland")}
         />
       ) : undefined,
