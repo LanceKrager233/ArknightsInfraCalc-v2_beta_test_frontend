@@ -36,6 +36,20 @@ test("cold HTML contains the workbench shell instead of only the client loading 
   expect(html).not.toContain("正在加载基建计算器");
 });
 
+test("a 768px cold start keeps the compact workbench inside the viewport", async ({ page }) => {
+  await mockApis(page);
+  await page.setViewportSize({ width: 768, height: 900 });
+  await page.goto("/");
+  await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
+  await expect(page.getByRole("tab", { name: "一图流布局" })).toHaveAttribute("aria-selected", "true");
+
+  const dimensions = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1);
+});
+
 test("primary pages use independent routes without eagerly loading every view", async ({ page }) => {
   const trainingRouteRequests: string[] = [];
   page.on("request", (request) => {
