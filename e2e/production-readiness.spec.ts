@@ -1191,13 +1191,13 @@ test("website login opens account management after the gated navigation dialog",
   await expect(websiteAvatar).toHaveAttribute("data-fluid-orb-motion", /^(still|fallback)$/);
 });
 
-test("website account Fluid Orb keeps its CSS fallback without WebGL", async ({ page }) => {
+test("website account Fluid Orb keeps its CSS fallback without Canvas support", async ({ page }) => {
   await page.addInitScript(() => {
     const originalGetContext = HTMLCanvasElement.prototype.getContext;
     Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
       configurable: true,
       value(contextId: string, ...args: unknown[]) {
-        if (contextId === "webgl") return null;
+        if (contextId === "2d") return null;
         return Reflect.apply(originalGetContext, this, [contextId, ...args]);
       },
     });
