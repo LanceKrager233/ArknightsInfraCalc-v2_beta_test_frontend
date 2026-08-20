@@ -797,7 +797,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         boxSource,
         rotation: rotationProfile,
         fiammetta_enable: effectiveFiammettaEnabled,
-      }, controller.signal);
+      }, { signal: controller.signal, includeDebug: showBetaPanels });
       setCliReady(true);
       setActiveShift(0);
       const finalizedResult = response;
@@ -1344,6 +1344,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       operbox: accountCanUseCurrentBox ? operbox : null,
       layout,
       profile: accountCanUseCurrentBox ? result?.profile : null,
+      trainingAdvice: accountCanUseCurrentBox ? result?.trainingAdvice ?? null : null,
       requiresAccount: !accountCanUseCurrentBox,
       onOpenCalculator: () => navigateToPage("calculator"),
     },

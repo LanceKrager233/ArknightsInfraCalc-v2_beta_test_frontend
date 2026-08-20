@@ -92,6 +92,11 @@ export function toDisplayError(error: unknown, fallback: string): DisplayError {
   };
 }
 
+type PlanRequestOptions = {
+  signal?: AbortSignal;
+  includeDebug?: boolean;
+};
+
 export function runPlan(payload: {
   layout: BaseBlueprint;
   operbox: OperBoxEntry[];
@@ -99,15 +104,15 @@ export function runPlan(payload: {
   boxSource: "skland" | "maa" | "sample";
   rotation: RotationProfile;
   fiammetta_enable?: boolean;
-}, signal?: AbortSignal): Promise<PublicPlanData> {
+}, options: PlanRequestOptions = {}): Promise<PublicPlanData> {
   const requestPayload = payload.boxSource === "sample"
     ? { layout: payload.layout, sourceName: payload.sourceName, boxSource: payload.boxSource, rotation: payload.rotation, fiammetta_enable: payload.fiammetta_enable }
     : payload;
-  return requestData("/api/plan", {
+  return requestData(options.includeDebug ? "/api/plan?beta=1" : "/api/plan", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(requestPayload),
-    signal,
+    signal: options.signal,
   });
 }
 

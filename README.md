@@ -122,7 +122,17 @@ chmod +x bin/infra-cli
 | `main` | `production` | 线上站点 | 强制关闭 |
 | `develop` | `development` | dev 站点 | 开启，可由环境变量主动关闭 |
 
-推送到两个分支都会先执行`Frontend quality`。只有 push 门禁成功后，`Deploy verified branch`才会发布该次通过验证的 SHA；PR 检查不会触发部署。工作流先确认服务器两个固定 helper 是`root:root 0755`普通文件且`--contract-version`与当前工作流兼容，再从共享 Git 缓存增量取得对象并在服务器本地生成只包含 Git 跟踪内容的发布包。helper 以状态码`75`报告临时 GitHub 网络、缓存或锁故障时，Runner 会读取该环境的服务器缓存 ref，并优先上传从该 ref 到已验证 SHA 的增量 Git bundle；缓存 ref 不可用时才尝试上一次 push SHA。服务器严格校验 bundle 的路径、所有者、HEAD、前置对象、commit tree 和完整对象图后导入缓存。只有 bundle 基线不可用、传输失败或缓存缺少前置对象时才退回完整 SCP；SHA、tree、路径或 helper 契约错误会直接终止。`scripts/deploy-release.sh`负责独立 release 目录、原子切换`current`软链、内部/公网健康检查和失败回滚；它在构建前及成功后都只清理经过严格校验的旧 release，每个环境保留当前版本和两个回滚版本，并在清理后可用空间不足 3 GiB 时于创建新 release 前失败。失败构建的本次目录会自动移除，`shared`和`/var/lib`持久化数据不参与清理。
+推送到两个分支都会先执行`Frontend quality`，但`Change scope`会先用保守白名单判断实际影响范围。`quality`汇总检查始终存在；它要求被选中的 Job 成功，并核对未选中的 Job 确实是`skipped`，因此不会因 workflow 级路径过滤而让受保护分支永久等待。
+
+| 变更范围 | Core checks | Chromium E2E | 服务器部署 |
+| --- | --- | --- | --- |
+| `docs/**`、根 Markdown、`.gitignore`、`.editorconfig`、LICENSE | 跳过 | 跳过 | 跳过 |
+| 单元测试、非发布型 GitHub 配置 | 执行 | 跳过 | 跳过 |
+| E2E 或 Playwright 配置 | 执行 | 执行 | 跳过 |
+| `frontend-quality.yml`、`deploy.yml` | 执行 | 跳过 | 受保护分支 push 执行 |
+| 运行时代码、依赖、部署脚本或未知路径 | 执行 | 执行 | 受保护分支 push 执行 |
+
+手动触发、无法取得可靠基线或空差异都会失败关闭为完整门禁。PR 检查不部署；push 只有在门禁成功且分类输出`deploy_required=true`时，`Deploy verified branch`才会发布该次验证 SHA。部署工作流先确认服务器两个固定 helper 是`root:root 0755`普通文件且`--contract-version`与当前工作流兼容，再从共享 Git 缓存增量取得对象并在服务器本地生成只包含 Git 跟踪内容的发布包。helper 以状态码`75`报告临时 GitHub 网络、缓存或锁故障时，Runner 会读取该环境的服务器缓存 ref，并优先上传从该 ref 到已验证 SHA 的增量 Git bundle；缓存 ref 不可用时才尝试上一次 push SHA。服务器严格校验 bundle 的路径、所有者、HEAD、前置对象、commit tree 和完整对象图后导入缓存。只有 bundle 基线不可用、传输失败或缓存缺少前置对象时才退回完整 SCP；SHA、tree、路径或 helper 契约错误会直接终止。`scripts/deploy-release.sh`负责独立 release 目录、原子切换`current`软链、内部/公网健康检查和失败回滚；它在构建前及成功后都只清理经过严格校验的旧 release，每个环境保留当前版本和两个回滚版本，并在清理后可用空间不足 3 GiB 时于创建新 release 前失败。失败构建的本次目录会自动移除，`shared`和`/var/lib`持久化数据不参与清理。
 
 生产构建同时限制 Next route 统计和首页 HTML 实际引用的全部首轮 JavaScript 文件数、原始体积与 gzip 体积，避免 SSR 动态预加载逃过 bundle 门禁。发布完成后还会用真实 GET 请求核对公网 HTML 与 JavaScript 的 gzip/Brotli 响应；HEAD 不作为压缩验收依据。
 
