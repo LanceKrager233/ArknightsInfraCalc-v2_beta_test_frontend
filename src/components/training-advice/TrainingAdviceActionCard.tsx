@@ -5,7 +5,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { OperatorSlot } from "@/components";
 import { InfraTechnicalCard } from "@/components/InfraTechnicalCard";
 import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
-import { operatorPortraitFor } from "@/operatorPortraits";
+import { operatorPortraitFor, operatorProfessionFor } from "@/operatorPortraits";
 import type {
   OperBoxEntry,
   TrainingNewbieItem,
@@ -60,6 +60,7 @@ export function TrainingAdviceActionCard({
               name: action.operator,
               label: action.operator,
               portrait: operatorPortraitFor(action.operator, entry?.id),
+              profession: operatorProfessionFor(action.operator),
             }}
             portraitSize={80}
           />

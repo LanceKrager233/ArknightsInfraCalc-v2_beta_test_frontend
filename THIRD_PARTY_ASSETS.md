@@ -25,7 +25,7 @@ For a local, explicitly reviewed update:
 
 ```powershell
 git clone --depth 1 --filter=blob:none --sparse https://github.com/arkntools/arknights-toolbox-data.git .tmp/arkntools-data
-git -C .tmp/arkntools-data sparse-checkout set --no-cone /assets/data/character.json /assets/data/building.json /assets/locales/cn/character.json /assets/locales/cn/building.json /assets/img/building_skill /LICENSE /package.json
+git -C .tmp/arkntools-data sparse-checkout set --no-cone /assets/data/character.json /assets/data/building.json /assets/locales/cn/character.json /assets/locales/cn/building.json /assets/locales/cn/term.json /assets/img/building_skill /LICENSE /package.json
 git clone --depth 1 --filter=blob:none --sparse https://github.com/yuanyan3060/ArknightsGameResource.git .tmp/arknights-game-resource
 git -C .tmp/arknights-game-resource sparse-checkout set --no-cone /avatar/char_*.png
 $sourceSha = git -C .tmp/arkntools-data rev-parse HEAD

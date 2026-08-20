@@ -47,6 +47,7 @@ jobs:
             /assets/data/building.json
             /assets/locales/cn/character.json
             /assets/locales/cn/building.json
+            /assets/locales/cn/term.json
             /assets/img/building_skill
             /assets/img/item/2003.png
             /assets/img/item/4001.png
