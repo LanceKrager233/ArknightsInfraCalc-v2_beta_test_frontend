@@ -241,7 +241,7 @@ flowchart TD
 
 公共 DTO 变更必须同时更新 mapper 与泄露测试。错误码新增或修改必须同步更新类型、映射测试和本报告目录。UI 修改必须检查三个一级导航和两处锁定区域，不得把“一图流布局”在手机端隐藏，也不得替换加工站“暂不显示”。
 
-GitHub Actions 工作流位于 `.github/workflows/frontend-quality.yml`，使用 Node 22。核心检查与生产构建、Chromium E2E 分成两个隔离 Job 并行执行，再由保持原状态名称的 `quality` Job 汇总结果；受保护分支 push 只有在同一 SHA 的两个必需 Job 成功后才进入部署。Chromium 与 WebKit Job 使用和 lockfile 中 Playwright 版本一致、以 digest 固定的官方 noble 镜像，避免临时 runner 为系统字体和浏览器依赖重复访问 Ubuntu 软件源；浏览器 Job 使用自身的临时数据库 owner，权限边界仍由 Core checks 中的独立集成测试验证。完整 WebKit E2E 每日定时运行，也可手动触发，作为不阻塞逐次发布的 Safari 兼容性回归。PR 的新提交会取消同一 PR 的过期运行，分支 push 和已开始的部署不会被取消。
+GitHub Actions 工作流位于 `.github/workflows/frontend-quality.yml`，使用 Node 22。当前先由`Change scope`按失败关闭的保守白名单判定文档、测试、浏览器测试、发布工作流和运行时范围；选中的 Core/Chromium Job 必须成功，未选中的 Job 必须确实为`skipped`，再由保持原状态名称的`quality`汇总。文档、仓库元数据、测试和非发布型 CI 变更不创建服务器 release；运行时、未知路径和发布工作流仍在受保护分支 push 后部署。不得用 workflow 级`paths-ignore`移除必需检查。Chromium 与 WebKit Job 使用和 lockfile 中 Playwright 版本一致、以 digest 固定的官方 noble 镜像，避免临时 runner 为系统字体和浏览器依赖重复访问 Ubuntu 软件源；浏览器 Job 使用自身的临时数据库 owner，权限边界仍由 Core checks 中的独立集成测试验证。完整 WebKit E2E 每日定时运行，也可手动触发，作为不阻塞逐次发布的 Safari 兼容性回归。PR 的新提交会取消同一 PR 的过期运行，分支 push 和已开始的部署不会被取消。
 
 ## 开发调试环境使用指南
 
