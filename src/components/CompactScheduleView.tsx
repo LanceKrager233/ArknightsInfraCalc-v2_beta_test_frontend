@@ -9,7 +9,6 @@ import {
 } from "@/blueprint";
 import { AnimatedNumber, AnimatedText } from "@/components/AnimatedText";
 import { LevelDiamonds, OperatorSlot, roomVisualFor } from "@/components";
-import { Skeleton } from "@/components/ui/skeleton";
 import { presentRoomEfficiency } from "@/efficiency";
 import {
   COMPACT_AUXILIARY_WIDTHS,
@@ -43,42 +42,6 @@ export interface CompactScheduleViewProps {
   activePlan?: MaaPlan;
   shiftDirection: ShiftDirection;
   onIssue: (row: RoomRow) => void;
-}
-
-function SkeletonRoom({ className }: { className?: string }) {
-  return (
-    <div className={`grid min-h-28 grid-cols-[minmax(7rem,0.38fr)_1fr] gap-4 bg-[#313131] p-3 ${className ?? ""}`}>
-      <div className="grid content-center gap-2">
-        <Skeleton className="h-4 w-24 rounded-none bg-white/14" />
-        <Skeleton className="h-3 w-16 rounded-none bg-white/10" />
-      </div>
-      <div className="flex items-center gap-3">
-        {Array.from({ length: 3 }, (_, index) => (
-          <Skeleton key={index} className="aspect-square h-14 rounded-none bg-white/12" />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-export function CompactScheduleSkeleton() {
-  return (
-    <div className="grid min-h-[560px] grid-cols-[1.2fr_1fr] gap-3 max-md:grid-cols-1" data-compact-schedule-skeleton role="status" aria-label="正在准备一图流布局">
-      <div className="grid content-start gap-3">
-        <SkeletonRoom />
-        <div className="grid grid-cols-2 gap-3"><SkeletonRoom /><SkeletonRoom /></div>
-        <div className="grid grid-cols-2 gap-3"><SkeletonRoom /><SkeletonRoom /></div>
-        <div className="grid grid-cols-2 gap-3"><SkeletonRoom /><SkeletonRoom /></div>
-      </div>
-      <div className="grid content-start gap-3 max-md:hidden">
-        <div className="grid grid-cols-3 gap-3">
-          {Array.from({ length: 3 }, (_, index) => <Skeleton key={index} className="h-28 rounded-none bg-[#313131]/88" />)}
-        </div>
-        {Array.from({ length: 4 }, (_, index) => <SkeletonRoom key={index} />)}
-      </div>
-      <span className="sr-only">正在准备一图流布局</span>
-    </div>
-  );
 }
 
 /** 布局宽度百分比，自己改数值 */
@@ -302,7 +265,7 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
   const processing = getGroup("processing")[0];
 
   return (
-    <div className={COMPACT_GRID_CLASS}>
+    <div className={COMPACT_GRID_CLASS} data-compact-schedule-view>
       <div
         className={COMPACT_COLUMN_CLASS}
         style={{ flexBasis: `${GRID_LEFT_PCT}%` }}
