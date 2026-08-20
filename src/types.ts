@@ -1043,12 +1043,18 @@ export interface FeedbackRoom {
   operators: string[];
 }
 
-export interface FeedbackRequest {
+export type FeedbackKind = "room_issue" | "performance_issue";
+
+type FeedbackRequestBase = {
   diagnosticId: string;
-  room: FeedbackRoom;
   note: string;
   consent: true;
-}
+};
+
+export type FeedbackRequest = FeedbackRequestBase & (
+  | { kind?: "room_issue"; room: FeedbackRoom }
+  | { kind: "performance_issue"; room?: never }
+);
 
 export interface FeedbackData {
   feedbackId: string;

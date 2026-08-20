@@ -286,14 +286,23 @@ export function acquirePlanSlot(ip: string): () => void {
 }
 
 export function validateFeedbackRequest(value: unknown): asserts value is FeedbackRequest {
-  const body = value as Partial<FeedbackRequest> | null;
-  const room = body?.room;
+  const body = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+  const room = body?.room && typeof body.room === "object" && !Array.isArray(body.room)
+    ? body.room as Record<string, unknown>
+    : null;
+  const kind = body?.kind === undefined ? "room_issue" : body.kind;
   const note = typeof body?.note === "string" ? body.note.trim() : "";
-  const valid =
+  const commonValid =
     Boolean(body)
     && typeof body?.diagnosticId === "string"
     && body.diagnosticId.length >= 1
     && body.diagnosticId.length <= 80
+    && note.length >= 1
+    && note.length <= 1000
+    && body?.consent === true;
+  const roomValid = kind === "room_issue"
     && Boolean(room)
     && typeof room?.id === "string"
     && room.id.length >= 1
@@ -306,17 +315,15 @@ export function validateFeedbackRequest(value: unknown): asserts value is Feedba
     && room.group.length <= 80
     && Array.isArray(room?.operators)
     && room.operators.length <= 10
-    && room.operators.every((operator) => typeof operator === "string" && operator.length <= 80)
-    && note.length >= 1
-    && note.length <= 1000
-    && body?.consent === true;
+    && room.operators.every((operator) => typeof operator === "string" && operator.length <= 80);
+  const performanceValid = kind === "performance_issue" && body?.room === undefined;
 
-  if (!valid) {
+  if (!commonValid || (!roomValid && !performanceValid)) {
     throw new PublicApiError("AIC-FEEDBACK-4001", {
       fieldErrors: [{
         path: "body",
         code: "invalid_feedback",
-        message: "请填写 1–1000 字说明，并确认提交本次排班问题。",
+        message: "请填写 1–1000 字说明，选择有效的反馈类型，并确认提交本次排班问题。",
       }],
     });
   }

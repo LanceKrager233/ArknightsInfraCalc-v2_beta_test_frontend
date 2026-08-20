@@ -162,7 +162,7 @@ test("same-origin protection uses Host instead of the wildcard listen address", 
   }
 });
 
-test("feedback validation requires consent and a 1-1000 character note", () => {
+test("feedback validation separates room and performance feedback while keeping notes minimal", () => {
   const valid = {
     diagnosticId: "diag",
     room: { id: "trade_1", title: "贸易站 1", group: "trading", operators: ["能天使"] },
@@ -170,12 +170,30 @@ test("feedback validation requires consent and a 1-1000 character note", () => {
     consent: true as const,
   };
   assert.doesNotThrow(() => validateFeedbackRequest(valid));
+  assert.doesNotThrow(() => validateFeedbackRequest({
+    kind: "performance_issue",
+    diagnosticId: "diag",
+    note: "运行耗时明显偏长",
+    consent: true,
+  }));
   assert.throws(
     () => validateFeedbackRequest({ ...valid, consent: false }),
     (error: unknown) => error instanceof PublicApiError && error.code === "AIC-FEEDBACK-4001"
   );
   assert.throws(
     () => validateFeedbackRequest({ ...valid, note: "x".repeat(1001) }),
+    (error: unknown) => error instanceof PublicApiError && error.code === "AIC-FEEDBACK-4001"
+  );
+  assert.throws(
+    () => validateFeedbackRequest({ ...valid, kind: "performance_issue" }),
+    (error: unknown) => error instanceof PublicApiError && error.code === "AIC-FEEDBACK-4001"
+  );
+  assert.throws(
+    () => validateFeedbackRequest({ kind: "room_issue", diagnosticId: "diag", note: "缺少房间", consent: true }),
+    (error: unknown) => error instanceof PublicApiError && error.code === "AIC-FEEDBACK-4001"
+  );
+  assert.throws(
+    () => validateFeedbackRequest({ kind: "future", diagnosticId: "diag", note: "未知类型", consent: true }),
     (error: unknown) => error instanceof PublicApiError && error.code === "AIC-FEEDBACK-4001"
   );
 });

@@ -19,6 +19,7 @@ import type {
 } from "@/types";
 import { isSklandConfigured, sklandDisabledReason } from "@/server/skland/session";
 import { PublicApiError } from "./api-contract";
+import { feedbackDirectoryGroup, toStoredFeedbackIssue } from "./feedback-record";
 import {
   PLAN_SCHEMA_VERSION,
   createSolverObservation,
@@ -880,7 +881,8 @@ export async function getSampleOperbox() {
 export async function saveFeedback(body: FeedbackRequest): Promise<FeedbackData> {
   const savedAt = new Date().toISOString();
   const feedbackId = randomUUID();
-  const dirName = makeStampedDirName(savedAt, body.room.group, feedbackId);
+  const kind = body.kind ?? "room_issue";
+  const dirName = makeStampedDirName(savedAt, feedbackDirectoryGroup(body), feedbackId);
   const feedbackDir = path.join(feedbackRoot, dirName);
   const metaPath = path.join(feedbackDir, "meta.json");
   const issuePath = path.join(feedbackDir, "issue.json");
@@ -896,19 +898,14 @@ export async function saveFeedback(body: FeedbackRequest): Promise<FeedbackData>
     feedbackId,
     savedAt,
     diagnosticId: body.diagnosticId,
+    kind,
     consent: body.consent,
     solver,
     ...(dataOwnerTag ? { dataOwnerTag } : {}),
   };
 
   await writeJson(metaPath, meta);
-  await writeJson(issuePath, {
-    type: "room_issue",
-    diagnosticId: body.diagnosticId,
-    room: body.room,
-    note: body.note,
-    consent: true,
-  });
+  await writeJson(issuePath, toStoredFeedbackIssue(body));
 
   return {
     feedbackId,
