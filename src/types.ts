@@ -176,6 +176,80 @@ export interface RotationJson {
   };
 }
 
+/** plan.compute 响应里的练卡建议报告（PlayerTrainingAdviceReport v2）。 */
+export interface TrainingAdviceReport {
+  schema_version: number;
+  context?: TrainingAdviceContext;
+  newbie_section_status?: string;
+  incomplete_newbie?: TrainingNewbieItem[];
+  combinations?: TrainingCombination[];
+  recommendations?: TrainingRecommendation[];
+}
+
+export interface TrainingAdviceContext {
+  dormitory_level_sum?: number | null;
+  engineering_robot_count?: number | null;
+  has_originium_shard_factory?: boolean | null;
+  manufacturing_average_efficiency_percent?: number | null;
+  meeting_room_max_level?: number | null;
+  trade_average_efficiency_percent?: number | null;
+}
+
+export interface TrainingAdviceTarget {
+  elite: number;
+  level?: number | null;
+  kind?: string;
+}
+
+export interface TrainingAdviceMember {
+  operator: string;
+  role?: string;
+  owned?: boolean;
+  progress?: string;
+  current?: { elite: number; level?: number } | null;
+  target?: TrainingAdviceTarget | null;
+  target_met?: boolean;
+  counts_toward_completion?: boolean;
+}
+
+export interface TrainingCombination {
+  id: string;
+  name: string;
+  product?: string | null;
+  scale?: string | null;
+  tier?: string | null;
+  state?: string;
+  completed_slots?: number;
+  total_slots?: number;
+  completion_percent?: number;
+  facilities?: string[];
+  members?: TrainingAdviceMember[];
+  missing_core?: string[];
+  missing_important?: string[];
+  untrained_core?: string[];
+}
+
+export interface TrainingRecommendation {
+  action?: string;
+  operator: string;
+  combination_id?: string | null;
+  combination_name?: string | null;
+  product?: string | null;
+  priority?: string | null;
+  priority_rank?: number | null;
+  reason?: string | null;
+  target?: TrainingAdviceTarget | null;
+  current?: { elite: number; level?: number } | null;
+}
+
+export interface TrainingNewbieItem {
+  action?: string;
+  operator: string;
+  product?: string | null;
+  target?: TrainingAdviceTarget | null;
+  current?: { elite: number; level?: number } | null;
+}
+
 export interface CliCandidate {
   path: string;
   exists: boolean;
@@ -777,6 +851,7 @@ export interface PlanApiResponse {
   stderr?: string;
   profileJson?: UserProfile;
   maaJson?: MaaJson;
+  trainingAdviceJson?: TrainingAdviceReport;
   rotationJson?: RotationJson;
   solver?: SolverObservation;
   debugBundle?: DebugBundle;
@@ -863,6 +938,7 @@ export interface PublicPlanData {
   profile: UserProfile;
   maa: MaaJson;
   rotation: RotationJson;
+  trainingAdvice?: TrainingAdviceReport;
   durationMs: number;
   diagnosticId: string;
   debug?: PublicPlanDebug;

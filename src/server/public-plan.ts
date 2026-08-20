@@ -100,6 +100,7 @@ export function toPublicPlanData(
   const data: PublicPlanData = {
     profile: sanitizeProfile(result.profileJson, input.layoutLabel, input.sourceName),
     maa: sanitizeMaa(result.maaJson, input.layoutLabel),
+    ...(result.trainingAdviceJson ? { trainingAdvice: result.trainingAdviceJson } : {}),
     rotation: normalizeRotationResult({
       source: result.rotationJson as RotationJson,
       profile: result.profileJson,

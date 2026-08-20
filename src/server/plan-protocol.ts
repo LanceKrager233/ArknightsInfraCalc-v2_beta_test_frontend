@@ -26,6 +26,7 @@ export type PlanComputePayload = {
   profile: ProtocolRecord;
   rotation: ProtocolRecord & { shifts: unknown[] };
   maa: ProtocolRecord;
+  trainingAdvice?: ProtocolRecord;
 };
 
 export function isProtocolRecord(value: unknown): value is ProtocolRecord {
@@ -203,5 +204,6 @@ export function parsePlanComputePayload(response: unknown): PlanComputePayload |
     profile: result.profile,
     rotation: { ...result.rotation, shifts: result.rotation.shifts },
     maa: result.maa,
+    trainingAdvice: isProtocolRecord(result.training_advice) ? result.training_advice : undefined,
   };
 }

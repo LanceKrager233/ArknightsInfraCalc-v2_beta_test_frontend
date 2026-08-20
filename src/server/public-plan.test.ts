@@ -63,6 +63,11 @@ function internalResult(): PlanApiResponse {
         solver_executable_sha256: "b".repeat(64),
       },
     } as PlanApiResponse["maaJson"] & { nestedInternal: Record<string, unknown> },
+    trainingAdviceJson: {
+      schema_version: 2,
+      newbie_section_status: "complete",
+      recommendations: [],
+    },
     rotationJson: {
       profile: "abc_12_6_6",
       shifts: [{
@@ -177,6 +182,7 @@ test("production public plan data recursively excludes internal fields", () => {
       false
     );
     assert.equal(publicData.maa.scheduleType?.planTimes, 2);
+    assert.deepEqual(publicData.trainingAdvice, { schema_version: 2, newbie_section_status: "complete", recommendations: [] });
     assert.equal(publicData.profile.baseline_label, "产品推荐基准");
     assert.equal(publicData.profile.layout_label.includes("\\"), false);
     assert.equal(publicData.maa.title.includes("\\"), false);

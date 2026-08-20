@@ -150,11 +150,13 @@ test("validates the complete plan.compute success payload", () => {
       profile: { schema_version: 4 },
       rotation: { profile: "abc_12_6_6", daily: {}, shifts: [] },
       maa: { plans: [] },
+      training_advice: { schema_version: 2, newbie_section_status: "complete", recommendations: [] },
     },
   });
 
   assert.deepEqual(payload?.rotation.shifts, []);
   assert.equal(payload?.profile.schema_version, 4);
+  assert.equal(payload?.trainingAdvice?.schema_version, 2);
 });
 
 test("rejects malformed successful plan.compute payloads", () => {
