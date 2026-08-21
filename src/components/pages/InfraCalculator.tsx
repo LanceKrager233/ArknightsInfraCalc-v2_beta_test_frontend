@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Textarea } from "@/components/ui/textarea";
+import { PlanResultSummarySkeleton } from "@/components/PlanResultSummarySkeleton";
 
 import type { FactoryRecipe, TradeOrder } from "@/blueprint";
 import { cn } from "@/lib/utils";
@@ -28,11 +29,7 @@ const DebugActions = lazy(() => import("@/components").then((module) => ({ defau
 const IssuePanel = lazy(() => import("@/components").then((module) => ({ default: module.IssuePanel })));
 
 function DeferredResultLoading() {
-  return (
-    <div className="grid min-h-64 place-items-center" role="status" aria-live="polite">
-      <span className="text-sm text-muted-foreground">正在恢复排班视图…</span>
-    </div>
-  );
+  return <PlanResultSummarySkeleton />;
 }
 
 function Panel({ children, className = "", action, title, icon }: {

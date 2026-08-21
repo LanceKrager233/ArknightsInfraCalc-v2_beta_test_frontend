@@ -47,6 +47,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { RemoteAvatar } from "@/components/ui/remote-avatar";
+import { Skeleton } from "@/components/ui/skeleton";
 import { HoldToConfirm } from "@/components/ui/hold-to-confirm";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LevelDiamonds, OperatorSlot, roomVisualFor } from "@/components";
@@ -1495,22 +1497,23 @@ export function SklandStatus({
         data-ui-number-font
         identity={(
           <div className="flex min-w-0 items-center gap-4">
-            {snapshot.player.avatarUrl ? (
-              <img
-                src={snapshot.player.avatarUrl}
-                alt={`${snapshot.player.nickname}的森空岛头像`}
-                referrerPolicy="no-referrer"
-                className="size-14 shrink-0 rounded-xl object-cover ring-1 ring-foreground/10"
-              />
-            ) : (
-              <div
+            <RemoteAvatar
+              src={snapshot.player.avatarUrl}
+              alt={`${snapshot.player.nickname}的森空岛头像`}
+              pixelSize={56}
+              className="size-14 rounded-xl ring-1 ring-foreground/10"
+              imageClassName="rounded-xl"
+              loadingFallback={<Skeleton className="size-full rounded-xl" />}
+              emptyFallback={(
+                <div
                 className="grid size-14 shrink-0 place-items-center rounded-xl bg-primary text-lg font-semibold text-primary-foreground"
                 role="img"
                 aria-label={`${snapshot.player.nickname}的森空岛头像`}
               >
                 {snapshot.player.nickname.slice(0, 1)}
-              </div>
-            )}
+                </div>
+              )}
+            />
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="truncate text-2xl font-semibold tracking-tight">{snapshot.player.nickname}</h2>
