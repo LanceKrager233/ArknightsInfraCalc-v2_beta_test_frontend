@@ -2785,7 +2785,7 @@ test("Full E2 stays in place and completes generation, shifts, MAA export, and f
   await expect(page.getByText("反馈已提交，编号：feedback-001")).toBeVisible();
 });
 
-test("slow plans submit performance feedback without attributing an arbitrary room", async ({ page }) => {
+test("plan timing stays passive and performance feedback waits for result details to close", async ({ page }) => {
   await mockApis(page);
   const feedbackPayloads: Record<string, unknown>[] = [];
   await page.unroute("**/api/feedback");
@@ -2801,15 +2801,49 @@ test("slow plans submit performance feedback without attributing an arbitrary ro
       }),
     });
   });
-  await seedV4Session(page, { ...planData, durationMs: 735 });
+  await seedV4Session(page, { ...planData, durationMs: 2764 });
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 
-  const performancePrompt = page.getByRole("status").filter({ hasText: "本次求解耗时 735 ms" });
-  await expect(performancePrompt).toBeVisible();
-  await performancePrompt.getByRole("button", { name: "提交性能反馈" }).click();
+  const resultSummary = page.locator("[data-plan-primary-details-trigger]");
+  await expect(resultSummary).toContainText("用时 2.8 秒 · 点击查看详情");
+  await expect(page.getByText(/本次求解耗时/)).toHaveCount(0);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(feedbackPayloads).toHaveLength(0);
+
+  for (const viewport of [{ width: 390, height: 844 }, { width: 768, height: 900 }, { width: 1440, height: 900 }]) {
+    await page.setViewportSize(viewport);
+    await resultSummary.click();
+    const detailsDrawer = page.getByRole("dialog", { name: "排班结果详情" });
+    const performanceAction = detailsDrawer.getByRole("button", { name: "反馈本次求解速度" });
+    await expect(performanceAction).toBeVisible();
+    const horizontalFit = await detailsDrawer.evaluate((element) => {
+      const action = element.querySelector<HTMLElement>("[data-plan-performance-feedback]");
+      if (!action) throw new Error("Missing performance feedback action");
+      const drawerBox = element.getBoundingClientRect();
+      const actionBox = action.getBoundingClientRect();
+      return {
+        left: actionBox.left >= drawerBox.left,
+        right: actionBox.right <= drawerBox.right + 1,
+      };
+    });
+    expect(horizontalFit).toEqual({ left: true, right: true });
+    await page.keyboard.press("Escape");
+    await expect(page.locator('[data-slot="drawer-root"]')).toHaveCount(0);
+    await expect(resultSummary).toBeFocused();
+  }
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await resultSummary.press("Enter");
+  const detailsDrawer = page.getByRole("dialog", { name: "排班结果详情" });
+  const performanceAction = detailsDrawer.getByRole("button", { name: "反馈本次求解速度" });
+  await performanceAction.focus();
+  await page.keyboard.press("Enter");
   const feedbackDialog = page.getByRole("dialog", { name: "提交性能反馈" });
   await expect(feedbackDialog).toBeVisible();
-  await expect(performancePrompt).toHaveCount(0);
+  await expect(detailsDrawer).toHaveCount(0);
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+  expect(feedbackPayloads).toHaveLength(0);
   await expect(feedbackDialog.getByText(/不会附带任意房间或完整干员数据/)).toBeVisible();
   await feedbackDialog.getByRole("textbox").fill("同一份 Box 之前通常可以更快完成。");
   await feedbackDialog.getByRole("checkbox").check();
@@ -2823,8 +2857,9 @@ test("slow plans submit performance feedback without attributing an arbitrary ro
     consent: true,
   });
   expect(feedbackPayload).not.toHaveProperty("room");
-  expect(feedbackPayload?.note).toContain("求解耗时：735 ms");
+  expect(feedbackPayload?.note).toContain("求解耗时：2764 ms");
   await expect(page.getByText("反馈已提交，编号：feedback-performance")).toBeVisible();
+  await expect(resultSummary).toBeFocused();
 });
 
 test("scheduled product changes require destructive confirmation and rerun with the updated layout", async ({ page }) => {

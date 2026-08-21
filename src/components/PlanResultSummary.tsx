@@ -3,11 +3,12 @@
 import { ChevronRight } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { AnimatedNumber, AnimatedText } from "@/components/AnimatedText";
 import { ShiftComparisonDetails } from "@/components/ShiftComparisonCard";
 import { RecommendationCard } from "@/components/RecommendationCard";
+import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { estimateDailyProduction, type DailyProductionAmount, type DailyProductionEstimate, type DailyProductionUnavailableReason } from "@/daily-production";
@@ -15,7 +16,7 @@ import { manufacturePoolReady, profileEfficiency } from "@/efficiency";
 import { cn } from "@/lib/utils";
 import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
 import { PRODUCT_ICON_URLS } from "@/product-assets";
-import { relativeMetricDelta, rotationMetricValue, type RotationMetricKind } from "@/rotation-presentation";
+import { formatPlanDuration, relativeMetricDelta, rotationMetricValue, type RotationMetricKind } from "@/rotation-presentation";
 import type { BaseBlueprint, MaaJson, RotationJson, ShiftComparison, UserProfile } from "@/types";
 
 type DetailSection = "efficiency" | "comparison";
@@ -59,9 +60,11 @@ export function PlanResultSummary({
   layout,
   activeShift,
   comparison,
+  durationMs,
   planRevision,
   animateEntrance = true,
   onEntranceConsumed,
+  onPerformanceIssue,
 }: {
   profile?: UserProfile;
   rotation?: RotationJson;
@@ -69,14 +72,17 @@ export function PlanResultSummary({
   layout: BaseBlueprint;
   activeShift: number;
   comparison: ShiftComparison | null;
+  durationMs: number;
   planRevision?: string;
   animateEntrance?: boolean;
   onEntranceConsumed?: (revision: string) => void;
+  onPerformanceIssue: () => void;
 }) {
   const shouldReduceMotion = useReducedMotion();
   const [animateOnMount] = useState(animateEntrance);
   const [detailSection, setDetailSection] = useState<DetailSection>("efficiency");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const performanceFeedbackPendingRef = useRef(false);
   useEffect(() => {
     if (animateOnMount && planRevision) onEntranceConsumed?.(planRevision);
   }, [animateOnMount, onEntranceConsumed, planRevision]);
@@ -112,6 +118,15 @@ export function PlanResultSummary({
     setDetailSection(section);
     setDrawerOpen(true);
   };
+  const requestPerformanceFeedback = () => {
+    performanceFeedbackPendingRef.current = true;
+    setDrawerOpen(false);
+  };
+  const handleDrawerCloseComplete = () => {
+    if (!performanceFeedbackPendingRef.current) return;
+    performanceFeedbackPendingRef.current = false;
+    onPerformanceIssue();
+  };
 
   return (
     <>
@@ -137,7 +152,7 @@ export function PlanResultSummary({
           <motion.button type="button" className={cn("group relative flex min-w-0 items-center justify-between gap-3 overflow-hidden bg-[#272A2B] px-5 py-3 text-left text-white focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-[#FFD800] max-[820px]:row-span-1 max-sm:min-h-16", comparison && "row-span-2")} data-plan-details-trigger="efficiency" data-plan-primary-details-trigger whileHover={shouldReduceMotion ? undefined : { x: 2 }} whileTap={shouldReduceMotion ? undefined : { scale: 0.985 }} onClick={() => openDetails("efficiency")}>
             <motion.span className="min-w-0" data-plan-metric initial={animateOnMount ? { opacity: 0, x: shouldReduceMotion ? 0 : -10 } : false} animate={{ opacity: 1, x: 0 }} transition={{ duration: shouldReduceMotion ? MOTION_DURATION.feedback : 0.36, delay: shouldReduceMotion ? 0 : 0.1, ease: MOTION_EASE_OUT }}>
               <strong className="block truncate text-lg font-medium"><span className="font-number">{layout.template}</span> 基建方案</strong>
-              <span className="mt-1 block text-[10px] text-white/45">点击查看产出组成与效率诊断</span>
+              <span className="mt-1 block text-[10px] text-white/45">用时 <span className="font-number">{formatPlanDuration(durationMs)}</span> · 点击查看详情</span>
             </motion.span>
             <ChevronRight className="size-4 shrink-0 text-white/55 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
           </motion.button>
@@ -207,27 +222,40 @@ export function PlanResultSummary({
         </div>
       </motion.section>
 
-      <Drawer open={drawerOpen} onOpenChange={setDrawerOpen} title="排班结果详情" description="日产物组成、原效率与当前进驻状态诊断。" width={560}>
-        <Tabs value={activeDetailSection} onValueChange={(value) => setDetailSection(value as DetailSection)} className="min-h-0 flex-1 gap-0">
-          <TabsList variant="line" className="w-full justify-start gap-1 border-b border-border/70 px-4 py-0" aria-label="结果详情分类">
-            <TabsTrigger value="efficiency" className="min-h-11 flex-none px-3">产出与效率</TabsTrigger>
-            {comparison ? <TabsTrigger value="comparison" className="min-h-11 flex-none px-3">当前状态匹配</TabsTrigger> : null}
-          </TabsList>
-          <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pb-6" data-plan-details-section={activeDetailSection}>
-            <TabsContent value="efficiency" className="m-0">
-              <motion.div initial={{ opacity: 0, x: shouldReduceMotion ? 0 : -12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.state, ease: MOTION_EASE_OUT }}>
-                <EfficiencyDetails profile={profile} rotation={rotation} layout={layout} metrics={efficiencyMetrics} production={production} />
-              </motion.div>
-            </TabsContent>
-            {comparison ? (
-              <TabsContent value="comparison" className="m-0">
-                <motion.div initial={{ opacity: 0, x: shouldReduceMotion ? 0 : 12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.state, ease: MOTION_EASE_OUT }}>
-                  <ShiftComparisonDetails comparison={comparison} />
+      <Drawer open={drawerOpen} onOpenChange={setDrawerOpen} onCloseComplete={handleDrawerCloseComplete} title="排班结果详情" description="日产物组成、原效率与当前进驻状态诊断。" width={560}>
+        <div className="flex h-full min-h-0 flex-col">
+          <Tabs value={activeDetailSection} onValueChange={(value) => setDetailSection(value as DetailSection)} className="min-h-0 flex-1 gap-0">
+            <TabsList variant="line" className="w-full justify-start gap-1 border-b border-border/70 px-4 py-0" aria-label="结果详情分类">
+              <TabsTrigger value="efficiency" className="min-h-11 flex-none px-3">产出与效率</TabsTrigger>
+              {comparison ? <TabsTrigger value="comparison" className="min-h-11 flex-none px-3">当前状态匹配</TabsTrigger> : null}
+            </TabsList>
+            <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pb-6" data-plan-details-section={activeDetailSection}>
+              <TabsContent value="efficiency" className="m-0">
+                <motion.div initial={{ opacity: 0, x: shouldReduceMotion ? 0 : -12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.state, ease: MOTION_EASE_OUT }}>
+                  <EfficiencyDetails profile={profile} rotation={rotation} layout={layout} metrics={efficiencyMetrics} production={production} />
                 </motion.div>
               </TabsContent>
-            ) : null}
+              {comparison ? (
+                <TabsContent value="comparison" className="m-0">
+                  <motion.div initial={{ opacity: 0, x: shouldReduceMotion ? 0 : 12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.state, ease: MOTION_EASE_OUT }}>
+                    <ShiftComparisonDetails comparison={comparison} />
+                  </motion.div>
+                </TabsContent>
+              ) : null}
+            </div>
+          </Tabs>
+          <div className="shrink-0 border-t border-[#313131]/12 px-5 py-2.5">
+            <Button
+              type="button"
+              variant="link"
+              className="h-11 justify-start px-0 text-xs font-medium text-[#313131]/58 hover:text-[#313131]"
+              data-plan-performance-feedback
+              onClick={requestPerformanceFeedback}
+            >
+              反馈本次求解速度
+            </Button>
           </div>
-        </Tabs>
+        </div>
       </Drawer>
     </>
   );
