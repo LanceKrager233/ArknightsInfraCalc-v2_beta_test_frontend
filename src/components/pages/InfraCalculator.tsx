@@ -5,13 +5,12 @@ import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "rea
 
 import { ScheduleBoard, ShiftTabs } from "@/components";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Textarea } from "@/components/ui/textarea";
 import { PlanResultSummarySkeleton } from "@/components/PlanResultSummarySkeleton";
 
 import type { FactoryRecipe, TradeOrder } from "@/blueprint";
+import { loadClientFeature } from "@/client-lazy-loader";
 import { cn } from "@/lib/utils";
 import type { ShiftDirection } from "@/motion";
 import type { RoomRow } from "@/schedule";
@@ -24,9 +23,10 @@ import type {
   ShiftComparison,
 } from "@/types";
 
-const PlanResultSummary = lazy(() => import("@/components/PlanResultSummary").then((module) => ({ default: module.PlanResultSummary })));
-const DebugActions = lazy(() => import("@/components").then((module) => ({ default: module.DebugActions })));
-const IssuePanel = lazy(() => import("@/components").then((module) => ({ default: module.IssuePanel })));
+const PlanResultSummary = lazy(() => loadClientFeature("planResultSummary").then((module) => ({ default: module.PlanResultSummary })));
+const DebugActions = lazy(() => loadClientFeature("sharedComponents").then((module) => ({ default: module.DebugActions })));
+const IssuePanel = lazy(() => loadClientFeature("sharedComponents").then((module) => ({ default: module.IssuePanel })));
+const ShortcutGuideDialog = lazy(() => loadClientFeature("sharedComponents").then((module) => ({ default: module.ShortcutGuideDialog })));
 
 function DeferredResultLoading() {
   return <PlanResultSummarySkeleton />;
@@ -152,7 +152,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
       setFiammettaPortrait(null);
       return;
     }
-    void import("@/operatorPortraits").then(({ operatorPortraitFor }) => {
+    void loadClientFeature("operatorPortraits").then(({ operatorPortraitFor }) => {
       if (!cancelled) setFiammettaPortrait(operatorPortraitFor(fiammettaTarget) ?? null);
     });
     return () => { cancelled = true; };
@@ -385,28 +385,9 @@ export function InfraCalculator(props: InfraCalculatorProps) {
           </div>
         </aside>
       ) : null}
-      <Dialog open={shortcutGuideOpen} onOpenChange={setShortcutGuideOpen}>
-        <DialogContent className="gap-5 sm:max-w-2xl sm:p-6">
-          <DialogHeader className="gap-1.5 px-1 sm:px-2">
-            <DialogTitle className="text-xl font-semibold">快捷键</DialogTitle>
-            <DialogDescription className="max-w-lg text-sm leading-6">在排班主界面快速定位搜索、关闭临时状态或切换导航。</DialogDescription>
-          </DialogHeader>
-          <div className="divide-y divide-border/70 border-y border-border/70 px-1 sm:px-2">
-            <div className="flex min-h-14 items-center justify-between gap-8 py-3 max-sm:flex-wrap max-sm:gap-2">
-              <span className="text-[15px] font-medium leading-6">聚焦排班搜索</span>
-              <KbdGroup className="shrink-0" aria-label="Control 加 K"><Kbd>Ctrl</Kbd><span aria-hidden="true">+</span><Kbd>K</Kbd></KbdGroup>
-            </div>
-            <div className="flex min-h-14 items-center justify-between gap-8 py-3 max-sm:flex-wrap max-sm:gap-2">
-              <span className="text-[15px] font-medium leading-6">清空搜索；计算中取消请求</span>
-              <Kbd className="shrink-0">Esc</Kbd>
-            </div>
-            <div className="flex min-h-14 items-center justify-between gap-8 py-3 max-sm:flex-wrap max-sm:gap-2">
-              <span className="text-[15px] font-medium leading-6">展开或收起侧边栏</span>
-              <KbdGroup className="shrink-0" aria-label="Control 加 B"><Kbd>Ctrl</Kbd><span aria-hidden="true">+</span><Kbd>B</Kbd></KbdGroup>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <Suspense fallback={null}>
+        <ShortcutGuideDialog open={shortcutGuideOpen} onOpenChange={setShortcutGuideOpen} />
+      </Suspense>
     </>
   );
 }

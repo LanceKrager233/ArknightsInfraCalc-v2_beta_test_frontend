@@ -13,11 +13,17 @@ SELECT format('GRANT CONNECT ON DATABASE %I TO %I', current_database(), :'migrat
 SELECT format('GRANT CONNECT ON DATABASE %I TO %I', current_database(), :'backup_user') \gexec
 SELECT format('GRANT CREATE ON DATABASE %I TO %I', current_database(), :'migration_user') \gexec
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+CREATE SCHEMA IF NOT EXISTS app AUTHORIZATION :"migration_user";
 GRANT USAGE, CREATE ON SCHEMA public TO :"migration_user";
 GRANT USAGE ON SCHEMA public TO :"runtime_user";
 GRANT USAGE ON SCHEMA public TO :"backup_user";
+GRANT USAGE, CREATE ON SCHEMA app TO :"migration_user";
+GRANT USAGE ON SCHEMA app TO :"runtime_user";
+GRANT USAGE ON SCHEMA app TO :"backup_user";
 ALTER DEFAULT PRIVILEGES FOR ROLE :"migration_user" IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO :"runtime_user";
 ALTER DEFAULT PRIVILEGES FOR ROLE :"migration_user" IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO :"runtime_user";
+ALTER DEFAULT PRIVILEGES FOR ROLE :"migration_user" IN SCHEMA app GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO :"runtime_user";
+ALTER DEFAULT PRIVILEGES FOR ROLE :"migration_user" IN SCHEMA app GRANT USAGE, SELECT ON SEQUENCES TO :"runtime_user";
 ALTER DEFAULT PRIVILEGES FOR ROLE :"migration_user" GRANT USAGE ON SCHEMAS TO :"backup_user";
 ALTER DEFAULT PRIVILEGES FOR ROLE :"migration_user" GRANT SELECT ON TABLES TO :"backup_user";
 ALTER DEFAULT PRIVILEGES FOR ROLE :"migration_user" GRANT SELECT ON SEQUENCES TO :"backup_user";

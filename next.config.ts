@@ -26,11 +26,15 @@ const nextConfig: NextConfig = {
     ];
   },
   env: {
+    APP_CLIENT_ACCOUNT_CLOUD_SYNC_ENABLED: process.env.ACCOUNT_CLOUD_SYNC_ENABLED === "1" ? "1" : "0",
     APP_CLIENT_SKLAND_ENABLED: isSklandFeatureEnabled() ? "1" : "0",
     APP_CLIENT_SKLAND_API_PREFIX: isSklandFeatureEnabled() ? "/api/skland" : "",
   },
   turbopack: {
     resolveAlias: {
+      "account-cloud-workspace-bridge": process.env.ACCOUNT_CLOUD_SYNC_ENABLED === "1"
+        ? "./src/components/cloud/useAccountCloudWorkspace.tsx"
+        : "./src/components/cloud/useAccountCloudWorkspace.disabled.ts",
       "workbench-skland-route": isSklandFeatureEnabled()
         ? "./src/components/workbench/SklandRoute.tsx"
         : "./src/components/workbench/SklandRoute.disabled.tsx",

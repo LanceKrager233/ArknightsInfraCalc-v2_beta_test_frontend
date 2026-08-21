@@ -43,6 +43,10 @@ export const ERROR_DEFINITIONS: Record<AppErrorCode, ErrorDefinition> = {
   "AIC-SYS-5000": { status: 500, message: "服务暂时出现问题，请稍后重试。", retryable: true },
   "AIC-RATE-6001": { status: 429, message: "操作过于频繁，请稍后重试。", retryable: true },
   "AIC-LOCAL-7001": { status: 0, message: "浏览器无法保存本地数据，但仍可继续生成排班。", retryable: false },
+  "AIC-DATA-8001": { status: 403, message: "请先确认当前版本的服务条款与隐私政策。", retryable: false },
+  "AIC-DATA-8002": { status: 503, message: "账号云端数据暂不可用，请继续使用本地模式。", retryable: true },
+  "AIC-DATA-8003": { status: 422, message: "云端工作区数据无效，请检查后重试。", retryable: false },
+  "AIC-DATA-8004": { status: 404, message: "请求的云端数据不存在或已过期。", retryable: false },
 };
 
 export class PublicApiError extends Error {

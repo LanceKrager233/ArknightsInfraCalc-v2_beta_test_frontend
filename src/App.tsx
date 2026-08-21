@@ -6,6 +6,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } 
 
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { WebsiteAccountDialogSkeleton } from "@/components/auth/WebsiteAccountDialogSkeleton";
+import { useAccountCloudWorkspace } from "account-cloud-workspace-bridge";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { AppTopBar, SklandAccountControl } from "@/components/layout/AppTopBar";
 import { AppMotionProvider } from "@/components/MotionProvider";
@@ -13,6 +14,7 @@ import { PrimaryPageTransition } from "@/components/layout/PrimaryPageTransition
 import { SetupDialogSkeleton } from "@/components/setup/SetupDialogSkeleton";
 import { LiveActivity, usePlanActivity } from "@/components/ui/live-activity";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { loadClientFeature } from "@/client-lazy-loader";
 import { preloadProductIcons } from "@/product-assets";
 import { WorkbenchContext } from "@/workbench-context";
 import { WORKBENCH_PAGE_PATHS, workbenchHref, workbenchPageFromPathname, type AppPage } from "@/workbench-routes";
@@ -81,6 +83,7 @@ import {
 } from "./types";
 
 const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
+const CLIENT_ACCOUNT_CLOUD_SYNC_ENABLED = process.env.APP_CLIENT_ACCOUNT_CLOUD_SYNC_ENABLED === "1";
 
 function bindingSummaryFromSession(session: Pick<SklandSessionData, "accounts" | "bindingCount" | "bindingSummary">): SklandBindingSummary {
   if (session.bindingSummary) return session.bindingSummary;
@@ -96,9 +99,9 @@ function bindingSummaryFromSession(session: Pick<SklandSessionData, "accounts" |
   };
 }
 
-const loadWebsiteAccountDialog = () => import("@/components/auth/WebsiteAccountDialog");
-const loadSetupDialog = () => import("./setup-dialog");
-const loadComponents = () => import("./components");
+const loadWebsiteAccountDialog = () => loadClientFeature("websiteAccountDialog");
+const loadSetupDialog = () => loadClientFeature("setupDialog");
+const loadComponents = () => loadClientFeature("sharedComponents");
 
 const WebsiteAccountDialog = lazy(() => loadWebsiteAccountDialog().then((module) => ({
   default: module.WebsiteAccountDialog,
@@ -272,6 +275,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const initialLayoutSource = useRef<"local" | "skland">("local");
   const initialLocalLayoutBackup = useRef<BaseBlueprint | null>(null);
   const skipNextPersistence = useRef(false);
+  const hadPersistedSession = useRef(false);
   const leavingAccountAfterLogout = useRef(false);
   const statusLoadingAccount = useRef<string | null>(null);
   const sklandRestoreGuard = useRef(createSklandRestoreGuard());
@@ -370,6 +374,35 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const showBetaPanels = betaRequested && debugToolsEnabled;
   const sklandBindingCount = sklandBindingSummary.totalCount;
   const websiteUserId = websiteSession?.user.id ?? null;
+  const accountCloudWorkspace = useAccountCloudWorkspace(CLIENT_ACCOUNT_CLOUD_SYNC_ENABLED ? {
+    userId: websiteUserId,
+    hasRestoredSession,
+    hasLocalSession: hadPersistedSession.current,
+    preset,
+    setPreset,
+    layout,
+    setLayout,
+    operbox,
+    setOperbox,
+    fileName,
+    setFileName,
+    boxSource,
+    setBoxSource,
+    layoutDirty,
+    setLayoutDirty,
+    layoutSource,
+    setLayoutSource,
+    localLayoutBackup,
+    setLocalLayoutBackup,
+    rotationProfile,
+    setRotationProfile,
+    fiammettaEnabled,
+    setFiammettaEnabled,
+    result,
+    setResult,
+    activeShift,
+    setActiveShift,
+  } : null);
 
   function beginSklandStateChange(): number {
     sklandFullRestore.current = null;
@@ -445,6 +478,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     if (typeof window === "undefined") return;
     try {
       const restored = loadPersistedSession(window.localStorage);
+      hadPersistedSession.current = Boolean(restored);
       const warningDismissed = window.localStorage.getItem(RESULT_CLEAR_WARNING_DISMISSED_KEY) === "1";
       setResultClearWarningDismissed(warningDismissed);
       if (restored) {
@@ -1454,6 +1488,16 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       authenticated: Boolean(websiteSession),
       pending: websiteSessionPending,
       onSessionChanged: handleWebsiteSessionChanged,
+      ...(CLIENT_ACCOUNT_CLOUD_SYNC_ENABLED ? {
+        cloudWorkspace: accountCloudWorkspace.cloudWorkspaceData,
+        onRestoreCloudWorkspace: accountCloudWorkspace.applyWorkspace,
+        onRestoreSavedPlan: (saved: PublicPlanData) => {
+          setResult(saved);
+          setActiveShift(0);
+          router.push(workbenchHref("calculator", betaRequested));
+        },
+        onCloudDataChanged: accountCloudWorkspace.refreshCloudData,
+      } : {}),
     },
     skland: CLIENT_SKLAND_ENABLED ? {
       websiteAuthenticated: Boolean(websiteSession),
@@ -1534,6 +1578,8 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
           </Link>
         ) : null}
       </footer>
+
+      {CLIENT_ACCOUNT_CLOUD_SYNC_ENABLED ? accountCloudWorkspace.syncElement : null}
 
       {websiteAuthDialogMounted ? <Suspense fallback={(
         <WebsiteAccountDialogSkeleton

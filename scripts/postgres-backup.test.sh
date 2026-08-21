@@ -12,6 +12,7 @@ mkdir -p "$mock_bin"
 cat > "$mock_bin/pg_dump" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
+printf '%s\n' "$*" > "${TEST_PG_DUMP_LOG:?}"
 printf 'postgres-custom-dump\n'
 MOCK
 
@@ -53,6 +54,7 @@ run_backup() {
     PGPASSWORD='test-only-password' \
     BACKUP_AGE_RECIPIENT='age1testrecipient' \
     BACKUP_LOCAL_DIR="$backup_dir" \
+    TEST_PG_DUMP_LOG="$backup_dir/pg-dump-args.log" \
     "$@" \
     bash "$helper"
 }
@@ -70,6 +72,11 @@ test -e "$local_dir/auth-20000102T000000Z.dump.age"
 test "$(find "$local_dir" -maxdepth 1 -type f -name 'auth-*.dump.age' | wc -l)" -eq 2
 test ! -e "$local_log"
 grep -l '^age-encrypted$' "$local_dir"/auth-*.dump.age >/dev/null
+grep -q -- '--format=custom' "$local_dir/pg-dump-args.log"
+if grep -Eq -- '--schema(=|[[:space:]])|(^|[[:space:]])-n([[:space:]]|$)' "$local_dir/pg-dump-args.log"; then
+  echo 'backup unexpectedly filtered out the app schema' >&2
+  exit 1
+fi
 
 if run_backup "$test_root/password-url" \
   DATABASE_BACKUP_URL='postgresql://backup:must-not-appear@127.0.0.1:55433/auth' \

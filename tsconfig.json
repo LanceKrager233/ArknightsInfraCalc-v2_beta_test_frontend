@@ -27,6 +27,9 @@
       "@/*": [
         "./src/*"
       ],
+      "account-cloud-workspace-bridge": [
+        "./src/components/cloud/useAccountCloudWorkspace.tsx"
+      ],
       "workbench-skland-route": [
         "./src/components/workbench/SklandRoute.tsx"
       ]

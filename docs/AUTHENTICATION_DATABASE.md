@@ -1,13 +1,13 @@
 # 网站账号、登录与 PostgreSQL 技术及运维手册
 
-本文说明当前网站账号系统的真实实现、数据库用途、登录生命周期、安全边界、开发方式和服务器运维流程。内容已按 2026-08-18 的 `develop` 代码核对；当本文与代码不一致时，以 Drizzle Schema、已提交 migration、认证配置和部署脚本为准。
+本文说明当前网站账号系统的真实实现、数据库用途、登录生命周期、安全边界、开发方式和服务器运维流程。内容已按 2026-08-21 的当前代码核对；当本文与代码不一致时，以 Drizzle Schema、已提交 migration、认证配置和部署脚本为准。
 
 不要把本文示例中的占位值直接投入使用，也不要把生成的密钥、连接串、Resend Key、Cookie、验证码、重置链接或真实邮件写入 Git、Issue、日志或聊天记录。
 
 ## 快速结论
 
-- PostgreSQL 只承担网站账号相关的持久化：用户、登录凭据、数据库 Session、验证记录、Better Auth 限流状态和不含森空岛身份明文的绑定记录。
-- MAA Box、布局、排班、森空岛 UID/昵称、森空岛凭据和完整状态不写入 PostgreSQL。浏览器业务数据继续使用现有 v5 白名单持久化。
+- PostgreSQL 的 `public` schema 保存网站账号、Session、验证、认证限流和不含森空岛身份明文的绑定；`app` schema 保存按开关启用的业务摘要、云端工作区和共享缓存。
+- 当前政策同意并启用云同步后，布局、设置、公开排班和应用层信封加密的 MAA Box 可以入库。森空岛 UID/昵称、森空岛 Box/凭据和完整状态始终禁止入库。
 - 登录使用 Better Auth 的邮箱密码模式。注册后必须输入 6 位邮箱验证码，验证成功也不会自动登录；密码重置使用一小时有效链接。
 - production 与 development 使用独立 PostgreSQL 容器、卷、账号、连接串、Better Auth 密钥和邮件配置。
 - 数据库与认证对象惰性初始化，所以缺少数据库和认证密钥时仍能完成 `npm run build`；真实认证请求、migration 和认证就绪检查会失败关闭。
@@ -25,7 +25,7 @@ flowchart LR
   D --> P[(PostgreSQL)]
   A -->|验证码 / 重置邮件| E[Resend]
 
-  B -->|应用统一响应信封| U[/api/admin/users]
+  B -->|应用统一响应信封| U[/api/admin/users 与业务 API]
   U --> S[数据库 Session 与实时管理员角色校验]
   S --> P
 
@@ -33,6 +33,9 @@ flowchart LR
   K --> S
   K --> C[用户专属加密 HttpOnly Cookie]
   K -->|仅 HMAC 绑定键和授权时间| P
+
+  B -->|当前政策同意后同步| W[/api/workspace 与 /api/plans]
+  W -->|白名单数据与 MAA Box 密文| P
 
   M[发布 helper] -->|DATABASE_MIGRATION_URL| G[已提交 Drizzle migration]
   G --> P
@@ -44,16 +47,17 @@ flowchart LR
 
 | 路径 | 责任 |
 | --- | --- |
-| `src/server/db/schema.ts` | 六张业务表的 Drizzle Schema，是生成 migration 的来源 |
+| `src/server/db/schema.ts` | `public` 认证表与 `app` 业务表的 Drizzle Schema，是生成 migration 的来源 |
 | `src/server/db/index.ts` | 惰性创建 `pg.Pool` 与 Drizzle 实例 |
 | `src/server/auth/index.ts` | Better Auth、邮箱密码、验证码、管理员插件和数据库限流配置 |
 | `src/app/api/auth/[...all]/route.ts` | Better Auth 原生路由、原生 admin 路由封锁和森空岛 Cookie 清理 |
 | `src/components/auth/WebsiteAccountPanel.tsx` | 注册、验证码、登录、找回密码、设备退出与账号注销 UI |
 | `src/app/api/admin/users/route.ts` | 应用自有管理员搜索、封禁、Session 撤销和角色管理 |
 | `src/server/skland/bindings.ts` | HMAC 化森空岛绑定记录的写入、统计与清理 |
+| `src/server/business-records.ts`、`src/server/workspace.ts`、`src/server/plan-cache.ts` | 最小运行/反馈摘要、账号云端工作区和共享排班缓存 |
 | `drizzle/*.sql` | 生产实际执行、可审查且按顺序追加的 SQL migration |
 | `scripts/migrate-db.mts` | 使用 migration 账号执行已提交 migration |
-| `scripts/check-auth-readiness.mts` | 使用 runtime 账号检查配置和六张表是否可用 |
+| `scripts/check-auth-readiness.mts` | 使用 runtime 账号检查认证/业务表及已启用功能的密钥配置 |
 | `deploy/postgres/*` | 双环境容器、最小权限角色、备份和 systemd 模板 |
 | `src/server/auth/postgres.integration.test.mjs` | PostgreSQL 注册、验证、登录、Session、重置、封禁和角色集成测试 |
 
@@ -70,16 +74,18 @@ flowchart LR
 | `rateLimit` | Better Auth 的持久化限流键、次数和最后请求时间 | `key` 唯一；这与应用 API 在 `api-contract.ts` 中的限流是两个独立层次 |
 | `skland_binding` | HMAC 化绑定键、网站用户 ID、首次创建和最近扫码授权时间 | 主键不含森空岛 UID 明文；同一森空岛账号不能绑定到两个网站账号；用户删除时级联删除 |
 
+`app` schema 的十张业务表、保留策略、回填、加密和分阶段开关见[业务数据存储与分阶段启用手册](./BUSINESS_DATA_STORAGE.md)。runtime 对两个 schema 都只有 DML；migration 账号负责 DDL；完整加密备份同时覆盖两个 schema。
+
 Drizzle 还会维护 `drizzle.__drizzle_migrations` 元数据，用于判断哪些 migration 已执行。不要手工修改这张表，也不要重命名已经发布的 migration。
 
 ### 2.2 不进入 PostgreSQL 的数据
 
 以下内容明确不属于网站账号数据库：
 
-- MAA JSON / xlsx 导入的 Box、布局、排班结果和练卡数据；
+- MAA Box 明文、未经过白名单清理的布局/排班/练卡数据；
 - 森空岛 UID、昵称、角色列表、Box、基建快照和完整状态；
 - 森空岛 `cred`、token、设备 ID 或二维码临时凭据；
-- CLI stdout、stderr、命令、内部调试包和用户反馈正文；
+- CLI stdout、stderr、命令、路径、内部调试包、原始请求响应和完整 Box；
 - Resend API key、Better Auth secret、数据库密码或 age 私钥。
 
 森空岛凭据使用 `SKLAND_SESSION_SECRET` 派生的 AES-256-GCM 密钥加密，存放在用户浏览器的 HttpOnly、SameSite=Lax、HTTPS 下 Secure Cookie 中。Cookie 还包含网站用户所有者 HMAC；网站账号不匹配时服务端拒绝解密并清理陈旧 Cookie。凭据从扫码成功起固定七天失效，刷新、读取或切换角色不会续期。
@@ -91,9 +97,9 @@ Drizzle 还会维护 `drizzle.__drizzle_migrations` 元数据，用于判断哪�
 | 账号 | 用途 | 权限 |
 | --- | --- | --- |
 | bootstrap | PostgreSQL 容器首次初始化 | 仅初始化阶段持有；应用与日常 migration 不使用 |
-| migration | `npm run db:migrate` | 数据库连接、public schema 使用/创建和认证 Schema DDL |
-| runtime | Next.js 认证请求与 `npm run auth:check` | migration 创建表的 SELECT/INSERT/UPDATE/DELETE 与序列使用；不能建表 |
-| backup | `pg_dump` 与只读检查 | 认证 Schema 的 SELECT；不能修改数据 |
+| migration | `npm run db:migrate` | 数据库连接、`public`/`app` schema 使用与创建，以及已提交 Schema DDL |
+| runtime | Next.js 认证/业务请求与 `npm run auth:check` | migration 创建表的 SELECT/INSERT/UPDATE/DELETE 与序列使用；不能建表 |
+| backup | `pg_dump` 与只读检查 | `public`/`app` schema 的 SELECT；不能修改数据 |
 
 脚本会撤销 `PUBLIC` 对 `public` schema 的 CREATE 权限，并通过 migration 用户的 default privileges 将新表 DML 自动授予 runtime、只读权限授予 backup。CI 会实际验证 backup 不能 DELETE、runtime 不能 CREATE TABLE，并确认 backup 可以执行 `pg_dump`。
 
@@ -147,12 +153,13 @@ runtime 连接池只在第一次数据库请求时创建，配置为最大 10 �
 | MAA JSON / xlsx 导入及求解 | 返回 `AIC-AUTH-2008` | 可用 |
 | 森空岛登录、同步和求解 | 不可用 | 仅 development 可用 |
 | `/admin/users` | 不可用 | 初始管理员及其通过管理页授予权限的管理员可用 |
+| 云端工作区与排班历史 | 不可用 | 当前政策同意且功能开关开启后可用 |
 
-`/api/auth/*` 保持 Better Auth 原生响应，是统一 `ApiSuccess | ApiFailure` 信封的唯一例外。应用自有的 `/api/admin/users`、`/api/plan` 和 `/api/skland/*` 继续使用统一信封、请求 ID、同源校验、大小限制和限流。Better Auth 的原生 `/api/auth/admin/*` 全部返回 404，避免开放模拟登录、改密码、删除用户或绕过应用权限边界授予角色等能力。网站昵称为 2–20 个字符，只允许中文、英文字母、数字、空格、下划线和短横线，且不能包含连续空格；页面与 Better Auth 数据库钩子执行同一规则。
+`/api/auth/*` 保持 Better Auth 原生响应，是统一 `ApiSuccess | ApiFailure` 信封的唯一例外。应用自有的 `/api/admin/*`、`/api/plan`、`/api/skland/*`、`/api/account/data-consent`、`/api/workspace` 和 `/api/plans*` 继续使用统一信封、请求 ID、同源校验、大小限制和限流。Better Auth 的原生 `/api/auth/admin/*` 全部返回 404，避免开放模拟登录、改密码、删除用户或绕过应用权限边界授予角色等能力。网站昵称为 2–20 个字符，只允许中文、英文字母、数字、空格、下划线和短横线，且不能包含连续空格；页面与 Better Auth 数据库钩子执行同一规则。
 
 `BETTER_AUTH_ADMIN_USER_IDS` 中的账号是不可由网页降级的初始管理员。初始管理员可以在中文管理页将已验证、未封禁的账号设为管理员，角色保存于 PostgreSQL 的 `user.role`。受委派管理员可以搜索、封禁用户及查看或撤销 Session，但不能继续授予或撤销管理员权限，也不能封禁初始管理员或撤销其 Session。服务端每次请求都读取当前数据库角色，因此撤销权限后立即生效。
 
-PostgreSQL 保存网站账号、数据库 Session、验证记录、Better Auth 限流记录，以及 HMAC 化的森空岛绑定标识、对应网站用户和授权时间。森空岛状态中心根据最近授权时间区分七天内有效与待续期绑定，管理后台分别显示两类数量；到期不会删除绑定记录。MAA Box、布局、排班、森空岛 UID/昵称与第三方游戏凭据不会写入 PostgreSQL；凭据仍只保存在绑定网站用户的加密 HttpOnly Cookie 中。
+PostgreSQL 保存网站账号、数据库 Session、验证记录、Better Auth 限流记录，以及 HMAC 化的森空岛绑定标识、对应网站用户和授权时间。森空岛状态中心根据最近授权时间区分七天内有效与待续期绑定，管理后台分别显示两类数量；到期不会删除绑定记录。业务开关启用后，当前政策已同意的用户可以同步白名单布局、设置、公开排班及加密 MAA Box；森空岛 UID/昵称、Box 与第三方游戏凭据仍不写入 PostgreSQL，凭据只保存在绑定网站用户的加密 HttpOnly Cookie 中。
 
 ### 4.1 管理员模型
 
@@ -172,8 +179,12 @@ PostgreSQL 保存网站账号、数据库 Session、验证记录、Better Auth �
 | --- | --- |
 | `GET/POST /api/auth/*` | Better Auth 原生协议；唯一不使用项目统一响应信封的路由族 |
 | `GET/POST /api/admin/users` | 项目统一信封；要求实时管理员权限 |
+| `GET/PATCH /api/admin/records` | 项目统一信封；要求实时管理员权限 |
 | `POST /api/plan` | sample 可匿名，MAA/森空岛/旧来源要求网站 Session |
 | `/api/skland/*` | 项目统一信封；要求网站 Session，且只在 development 开放 |
+| `GET/POST/DELETE /api/account/data-consent` | 项目统一信封；要求网站 Session；写操作要求同源；云同步开关关闭时返回功能不可用 |
+| `GET/PUT/DELETE /api/workspace` | 项目统一信封；要求网站 Session 与当前政策同意；写操作要求同源 |
+| `GET /api/plans`、`PATCH/DELETE /api/plans/[id]` | 项目统一信封；要求网站 Session 与当前政策同意；写操作要求同源 |
 
 production 构建强制从客户端和公开 API 面移除森空岛能力，不能由 `SKLAND_FEATURE_ENABLED=1` 覆盖。网站账号与数据库能力本身仍可在 production 使用。
 
@@ -190,6 +201,11 @@ production 构建强制从客户端和公开 API 面移除森空岛能力，不�
 | `BETTER_AUTH_ADMIN_USER_IDS` | 管理员授权 | 逗号分隔 user ID；不要填写邮箱 |
 | `RESEND_API_KEY` | 认证邮件 | 对应环境的 Resend key |
 | `AUTH_EMAIL_FROM` | 认证邮件 | 已验证域名的 From；显示名会被规范为“可露希尔基建终端” |
+| `BETA_BUSINESS_DB_ENABLED` | 业务摘要双写 | migration 完成后才可设为 `1` |
+| `BETA_BUSINESS_DB_READ_ENABLED` | 运维摘要读取 | 双写核对稳定后再设为 `1` |
+| `ACCOUNT_CLOUD_SYNC_ENABLED` | 账号云端工作区 | 需同时配置版本化工作区主密钥 |
+| `WORKSPACE_ACTIVE_KEY_VERSION`、`WORKSPACE_MASTER_KEYS` | MAA Box 信封加密 | 当前版本及历史 32 字节主密钥只保存在服务端 |
+| `PLAN_CACHE_ENABLED`、`PLAN_CACHE_HMAC_KEY` | 共享排班缓存 | HMAC 密钥至少 32 字节且独立于其他密钥 |
 
 `src/server/db/index.ts` 和 `src/server/auth/index.ts` 都使用全局缓存进行运行时惰性初始化。Next build 不会因为导入模块而连接数据库；CI 还会显式清空数据库与认证变量执行 production build。以下操作则必须有完整配置并失败关闭：
 
@@ -221,7 +237,7 @@ npm run db:generate
 # 执行仓库内已提交 migration；需要 DATABASE_MIGRATION_URL
 npm run db:migrate
 
-# 用 runtime 连接检查配置与六张表；不会发送邮件
+# 用 runtime 连接检查配置、认证表和已启用的业务能力；不会发送邮件
 npm run auth:check
 
 # 需要 AUTH_INTEGRATION_DATABASE_URL 指向可清理的隔离测试库
@@ -272,9 +288,9 @@ openssl rand -hex 32
 
 以 `deploy/postgres/example.env` 为模板创建 `/opt/arknights-infra-databases/development.env` 与 `production.env`，设置为 `root:root 0600`。密码使用十六进制可避免 PostgreSQL URL 额外转义。首次启动时初始化脚本会创建：
 
-- runtime 用户：认证表 DML；不能执行 DDL。
+- runtime 用户：`public` 认证表与 `app` 业务表 DML；不能执行 DDL。
 - migration 用户：发布时执行仓库内 migration。
-- backup 用户：只读认证表，供 `pg_dump` 使用。
+- backup 用户：只读 `public` 与 `app`，供 `pg_dump` 使用。
 
 ### 6.3 首次启动 development PostgreSQL
 

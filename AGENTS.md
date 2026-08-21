@@ -68,6 +68,7 @@
 | `src/server/api-contract.ts` | 统一响应、错误码、同源校验、大小限制与限流 |
 | `src/server/public-plan.ts` | 内部求解结果到公共排班 DTO 的白名单映射 |
 | `src/server/infra.ts` | CLI 查找、长驻 serve 客户端、运行记录、反馈和 CLI release 存储 |
+| `src/server/business-records.ts`、`src/server/workspace.ts`、`src/server/plan-cache.ts` | 业务摘要、账号云端工作区和共享排班缓存；不得复制求解逻辑 |
 | `src/server/skland/*` | 森空岛会话加密、Cookie、扫码、同步、角色切换与数据归一化 |
 | `src/internal-field-safety.ts` | 递归剔除内部字段 |
 | `scripts/extract-room-emblems.mjs` | 从现有 WebP 确定性提取透明高清设施徽记 |
@@ -98,6 +99,11 @@ UI 控件优先组合 `src/components/ui/*` 中的现有 primitive。不要另�
 - `DELETE /api/skland/data`
 - `GET`、`POST /api/auth/*`（Better Auth 原生协议，不使用公共响应信封）
 - `GET`、`POST /api/admin/users`
+- `GET`、`PATCH /api/admin/records`
+- `GET`、`POST`、`DELETE /api/account/data-consent`
+- `GET`、`PUT`、`DELETE /api/workspace`
+- `GET /api/plans`
+- `PATCH`、`DELETE /api/plans/[id]`
 
 所有公共响应使用 `ApiSuccess<T> | ApiFailure` 信封并返回 `X-Request-Id`。健康检查的公开就绪字段是 `data.plannerReady`，不是内部 `HealthApiResponse` 的 `ok` / `cliReady`。
 `/api/auth/*` 是唯一明确例外，保持 Better Auth 原生协议；应用自有管理接口仍使用统一信封。
@@ -119,7 +125,7 @@ UI 控件优先组合 `src/components/ui/*` 中的现有 primitive。不要另�
 - `SKLAND_SESSION_SECRET` 必须至少 32 字节且长期稳定。森空岛会话使用 AES-256-GCM 封装在 HttpOnly Cookie 中；凭据不得进入 localStorage、CLI 运行记录、反馈包、console 或公开响应。
 - 非 localhost 的森空岛请求默认要求 HTTPS。`SKLAND_ALLOW_INSECURE_HTTP=1` 仅允许临时、可信的本地或内网测试，绝不能作为生产默认值。
 - 森空岛凭证从扫码成功起固定 7 天到期，刷新 token、读取会话和切换角色都不得续期；用户同意当前条款与隐私政策并登录后，状态中心默认返回完整状态白名单，排班链路仍只使用最小排班字段。
-- PostgreSQL 只允许保存 HMAC 化的森空岛绑定标识、网站用户关联和授权时间；不得保存森空岛 UID、昵称、Box 或凭据。退出对应森空岛账号、删除全部森空岛数据和注销网站账号必须清除相应绑定。
+- PostgreSQL 的 `app` schema 可保存最小运行/反馈摘要、当前政策同意、白名单工作区、公开排班历史和 HMAC 缓存。只有当前政策已同意且云同步开启时，MAA Box 才能以应用层信封密文入库；森空岛 UID、昵称、Box、凭据和完整状态始终禁止入库。退出对应森空岛账号、删除全部森空岛数据和注销网站账号必须清除相应绑定；撤销云同步或删除账号还必须删除工作区、密文、历史与缓存引用。
 - 浏览器 v5 持久化可以保存布局、Box、来源标记和经过清理的最近排班，但必须继续剔除 debug、路径、stdout、stderr、请求/响应内部字段和森空岛凭据。
 
 ## 环境变量
@@ -175,6 +181,14 @@ Worker 能力只由`protocol_version`和`plan_schema_version`判断；`plan_cont
 | `BETTER_AUTH_ADMIN_USER_IDS` | 逗号分隔的初始管理员 Better Auth user ID；作为网页角色委派的信任根 |
 | `RESEND_API_KEY` | 验证与重置邮件的 Resend API key |
 | `AUTH_EMAIL_FROM` | 已验证独立发信子域的 From 地址 |
+| `BETA_BUSINESS_DB_ENABLED` | 为 `1` 时启用 `app` schema 摘要双写及数据库维护 |
+| `BETA_BUSINESS_DB_READ_ENABLED` | 为 `1` 时将运维摘要读取切到数据库；要求业务数据库已启用 |
+| `BETA_BUSINESS_FILE_READ_FALLBACK` | 数据库读取未启用或状态更新未命中时是否允许临时文件回退 |
+| `ACCOUNT_CLOUD_SYNC_ENABLED` | 为 `1` 时开放当前政策同意、工作区和排班历史 API |
+| `WORKSPACE_ACTIVE_KEY_VERSION` | MAA Box 信封加密当前主密钥版本 |
+| `WORKSPACE_MASTER_KEYS` | 版本到 32 字节主密钥的 JSON；只存在服务端配置 |
+| `PLAN_CACHE_ENABLED` | 为 `1` 时启用 24 小时共享排班缓存 |
+| `PLAN_CACHE_HMAC_KEY` | 独立缓存键 HMAC 密钥，至少 32 字节 |
 
 反向代理生产环境应明确设置两个公开 Origin，并启用可信代理头；生产保持调试关闭、限流开启。
 

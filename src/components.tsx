@@ -39,11 +39,13 @@ import {
   ComboboxList,
 } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
+import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
+import { loadClientFeature } from "@/client-lazy-loader";
 import {
   BUILDING_SKILL_ENHANCED_WORD,
   buildingSkillUnlockLabel,
@@ -113,7 +115,7 @@ import {
   UserProfile,
 } from "./types";
 
-const OperatorSkillTooltip = lazy(() => import("@/components/OperatorSkillTooltip").then((module) => ({
+const OperatorSkillTooltip = lazy(() => loadClientFeature("operatorSkillTooltip").then((module) => ({
   default: module.OperatorSkillTooltip,
 })));
 
@@ -1392,7 +1394,7 @@ export function ScheduleBoard({
     if (viewMode !== "compact" || CompactScheduleView || compactScheduleLoadFailed) return;
 
     let cancelled = false;
-    void import("@/components/CompactScheduleView").then(
+    void loadClientFeature("compactScheduleView").then(
       (module) => {
         if (!cancelled) setCompactScheduleView(() => module.CompactScheduleView);
       },
@@ -1749,6 +1751,39 @@ export function ScheduleBoard({
           </AnimatePresence>
       </motion.div>
     </div>
+  );
+}
+
+export function ShortcutGuideDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="gap-5 sm:max-w-2xl sm:p-6">
+        <DialogHeader className="gap-1.5 px-1 sm:px-2">
+          <DialogTitle className="text-xl font-semibold">快捷键</DialogTitle>
+          <DialogDescription className="max-w-lg text-sm leading-6">在排班主界面快速定位搜索、关闭临时状态或切换导航。</DialogDescription>
+        </DialogHeader>
+        <div className="divide-y divide-border/70 border-y border-border/70 px-1 sm:px-2">
+          <div className="flex min-h-14 items-center justify-between gap-8 py-3 max-sm:flex-wrap max-sm:gap-2">
+            <span className="text-[15px] font-medium leading-6">聚焦排班搜索</span>
+            <KbdGroup className="shrink-0" aria-label="Control 加 K"><Kbd>Ctrl</Kbd><span aria-hidden="true">+</span><Kbd>K</Kbd></KbdGroup>
+          </div>
+          <div className="flex min-h-14 items-center justify-between gap-8 py-3 max-sm:flex-wrap max-sm:gap-2">
+            <span className="text-[15px] font-medium leading-6">清空搜索；计算中取消请求</span>
+            <Kbd className="shrink-0">Esc</Kbd>
+          </div>
+          <div className="flex min-h-14 items-center justify-between gap-8 py-3 max-sm:flex-wrap max-sm:gap-2">
+            <span className="text-[15px] font-medium leading-6">展开或收起侧边栏</span>
+            <KbdGroup className="shrink-0" aria-label="Control 加 B"><Kbd>Ctrl</Kbd><span aria-hidden="true">+</span><Kbd>B</Kbd></KbdGroup>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

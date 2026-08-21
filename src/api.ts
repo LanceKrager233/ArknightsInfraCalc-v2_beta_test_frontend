@@ -1,16 +1,22 @@
 import type {
   ApiFailure,
   ApiResponse,
+  AccountDataConsentData,
+  AccountDataConsentRequest,
   AppErrorCode,
   BaseBlueprint,
   DisplayError,
   FeedbackData,
   FeedbackRequest,
+  CloudWorkspaceData,
+  CloudWorkspacePutRequest,
   OperBoxEntry,
   PublicHealthData,
   PublicPlanData,
   RotationProfile,
   SampleOperboxData,
+  SavedPlanData,
+  SavedPlanListData,
   SklandQrStartData,
   SklandQrStatusData,
   SklandSessionData,
@@ -180,4 +186,54 @@ export function saveFeedback(payload: FeedbackRequest): Promise<FeedbackData> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+}
+
+export function getAccountDataConsent(signal?: AbortSignal): Promise<AccountDataConsentData> {
+  return requestData("/api/account/data-consent", { signal });
+}
+
+export function acceptAccountDataConsent(payload: AccountDataConsentRequest, signal?: AbortSignal): Promise<AccountDataConsentData> {
+  return requestData("/api/account/data-consent", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal,
+  });
+}
+
+export function revokeAccountDataConsent(): Promise<{ revoked: true; deleted: true }> {
+  return requestData("/api/account/data-consent", { method: "DELETE" });
+}
+
+export function getCloudWorkspace(signal?: AbortSignal): Promise<CloudWorkspaceData> {
+  return requestData("/api/workspace", { signal });
+}
+
+export function putCloudWorkspace(payload: CloudWorkspacePutRequest, signal?: AbortSignal): Promise<CloudWorkspaceData> {
+  return requestData("/api/workspace", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal,
+  });
+}
+
+export function deleteCloudWorkspace(): Promise<{ deleted: true }> {
+  return requestData("/api/workspace", { method: "DELETE" });
+}
+
+export function getSavedPlans(): Promise<SavedPlanListData> {
+  return requestData("/api/plans");
+}
+
+export function updateSavedPlan(id: string, pinned: boolean): Promise<SavedPlanData> {
+  return requestData(`/api/plans/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pinned }),
+  });
+}
+
+export function deleteSavedPlan(id: string): Promise<{ deleted: true }> {
+  return requestData(`/api/plans/${encodeURIComponent(id)}`, { method: "DELETE" });
 }

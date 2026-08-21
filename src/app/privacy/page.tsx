@@ -21,8 +21,12 @@ export default function PrivacyPage() {
           <li>注册网站账号时，我们会处理你提交的昵称、邮箱地址、不可逆密码哈希、邮箱验证状态和账号创建时间。</li>
           <li>登录后，PostgreSQL 会保存网站账号和数据库 Session。Session 包含随机令牌、有效期以及用于安全判断的 IP 地址和浏览器标识；密码原文不会保存。</li>
           <li>验证邮箱和重置密码时，邮箱地址、邮件正文及必要投递元数据会发送给邮件服务商 Resend；邮箱验证码在 <span className="font-number">10</span> 分钟后失效，密码重置链接在一小时后失效。</li>
-          <li>网站账号资料保留至你主动注销或我们依法删除；Session 保留至到期、退出、密码重置、封禁或主动撤销。注销会删除网站账号及其全部 Session。</li>
-          <li>你可以在账号设置中退出其他设备或重新验证密码后永久注销。网站账号数据不会保存 MAA Box、布局、排班或第三方游戏凭据{sklandEnabled ? "；使用森空岛时只额外保存不可逆的绑定标识和授权时间" : ""}。</li>
+          <li>网站账号资料保留至你主动注销或我们依法删除；Session 保留至到期、退出、密码重置、封禁或主动撤销。注销会删除网站账号、全部 Session 和关联的业务数据。</li>
+          <li>登录后只有在你确认当前版本政策时，本站才会自动同步 MAA Box、布局、设置、有限工作区版本和排班历史；拒绝或尚未确认时维持纯本地模式。</li>
+          <li>MAA Box 使用逐条独立数据密钥与 AES-<span className="font-number">256</span>-GCM 信封加密；主密钥只存在于服务端配置，不写入数据库、日志或备份。布局与排班结果在入库前继续经过字段白名单清理。</li>
+          <li>云端工作区版本最多保留 <span className="font-number">10</span> 份且不超过 <span className="font-number">30</span> 天；普通排班最多保留 <span className="font-number">5</span> 条并滚动保留 <span className="font-number">30</span> 天，另可固定最多 <span className="font-number">5</span> 条长期保存。</li>
+          <li>你可以撤销同步同意或删除云端数据；这会删除工作区、Box 密文、排班历史和相关缓存引用。浏览器仍可按你的选择保留清理后的本地副本。</li>
+          {sklandEnabled ? <li>森空岛 UID、昵称、Box、凭据和完整状态快照始终不会写入业务数据库；只额外保存不可逆的绑定标识和授权时间。</li> : null}
         </ul>
       </section>
       {sklandEnabled ? <>
@@ -118,14 +122,14 @@ export default function PrivacyPage() {
           <h2 className="font-number">4. 保存期限</h2>
           <ul>
             <li>服务端 CLI 运行记录最多保存 <span className="font-number">7</span> 天。</li>
-            <li>浏览器中的布局、干员 Box 和最近排班通常最多保存 <span className="font-number">30</span> 天。</li>
+            <li>浏览器中的布局、干员 Box 和最近排班通常最多保存 <span className="font-number">30</span> 天；确认当前政策后会按本政策开头所列范围自动同步到账号云端工作区。</li>
             <li>你可以随时使用页面中的清除功能删除浏览器本地数据。</li>
           </ul>
         </section>
 
         <section>
           <h2 className="font-number">5. 你的选择与权利</h2>
-          <p>你可以不提交问题反馈，并可随时清除浏览器数据。如需查询、更正或处理无法通过页面删除的信息，请通过本政策列明的联系渠道提交请求。</p>
+          <p>你可以不提交问题反馈、拒绝云端同步，并可随时清除浏览器数据、撤销同步同意或删除云端数据。如需查询、更正或处理无法通过页面删除的信息，请通过本政策列明的联系渠道提交请求。</p>
         </section>
 
         <section>
