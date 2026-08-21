@@ -911,6 +911,8 @@ function scheduleIssueTriggerId(row: RoomRow) {
   return `schedule-issue-${row.key}`;
 }
 
+const PLAN_RESULT_PRIMARY_TRIGGER_SELECTOR = "[data-plan-primary-details-trigger]";
+
 function roomSlotCountFor(group: string) {
   if (group === "trading" || group === "manufacture") return 3;
   return ROOM_SLOT_COUNT;
@@ -1808,6 +1810,7 @@ export function IssueNoteModal({
 }) {
   const [consented, setConsented] = useState(false);
   const returnFocusId = useRef<string | null>(null);
+  const returnToPlanSummary = useRef(false);
   const isPerformance = kind === "performance_issue";
 
   useEffect(() => {
@@ -1815,8 +1818,13 @@ export function IssueNoteModal({
   }, [kind, open, row?.key]);
 
   useEffect(() => {
-    if (row) returnFocusId.current = scheduleIssueTriggerId(row);
-    else if (open && isPerformance) returnFocusId.current = null;
+    if (row) {
+      returnFocusId.current = scheduleIssueTriggerId(row);
+      returnToPlanSummary.current = false;
+    } else if (open && isPerformance) {
+      returnFocusId.current = null;
+      returnToPlanSummary.current = true;
+    }
   }, [isPerformance, open, row]);
 
   return (
@@ -1829,7 +1837,11 @@ export function IssueNoteModal({
     >
       <DialogContent
         className="max-w-[min(620px,calc(100vw-2rem))] sm:max-w-xl"
-        finalFocus={() => returnFocusId.current ? document.getElementById(returnFocusId.current) : true}
+        finalFocus={() => {
+          if (returnFocusId.current) return document.getElementById(returnFocusId.current);
+          if (returnToPlanSummary.current) return document.querySelector<HTMLElement>(PLAN_RESULT_PRIMARY_TRIGGER_SELECTOR) ?? true;
+          return true;
+        }}
       >
         <DialogHeader>
           <DialogTitle>{isPerformance ? "提交性能反馈" : row?.title ?? "反馈排班问题"}</DialogTitle>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock3, Download, FileJson, FlaskConical, HeartPulse, Keyboard, Loader2, Play, Search, Settings2, Terminal, X } from "lucide-react";
+import { Download, FileJson, FlaskConical, HeartPulse, Keyboard, Loader2, Play, Search, Settings2, Terminal, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { ScheduleBoard, ShiftTabs } from "@/components";
@@ -138,7 +138,6 @@ export function InfraCalculator(props: InfraCalculatorProps) {
   const [scheduleViewMode, setScheduleViewMode] = useState<"list" | "compact">("compact");
   const [shortcutGuideOpen, setShortcutGuideOpen] = useState(false);
   const [operatorQuery, setOperatorQuery] = useState("");
-  const [dismissedPerformanceDiagnosticId, setDismissedPerformanceDiagnosticId] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [shiftDirection, setShiftDirection] = useState<ShiftDirection>(0);
   const [fiammettaPortrait, setFiammettaPortrait] = useState<string | null>(null);
@@ -283,28 +282,13 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                     layout={layout}
                     activeShift={activeShift}
                     comparison={closestComparison}
+                    durationMs={scheduleResult.durationMs}
                     planRevision={scheduleResult.diagnosticId}
                     animateEntrance={animatePlanEntrance}
                     onEntranceConsumed={onPlanEntranceConsumed}
+                    onPerformanceIssue={onPerformanceIssue}
                   />
                 </Suspense>
-                {scheduleResult.durationMs > 200 && dismissedPerformanceDiagnosticId !== scheduleResult.diagnosticId ? (
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950" role="status">
-                    <span className="flex items-center gap-2"><Clock3 className="size-4" />本次求解耗时 {Math.round(scheduleResult.durationMs)} ms</span>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="border-amber-400 bg-white max-sm:h-11"
-                      onClick={() => {
-                        setDismissedPerformanceDiagnosticId(scheduleResult.diagnosticId);
-                        onPerformanceIssue();
-                      }}
-                    >
-                      提交性能反馈
-                    </Button>
-                  </div>
-                ) : null}
               </>
             ) : null}
             {rows.length > 0 ? <ScheduleBoard
