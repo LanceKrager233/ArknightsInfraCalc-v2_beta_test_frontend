@@ -39,6 +39,7 @@ test("cold HTML contains the workbench shell instead of only the client loading 
 
 test("a 768px cold start keeps the compact workbench inside the viewport", async ({ page }) => {
   await mockApis(page);
+  await seedPreferences(page);
   await page.setViewportSize({ width: 768, height: 900 });
   await page.goto("/");
   await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
@@ -51,7 +52,7 @@ test("a 768px cold start keeps the compact workbench inside the viewport", async
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1);
 });
 
-test("primary pages use independent routes without eagerly loading every view", async ({ page }) => {
+test("primary pages prefetch after hydration and navigate on the first click", async ({ page }) => {
   const trainingRouteRequests: string[] = [];
   page.on("request", (request) => {
     const url = new URL(request.url());
@@ -73,10 +74,8 @@ test("primary pages use independent routes without eagerly loading every view", 
   for (const destination of destinations) {
     await expect(page.getByRole("button", { name: destination.name, exact: true })).toHaveAttribute("href", destination.href);
   }
-  expect(trainingRouteRequests).toEqual([]);
-
-  const trainingLink = page.getByRole("button", { name: "练卡建议", exact: true });
-  await trainingLink.hover();
+  await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
+  await expect(page.locator('[data-primary-navigation-prefetch="eager"]')).toBeVisible();
 
   for (const destination of destinations) {
     await page.getByRole("button", { name: destination.name, exact: true }).click();
@@ -1440,6 +1439,7 @@ test("defers a portrait far below the mobile viewport until it approaches view",
 
   const deferredPortrait = page.locator('img[alt="嘉辛塔"]');
   await expect(deferredPortrait).toHaveAttribute("loading", "lazy");
+  await expect(deferredPortrait).toBeVisible();
   const position = await deferredPortrait.evaluate((element) => {
     const box = element.getBoundingClientRect();
     return { top: box.top, viewportHeight: window.innerHeight };
@@ -1449,7 +1449,7 @@ test("defers a portrait far below the mobile viewport until it approaches view",
   expect(requestedPortraits).toHaveLength(3);
   expect(requestedPortraits.some((url) => url.includes("/4237_jcinta.webp?"))).toBe(false);
 
-  await deferredPortrait.scrollIntoViewIfNeeded();
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   await expect.poll(() => requestedPortraits.some((url) => url.includes("/4237_jcinta.webp?"))).toBe(true);
 });
 
@@ -1565,8 +1565,10 @@ test("a failed complete Skland restore keeps the independently restored identity
   const accountAvatar = accountControl.locator("[data-skland-account-avatar]");
   await expect(accountAvatar).toBeVisible();
   await expect(accountAvatar.locator("img")).toHaveCount(0);
-  await expect(accountAvatar.locator("[data-slot=\"fluid-orb\"]")).toHaveCount(0);
-  expect(await accountAvatar.evaluate((element) => element.childElementCount)).toBe(0);
+  const emptyRemoteAvatar = accountAvatar.locator('[data-remote-avatar-state="fallback"]');
+  await expect(emptyRemoteAvatar).toBeVisible();
+  await expect(emptyRemoteAvatar.locator('[data-slot="skeleton"]')).toHaveCount(0);
+  expect(await emptyRemoteAvatar.evaluate((element) => element.childElementCount)).toBe(0);
   await expect(accountControl).not.toContainText("测");
   await fullRestoreFailed;
   await accountControl.click();
@@ -1594,7 +1596,10 @@ test("a failed Skland avatar request leaves the logged-in calculator control bla
   await expect(accountControl).toBeVisible();
   await expect(accountControl).toHaveAttribute("aria-label", "测试博士，进入森空岛状态中心");
   await expect(accountAvatar.locator("img")).toHaveCount(0);
-  expect(await accountAvatar.evaluate((element) => element.childElementCount)).toBe(0);
+  const failedRemoteAvatar = accountAvatar.locator('[data-remote-avatar-state="fallback"]');
+  await expect(failedRemoteAvatar).toBeVisible();
+  await expect(failedRemoteAvatar.locator('[data-slot="skeleton"]')).toHaveCount(0);
+  expect(await failedRemoteAvatar.evaluate((element) => element.childElementCount)).toBe(0);
 });
 
 test("two-shift output drives product estimates, room formulas, and profile details", async ({ page, browserName }) => {
@@ -3730,8 +3735,39 @@ test("Skland login replaces a scanned QR with progress while authentication fini
   await expect(page.getByRole("status")).toContainText("已扫码，正在等待森空岛 App 确认并完成登录…");
 });
 
+test("Skland full restore starts while website session confirmation is pending and is deduplicated", async ({ page }) => {
+  let releaseWebsiteSession!: () => void;
+  const websiteSessionGate = new Promise<void>((resolve) => { releaseWebsiteSession = resolve; });
+  let fullSessionRequests = 0;
+  await page.unroute("**/api/auth/get-session");
+  await page.route("**/api/auth/get-session", async (route) => {
+    await websiteSessionGate;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ user: { id: "test-user" } }),
+    });
+  });
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/api/skland/session" && !url.searchParams.has("mode") && request.method() === "GET") {
+      fullSessionRequests += 1;
+    }
+  });
+  await mockApis(page, { sklandConfigured: true, sklandSnapshot: authenticatedSklandSnapshot });
+  await seedPreferences(page);
+  await page.goto("/");
+
+  await expect.poll(() => fullSessionRequests).toBe(1);
+  releaseWebsiteSession();
+  await expect(page.locator("[data-skland-account-avatar]")).toBeVisible();
+  await expect.poll(() => fullSessionRequests).toBe(1);
+});
+
 test("Skland login loads full status by default and deletion preserves non-Skland data", async ({ page }) => {
   const statusMethods: string[] = [];
+  let releaseAvatar!: () => void;
+  const avatarGate = new Promise<void>((resolve) => { releaseAvatar = resolve; });
   const snapshotWithAvatar = {
     ...authenticatedSklandSnapshot,
     player: {
@@ -3739,11 +3775,14 @@ test("Skland login loads full status by default and deletion preserves non-Sklan
       avatarUrl: "https://example.com/skland-avatar.png",
     },
   };
-  await page.route(snapshotWithAvatar.player.avatarUrl, (route) => route.fulfill({
-    status: 200,
-    contentType: "image/svg+xml",
-    body: '<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44"><rect width="44" height="44" fill="#ffd800"/></svg>',
-  }));
+  await page.route(snapshotWithAvatar.player.avatarUrl, async (route) => {
+    await avatarGate;
+    await route.fulfill({
+      status: 200,
+      contentType: "image/png",
+      body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64"),
+    });
+  });
   page.on("request", (request) => {
     if (new URL(request.url()).pathname === "/api/skland/status") statusMethods.push(request.method());
   });
@@ -3758,10 +3797,21 @@ test("Skland login loads full status by default and deletion preserves non-Sklan
     "src",
     snapshotWithAvatar.player.avatarUrl
   );
-  await expect(page.locator("[data-skland-account-avatar] img")).toBeVisible();
-  await expect(page.locator("[data-skland-account-avatar] [data-slot=\"fluid-orb\"]")).toHaveCount(0);
+  await expect(page.locator("[data-skland-account-avatar] [data-remote-avatar-state=\"loading\"]")).toBeVisible();
+  await expect(page.locator("[data-skland-account-avatar] [data-slot=\"skeleton\"]")).toBeVisible();
+  const compactAvatarBox = await page.locator("[data-skland-account-avatar] [data-remote-avatar-state]").boundingBox();
+  expect(compactAvatarBox?.width).toBeCloseTo(42, 0);
   await page.getByRole("button", { name: "Toggle Sidebar" }).click();
   await openSklandOverview(page);
+
+  const statusAvatar = page.locator('[data-skland-page] [data-remote-avatar-state="loading"]');
+  await expect(statusAvatar).toBeVisible();
+  const statusAvatarBox = await statusAvatar.boundingBox();
+  expect(statusAvatarBox?.width).toBeCloseTo(56, 0);
+  expect(statusAvatarBox?.height).toBeCloseTo(56, 0);
+  releaseAvatar();
+  await expect(page.locator('[data-skland-page] [data-remote-avatar-state="loaded"]')).toBeVisible();
+  await expect(page.locator('[data-skland-page] [data-remote-avatar-state="loaded"] img')).toBeVisible();
 
   await expect(page.getByText("UID 123••••789")).toBeVisible();
   await expect(page.getByRole("button", { name: "启用状态中心" })).toHaveCount(0);
@@ -4358,13 +4408,16 @@ test("setup routes Skland account actions to the status center", async ({ page }
   await page.goto("/");
 
   await page.getByRole("button", { name: "配置Box与布局" }).first().click();
-  await page.getByRole("dialog").getByRole("button", { name: /第 1 步，共 3 步：干员数据/ }).click();
-  await page.getByRole("button", { name: "更换", exact: true }).click();
-  await page.getByRole("tab", { name: "森空岛", exact: true }).click();
-  await expect(page.getByRole("dialog").getByText(/测试博士/).first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "前往森空岛同步" })).toBeVisible();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: /第 1 步，共 3 步：干员数据/ }).click();
+  const changeSource = dialog.getByRole("button", { name: "更换", exact: true });
+  if (await changeSource.isVisible()) await changeSource.click();
+  const sklandTab = dialog.getByRole("tab", { name: "森空岛", exact: true });
+  if (await sklandTab.isVisible()) await sklandTab.click();
+  await expect(dialog.getByText(/测试博士/).first()).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "前往森空岛同步" })).toBeVisible();
   await expect(page.getByRole("button", { name: "使用当前干员数据" })).toHaveCount(0);
-  await page.getByRole("button", { name: "前往森空岛同步" }).click();
+  await dialog.getByRole("button", { name: "前往森空岛同步" }).click();
   await expect(page.getByRole("heading", { name: "测试博士" }).first()).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });

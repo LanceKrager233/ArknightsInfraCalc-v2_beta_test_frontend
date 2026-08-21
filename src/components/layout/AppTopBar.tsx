@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
-
 import { Button } from "@/components/ui/button";
+import { RemoteAvatar } from "@/components/ui/remote-avatar";
+import { Skeleton } from "@/components/ui/skeleton";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import type { SklandAccountSummary, SklandStatusSnapshot } from "@/types";
 
@@ -33,15 +33,11 @@ export function SklandAccountControl({
   statusSnapshot,
   onOpenSkland,
 }: SklandAccountControlProps) {
-  const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
-
   if (!CLIENT_SKLAND_ENABLED) return null;
 
   const selectedRole = account.roles.find((role) => role.uid === account.selectedUid) ?? account.roles[0] ?? null;
   const nickname = statusSnapshot?.player.nickname ?? selectedRole?.nickname ?? null;
   const accountLabel = `${nickname ?? "已登录账号"}，进入森空岛状态中心`;
-  const avatarUrl = statusSnapshot?.player.avatarUrl ?? null;
-  const visibleAvatarUrl = avatarUrl === failedAvatarUrl ? null : avatarUrl;
 
   return (
     <Button
@@ -59,18 +55,14 @@ export function SklandAccountControl({
         aria-hidden="true"
         data-skland-account-avatar
       >
-        {visibleAvatarUrl ? (
-          <img
-            key={visibleAvatarUrl}
-            src={visibleAvatarUrl}
-            alt=""
-            width={44}
-            height={44}
-            referrerPolicy="no-referrer"
-            className="size-full object-cover"
-            onError={() => setFailedAvatarUrl(visibleAvatarUrl)}
-          />
-        ) : null}
+        <RemoteAvatar
+          src={statusSnapshot?.player.avatarUrl}
+          alt=""
+          pixelSize={44}
+          className="size-full"
+          emptyFallback={null}
+          loadingFallback={<Skeleton className="size-full rounded-none" />}
+        />
       </span>
     </Button>
   );

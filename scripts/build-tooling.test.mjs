@@ -115,7 +115,7 @@ test("production injects the client feature flag at every browser boundary", asy
   assert.match(workflow, /Production build[\s\S]+APP_DEPLOYMENT_ENV: production/);
 });
 
-test("workbench views use five independent route entries under one persistent layout", async () => {
+test("workbench views use five prefetched route entries under one persistent layout", async () => {
   const layout = await readRepoFile("src/app/(workbench)/layout.tsx");
   const app = await readRepoFile("src/App.tsx");
   const sidebar = await readRepoFile("src/components/layout/AppSidebar.tsx");
@@ -127,18 +127,26 @@ test("workbench views use five independent route entries under one persistent la
     "src/app/(workbench)/skland/page.tsx",
     "src/app/(workbench)/account/page.tsx",
   ].map(readRepoFile));
+  const loadingPages = await Promise.all([
+    "src/app/(workbench)/training/loading.tsx",
+    "src/app/(workbench)/skills/loading.tsx",
+    "src/app/(workbench)/account/loading.tsx",
+  ].map(readRepoFile));
 
   assert.match(layout, /import WorkbenchApp from "@\/App"/);
   assert.match(layout, /<WorkbenchApp>\{children\}<\/WorkbenchApp>/);
   assert.ok(pages.every((page) => !page.includes("dynamic(")));
+  assert.ok(loadingPages.every((loadingPage) => loadingPage.includes("RouteSkeleton")));
   assert.doesNotMatch(app, /components\/pages\/(?:InfraCalculator|TrainingAdvice|SkillQuery|AccountStatusCenter|DevelopmentSklandStatusCenter)/);
   assert.match(routeMap, /training: "\/training"/);
   assert.match(routeMap, /"skill-query": "\/skills"/);
   assert.match(routeMap, /skland: "\/skland"/);
   assert.match(routeMap, /account: "\/account"/);
   assert.match(sidebar, /import Link from "next\/link"/);
-  assert.match(sidebar, /prefetch=\{prefetchOnIntent \? null : false\}/);
-  assert.match(sidebar, /onMouseEnter=\{\(\) => setPrefetchOnIntent\(true\)\}/);
+  assert.match(sidebar, /useLinkStatus/);
+  assert.match(sidebar, /data-primary-navigation-prefetch="eager"/);
+  assert.doesNotMatch(sidebar, /prefetch=\{false\}/);
+  assert.match(app, /router\.prefetch\(workbenchHref\(target, betaRequested\)\)/);
 });
 
 test("the critical calculator board stays initial while the compact view loads on demand", async () => {
