@@ -130,7 +130,6 @@ test("workbench views use five prefetched route entries under one persistent lay
   const loadingPages = await Promise.all([
     "src/app/(workbench)/training/loading.tsx",
     "src/app/(workbench)/skills/loading.tsx",
-    "src/app/(workbench)/skland/loading.tsx",
     "src/app/(workbench)/account/loading.tsx",
   ].map(readRepoFile));
 
