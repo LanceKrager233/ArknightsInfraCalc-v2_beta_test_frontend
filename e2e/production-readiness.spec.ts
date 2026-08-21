@@ -1373,6 +1373,8 @@ for (const viewport of [
     await expect.poll(() => planDeleted).toBe(true);
 
     const revoke = cloudPanel.getByRole("button", { name: /按住撤销并删除/ });
+    await revoke.scrollIntoViewIfNeeded();
+    await expect(revoke).toBeVisible();
     const revokeBox = await revoke.boundingBox();
     expect(revokeBox).not.toBeNull();
     await page.mouse.move(revokeBox!.x + revokeBox!.width / 2, revokeBox!.y + revokeBox!.height / 2);
