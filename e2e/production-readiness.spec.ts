@@ -1283,10 +1283,49 @@ for (const viewport of [
 
     const dialog = page.getByRole("dialog", { name: "启用账号云端工作区" });
     await expect(dialog).toBeVisible();
+    await dialog.evaluate(async (element) => {
+      await Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished.catch(() => undefined)));
+    });
     const dialogBox = await dialog.boundingBox();
     expect(dialogBox?.width ?? 0).toBeLessThanOrEqual(viewport.width - 16);
     expect(dialogBox?.height ?? 0).toBeLessThanOrEqual(viewport.height - 16);
+    const dialogBody = dialog.locator('[data-slot="dialog-body"]');
+    const dialogBodyBox = await dialogBody.boundingBox();
+    expect(dialogBodyBox).not.toBeNull();
+    const bodyPadding = await dialogBody.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { left: Number.parseFloat(style.paddingLeft), right: Number.parseFloat(style.paddingRight) };
+    });
+    expect(bodyPadding.left).toBeGreaterThanOrEqual(20);
+    expect(bodyPadding.right).toBeGreaterThanOrEqual(20);
+    const decline = dialog.getByRole("button", { name: "继续纯本地模式" });
     const accept = dialog.getByRole("button", { name: "同意并开始同步" });
+    const declineBox = await decline.boundingBox();
+    const acceptBox = await accept.boundingBox();
+    expect(declineBox).not.toBeNull();
+    expect(acceptBox).not.toBeNull();
+    const [declineHeight, acceptHeight] = await Promise.all([
+      decline.evaluate((element) => Number.parseFloat(getComputedStyle(element).height)),
+      accept.evaluate((element) => Number.parseFloat(getComputedStyle(element).height)),
+    ]);
+    expect(declineHeight).toBeGreaterThanOrEqual(44);
+    expect(acceptHeight).toBeGreaterThanOrEqual(44);
+    if (viewport.width < 640) {
+      expect(acceptBox!.y).toBeGreaterThan(declineBox!.y);
+      expect(Math.abs(acceptBox!.width - declineBox!.width)).toBeLessThanOrEqual(1);
+    } else {
+      expect(Math.abs(acceptBox!.y - declineBox!.y)).toBeLessThanOrEqual(1);
+    }
+    if (viewport.width === 390) {
+      await page.setViewportSize({ width: 390, height: 480 });
+      const compactDialogBox = await dialog.boundingBox();
+      expect(compactDialogBox?.height ?? 0).toBeLessThanOrEqual(464);
+      await expect(dialog.getByRole("heading", { name: "启用账号云端工作区" })).toBeVisible();
+      await expect(decline).toBeVisible();
+      await expect(accept).toBeVisible();
+      expect(await dialogBody.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+      await page.setViewportSize(viewport);
+    }
     await expect(accept).toBeDisabled();
     await dialog.getByRole("checkbox").nth(0).check();
     await dialog.getByRole("checkbox").nth(1).check();
