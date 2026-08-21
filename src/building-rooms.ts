@@ -44,13 +44,13 @@ export const BUILDING_ROOM_PREFIXES: readonly BuildingRoomPrefix[] = [
 export const ROOM_SKILL_TAGS: Readonly<Record<BuildingRoomPrefix, readonly string[]>> = {
   control: ["生产力", "订单效率", "办公室", "线索倾向", "线索搜集", "心情消耗"],
   power: [],
-  manu: ["通用生产", "贵金属", "作战记录", "源石", "仓库容量", ],
-  trade: ["订单上限", "订单效率", "高品质", "特殊订单"],
+  manu: ["贵金属", "作战记录", "源石", "通用生产", "仓库容量"],
+  trade: ["订单效率", "订单上限", "特殊订单", "高品质"],
   dorm: ["单体恢复", "群体恢复", "特殊恢复", "自身恢复"],
   hire: ["联络速度", "特殊加成"],
   meet: ["未拥有加成", "无特别加成", "线索1", "线索2", "线索3", "线索4", "线索5", "线索6", "线索7"],
   train: ["全能", "减半", "辅助", "近卫", "狙击", "术师", "特种", "先锋", "医疗", "重装"],
-  workshop: ["基建材料", "技巧概要", "精英材料", "任意材料", "芯片"],
+  workshop: ["精英材料", "技巧概要", "基建材料", "芯片", "任意材料"],
 };
 
 const BUILDING_ROOM_PREFIX_SET = new Set<string>(BUILDING_ROOM_PREFIXES);
