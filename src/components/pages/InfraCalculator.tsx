@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Textarea } from "@/components/ui/textarea";
+import { PlanResultSummarySkeleton } from "@/components/PlanResultSummarySkeleton";
 
 import type { FactoryRecipe, TradeOrder } from "@/blueprint";
 import { cn } from "@/lib/utils";
@@ -28,11 +29,7 @@ const DebugActions = lazy(() => import("@/components").then((module) => ({ defau
 const IssuePanel = lazy(() => import("@/components").then((module) => ({ default: module.IssuePanel })));
 
 function DeferredResultLoading() {
-  return (
-    <div className="grid min-h-64 place-items-center" role="status" aria-live="polite">
-      <span className="text-sm text-muted-foreground">正在恢复排班视图…</span>
-    </div>
-  );
+  return <PlanResultSummarySkeleton />;
 }
 
 function Panel({ children, className = "", action, title, icon }: {
@@ -141,6 +138,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
   const [scheduleViewMode, setScheduleViewMode] = useState<"list" | "compact">("compact");
   const [shortcutGuideOpen, setShortcutGuideOpen] = useState(false);
   const [operatorQuery, setOperatorQuery] = useState("");
+  const [dismissedPerformanceDiagnosticId, setDismissedPerformanceDiagnosticId] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [shiftDirection, setShiftDirection] = useState<ShiftDirection>(0);
   const [fiammettaPortrait, setFiammettaPortrait] = useState<string | null>(null);
@@ -290,10 +288,21 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                     onEntranceConsumed={onPlanEntranceConsumed}
                   />
                 </Suspense>
-                {scheduleResult.durationMs > 200 ? (
+                {scheduleResult.durationMs > 200 && dismissedPerformanceDiagnosticId !== scheduleResult.diagnosticId ? (
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950" role="status">
                     <span className="flex items-center gap-2"><Clock3 className="size-4" />本次求解耗时 {Math.round(scheduleResult.durationMs)} ms</span>
-                    <Button type="button" size="sm" variant="outline" className="border-amber-400 bg-white max-sm:h-11" onClick={onPerformanceIssue}>提交性能反馈</Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="border-amber-400 bg-white max-sm:h-11"
+                      onClick={() => {
+                        setDismissedPerformanceDiagnosticId(scheduleResult.diagnosticId);
+                        onPerformanceIssue();
+                      }}
+                    >
+                      提交性能反馈
+                    </Button>
                   </div>
                 ) : null}
               </>

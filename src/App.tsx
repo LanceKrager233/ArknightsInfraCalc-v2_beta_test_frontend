@@ -10,11 +10,12 @@ import { AppSidebar } from "@/components/layout/AppSidebar";
 import { AppTopBar, SklandAccountControl } from "@/components/layout/AppTopBar";
 import { AppMotionProvider } from "@/components/MotionProvider";
 import { PrimaryPageTransition } from "@/components/layout/PrimaryPageTransition";
+import { SetupDialogSkeleton } from "@/components/setup/SetupDialogSkeleton";
 import { LiveActivity, usePlanActivity } from "@/components/ui/live-activity";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { preloadProductIcons } from "@/product-assets";
 import { WorkbenchContext } from "@/workbench-context";
-import { workbenchHref, workbenchPageFromPathname, type AppPage } from "@/workbench-routes";
+import { WORKBENCH_PAGE_PATHS, workbenchHref, workbenchPageFromPathname, type AppPage } from "@/workbench-routes";
 import { useWebsiteSessionIdentity } from "@/website-session";
 
 import {
@@ -95,17 +96,25 @@ function bindingSummaryFromSession(session: Pick<SklandSessionData, "accounts" |
   };
 }
 
-const WebsiteAccountDialog = lazy(() => import("@/components/auth/WebsiteAccountDialog").then((module) => ({
+const loadWebsiteAccountDialog = () => import("@/components/auth/WebsiteAccountDialog");
+const loadSetupDialog = () => import("./setup-dialog");
+const loadComponents = () => import("./components");
+
+const WebsiteAccountDialog = lazy(() => loadWebsiteAccountDialog().then((module) => ({
   default: module.WebsiteAccountDialog,
 })));
-const SetupDialog = lazy(() => import("./setup-dialog").then((module) => ({ default: module.SetupDialog })));
-const IssueNoteModal = lazy(() => import("./components").then((module) => ({ default: module.IssueNoteModal })));
-const ProductChangeConfirmModal = lazy(() => import("./components").then((module) => ({
+const SetupDialog = lazy(() => loadSetupDialog().then((module) => ({ default: module.SetupDialog })));
+const IssueNoteModal = lazy(() => loadComponents().then((module) => ({ default: module.IssueNoteModal })));
+const ProductChangeConfirmModal = lazy(() => loadComponents().then((module) => ({
   default: module.ProductChangeConfirmModal,
 })));
 type ProductChange =
   | { type: "factory"; roomId: string; recipe: FactoryRecipe }
   | { type: "trade"; roomId: string; order: TradeOrder };
+
+type SklandFullRestoreResult =
+  | { session: SklandSessionData; error?: never }
+  | { session?: never; error: unknown };
 
 function layoutWithProductChange(layout: BaseBlueprint, change: ProductChange): BaseBlueprint {
   return change.type === "factory"
@@ -266,6 +275,11 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const leavingAccountAfterLogout = useRef(false);
   const statusLoadingAccount = useRef<string | null>(null);
   const sklandRestoreGuard = useRef(createSklandRestoreGuard());
+  const sklandFullRestore = useRef<{
+    generation: number;
+    reloadKey: number;
+    result: Promise<SklandFullRestoreResult>;
+  } | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
   const [inputErrorCode, setInputErrorCode] = useState<DisplayError["code"]>("AIC-BOX-1101");
   const [sampleLoading, setSampleLoading] = useState(false);
@@ -358,6 +372,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const websiteUserId = websiteSession?.user.id ?? null;
 
   function beginSklandStateChange(): number {
+    sklandFullRestore.current = null;
     return sklandRestoreGuard.current.begin();
   }
 
@@ -372,6 +387,35 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (page === "calculator") hasRenderedCalculator.current = true;
   }, [page]);
+
+  useEffect(() => {
+    if (!hasRestoredSession) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      for (const target of Object.keys(WORKBENCH_PAGE_PATHS) as AppPage[]) {
+        if (target === page || (target === "skland" && !CLIENT_SKLAND_ENABLED)) continue;
+        router.prefetch(workbenchHref(target, betaRequested));
+      }
+    });
+
+    const preloadDeferredComponents = () => {
+      void Promise.allSettled([
+        loadWebsiteAccountDialog(),
+        loadSetupDialog(),
+        loadComponents(),
+      ]);
+    };
+    const idleCallback = window.requestIdleCallback?.(preloadDeferredComponents, { timeout: 1_500 });
+    const fallbackTimer = idleCallback === undefined
+      ? window.setTimeout(preloadDeferredComponents, 250)
+      : undefined;
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (idleCallback !== undefined) window.cancelIdleCallback?.(idleCallback);
+      if (fallbackTimer !== undefined) window.clearTimeout(fallbackTimer);
+    };
+  }, [betaRequested, hasRestoredSession, page, router]);
 
   useEffect(() => {
     if (setupOpen) setSetupMounted(true);
@@ -501,9 +545,21 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!CLIENT_SKLAND_ENABLED) return;
-    const generation = sklandRestoreGuard.current.begin();
+    const existingRestore = sklandFullRestore.current?.reloadKey === websiteAuthReloadKey
+      ? sklandFullRestore.current
+      : null;
+    const generation = existingRestore?.generation ?? sklandRestoreGuard.current.begin();
     let cancelled = false;
     setSklandSessionLoading(true);
+    if (!existingRestore) {
+      sklandFullRestore.current = {
+        generation,
+        reloadKey: websiteAuthReloadKey,
+        result: getSklandSession()
+          .then((session) => ({ session }))
+          .catch((error: unknown) => ({ error })),
+      };
+    }
     void getSklandSession("summary")
       .then((session) => {
         if (
@@ -548,9 +604,22 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     }
 
     setSklandSessionLoading(true);
-    void getSklandSession()
-      .then((session) => {
+    let restore = sklandFullRestore.current;
+    if (!restore || restore.generation !== generation) {
+      restore = {
+        generation,
+        reloadKey: websiteAuthReloadKey,
+        result: getSklandSession()
+          .then((session) => ({ session }))
+          .catch((error: unknown) => ({ error })),
+      };
+      sklandFullRestore.current = restore;
+    }
+    void restore.result
+      .then((resolved) => {
+        if ("error" in resolved) throw resolved.error;
         if (cancelled || !sklandRestoreGuard.current.acceptFull(generation)) return;
+        const session = resolved.session;
         const bindingSummary = bindingSummaryFromSession(session);
         setSklandError(null);
         setSklandConfigured(session.configured);
@@ -1147,6 +1216,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
 
   function handleAppPageChange(nextPage: AppPage): boolean {
     if (nextPage === "account" && !websiteSession) {
+      if (websiteSessionPending) return true;
       setWebsiteAuthDialogOpen(true);
       return false;
     }
@@ -1350,11 +1420,10 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       animateEmptyScheduleEntrance,
       onPlanEntranceConsumed: (revision: string) => revealedPlanRevisions.current.add(revision),
       requiresAccount: !accountCanUseCurrentBox,
-      accountControl: CLIENT_SKLAND_ENABLED ? (
+      accountControl: CLIENT_SKLAND_ENABLED && activeSklandAccount ? (
         <SklandAccountControl
           account={activeSklandAccount}
           statusSnapshot={sklandStatusSnapshot}
-          sessionLoading={sklandSessionLoading}
           onOpenSkland={() => navigateToPage("skland")}
         />
       ) : undefined,
@@ -1425,8 +1494,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       <TooltipProvider>
     <div
       className="contents"
-      inert={!hasRestoredSession}
-      aria-busy={!hasRestoredSession}
       data-workbench-hydrated={hasRestoredSession ? "true" : "false"}
     >
     <SidebarProvider defaultOpen={false}>
@@ -1441,7 +1508,12 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
           }}
         />
 
-      <div className="app-content-track py-4" data-app-content>
+      <div
+        className="app-content-track py-4"
+        data-app-content
+        inert={!hasRestoredSession}
+        aria-busy={!hasRestoredSession}
+      >
       <WorkbenchContext.Provider value={workbenchContext}>
         <PrimaryPageTransition pageKey={page}>{children}</PrimaryPageTransition>
       </WorkbenchContext.Provider>
@@ -1474,7 +1546,9 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
           onSessionChanged={handleWebsiteSessionChanged}
         /></Suspense> : null}
 
-      {setupMounted ? <Suspense fallback={null}><SetupDialog
+      {setupMounted ? <Suspense fallback={(
+        <SetupDialogSkeleton open={setupOpen} onOpenChange={handleSetupOpenChange} />
+      )}><SetupDialog
         {...(CLIENT_SKLAND_ENABLED ? {
           sklandSnapshot: sklandScheduleSnapshot,
           sklandBindingCount,

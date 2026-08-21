@@ -1,10 +1,8 @@
 "use client";
 
-import { UserPlus } from "lucide-react";
-
-import { accountOrbColor } from "@/account-orb";
 import { Button } from "@/components/ui/button";
-import { FluidOrb } from "@/components/ui/fluid-orb";
+import { RemoteAvatar } from "@/components/ui/remote-avatar";
+import { Skeleton } from "@/components/ui/skeleton";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import type { SklandAccountSummary, SklandStatusSnapshot } from "@/types";
 
@@ -25,37 +23,21 @@ export function AppTopBar() {
 }
 
 interface SklandAccountControlProps {
-  account?: SklandAccountSummary | null;
+  account: SklandAccountSummary;
   statusSnapshot?: SklandStatusSnapshot | null;
-  sessionLoading?: boolean;
   onOpenSkland?: () => void;
 }
 
 export function SklandAccountControl({
   account,
   statusSnapshot,
-  sessionLoading,
   onOpenSkland,
 }: SklandAccountControlProps) {
   if (!CLIENT_SKLAND_ENABLED) return null;
 
-  const selectedRole = account?.roles.find((role) => role.uid === account.selectedUid) ?? account?.roles[0] ?? null;
+  const selectedRole = account.roles.find((role) => role.uid === account.selectedUid) ?? account.roles[0] ?? null;
   const nickname = statusSnapshot?.player.nickname ?? selectedRole?.nickname ?? null;
-  const placeholderColor = account ? accountOrbColor(account.accountId) : null;
-  const accountLabel = account
-    ? `${nickname ?? "已登录账号"}，进入森空岛状态中心`
-    : "进入森空岛状态中心绑定账号";
-
-  if (sessionLoading && !account) {
-    return (
-      <div
-        className="size-9 shrink-0 animate-pulse rounded-r-lg bg-muted motion-reduce:animate-none max-sm:size-11"
-        role="status"
-        aria-label="正在恢复森空岛会话"
-        data-skland-account-loading
-      />
-    );
-  }
+  const accountLabel = `${nickname ?? "已登录账号"}，进入森空岛状态中心`;
 
   return (
     <Button
@@ -68,31 +50,20 @@ export function SklandAccountControl({
       title={nickname ?? "森空岛状态中心"}
       data-skland-account-control
     >
-      {account ? (
-        <span
-          className="grid size-full place-items-center overflow-hidden text-sm font-semibold"
-          aria-hidden="true"
-          data-skland-account-avatar
-        >
-          {statusSnapshot?.player.avatarUrl ? (
-            <img
-              src={statusSnapshot.player.avatarUrl}
-              alt=""
-              width={44}
-              height={44}
-              referrerPolicy="no-referrer"
-              className="size-full object-cover"
-            />
-          ) : (
-            <FluidOrb
-              size={44}
-              color={placeholderColor ?? undefined}
-              style={{ width: "100%", height: "100%" }}
-              data-skland-account-placeholder
-            />
-          )}
-        </span>
-      ) : <UserPlus aria-hidden="true" />}
+      <span
+        className="grid size-full place-items-center overflow-hidden"
+        aria-hidden="true"
+        data-skland-account-avatar
+      >
+        <RemoteAvatar
+          src={statusSnapshot?.player.avatarUrl}
+          alt=""
+          pixelSize={44}
+          className="size-full"
+          emptyFallback={null}
+          loadingFallback={<Skeleton className="size-full rounded-none" />}
+        />
+      </span>
     </Button>
   );
 }

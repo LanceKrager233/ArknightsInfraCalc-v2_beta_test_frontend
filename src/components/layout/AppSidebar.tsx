@@ -2,7 +2,6 @@
 
 import { Calculator, Cloud, GraduationCap, Search, UserRound, type LucideIcon } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
 
 import {
   Sidebar,
@@ -40,7 +39,6 @@ function AppNavigationItem({
   onPageChange,
 }: AppNavigationItemProps) {
   const { isMobile, setOpenMobile } = useSidebar();
-  const [prefetchOnIntent, setPrefetchOnIntent] = useState(false);
   const href = workbenchHref(target, betaRequested);
 
   return (
@@ -50,10 +48,7 @@ function AppNavigationItem({
           <Link
             href={href}
             role="button"
-            prefetch={prefetchOnIntent ? null : false}
             aria-current={page === target ? "page" : undefined}
-            onMouseEnter={() => setPrefetchOnIntent(true)}
-            onFocus={() => setPrefetchOnIntent(true)}
             onClick={(event) => {
               if (!onPageChange(target)) event.preventDefault();
               if (isMobile) setOpenMobile(false);
@@ -72,7 +67,7 @@ function AppNavigationItem({
 
 export function AppSidebar({ page, betaRequested, onPageChange }: AppSidebarProps) {
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="icon" data-primary-navigation-prefetch="eager">
       <SidebarHeader className="h-[65px] flex-row items-center justify-end border-b border-sidebar-border px-2 group-data-[collapsible=icon]:justify-center">
         <SidebarTrigger className="h-9 w-9" />
       </SidebarHeader>
