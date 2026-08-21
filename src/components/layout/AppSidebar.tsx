@@ -2,7 +2,6 @@
 
 import { Calculator, Cloud, GraduationCap, Search, UserRound, type LucideIcon } from "lucide-react";
 import Link from "next/link";
-import { useLinkStatus } from "next/link";
 
 import {
   Sidebar,
@@ -31,19 +30,6 @@ interface AppNavigationItemProps extends AppSidebarProps {
   icon: LucideIcon;
 }
 
-function NavigationPendingIndicator() {
-  const { pending } = useLinkStatus();
-
-  return (
-    <span
-      className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-primary opacity-0 motion-reduce:transition-none group-data-[collapsible=icon]:right-0.5 group-data-[collapsible=icon]:top-0.5 data-[pending=true]:animate-pulse data-[pending=true]:opacity-100"
-      data-pending={pending ? "true" : "false"}
-      data-navigation-pending
-      aria-hidden="true"
-    />
-  );
-}
-
 function AppNavigationItem({
   page,
   target,
@@ -58,7 +44,6 @@ function AppNavigationItem({
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
-        className="relative"
         render={(
           <Link
             href={href}
@@ -75,7 +60,6 @@ function AppNavigationItem({
       >
         <Icon className="size-5" />
         <span>{label}</span>
-        <NavigationPendingIndicator />
       </SidebarMenuButton>
     </SidebarMenuItem>
   );

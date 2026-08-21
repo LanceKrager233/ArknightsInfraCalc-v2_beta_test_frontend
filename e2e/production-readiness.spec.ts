@@ -76,6 +76,7 @@ test("primary pages prefetch after hydration and navigate on the first click", a
   }
   await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
   await expect(page.locator('[data-primary-navigation-prefetch="eager"]')).toBeVisible();
+  await expect(page.locator('[data-navigation-pending]')).toHaveCount(0);
 
   for (const destination of destinations) {
     await page.getByRole("button", { name: destination.name, exact: true }).click();
