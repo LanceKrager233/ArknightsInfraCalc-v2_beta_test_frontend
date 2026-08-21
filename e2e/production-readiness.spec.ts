@@ -1338,6 +1338,33 @@ for (const viewport of [
     const cloudPanel = page.locator("[data-cloud-data-panel]");
     await expect(cloudPanel).toBeVisible();
     await expect(cloudPanel).toContainText("已同步至修订 2");
+    const devicesCard = page.locator("[data-infra-technical-card]").filter({ has: page.getByRole("heading", { name: "登录设备" }) });
+    const cloudCard = page.locator('[data-slot="cloud-workspace-card"]');
+    const devicesTitle = devicesCard.getByRole("heading", { name: "登录设备" });
+    const cloudTitle = cloudCard.getByRole("heading", { name: "账号云端工作区" });
+    const devicesAction = devicesCard.getByRole("button", { name: "退出全部设备" });
+    const cloudAction = cloudCard.getByRole("button", { name: "恢复", exact: true }).first();
+    await expect(cloudCard).toBeVisible();
+    await expect(cloudPanel.locator("button svg")).toHaveCount(0);
+    expect(await cloudPanel.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    const revisionMeta = cloudPanel.getByText("修订 1", { exact: false });
+    const revisionMetaBox = await revisionMeta.boundingBox();
+    expect(revisionMetaBox).not.toBeNull();
+    expect(revisionMetaBox!.height).toBeLessThanOrEqual(50);
+    const matchingStyles = await Promise.all([
+      devicesTitle.evaluate((element) => getComputedStyle(element).fontSize),
+      cloudTitle.evaluate((element) => getComputedStyle(element).fontSize),
+      devicesAction.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return { borderRadius: style.borderRadius, fontSize: style.fontSize, height: style.height };
+      }),
+      cloudAction.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return { borderRadius: style.borderRadius, fontSize: style.fontSize, height: style.height };
+      }),
+    ]);
+    expect(matchingStyles[1]).toBe(matchingStyles[0]);
+    expect(matchingStyles[3]).toEqual(matchingStyles[2]);
     await cloudPanel.getByRole("button", { name: "恢复", exact: true }).click();
     await expect.poll(() => restoreRequests).toBe(1);
     await cloudPanel.getByRole("button", { name: "固定排班" }).click();
