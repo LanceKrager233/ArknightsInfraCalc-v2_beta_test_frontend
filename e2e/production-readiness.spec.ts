@@ -3560,6 +3560,7 @@ for (const scenario of [
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/");
     await page.getByRole("button", { name: "练卡建议" }).click();
+    await expect(page.getByRole("heading", { name: "练卡建议", exact: true })).toBeVisible();
 
     if (scenario.expectedSlot === "training-newbie-list") {
       await expect(page.locator("[data-training-newbie-list]")).toBeVisible();
