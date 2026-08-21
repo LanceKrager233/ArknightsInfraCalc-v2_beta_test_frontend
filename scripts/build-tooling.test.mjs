@@ -143,7 +143,7 @@ test("workbench views use five prefetched route entries under one persistent lay
   assert.match(routeMap, /skland: "\/skland"/);
   assert.match(routeMap, /account: "\/account"/);
   assert.match(sidebar, /import Link from "next\/link"/);
-  assert.match(sidebar, /useLinkStatus/);
+  assert.doesNotMatch(sidebar, /useLinkStatus|data-navigation-pending/);
   assert.match(sidebar, /data-primary-navigation-prefetch="eager"/);
   assert.doesNotMatch(sidebar, /prefetch=\{false\}/);
   assert.match(app, /router\.prefetch\(workbenchHref\(target, betaRequested\)\)/);
