@@ -54,6 +54,7 @@ flowchart LR
 | `src/components/auth/WebsiteAccountPanel.tsx` | 注册、验证码、登录、找回密码、设备退出与账号注销 UI |
 | `src/app/api/admin/users/route.ts` | 应用自有管理员搜索、封禁、Session 撤销和角色管理 |
 | `src/server/skland/bindings.ts` | HMAC 化森空岛绑定记录的写入、统计与清理 |
+| `src/server/business-records.ts`、`src/server/workspace.ts`、`src/server/plan-cache.ts` | 最小运行/反馈摘要、账号云端工作区和共享排班缓存 |
 | `drizzle/*.sql` | 生产实际执行、可审查且按顺序追加的 SQL migration |
 | `scripts/migrate-db.mts` | 使用 migration 账号执行已提交 migration |
 | `scripts/check-auth-readiness.mts` | 使用 runtime 账号检查认证/业务表及已启用功能的密钥配置 |
@@ -96,9 +97,9 @@ Drizzle 还会维护 `drizzle.__drizzle_migrations` 元数据，用于判断哪�
 | 账号 | 用途 | 权限 |
 | --- | --- | --- |
 | bootstrap | PostgreSQL 容器首次初始化 | 仅初始化阶段持有；应用与日常 migration 不使用 |
-| migration | `npm run db:migrate` | 数据库连接、public schema 使用/创建和认证 Schema DDL |
-| runtime | Next.js 认证请求与 `npm run auth:check` | migration 创建表的 SELECT/INSERT/UPDATE/DELETE 与序列使用；不能建表 |
-| backup | `pg_dump` 与只读检查 | 认证 Schema 的 SELECT；不能修改数据 |
+| migration | `npm run db:migrate` | 数据库连接、`public`/`app` schema 使用与创建，以及已提交 Schema DDL |
+| runtime | Next.js 认证/业务请求与 `npm run auth:check` | migration 创建表的 SELECT/INSERT/UPDATE/DELETE 与序列使用；不能建表 |
+| backup | `pg_dump` 与只读检查 | `public`/`app` schema 的 SELECT；不能修改数据 |
 
 脚本会撤销 `PUBLIC` 对 `public` schema 的 CREATE 权限，并通过 migration 用户的 default privileges 将新表 DML 自动授予 runtime、只读权限授予 backup。CI 会实际验证 backup 不能 DELETE、runtime 不能 CREATE TABLE，并确认 backup 可以执行 `pg_dump`。
 
@@ -152,8 +153,9 @@ runtime 连接池只在第一次数据库请求时创建，配置为最大 10 �
 | MAA JSON / xlsx 导入及求解 | 返回 `AIC-AUTH-2008` | 可用 |
 | 森空岛登录、同步和求解 | 不可用 | 仅 development 可用 |
 | `/admin/users` | 不可用 | 初始管理员及其通过管理页授予权限的管理员可用 |
+| 云端工作区与排班历史 | 不可用 | 当前政策同意且功能开关开启后可用 |
 
-`/api/auth/*` 保持 Better Auth 原生响应，是统一 `ApiSuccess | ApiFailure` 信封的唯一例外。应用自有的 `/api/admin/users`、`/api/plan` 和 `/api/skland/*` 继续使用统一信封、请求 ID、同源校验、大小限制和限流。Better Auth 的原生 `/api/auth/admin/*` 全部返回 404，避免开放模拟登录、改密码、删除用户或绕过应用权限边界授予角色等能力。网站昵称为 2–20 个字符，只允许中文、英文字母、数字、空格、下划线和短横线，且不能包含连续空格；页面与 Better Auth 数据库钩子执行同一规则。
+`/api/auth/*` 保持 Better Auth 原生响应，是统一 `ApiSuccess | ApiFailure` 信封的唯一例外。应用自有的 `/api/admin/*`、`/api/plan`、`/api/skland/*`、`/api/account/data-consent`、`/api/workspace` 和 `/api/plans*` 继续使用统一信封、请求 ID、同源校验、大小限制和限流。Better Auth 的原生 `/api/auth/admin/*` 全部返回 404，避免开放模拟登录、改密码、删除用户或绕过应用权限边界授予角色等能力。网站昵称为 2–20 个字符，只允许中文、英文字母、数字、空格、下划线和短横线，且不能包含连续空格；页面与 Better Auth 数据库钩子执行同一规则。
 
 `BETTER_AUTH_ADMIN_USER_IDS` 中的账号是不可由网页降级的初始管理员。初始管理员可以在中文管理页将已验证、未封禁的账号设为管理员，角色保存于 PostgreSQL 的 `user.role`。受委派管理员可以搜索、封禁用户及查看或撤销 Session，但不能继续授予或撤销管理员权限，也不能封禁初始管理员或撤销其 Session。服务端每次请求都读取当前数据库角色，因此撤销权限后立即生效。
 
@@ -177,8 +179,12 @@ PostgreSQL 保存网站账号、数据库 Session、验证记录、Better Auth �
 | --- | --- |
 | `GET/POST /api/auth/*` | Better Auth 原生协议；唯一不使用项目统一响应信封的路由族 |
 | `GET/POST /api/admin/users` | 项目统一信封；要求实时管理员权限 |
+| `GET/PATCH /api/admin/records` | 项目统一信封；要求实时管理员权限 |
 | `POST /api/plan` | sample 可匿名，MAA/森空岛/旧来源要求网站 Session |
 | `/api/skland/*` | 项目统一信封；要求网站 Session，且只在 development 开放 |
+| `GET/POST/DELETE /api/account/data-consent` | 项目统一信封；要求网站 Session；写操作要求同源；云同步开关关闭时返回功能不可用 |
+| `GET/PUT/DELETE /api/workspace` | 项目统一信封；要求网站 Session 与当前政策同意；写操作要求同源 |
+| `GET /api/plans`、`PATCH/DELETE /api/plans/[id]` | 项目统一信封；要求网站 Session 与当前政策同意；写操作要求同源 |
 
 production 构建强制从客户端和公开 API 面移除森空岛能力，不能由 `SKLAND_FEATURE_ENABLED=1` 覆盖。网站账号与数据库能力本身仍可在 production 使用。
 
@@ -231,7 +237,7 @@ npm run db:generate
 # 执行仓库内已提交 migration；需要 DATABASE_MIGRATION_URL
 npm run db:migrate
 
-# 用 runtime 连接检查配置与六张表；不会发送邮件
+# 用 runtime 连接检查配置、认证表和已启用的业务能力；不会发送邮件
 npm run auth:check
 
 # 需要 AUTH_INTEGRATION_DATABASE_URL 指向可清理的隔离测试库
@@ -282,9 +288,9 @@ openssl rand -hex 32
 
 以 `deploy/postgres/example.env` 为模板创建 `/opt/arknights-infra-databases/development.env` 与 `production.env`，设置为 `root:root 0600`。密码使用十六进制可避免 PostgreSQL URL 额外转义。首次启动时初始化脚本会创建：
 
-- runtime 用户：认证表 DML；不能执行 DDL。
+- runtime 用户：`public` 认证表与 `app` 业务表 DML；不能执行 DDL。
 - migration 用户：发布时执行仓库内 migration。
-- backup 用户：只读认证表，供 `pg_dump` 使用。
+- backup 用户：只读 `public` 与 `app`，供 `pg_dump` 使用。
 
 ### 6.3 首次启动 development PostgreSQL
 

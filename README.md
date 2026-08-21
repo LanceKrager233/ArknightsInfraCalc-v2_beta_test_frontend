@@ -199,6 +199,7 @@ fixtures/operbox_full_e2.json
 ## 文档入口
 
 - [开发指南](./docs/DEVELOPMENT_GUIDE.md)：API 契约、环境变量、本地调试和质量门禁。
+- [业务数据存储与分阶段启用手册](./docs/BUSINESS_DATA_STORAGE.md)：`app` schema、保留策略、加密、回填、备份与功能开关顺序。
 - [开发与发布维护准则](./docs/DEVELOPMENT_RELEASE_GUARDRAILS.md)：Windows/Linux 差异、求解器身份、helper 契约和双分支发布。
 - [上线产品化报告](./docs/FRONTEND_PRODUCTION_READINESS_REPORT.md)：改造基线、错误码、数据流、验证结果和 DevTools 排查方法。
 - [Frontend Serve Guide](./docs/FRONTEND_SERVE_GUIDE.md)：`infra-cli serve` 协议及公共 DTO 边界。

@@ -53,6 +53,9 @@ Windows 前端命令使用 PowerShell。部署 shell 测试只以 Linux CI 或�
 | `src/server/api-contract.ts` | requestId、错误响应、同源、大小、限流和并发保护 |
 | `src/server/public-plan.ts` | 内部求解结果到公开排班 DTO 的白名单映射 |
 | `src/server/infra.ts` | CLI 查找、长驻进程、内部运行记录和反馈落盘 |
+| `src/server/business-records.ts` | 运行/反馈白名单摘要、审计事件与文件回退 |
+| `src/server/workspace.ts` | 政策同意后的账号工作区、Box 密文与排班历史 |
+| `src/server/plan-cache.ts` | 求解器身份绑定的共享缓存、计算租约与删除驱逐 |
 | `src/app/api/*/route.ts` | 公开 HTTP 路由 |
 | `e2e/production-readiness.spec.ts` | hydration、产品主流程和锁定区域回归 |
 | `scripts/extract-room-emblems.mjs` | 从现有 WebP 确定性提取透明高清设施徽记 |
@@ -105,6 +108,11 @@ type ApiFailure = {
 - `POST /api/skland/role`
 - `GET/POST /api/auth/*`（Better Auth 原生协议，不使用公共响应信封）
 - `GET/POST /api/admin/users`
+- `GET/PATCH /api/admin/records`
+- `GET/POST/DELETE /api/account/data-consent`
+- `GET/PUT/DELETE /api/workspace`
+- `GET /api/plans`
+- `PATCH/DELETE /api/plans/[id]`
 
 `/api/auth/*` 是统一响应信封的唯一例外。Better Auth 原生 admin 路由全部返回 404；管理员只能使用应用自有的中文用户管理接口。`BETTER_AUTH_ADMIN_USER_IDS` 定义不可由网页降级的初始管理员；只有初始管理员能在该接口中授予或撤销数据库管理员角色，受委派管理员不能继续扩权。
 
