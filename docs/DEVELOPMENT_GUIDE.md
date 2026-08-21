@@ -148,13 +148,19 @@ POST 和 DELETE 路由执行同源检查。生产部署在 Nginx 后时启用受
 | `SKLAND_ALLOW_INSECURE_HTTP` | 仅限可信临时环境；允许非 localhost 使用不安全 HTTP |
 | `APP_DEPLOYMENT_ENV` | `production`或`development`；production 强制移除森空岛访问面 |
 | `SKLAND_FEATURE_ENABLED` | dev/local 可设为`0`主动关闭；不能在 production 开启 |
-| `DATABASE_URL` | 网站认证 runtime PostgreSQL 连接串，仅授予认证表 DML |
+| `DATABASE_URL` | Next runtime PostgreSQL 连接串，仅授予 `public` 认证表与 `app` 业务表 DML |
 | `DATABASE_MIGRATION_URL` | release 执行仓库内 migration 的 DDL 连接串 |
 | `BETTER_AUTH_SECRET` | 网站 Session 签名密钥，至少 32 字节且长期稳定 |
 | `BETTER_AUTH_URL` | 浏览器实际访问的完整 HTTPS Origin |
 | `BETTER_AUTH_ADMIN_USER_IDS` | 逗号分隔的初始管理员 Better Auth user ID；作为网页角色委派的信任根 |
 | `RESEND_API_KEY` | 验证与密码重置邮件的 Resend API key |
 | `AUTH_EMAIL_FROM` | 已验证独立发信子域的 From 地址 |
+| `BETA_BUSINESS_DB_ENABLED` | 启用业务摘要双写和过期清理 |
+| `BETA_BUSINESS_DB_READ_ENABLED` | 将运维摘要读取切到 PostgreSQL |
+| `BETA_BUSINESS_FILE_READ_FALLBACK` | 短期保留文件读取/更新回退 |
+| `ACCOUNT_CLOUD_SYNC_ENABLED` | 开放政策同意与账号云端工作区 |
+| `WORKSPACE_ACTIVE_KEY_VERSION`、`WORKSPACE_MASTER_KEYS` | MAA Box 信封加密版本和只存在服务端的 32 字节主密钥集合 |
+| `PLAN_CACHE_ENABLED`、`PLAN_CACHE_HMAC_KEY` | 开放共享缓存及其独立 HMAC 密钥 |
 
 建议的生产配置：
 
@@ -207,7 +213,7 @@ v5 只保存：
 
 有效期为 30 天。损坏、过期或类型校验失败的数据会自动删除；恢复时还会按求解器使用的干员名称归一化旧 Box，同名记录保留练度更高的一条。v2/v3/v4 仅进行一次白名单迁移，迁移后删除旧 key。严禁保存 debug bundle、路径、CLI 输出、原始异常、反馈草稿、反馈响应、森空岛凭据或完整状态快照。
 
-“清除本地数据”会删除 v2/v3/v4/v5、onboarding 和提示偏好并重置页面；森空岛 HttpOnly cookie 不受影响。状态中心的“删除全部森空岛数据”是另一条流程，只清除森空岛派生的本地字段、全部森空岛 Cookie 及可关联的服务端记录。
+“清除本地数据”会删除 v2/v3/v4/v5、onboarding 和提示偏好并重置页面；森空岛 HttpOnly cookie 不受影响。状态中心的“删除全部森空岛数据”是另一条流程，只清除森空岛派生的本地字段、全部森空岛 Cookie 及可关联的服务端记录。账号云同步只在当前政策同意后开启；首次上传成功后仍保留经过同一白名单清理的 v5 本地副本，用于快速首屏。撤销授权会删除云端工作区、Box 密文、排班历史及缓存引用，并回到纯本地模式。
 
 ## 测试与合并门禁
 

@@ -1,13 +1,13 @@
 # 网站账号、登录与 PostgreSQL 技术及运维手册
 
-本文说明当前网站账号系统的真实实现、数据库用途、登录生命周期、安全边界、开发方式和服务器运维流程。内容已按 2026-08-18 的 `develop` 代码核对；当本文与代码不一致时，以 Drizzle Schema、已提交 migration、认证配置和部署脚本为准。
+本文说明当前网站账号系统的真实实现、数据库用途、登录生命周期、安全边界、开发方式和服务器运维流程。内容已按 2026-08-21 的当前代码核对；当本文与代码不一致时，以 Drizzle Schema、已提交 migration、认证配置和部署脚本为准。
 
 不要把本文示例中的占位值直接投入使用，也不要把生成的密钥、连接串、Resend Key、Cookie、验证码、重置链接或真实邮件写入 Git、Issue、日志或聊天记录。
 
 ## 快速结论
 
-- PostgreSQL 只承担网站账号相关的持久化：用户、登录凭据、数据库 Session、验证记录、Better Auth 限流状态和不含森空岛身份明文的绑定记录。
-- MAA Box、布局、排班、森空岛 UID/昵称、森空岛凭据和完整状态不写入 PostgreSQL。浏览器业务数据继续使用现有 v5 白名单持久化。
+- PostgreSQL 的 `public` schema 保存网站账号、Session、验证、认证限流和不含森空岛身份明文的绑定；`app` schema 保存按开关启用的业务摘要、云端工作区和共享缓存。
+- 当前政策同意并启用云同步后，布局、设置、公开排班和应用层信封加密的 MAA Box 可以入库。森空岛 UID/昵称、森空岛 Box/凭据和完整状态始终禁止入库。
 - 登录使用 Better Auth 的邮箱密码模式。注册后必须输入 6 位邮箱验证码，验证成功也不会自动登录；密码重置使用一小时有效链接。
 - production 与 development 使用独立 PostgreSQL 容器、卷、账号、连接串、Better Auth 密钥和邮件配置。
 - 数据库与认证对象惰性初始化，所以缺少数据库和认证密钥时仍能完成 `npm run build`；真实认证请求、migration 和认证就绪检查会失败关闭。
@@ -25,7 +25,7 @@ flowchart LR
   D --> P[(PostgreSQL)]
   A -->|验证码 / 重置邮件| E[Resend]
 
-  B -->|应用统一响应信封| U[/api/admin/users]
+  B -->|应用统一响应信封| U[/api/admin/users 与业务 API]
   U --> S[数据库 Session 与实时管理员角色校验]
   S --> P
 
@@ -33,6 +33,9 @@ flowchart LR
   K --> S
   K --> C[用户专属加密 HttpOnly Cookie]
   K -->|仅 HMAC 绑定键和授权时间| P
+
+  B -->|当前政策同意后同步| W[/api/workspace 与 /api/plans]
+  W -->|白名单数据与 MAA Box 密文| P
 
   M[发布 helper] -->|DATABASE_MIGRATION_URL| G[已提交 Drizzle migration]
   G --> P
@@ -44,7 +47,7 @@ flowchart LR
 
 | 路径 | 责任 |
 | --- | --- |
-| `src/server/db/schema.ts` | 六张业务表的 Drizzle Schema，是生成 migration 的来源 |
+| `src/server/db/schema.ts` | `public` 认证表与 `app` 业务表的 Drizzle Schema，是生成 migration 的来源 |
 | `src/server/db/index.ts` | 惰性创建 `pg.Pool` 与 Drizzle 实例 |
 | `src/server/auth/index.ts` | Better Auth、邮箱密码、验证码、管理员插件和数据库限流配置 |
 | `src/app/api/auth/[...all]/route.ts` | Better Auth 原生路由、原生 admin 路由封锁和森空岛 Cookie 清理 |
@@ -53,7 +56,7 @@ flowchart LR
 | `src/server/skland/bindings.ts` | HMAC 化森空岛绑定记录的写入、统计与清理 |
 | `drizzle/*.sql` | 生产实际执行、可审查且按顺序追加的 SQL migration |
 | `scripts/migrate-db.mts` | 使用 migration 账号执行已提交 migration |
-| `scripts/check-auth-readiness.mts` | 使用 runtime 账号检查配置和六张表是否可用 |
+| `scripts/check-auth-readiness.mts` | 使用 runtime 账号检查认证/业务表及已启用功能的密钥配置 |
 | `deploy/postgres/*` | 双环境容器、最小权限角色、备份和 systemd 模板 |
 | `src/server/auth/postgres.integration.test.mjs` | PostgreSQL 注册、验证、登录、Session、重置、封禁和角色集成测试 |
 
@@ -70,16 +73,18 @@ flowchart LR
 | `rateLimit` | Better Auth 的持久化限流键、次数和最后请求时间 | `key` 唯一；这与应用 API 在 `api-contract.ts` 中的限流是两个独立层次 |
 | `skland_binding` | HMAC 化绑定键、网站用户 ID、首次创建和最近扫码授权时间 | 主键不含森空岛 UID 明文；同一森空岛账号不能绑定到两个网站账号；用户删除时级联删除 |
 
+`app` schema 的十张业务表、保留策略、回填、加密和分阶段开关见[业务数据存储与分阶段启用手册](./BUSINESS_DATA_STORAGE.md)。runtime 对两个 schema 都只有 DML；migration 账号负责 DDL；完整加密备份同时覆盖两个 schema。
+
 Drizzle 还会维护 `drizzle.__drizzle_migrations` 元数据，用于判断哪些 migration 已执行。不要手工修改这张表，也不要重命名已经发布的 migration。
 
 ### 2.2 不进入 PostgreSQL 的数据
 
 以下内容明确不属于网站账号数据库：
 
-- MAA JSON / xlsx 导入的 Box、布局、排班结果和练卡数据；
+- MAA Box 明文、未经过白名单清理的布局/排班/练卡数据；
 - 森空岛 UID、昵称、角色列表、Box、基建快照和完整状态；
 - 森空岛 `cred`、token、设备 ID 或二维码临时凭据；
-- CLI stdout、stderr、命令、内部调试包和用户反馈正文；
+- CLI stdout、stderr、命令、路径、内部调试包、原始请求响应和完整 Box；
 - Resend API key、Better Auth secret、数据库密码或 age 私钥。
 
 森空岛凭据使用 `SKLAND_SESSION_SECRET` 派生的 AES-256-GCM 密钥加密，存放在用户浏览器的 HttpOnly、SameSite=Lax、HTTPS 下 Secure Cookie 中。Cookie 还包含网站用户所有者 HMAC；网站账号不匹配时服务端拒绝解密并清理陈旧 Cookie。凭据从扫码成功起固定七天失效，刷新、读取或切换角色不会续期。
@@ -152,7 +157,7 @@ runtime 连接池只在第一次数据库请求时创建，配置为最大 10 �
 
 `BETTER_AUTH_ADMIN_USER_IDS` 中的账号是不可由网页降级的初始管理员。初始管理员可以在中文管理页将已验证、未封禁的账号设为管理员，角色保存于 PostgreSQL 的 `user.role`。受委派管理员可以搜索、封禁用户及查看或撤销 Session，但不能继续授予或撤销管理员权限，也不能封禁初始管理员或撤销其 Session。服务端每次请求都读取当前数据库角色，因此撤销权限后立即生效。
 
-PostgreSQL 保存网站账号、数据库 Session、验证记录、Better Auth 限流记录，以及 HMAC 化的森空岛绑定标识、对应网站用户和授权时间。森空岛状态中心根据最近授权时间区分七天内有效与待续期绑定，管理后台分别显示两类数量；到期不会删除绑定记录。MAA Box、布局、排班、森空岛 UID/昵称与第三方游戏凭据不会写入 PostgreSQL；凭据仍只保存在绑定网站用户的加密 HttpOnly Cookie 中。
+PostgreSQL 保存网站账号、数据库 Session、验证记录、Better Auth 限流记录，以及 HMAC 化的森空岛绑定标识、对应网站用户和授权时间。森空岛状态中心根据最近授权时间区分七天内有效与待续期绑定，管理后台分别显示两类数量；到期不会删除绑定记录。业务开关启用后，当前政策已同意的用户可以同步白名单布局、设置、公开排班及加密 MAA Box；森空岛 UID/昵称、Box 与第三方游戏凭据仍不写入 PostgreSQL，凭据只保存在绑定网站用户的加密 HttpOnly Cookie 中。
 
 ### 4.1 管理员模型
 
@@ -190,6 +195,11 @@ production 构建强制从客户端和公开 API 面移除森空岛能力，不�
 | `BETTER_AUTH_ADMIN_USER_IDS` | 管理员授权 | 逗号分隔 user ID；不要填写邮箱 |
 | `RESEND_API_KEY` | 认证邮件 | 对应环境的 Resend key |
 | `AUTH_EMAIL_FROM` | 认证邮件 | 已验证域名的 From；显示名会被规范为“可露希尔基建终端” |
+| `BETA_BUSINESS_DB_ENABLED` | 业务摘要双写 | migration 完成后才可设为 `1` |
+| `BETA_BUSINESS_DB_READ_ENABLED` | 运维摘要读取 | 双写核对稳定后再设为 `1` |
+| `ACCOUNT_CLOUD_SYNC_ENABLED` | 账号云端工作区 | 需同时配置版本化工作区主密钥 |
+| `WORKSPACE_ACTIVE_KEY_VERSION`、`WORKSPACE_MASTER_KEYS` | MAA Box 信封加密 | 当前版本及历史 32 字节主密钥只保存在服务端 |
+| `PLAN_CACHE_ENABLED`、`PLAN_CACHE_HMAC_KEY` | 共享排班缓存 | HMAC 密钥至少 32 字节且独立于其他密钥 |
 
 `src/server/db/index.ts` 和 `src/server/auth/index.ts` 都使用全局缓存进行运行时惰性初始化。Next build 不会因为导入模块而连接数据库；CI 还会显式清空数据库与认证变量执行 production build。以下操作则必须有完整配置并失败关闭：
 

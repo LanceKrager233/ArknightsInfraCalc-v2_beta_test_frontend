@@ -19,6 +19,7 @@ docs/*
 !docs/SKLAND_DATA_CAPABILITIES.md
 !docs/UPDATE_SOLVER.md
 !docs/AUTHENTICATION_DATABASE.md
+!docs/BUSINESS_DATA_STORAGE.md
 !docs/TRADE_PRODUCTION_CONTRACT_GAP.md
 !docs/计算逻辑.md
 *.tsbuildinfo
