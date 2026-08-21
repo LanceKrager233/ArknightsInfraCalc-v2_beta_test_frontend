@@ -127,7 +127,7 @@ test("routes drones to gold, experience, and both originium stages", () => {
   const drone = (room: "trading" | "manufacture", index: number) => ({ enable: true, room, index, order: "pre" as const });
   const equivalent = (1 + 0.2 + 0.1) / 2 / 4;
   const input = fixture({
-    tradeProducts: ["Originium Shard", "LMD", "LMD"],
+    tradeProducts: ["Orundum", "LMD", "LMD"],
     durations: [6, 6, 6, 6],
     lines: [baseLines, baseLines, baseLines, baseLines],
     drones: [drone("manufacture", 1), drone("manufacture", 2), drone("manufacture", 3), drone("trading", 1)],
@@ -144,7 +144,7 @@ test("routes drones to gold, experience, and both originium stages", () => {
 test("uses the smaller originium stage and handles zero production lines", () => {
   const input = fixture({
     tradeLevels: [3],
-    tradeProducts: ["Originium Shard"],
+    tradeProducts: ["Orundum"],
     factoryProducts: ["Originium Shard"],
     durations: [24],
     lines: [[
