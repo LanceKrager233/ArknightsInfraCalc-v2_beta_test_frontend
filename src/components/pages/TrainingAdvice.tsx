@@ -299,7 +299,7 @@ export function TrainingAdvice({
 
           <CollapsibleSection
             accent="bg-[#29BDF5]"
-            title="优先行动"
+            title="练卡建议"
             count={recommendations.length}
             collapsed={Boolean(collapsedSections.actions)}
             onToggle={() => toggleSection("actions")}
