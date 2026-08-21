@@ -16,6 +16,21 @@ if (!process.env.RESEND_API_KEY?.trim() || !process.env.AUTH_EMAIL_FROM?.trim())
 }
 
 const expectedTables = ["account", "rateLimit", "session", "skland_binding", "user", "verification"];
+const expectedBusinessTables = [
+  "feedback",
+  "feedback_event",
+  "operbox_snapshot",
+  "plan_cache",
+  "plan_cache_reference",
+  "plan_run",
+  "policy_consent",
+  "saved_plan",
+  "user_workspace",
+  "workspace_revision",
+];
+function secretBytes(value: string): number {
+  return value.startsWith("base64:") ? Buffer.from(value.slice(7), "base64").byteLength : Buffer.byteLength(value);
+}
 const pool = new Pool({
   connectionString: databaseUrl,
   max: 1,
@@ -32,7 +47,27 @@ try {
   const found = new Set(result.rows.map((row) => row.table_name));
   const missing = expectedTables.filter((table) => !found.has(table));
   if (missing.length > 0) throw new Error(`Authentication database is missing committed tables: ${missing.join(", ")}`);
-  console.log("Authentication runtime readiness check passed.");
+  const businessResult = await pool.query<{ table_name: string }>(
+    "SELECT table_name FROM information_schema.tables WHERE table_schema = 'app' AND table_name = ANY($1::text[])",
+    [expectedBusinessTables],
+  );
+  const businessFound = new Set(businessResult.rows.map((row) => row.table_name));
+  const missingBusiness = expectedBusinessTables.filter((table) => !businessFound.has(table));
+  if (missingBusiness.length > 0) throw new Error(`Business database is missing committed tables: ${missingBusiness.join(", ")}`);
+  if (process.env.ACCOUNT_CLOUD_SYNC_ENABLED === "1") {
+    const active = process.env.WORKSPACE_ACTIVE_KEY_VERSION?.trim();
+    const raw = process.env.WORKSPACE_MASTER_KEYS?.trim();
+    if (!active || !raw) throw new Error("Cloud sync requires versioned workspace encryption keys.");
+    const keys = JSON.parse(raw) as Record<string, unknown>;
+    const activeKey = keys[active];
+    if (typeof activeKey !== "string") throw new Error("The active workspace encryption key version is unavailable.");
+    if (secretBytes(activeKey) !== 32) throw new Error("The active workspace encryption key must contain exactly 32 bytes.");
+  }
+  if (process.env.PLAN_CACHE_ENABLED === "1") {
+    const key = process.env.PLAN_CACHE_HMAC_KEY?.trim() ?? "";
+    if (secretBytes(key) < 32) throw new Error("PLAN_CACHE_HMAC_KEY must contain at least 32 bytes.");
+  }
+  console.log("Authentication and business-data runtime readiness check passed.");
 } finally {
   await pool.end();
 }

@@ -39,6 +39,10 @@ test("error catalog keeps the required HTTP status mapping", () => {
   assert.equal(ERROR_DEFINITIONS["AIC-FEEDBACK-4002"].status, 500);
   assert.equal(ERROR_DEFINITIONS["AIC-SYS-5000"].status, 500);
   assert.equal(ERROR_DEFINITIONS["AIC-RATE-6001"].status, 429);
+  assert.equal(ERROR_DEFINITIONS["AIC-DATA-8001"].status, 403);
+  assert.equal(ERROR_DEFINITIONS["AIC-DATA-8002"].status, 503);
+  assert.equal(ERROR_DEFINITIONS["AIC-DATA-8003"].status, 422);
+  assert.equal(ERROR_DEFINITIONS["AIC-DATA-8004"].status, 404);
 });
 
 test("success and failure responses include the request id", async () => {

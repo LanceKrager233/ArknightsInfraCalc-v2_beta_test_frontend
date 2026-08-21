@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page, type Route } from "@playwright/test";
 
 import operatorCatalog from "../src/generated/arkntools/operator-catalog.json" with { type: "json" };
 
@@ -1162,6 +1162,159 @@ for (const viewport of [
     await accountPanel.getByRole("button", { name: "验证邮箱", exact: true }).click();
     await expect(accountPanel.getByText("邮箱验证完成", { exact: true })).toBeVisible();
     await expect(accountPanel.getByText("邮箱验证完成，现在可以登录网站账号。")).toBeVisible();
+  });
+}
+
+for (const viewport of [
+  { width: 390, height: 844 },
+  { width: 768, height: 900 },
+  { width: 1440, height: 900 },
+]) {
+  test(`cloud consent, sync, restore, plan controls, and deletion work at ${viewport.width}px`, async ({ page }) => {
+    let consentCurrent = false;
+    let workspace: Record<string, unknown> | null = null;
+    let workspaceWrites = 0;
+    let restoreRequests = 0;
+    let revokeRequests = 0;
+    let planDeleted = false;
+    let planPinned = false;
+    const revisionId = "33333333-3333-4333-8333-333333333333";
+    const timestamp = "2026-08-21T08:00:00.000Z";
+    const fulfill = (route: Route, data: unknown) => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "X-Request-Id": requestId },
+      body: JSON.stringify({ success: true, data, requestId }),
+    });
+
+    await page.route("**/api/account/data-consent", async (route) => {
+      if (route.request().method() === "POST") {
+        const body = route.request().postDataJSON() as Record<string, unknown>;
+        expect(body).toMatchObject({ termsAccepted: true, privacyAccepted: true });
+        consentCurrent = true;
+      } else if (route.request().method() === "DELETE") {
+        consentCurrent = false;
+        revokeRequests += 1;
+        return fulfill(route, { revoked: true, deleted: true });
+      }
+      return fulfill(route, {
+        current: consentCurrent,
+        termsVersion: "2026-08-21-cloud-workspace",
+        privacyVersion: "2026-08-21-cloud-workspace",
+        acceptedAt: consentCurrent ? timestamp : null,
+        revokedAt: null,
+        cloudSyncEnabled: true,
+      });
+    });
+    await page.route("**/api/workspace", async (route) => {
+      if (route.request().method() === "GET") {
+        return fulfill(route, workspace ?? {
+          exists: false,
+          revision: 0,
+          state: null,
+          operbox: null,
+          result: null,
+          updatedAt: null,
+          syncedAt: null,
+          revisions: [],
+        });
+      }
+      if (route.request().method() === "PUT") {
+        const body = route.request().postDataJSON() as Record<string, unknown>;
+        if (body.restoreRevisionId) {
+          expect(body.restoreRevisionId).toBe(revisionId);
+          expect(workspace).not.toBeNull();
+          restoreRequests += 1;
+          workspace = { ...workspace!, revision: 3, updatedAt: timestamp, syncedAt: timestamp };
+          return fulfill(route, workspace);
+        }
+        workspaceWrites += 1;
+        expect((body.state as { boxSource?: string }).boxSource).toBe("maa");
+        expect(Array.isArray(body.operbox)).toBe(true);
+        expect(JSON.stringify(body)).not.toContain("debugBundle");
+        workspace = {
+          exists: true,
+          revision: 2,
+          state: body.state,
+          operbox: body.operbox,
+          result: body.result,
+          updatedAt: timestamp,
+          syncedAt: timestamp,
+          revisions: [{ id: revisionId, revision: 1, createdAt: timestamp, expiresAt: "2026-09-20T08:00:00.000Z" }],
+        };
+        return fulfill(route, workspace);
+      }
+      return fulfill(route, { deleted: true });
+    });
+    await page.route("**/api/plans", (route) => fulfill(route, {
+      plans: planDeleted ? [] : [{
+        id: "saved-plan-1",
+        diagnosticId,
+        title: "243 · 本地 MAA",
+        pinned: planPinned,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        expiresAt: planPinned ? null : "2026-09-20T08:00:00.000Z",
+        result: planData,
+      }],
+    }));
+    await page.route("**/api/plans/*", async (route) => {
+      if (route.request().method() === "PATCH") {
+        planPinned = Boolean((route.request().postDataJSON() as { pinned?: boolean }).pinned);
+        return fulfill(route, {
+          id: "saved-plan-1",
+          diagnosticId,
+          title: "243 · 本地 MAA",
+          pinned: planPinned,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          expiresAt: null,
+          result: planData,
+        });
+      }
+      planDeleted = true;
+      return fulfill(route, { deleted: true });
+    });
+
+    await mockApis(page);
+    await seedV4Session(page, planData, { boxSource: "maa" });
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+
+    const dialog = page.getByRole("dialog", { name: "启用账号云端工作区" });
+    await expect(dialog).toBeVisible();
+    const dialogBox = await dialog.boundingBox();
+    expect(dialogBox?.width ?? 0).toBeLessThanOrEqual(viewport.width - 16);
+    expect(dialogBox?.height ?? 0).toBeLessThanOrEqual(viewport.height - 16);
+    const accept = dialog.getByRole("button", { name: "同意并开始同步" });
+    await expect(accept).toBeDisabled();
+    await dialog.getByRole("checkbox").nth(0).check();
+    await dialog.getByRole("checkbox").nth(1).check();
+    await accept.click();
+    await expect(dialog).toHaveCount(0);
+    await expect.poll(() => workspaceWrites).toBe(1);
+
+    if (viewport.width < 768) await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+    await page.getByRole("button", { name: "账号管理", exact: true }).click();
+    const cloudPanel = page.locator("[data-cloud-data-panel]");
+    await expect(cloudPanel).toBeVisible();
+    await expect(cloudPanel).toContainText("已同步至修订 2");
+    await cloudPanel.getByRole("button", { name: "恢复", exact: true }).click();
+    await expect.poll(() => restoreRequests).toBe(1);
+    await cloudPanel.getByRole("button", { name: "固定排班" }).click();
+    await expect.poll(() => planPinned).toBe(true);
+    await cloudPanel.getByRole("button", { name: "删除排班" }).click();
+    await expect.poll(() => planDeleted).toBe(true);
+
+    const revoke = cloudPanel.getByRole("button", { name: /按住撤销并删除/ });
+    const revokeBox = await revoke.boundingBox();
+    expect(revokeBox).not.toBeNull();
+    await page.mouse.move(revokeBox!.x + revokeBox!.width / 2, revokeBox!.y + revokeBox!.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(1900);
+    await page.mouse.up();
+    await expect.poll(() => revokeRequests).toBe(1);
+    await expect(cloudPanel).toContainText("当前保持纯本地模式，不会上传已有数据。");
   });
 }
 
@@ -3536,7 +3689,7 @@ test("publishes the site terms and privacy policy with upstream policy links", a
   await page.setViewportSize({ width: 390, height: 844 });
   await gotoStable(page, "/privacy");
   await expect(page.getByRole("heading", { name: "隐私政策", level: 1 })).toBeVisible();
-  await expect(page.getByText("版本与生效日期：2026-08-17")).toBeVisible();
+  await expect(page.getByText("版本与生效日期：2026-08-21")).toBeVisible();
   await expect(page.getByText("可露希尔基建终端项目维护者", { exact: false })).toBeVisible();
   await expect(page.getByRole("link", { name: "森空岛使用许可及服务协议" })).toHaveAttribute(
     "href",
@@ -3549,7 +3702,7 @@ test("publishes the site terms and privacy policy with upstream policy links", a
 
   await gotoStable(page, "/terms");
   await expect(page.getByRole("heading", { name: "服务条款", level: 1 })).toBeVisible();
-  await expect(page.getByText("版本与生效日期：2026-08-17")).toBeVisible();
+  await expect(page.getByText("版本与生效日期：2026-08-21")).toBeVisible();
   await expect(page.getByText(/非官方、非商业工具/)).toBeVisible();
 });
 
@@ -3562,8 +3715,8 @@ test("Skland login centers the QR on every viewport and starts after explicit co
       consent: {
         termsAccepted: true,
         privacyAccepted: true,
-        termsVersion: "2026-08-17",
-        privacyVersion: "2026-08-17-skland-binding",
+        termsVersion: "2026-08-21-cloud-workspace",
+        privacyVersion: "2026-08-21-cloud-workspace",
       },
     });
     return route.fulfill({

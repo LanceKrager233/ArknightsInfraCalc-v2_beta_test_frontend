@@ -14,5 +14,5 @@ export function AccountRoute() {
       </div>
     );
   }
-  return <AccountStatusCenter onSessionChanged={account.onSessionChanged} />;
+  return <AccountStatusCenter {...account} />;
 }

@@ -20,6 +20,7 @@ import {
   validateWebsiteAccountName,
 } from "@/account-name";
 import { accountOrbColor } from "@/account-orb";
+import { cloudSyncMetadataKey } from "@/cloud-sync";
 import { OtpInput, type OtpInputHandle, type OtpStatus } from "@/components/interior/otp-input";
 import { PasswordStrength } from "@/components/interior/password-strength";
 import { WizardSteps } from "@/components/interior/wizard-steps";
@@ -36,6 +37,10 @@ import { FluidOrb } from "@/components/ui/fluid-orb";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { PRIVACY_VERSION, TERMS_VERSION } from "@/legal-policy";
+import { clearLocalProductData } from "@/persistence";
+import { CloudDataPanel } from "@/components/cloud/CloudDataPanel";
+import type { CloudWorkspaceData, PublicPlanData } from "@/types";
 
 type AuthMode = "signin" | "signup" | "forgot";
 type AuthStep = "details" | "verify" | "complete";
@@ -51,6 +56,10 @@ const AUTH_INPUT_CLASS = "border-[#d5d7da] bg-white shadow-none dark:border-[#d5
 
 interface WebsiteAccountPanelProps {
   onSessionChanged?: (authenticated: boolean) => void | Promise<void>;
+  cloudWorkspace?: CloudWorkspaceData | null;
+  onRestoreCloudWorkspace?: (workspace: CloudWorkspaceData) => void;
+  onRestoreSavedPlan?: (plan: PublicPlanData) => void;
+  onCloudDataChanged?: () => void;
 }
 
 function errorMessage(value: unknown): string {
@@ -64,7 +73,13 @@ function formatSessionExpiry(value: unknown): string | null {
   return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
-export function WebsiteAccountPanel({ onSessionChanged }: WebsiteAccountPanelProps) {
+export function WebsiteAccountPanel({
+  onSessionChanged,
+  cloudWorkspace,
+  onRestoreCloudWorkspace,
+  onRestoreSavedPlan,
+  onCloudDataChanged,
+}: WebsiteAccountPanelProps) {
   const { data: session, isPending, refetch } = authClient.useSession();
   const [mode, setMode] = useState<AuthMode>("signin");
   const [step, setStep] = useState<AuthStep>("details");
@@ -79,6 +94,7 @@ export function WebsiteAccountPanel({ onSessionChanged }: WebsiteAccountPanelPro
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [busyAction, setBusyAction] = useState<AccountAction | null>(null);
+  const [deleteLocalData, setDeleteLocalData] = useState(true);
   const [resendSeconds, setResendSeconds] = useState(0);
   const otpRef = useRef<OtpInputHandle>(null);
   const fieldId = useId();
@@ -210,6 +226,16 @@ export function WebsiteAccountPanel({ onSessionChanged }: WebsiteAccountPanelPro
           ? await authClient.revokeSessions()
           : await authClient.deleteUser({ password: deletePassword, callbackURL: location.origin });
       if (result.error) throw new Error(result.error.message);
+      if (action === "delete" && deleteLocalData && session?.user.id) {
+        try {
+          clearLocalProductData(window.localStorage);
+          window.localStorage.removeItem(cloudSyncMetadataKey(session.user.id));
+          window.localStorage.removeItem(`cloud-consent-dismissed:${session.user.id}:${TERMS_VERSION}:${PRIVACY_VERSION}`);
+        } catch {
+          // Account deletion has already succeeded; local storage can still be
+          // cleared later from the calculator when browser access is restored.
+        }
+      }
       setDeletePassword("");
       await notifySessionChanged(false);
     } catch (caught) {
@@ -314,6 +340,15 @@ export function WebsiteAccountPanel({ onSessionChanged }: WebsiteAccountPanelPro
                   autoComplete="current-password"
                 />
               </div>
+              <label className="mt-3 flex min-h-11 items-center gap-3 text-sm text-white/72">
+                <input
+                  type="checkbox"
+                  checked={deleteLocalData}
+                  onChange={(event) => setDeleteLocalData(event.target.checked)}
+                  className="size-4 shrink-0 accent-white"
+                />
+                注销成功后同时清除当前浏览器的本地工作区
+              </label>
               <div className="mt-auto flex justify-end pt-5">
                 <Button
                   type="button"
@@ -328,6 +363,13 @@ export function WebsiteAccountPanel({ onSessionChanged }: WebsiteAccountPanelPro
             </section>
           </AccountTechnicalCard>
         </div>
+        <CloudDataPanel
+          userId={session.user.id}
+          workspace={cloudWorkspace}
+          onRestoreWorkspace={onRestoreCloudWorkspace}
+          onRestorePlan={onRestoreSavedPlan}
+          onCloudDataChanged={onCloudDataChanged}
+        />
       </div>
     );
   }

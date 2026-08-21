@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { WebsiteAccountDialogSkeleton } from "@/components/auth/WebsiteAccountDialogSkeleton";
@@ -13,6 +13,7 @@ import { PrimaryPageTransition } from "@/components/layout/PrimaryPageTransition
 import { SetupDialogSkeleton } from "@/components/setup/SetupDialogSkeleton";
 import { LiveActivity, usePlanActivity } from "@/components/ui/live-activity";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { CloudDataSync } from "@/components/cloud/CloudDataSync";
 import { preloadProductIcons } from "@/product-assets";
 import { WorkbenchContext } from "@/workbench-context";
 import { WORKBENCH_PAGE_PATHS, workbenchHref, workbenchPageFromPathname, type AppPage } from "@/workbench-routes";
@@ -78,6 +79,7 @@ import {
   SklandSessionData,
   SklandScheduleSnapshot,
   SklandStatusSnapshot,
+  CloudWorkspaceData,
 } from "./types";
 
 const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
@@ -272,6 +274,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const initialLayoutSource = useRef<"local" | "skland">("local");
   const initialLocalLayoutBackup = useRef<BaseBlueprint | null>(null);
   const skipNextPersistence = useRef(false);
+  const hadPersistedSession = useRef(false);
   const leavingAccountAfterLogout = useRef(false);
   const statusLoadingAccount = useRef<string | null>(null);
   const sklandRestoreGuard = useRef(createSklandRestoreGuard());
@@ -301,6 +304,8 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const [resultClearNotice, setResultClearNotice] = useState<string | null>(null);
   const [resultClearWarningDismissed, setResultClearWarningDismissed] = useState(false);
   const [pendingProductChange, setPendingProductChange] = useState<ProductChange | null>(null);
+  const [cloudWorkspaceData, setCloudWorkspaceData] = useState<CloudWorkspaceData | null>(null);
+  const [cloudSyncRefreshKey, setCloudSyncRefreshKey] = useState(0);
 
   // 公开排班结果只包含产品页面需要的效率、MAA 与轮换数据。
   const scheduleResult = result;
@@ -445,6 +450,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     if (typeof window === "undefined") return;
     try {
       const restored = loadPersistedSession(window.localStorage);
+      hadPersistedSession.current = Boolean(restored);
       const warningDismissed = window.localStorage.getItem(RESULT_CLEAR_WARNING_DISMISSED_KEY) === "1";
       setResultClearWarningDismissed(warningDismissed);
       if (restored) {
@@ -507,6 +513,45 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       setStorageNotice(displayError("AIC-LOCAL-7001", "浏览器无法保存本地数据，但仍可继续生成排班。"));
     }
   }, [hasRestoredSession, preset, layout, operbox, fileName, boxSource, layoutDirty, layoutSource, localLayoutBackup, rotationProfile, fiammettaEnabled, result, activeShift]);
+
+  const cloudWorkspacePayload = useMemo(() => ({
+    state: {
+      presetLabel: preset.label,
+      layout,
+      sourceName: fileName,
+      boxSource,
+      layoutDirty,
+      layoutSource,
+      localLayoutBackup,
+      rotationProfile,
+      fiammettaEnabled,
+      activeShift,
+    },
+    operbox: boxSource === "maa" ? operbox : null,
+    result,
+  }), [activeShift, boxSource, fiammettaEnabled, fileName, layout, layoutDirty, layoutSource, localLayoutBackup, operbox, preset.label, result, rotationProfile]);
+
+  const applyCloudWorkspace = useCallback((cloud: CloudWorkspaceData) => {
+    if (!cloud.exists || !cloud.state) return;
+    const state = cloud.state;
+    setPreset(resolvePreset(PRESETS.find((item) => item.label === state.presetLabel)));
+    setLayout(structuredClone(state.layout));
+    setOperbox(cloud.operbox ? normalizeOperboxEntries(cloud.operbox) : null);
+    setFileName(state.sourceName);
+    setBoxSource(state.boxSource);
+    setLayoutDirty(state.layoutDirty);
+    setLayoutSource(state.layoutSource);
+    setLocalLayoutBackup(state.localLayoutBackup ? structuredClone(state.localLayoutBackup) : null);
+    setRotationProfile(state.rotationProfile);
+    setFiammettaEnabled(state.fiammettaEnabled);
+    setResult(cloud.result);
+    setActiveShift(cloud.result ? state.activeShift : 0);
+    setCloudWorkspaceData(cloud);
+  }, []);
+
+  const handleCloudWorkspaceChanged = useCallback((cloud: CloudWorkspaceData | null) => {
+    setCloudWorkspaceData(cloud);
+  }, []);
 
   useEffect(() => {
     if (!hasRestoredSession || typeof window === "undefined") return;
@@ -1454,6 +1499,14 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       authenticated: Boolean(websiteSession),
       pending: websiteSessionPending,
       onSessionChanged: handleWebsiteSessionChanged,
+      cloudWorkspace: cloudWorkspaceData,
+      onRestoreCloudWorkspace: applyCloudWorkspace,
+      onRestoreSavedPlan: (saved: PublicPlanData) => {
+        setResult(saved);
+        setActiveShift(0);
+        router.push(workbenchHref("calculator", betaRequested));
+      },
+      onCloudDataChanged: () => setCloudSyncRefreshKey((current) => current + 1),
     },
     skland: CLIENT_SKLAND_ENABLED ? {
       websiteAuthenticated: Boolean(websiteSession),
@@ -1534,6 +1587,15 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
           </Link>
         ) : null}
       </footer>
+
+      {hasRestoredSession ? <CloudDataSync
+        userId={websiteUserId}
+        hasLocalSession={hadPersistedSession.current}
+        workspace={cloudWorkspacePayload}
+        refreshKey={cloudSyncRefreshKey}
+        onApply={applyCloudWorkspace}
+        onWorkspaceChanged={handleCloudWorkspaceChanged}
+      /> : null}
 
       {websiteAuthDialogMounted ? <Suspense fallback={(
         <WebsiteAccountDialogSkeleton

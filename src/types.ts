@@ -972,7 +972,11 @@ export type AppErrorCode =
   | "AIC-FEEDBACK-4002"
   | "AIC-SYS-5000"
   | "AIC-RATE-6001"
-  | "AIC-LOCAL-7001";
+  | "AIC-LOCAL-7001"
+  | "AIC-DATA-8001"
+  | "AIC-DATA-8002"
+  | "AIC-DATA-8003"
+  | "AIC-DATA-8004";
 
 export interface ApiFieldError {
   path: string;
@@ -1059,6 +1063,77 @@ export type FeedbackRequest = FeedbackRequestBase & (
 export interface FeedbackData {
   feedbackId: string;
   savedAt: string;
+}
+
+export interface AccountDataConsentData {
+  current: boolean;
+  termsVersion: string;
+  privacyVersion: string;
+  acceptedAt: string | null;
+  revokedAt: string | null;
+  cloudSyncEnabled: boolean;
+}
+
+export interface AccountDataConsentRequest {
+  termsAccepted: true;
+  privacyAccepted: true;
+  termsVersion: string;
+  privacyVersion: string;
+}
+
+export interface CloudWorkspaceState {
+  presetLabel: string;
+  layout: BaseBlueprint;
+  sourceName: string | null;
+  boxSource: BoxSource;
+  layoutDirty: boolean;
+  layoutSource: "local" | "skland";
+  localLayoutBackup: BaseBlueprint | null;
+  rotationProfile: RotationProfile;
+  fiammettaEnabled: boolean;
+  activeShift: number;
+}
+
+export interface CloudWorkspaceRevisionData {
+  id: string;
+  revision: number;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export interface CloudWorkspaceData {
+  exists: boolean;
+  revision: number;
+  state: CloudWorkspaceState | null;
+  operbox: OperBoxEntry[] | null;
+  result: PublicPlanData | null;
+  updatedAt: string | null;
+  syncedAt: string | null;
+  revisions: CloudWorkspaceRevisionData[];
+}
+
+export type CloudWorkspacePutRequest =
+  | {
+      baseRevision?: number | null;
+      state: CloudWorkspaceState;
+      operbox: OperBoxEntry[] | null;
+      result: PublicPlanData | null;
+    }
+  | { restoreRevisionId: string };
+
+export interface SavedPlanData {
+  id: string;
+  diagnosticId: string;
+  title: string;
+  pinned: boolean;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string | null;
+  result: PublicPlanData;
+}
+
+export interface SavedPlanListData {
+  plans: SavedPlanData[];
 }
 
 export type AdminUserAction = "ban" | "unban" | "revokeSessions" | "grantAdmin" | "revokeAdmin";

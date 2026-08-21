@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { chmod, mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { chmod, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 
 import type {
@@ -37,6 +37,14 @@ import {
   isSafePrivateStorageRoot,
 } from "./private-storage";
 import { resolveRuntimeDataDir } from "./runtime-data";
+import {
+  deleteExpiredBusinessRecords,
+  queryBusinessRecords,
+  recordFeedbackIfEnabled,
+  updateFeedbackRecord,
+  type PrivateArtifactDescriptor,
+} from "./business-records";
+import { isBusinessDatabaseReadEnabled, isBusinessFileFallbackEnabled } from "./business-config";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -247,6 +255,24 @@ async function readJsonIfExists(filePath: string) {
   }
 }
 
+async function artifactDescriptor(
+  key: string,
+  filePaths: string[],
+): Promise<PrivateArtifactDescriptor | null> {
+  try {
+    const values = await Promise.all(filePaths.map((filePath) => readFile(filePath)));
+    const hash = createHash("sha256");
+    let bytes = 0;
+    for (const value of values) {
+      bytes += value.byteLength;
+      hash.update(value);
+    }
+    return { key, bytes, sha256: hash.digest("hex") };
+  } catch {
+    return null;
+  }
+}
+
 async function ensurePrivateStorageBoundaries(): Promise<void> {
   const lexicalStorageRoot = path.resolve(/* turbopackIgnore: true */ storageRoot);
   const lexicalRoots = [
@@ -351,6 +377,9 @@ export async function maintainPrivateRecords(now = Date.now()): Promise<void> {
     }
     await writeJson(legacySklandPurgeMarker, { version: 1, completedAt: new Date(now).toISOString() });
   }
+  await deleteExpiredBusinessRecords(new Date(now)).catch(() => {
+    console.error(JSON.stringify({ level: "error", event: "business_database_cleanup_failed" }));
+  });
 }
 
 async function maintainPrivateRecordsIfDue(now = Date.now()): Promise<void> {
@@ -868,6 +897,19 @@ export async function getHealth(): Promise<HealthApiResponse> {
   }
 }
 
+export async function getPlanCacheSolverIdentity(): Promise<SolverObservation | null> {
+  try {
+    resolveCliPath();
+    const ping = await getServeClient().ping();
+    const capability = inspectPlanComputeCapability(ping.response);
+    if (!capability.supported || !capability.solverExecutableSha256) return null;
+    const readiness = inspectSolverDeploymentReadiness(capability, process.env.INFRA_CLI_EXPECTED_SHA256);
+    return readiness.ready ? createSolverObservation(capability, new Date().toISOString()) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getSampleOperbox() {
   const samplePath = resolveSampleOperboxPath();
   const sample = JSON.parse(await readFile(samplePath, "utf-8")) as unknown;
@@ -906,6 +948,12 @@ export async function saveFeedback(body: FeedbackRequest): Promise<FeedbackData>
 
   await writeJson(metaPath, meta);
   await writeJson(issuePath, toStoredFeedbackIssue(body));
+  await recordFeedbackIfEnabled({
+    feedbackId,
+    savedAt: new Date(savedAt),
+    body,
+    artifact: await artifactDescriptor(feedbackId, [metaPath, issuePath]),
+  });
 
   return {
     feedbackId,
@@ -913,8 +961,17 @@ export async function saveFeedback(body: FeedbackRequest): Promise<FeedbackData>
   };
 }
 
+export async function describePlanArtifact(result: PlanApiResponse): Promise<PrivateArtifactDescriptor | null> {
+  if (!result.runId || !result.resultPath) return null;
+  const resolved = path.resolve(/* turbopackIgnore: true */ result.resultPath);
+  const root = path.resolve(/* turbopackIgnore: true */ cliRunRoot);
+  if (!isPrivateStorageChild(root, resolved)) return null;
+  return artifactDescriptor(result.runId, [resolved]);
+}
+
 export async function runPlan(body: unknown): Promise<PlanApiResponse> {
   let runDir = "";
+  let ephemeralRunDir = "";
   let resultPath = "";
   let solver: SolverObservation | undefined;
   const startedAt = new Date().toISOString();
@@ -928,7 +985,12 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
     const cliPath = resolveCliPath();
     const runId = randomUUID();
     runDir = path.join(cliRunRoot, makeStampedDirName(startedAt, body.sourceName, runId));
-    await mkdir(runDir, { recursive: true });
+    try {
+      await mkdir(runDir, { recursive: true });
+    } catch {
+      ephemeralRunDir = await mkdtemp(path.join(tmpdir(), "arknights-infra-run-"));
+      runDir = ephemeralRunDir;
+    }
     if (body.dataOwnerTag) {
       await writeJson(path.join(runDir, "owner.json"), {
         version: 1,
@@ -1091,7 +1153,7 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
       serveResponse: serveResult.response,
       stdout: serveResult.stdout,
       stderr: serveResult.stderr,
-      savedFiles: {
+      savedFiles: ephemeralRunDir ? undefined : {
         runDir: path.relative(repoRoot, runDir),
         layout: path.relative(repoRoot, layoutPath),
         operbox: path.relative(repoRoot, operboxPath),
@@ -1158,17 +1220,43 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
       await writeJson(resultPath, errorPayload);
     }
     return errorPayload;
+  } finally {
+    if (ephemeralRunDir) await rm(ephemeralRunDir, { recursive: true, force: true }).catch(() => undefined);
   }
 }
 
 export async function listOpsRecords() {
-  const [feedback, runs, releases, health, storage] = await Promise.all([
-    listStoredRecords(feedbackRoot, "meta.json", "issue.json"),
-    listStoredRecords(cliRunRoot, "result.json", "debug-bundle.json"),
+  const databaseReads = isBusinessDatabaseReadEnabled();
+  const recordsPromise = (async () => {
+    if (databaseReads) {
+      try {
+        const [feedbackRecords, runRecords] = await Promise.all([
+          queryBusinessRecords({ kind: "feedback", limit: 100 }),
+          queryBusinessRecords({ kind: "runs", limit: 100 }),
+        ]);
+        return { feedbackRecords, runRecords };
+      } catch (error) {
+        if (!isBusinessFileFallbackEnabled()) throw error;
+      }
+    }
+    const [feedbackRecords, runRecords] = await Promise.all([
+      listStoredRecords(feedbackRoot, "meta.json", "issue.json"),
+      listStoredRecords(cliRunRoot, "result.json", "debug-bundle.json"),
+    ]);
+    return { feedbackRecords, runRecords };
+  })();
+  const [{ feedbackRecords, runRecords }, releases, health, storage] = await Promise.all([
+    recordsPromise,
     listCliReleases(),
     getHealth(),
     getOpsStorageStats(),
   ]);
+  const feedback = databaseReads && "items" in feedbackRecords
+    ? feedbackRecords.items.map((data) => ({ id: "id" in data ? String(data.id) : "", data, ops: { status: "status" in data ? data.status : null, note: "adminNote" in data ? data.adminNote : null } }))
+    : feedbackRecords;
+  const runs = databaseReads && "items" in runRecords
+    ? runRecords.items.map((data) => ({ id: "diagnosticId" in data ? String(data.diagnosticId) : "", data, ops: null }))
+    : runRecords;
   return { feedback, runs, releases, health, storage, activeCli: readActiveCliPath() ?? null };
 }
 
@@ -1207,6 +1295,17 @@ async function getOpsStorageStats() {
 export async function updateFeedbackOps(id: string, status: string, note: string) {
   if (!/^[\w.-]+$/.test(id)) throw new Error("记录 ID 非法。");
   if (!["pending", "working", "resolved"].includes(status)) throw new Error("状态非法。");
+  if (isBusinessDatabaseReadEnabled()) {
+    const updated = await updateFeedbackRecord({
+      feedbackId: id,
+      status: status as "pending" | "working" | "resolved",
+      note,
+    });
+    if (updated || !isBusinessFileFallbackEnabled()) {
+      if (!updated) throw new Error("记录不存在。");
+      return updated;
+    }
+  }
   const dir = path.join(feedbackRoot, id);
   await stat(dir);
   const value = { status, note: note.trim().slice(0, 2000), updatedAt: new Date().toISOString() };
