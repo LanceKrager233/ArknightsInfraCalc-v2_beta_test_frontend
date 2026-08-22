@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { decryptOperboxSnapshot, encryptOperboxSnapshot } from "./workspace-crypto.ts";
+import {
+  decryptOperboxSnapshot,
+  encryptOperboxSnapshot,
+  planOperboxContentHmac,
+  verifyPlanOperboxContentHmac,
+} from "./workspace-crypto.ts";
 
 const key = Buffer.alloc(32, 7);
 const keys = new Map([["v1", key]]);
@@ -55,4 +60,16 @@ test("operbox content HMAC cannot correlate equal boxes across website users", (
     masterKey: key,
   });
   assert.notEqual(first.contentHmac, second.contentHmac);
+});
+
+test("saved plan Box HMAC is order-independent and bound to user and content", () => {
+  const first = { id: "char_1", name: "测试一", elite: 2, level: 80, own: true, potential: 1, rarity: 6 };
+  const second = { id: "char_2", name: "测试二", elite: 1, level: 60, own: true, potential: 2, rarity: 5 };
+  const original = planOperboxContentHmac({ userId: "user-a", operbox: [first, second], masterKey: key });
+  assert.equal(original, planOperboxContentHmac({ userId: "user-a", operbox: [second, first], masterKey: key }));
+  assert.notEqual(original, planOperboxContentHmac({ userId: "user-b", operbox: [first, second], masterKey: key }));
+  assert.notEqual(original, planOperboxContentHmac({ userId: "user-a", operbox: [{ ...first, level: 79 }, second], masterKey: key }));
+  assert.equal(verifyPlanOperboxContentHmac({ userId: "user-a", operbox: [second, first], masterKey: key, expected: original }), true);
+  assert.equal(verifyPlanOperboxContentHmac({ userId: "user-a", operbox: [first, second], masterKey: key, expected: "0".repeat(64) }), false);
+  assert.equal(verifyPlanOperboxContentHmac({ userId: "user-a", operbox: [first, second], masterKey: key, expected: "invalid" }), false);
 });

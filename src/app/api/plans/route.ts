@@ -1,17 +1,10 @@
-import { createRequestId, failureResponse, successResponse } from "@/server/api-contract";
-import { requireWebsiteSession } from "@/server/auth/authorization";
-import { listSavedPlans } from "@/server/workspace";
+import { handleListSavedPlans } from "@/server/saved-plans-api";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
 export async function GET(request: Request) {
-  const requestId = createRequestId();
-  const startedAt = performance.now();
-  try {
-    const session = await requireWebsiteSession(request);
-    return successResponse(await listSavedPlans(session.user.id), requestId);
-  } catch (error) {
-    return failureResponse(error, requestId, "/api/plans", startedAt);
-  }
+  const response = await handleListSavedPlans(request, "/api/plans");
+  response.headers.set("Deprecation", "true");
+  response.headers.set("Link", "</api/account/saved-plans>; rel=\"successor-version\"");
+  return response;
 }

@@ -43,6 +43,13 @@
       "when": 1787276435567,
       "tag": "0005_crazy_kate_bishop",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787328411230,
+      "tag": "0006_saved_plan_calculation_context",
+      "breakpoints": true
     }
   ]
 }

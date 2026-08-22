@@ -1,50 +1,7 @@
-import {
-  assertEmptyBody,
-  assertSameOrigin,
-  createRequestId,
-  enforceRateLimit,
-  requestClientIp,
-  successResponse,
-} from "@/server/api-contract";
-import { deleteSklandOwnedData } from "@/server/infra";
-import {
-  assertSklandAvailable,
-  assertSklandFeatureEnabled,
-  readSklandAccountStore,
-  setSklandAccountStoreCookies,
-  sklandErrorResponse,
-} from "@/server/skland/http";
-import { sklandDataOwnerTag } from "@/server/skland/session";
-import { requireWebsiteSession } from "@/server/auth/authorization";
-import { removeSklandBindings } from "@/server/skland/bindings";
+import { handleLegacyDeleteSklandData } from "@/server/skland/account-data-api";
 
 export const runtime = "nodejs";
 
 export async function DELETE(request: Request) {
-  const requestId = createRequestId();
-  const startedAt = performance.now();
-  try {
-    assertSklandFeatureEnabled();
-    const website = await requireWebsiteSession(request);
-    assertSklandAvailable(request);
-    assertSameOrigin(request);
-    await assertEmptyBody(request, 1024);
-    enforceRateLimit("skland-delete", requestClientIp(request), 5, 60 * 60_000);
-    const previous = await readSklandAccountStore();
-    const deleted = await deleteSklandOwnedData(
-      previous.accounts.map((account) => sklandDataOwnerTag(account.session.userId))
-    );
-    await removeSklandBindings(website.user.id);
-    const next = {
-      ...previous,
-      accounts: [],
-      activeAccountId: null,
-      migratedSnapshot: null,
-    };
-    const response = successResponse({ deleted: true, ...deleted }, requestId);
-    setSklandAccountStoreCookies(response, request, next, previous);
-    return response;
-  } catch (error) {
-    return sklandErrorResponse(error, requestId, "/api/skland/data", startedAt);
-  }
+  return handleLegacyDeleteSklandData(request);
 }

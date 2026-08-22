@@ -101,18 +101,27 @@ type ApiFailure = {
 - `GET /api/sample-operbox`
 - `POST /api/plan`
 - `POST /api/feedback`
-- `GET/DELETE /api/skland/session`
+- `GET/DELETE /api/skland/accounts`
+- `DELETE /api/skland/accounts/[id]`
 - `POST /api/skland/auth/qr`
 - `POST /api/skland/auth/qr/status`
 - `POST /api/skland/sync`
 - `POST /api/skland/role`
+- `POST /api/skland/status/refresh`
+- `DELETE /api/skland/account-data`
 - `GET/POST /api/auth/*`（Better Auth 原生协议，不使用公共响应信封）
-- `GET/POST /api/admin/users`
-- `GET/PATCH /api/admin/records`
+- `GET /api/admin/users`
+- `PATCH /api/admin/users/[id]`
+- `GET/DELETE /api/admin/users/[id]/sessions`
+- `GET /api/admin/plan-runs`
+- `GET /api/admin/feedback`
+- `PATCH /api/admin/feedback/[id]`
 - `GET/POST/DELETE /api/account/data-consent`
-- `GET/PUT/DELETE /api/workspace`
-- `GET /api/plans`
-- `PATCH/DELETE /api/plans/[id]`
+- `GET/PUT /api/workspace`
+- `GET /api/account/saved-plans`
+- `PATCH/DELETE /api/account/saved-plans/[id]`
+
+`POST /api/plan` 是即时求解，`/api/account/saved-plans*` 是账号排班历史。旧 `/api/plans*`、`DELETE /api/workspace`、`/api/admin/records`、`POST /api/admin/users`、带 `userId` 查询的 `/api/admin/users`，以及旧 `/api/skland/session`、`/api/skland/status`、`/api/skland/data` 仅保留兼容并返回 successor 链接，不应在新代码中使用。撤销云端同意并清除数据统一使用 `DELETE /api/account/data-consent`。
 
 `/api/auth/*` 是统一响应信封的唯一例外。Better Auth 原生 admin 路由全部返回 404；管理员只能使用应用自有的中文用户管理接口。`BETTER_AUTH_ADMIN_USER_IDS` 定义不可由网页降级的初始管理员；只有初始管理员能在该接口中授予或撤销数据库管理员角色，受委派管理员不能继续扩权。
 

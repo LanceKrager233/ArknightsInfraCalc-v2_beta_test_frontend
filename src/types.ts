@@ -1121,10 +1121,19 @@ export type CloudWorkspacePutRequest =
     }
   | { restoreRevisionId: string };
 
+export interface SavedPlanCalculationContext {
+  presetLabel: string;
+  layout: BaseBlueprint;
+  rotationProfile: RotationProfile;
+  fiammettaEnabled: boolean;
+}
+
 export interface SavedPlanData {
   id: string;
   diagnosticId: string;
   title: string;
+  calculationContext: SavedPlanCalculationContext | null;
+  boxMatchesWorkspace: boolean;
   pinned: boolean;
   createdAt: string;
   updatedAt: string;

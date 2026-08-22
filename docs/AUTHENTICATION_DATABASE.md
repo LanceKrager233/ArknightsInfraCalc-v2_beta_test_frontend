@@ -34,7 +34,7 @@ flowchart LR
   K --> C[用户专属加密 HttpOnly Cookie]
   K -->|仅 HMAC 绑定键和授权时间| P
 
-  B -->|当前政策同意后同步| W[/api/workspace 与 /api/plans]
+  B -->|当前政策同意后同步| W[/api/workspace 与 /api/account/saved-plans]
   W -->|白名单数据与 MAA Box 密文| P
 
   M[发布 helper] -->|DATABASE_MIGRATION_URL| G[已提交 Drizzle migration]
@@ -52,7 +52,7 @@ flowchart LR
 | `src/server/auth/index.ts` | Better Auth、邮箱密码、验证码、管理员插件和数据库限流配置 |
 | `src/app/api/auth/[...all]/route.ts` | Better Auth 原生路由、原生 admin 路由封锁和森空岛 Cookie 清理 |
 | `src/components/auth/WebsiteAccountPanel.tsx` | 注册、验证码、登录、找回密码、设备退出与账号注销 UI |
-| `src/app/api/admin/users/route.ts` | 应用自有管理员搜索、封禁、Session 撤销和角色管理 |
+| `src/app/api/admin/users*`、`src/app/api/admin/plan-runs*`、`src/app/api/admin/feedback*` | 应用自有管理员搜索、封禁、Session 撤销、角色管理与业务记录管理 |
 | `src/server/skland/bindings.ts` | HMAC 化森空岛绑定记录的写入、统计与清理 |
 | `src/server/business-records.ts`、`src/server/workspace.ts`、`src/server/plan-cache.ts` | 最小运行/反馈摘要、账号云端工作区和共享排班缓存 |
 | `drizzle/*.sql` | 生产实际执行、可审查且按顺序追加的 SQL migration |
@@ -155,7 +155,7 @@ runtime 连接池只在第一次数据库请求时创建，配置为最大 10 �
 | `/admin/users` | 不可用 | 初始管理员及其通过管理页授予权限的管理员可用 |
 | 云端工作区与排班历史 | 不可用 | 当前政策同意且功能开关开启后可用 |
 
-`/api/auth/*` 保持 Better Auth 原生响应，是统一 `ApiSuccess | ApiFailure` 信封的唯一例外。应用自有的 `/api/admin/*`、`/api/plan`、`/api/skland/*`、`/api/account/data-consent`、`/api/workspace` 和 `/api/plans*` 继续使用统一信封、请求 ID、同源校验、大小限制和限流。Better Auth 的原生 `/api/auth/admin/*` 全部返回 404，避免开放模拟登录、改密码、删除用户或绕过应用权限边界授予角色等能力。网站昵称为 2–20 个字符，只允许中文、英文字母、数字、空格、下划线和短横线，且不能包含连续空格；页面与 Better Auth 数据库钩子执行同一规则。
+`/api/auth/*` 保持 Better Auth 原生响应，是统一 `ApiSuccess | ApiFailure` 信封的唯一例外。应用自有的 `/api/admin/*`、`/api/plan`、`/api/skland/*`、`/api/account/data-consent`、`/api/workspace` 和 `/api/account/saved-plans*` 继续使用统一信封、请求 ID、同源校验、大小限制和限流。Better Auth 的原生 `/api/auth/admin/*` 全部返回 404，避免开放模拟登录、改密码、删除用户或绕过应用权限边界授予角色等能力。网站昵称为 2–20 个字符，只允许中文、英文字母、数字、空格、下划线和短横线，且不能包含连续空格；页面与 Better Auth 数据库钩子执行同一规则。
 
 `BETTER_AUTH_ADMIN_USER_IDS` 中的账号是不可由网页降级的初始管理员。初始管理员可以在中文管理页将已验证、未封禁的账号设为管理员，角色保存于 PostgreSQL 的 `user.role`。受委派管理员可以搜索、封禁用户及查看或撤销 Session，但不能继续授予或撤销管理员权限，也不能封禁初始管理员或撤销其 Session。服务端每次请求都读取当前数据库角色，因此撤销权限后立即生效。
 
@@ -169,7 +169,7 @@ PostgreSQL 保存网站账号、数据库 Session、验证记录、Better Auth �
 - 只有初始管理员能把已验证、未封禁的用户设为管理员或撤销该角色。
 - 受委派管理员可以搜索用户、查看有效 Session、撤销 Session、封禁和解封普通用户，但不能继续扩权，也不能影响初始管理员。
 - 每个管理员请求都重新读取 `user.role`，因此撤销委派角色后立即生效。
-- 原生 `/api/auth/admin/*` 固定返回 404；所有管理操作只能走应用自有 `/api/admin/users`。
+- 原生 `/api/auth/admin/*` 固定返回 404；所有管理操作只能走应用自有资源型 `/api/admin/*` 接口。
 
 管理员用户搜索与 Session 列表各最多返回 100 条；搜索词和 user ID 有长度限制，写操作保留同源校验、16 KiB 请求体上限、请求 ID、统一错误信封和独立限流。
 
@@ -178,13 +178,17 @@ PostgreSQL 保存网站账号、数据库 Session、验证记录、Better Auth �
 | 路由 | 协议与鉴权 |
 | --- | --- |
 | `GET/POST /api/auth/*` | Better Auth 原生协议；唯一不使用项目统一响应信封的路由族 |
-| `GET/POST /api/admin/users` | 项目统一信封；要求实时管理员权限 |
-| `GET/PATCH /api/admin/records` | 项目统一信封；要求实时管理员权限 |
+| `GET /api/admin/users`、`PATCH /api/admin/users/[id]`、`GET/DELETE /api/admin/users/[id]/sessions` | 项目统一信封；要求实时管理员权限；写操作要求同源 |
+| `GET /api/admin/plan-runs`、`GET /api/admin/feedback`、`PATCH /api/admin/feedback/[id]` | 项目统一信封；要求实时管理员权限；写操作要求同源 |
 | `POST /api/plan` | sample 可匿名，MAA/森空岛/旧来源要求网站 Session |
 | `/api/skland/*` | 项目统一信封；要求网站 Session，且只在 development 开放 |
 | `GET/POST/DELETE /api/account/data-consent` | 项目统一信封；要求网站 Session；写操作要求同源；云同步开关关闭时返回功能不可用 |
-| `GET/PUT/DELETE /api/workspace` | 项目统一信封；要求网站 Session 与当前政策同意；写操作要求同源 |
-| `GET /api/plans`、`PATCH/DELETE /api/plans/[id]` | 项目统一信封；要求网站 Session 与当前政策同意；写操作要求同源 |
+| `GET/PUT /api/workspace` | 项目统一信封；要求网站 Session 与当前政策同意；写操作要求同源 |
+| `GET /api/account/saved-plans`、`PATCH/DELETE /api/account/saved-plans/[id]` | 账号排班历史；项目统一信封；要求网站 Session 与当前政策同意；写操作要求同源 |
+
+`POST /api/plan` 只负责即时求解；账号历史使用 `/api/account/saved-plans`，避免以单复数区分完全不同的动作。旧 `/api/plans*` 暂时兼容并返回 `Deprecation: true` 与 successor `Link`。求解成功时服务端从白名单结果确定自动配方，保存带结果 SHA-256 及用户域 Box HMAC 绑定的最小计算上下文（布局、换班方式与菲亚梅塔设置）；workspace 只有在诊断 ID、用户归属、结果摘要、计算上下文和 MAA Box 全部一致时才接受该结果。绑定首次验证后由用户自己的 saved plan 继续自证，因此固定排班不依赖 30 天后会过期的运行摘要；缺少可信上下文的旧记录或 Box 已变化的历史排班不得与当前工作区拼接恢复，任何 HMAC 都不会出现在公共响应中。
+
+旧 `DELETE /api/workspace`、`/api/admin/records`、`POST /api/admin/users`、带 `userId` 查询的 `/api/admin/users`，以及 `/api/skland/session`、`/api/skland/status`、`/api/skland/data` 暂时作为兼容入口并返回 `Deprecation: true` 与 successor `Link`。新客户端应使用资源型路由；撤销云端同意并级联删除统一使用 `DELETE /api/account/data-consent`。
 
 production 构建强制从客户端和公开 API 面移除森空岛能力，不能由 `SKLAND_FEATURE_ENABLED=1` 覆盖。网站账号与数据库能力本身仍可在 production 使用。
 

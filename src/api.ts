@@ -103,7 +103,7 @@ type PlanRequestOptions = {
   includeDebug?: boolean;
 };
 
-export function runPlan(payload: {
+export function computePlan(payload: {
   layout: BaseBlueprint;
   operbox: OperBoxEntry[];
   sourceName: string | null;
@@ -126,8 +126,8 @@ export function getHealth(): Promise<PublicHealthData> {
   return requestData("/api/health");
 }
 
-export function getSklandSession(mode: "full" | "summary" = "full"): Promise<SklandSessionData> {
-  return requestData(sklandApiPath(mode === "summary" ? "/session?mode=summary" : "/session"));
+export function getSklandAccounts(mode: "full" | "summary" = "full"): Promise<SklandSessionData> {
+  return requestData(sklandApiPath(mode === "summary" ? "/accounts?mode=summary" : "/accounts"));
 }
 
 export function startSklandQr(consent: SklandPolicyConsentRequest): Promise<SklandQrStartData> {
@@ -138,8 +138,8 @@ export function startSklandQr(consent: SklandPolicyConsentRequest): Promise<Skla
   });
 }
 
-export function getSklandStatus(): Promise<SklandStatusData> {
-  return requestData(sklandApiPath("/status"));
+export function refreshSklandStatus(): Promise<SklandStatusData> {
+  return requestData(sklandApiPath("/status/refresh"), { method: "POST" });
 }
 
 export function pollSklandQr(scanId: string): Promise<SklandQrStatusData> {
@@ -162,18 +162,12 @@ export function selectSklandRole(accountId: string, uid: string): Promise<Skland
   });
 }
 
-export function logoutSkland(accountId?: string): Promise<SklandSessionData> {
-  return requestData(sklandApiPath("/session"), {
-    method: "DELETE",
-    ...(accountId ? {
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accountId }),
-    } : {}),
-  });
+export function deleteSklandAccount(accountId: string): Promise<SklandSessionData> {
+  return requestData(sklandApiPath(`/accounts/${encodeURIComponent(accountId)}`), { method: "DELETE" });
 }
 
-export function deleteAllSklandData(): Promise<{ deleted: true; runs: number; feedback: number }> {
-  return requestData(sklandApiPath("/data"), { method: "DELETE" });
+export function deleteAllSklandAccountData(): Promise<{ deleted: true; runs: number; feedback: number }> {
+  return requestData(sklandApiPath("/account-data"), { method: "DELETE" });
 }
 
 export function getSampleOperbox(): Promise<SampleOperboxData> {
@@ -218,22 +212,18 @@ export function putCloudWorkspace(payload: CloudWorkspacePutRequest, signal?: Ab
   });
 }
 
-export function deleteCloudWorkspace(): Promise<{ deleted: true }> {
-  return requestData("/api/workspace", { method: "DELETE" });
+export function getAccountSavedPlans(): Promise<SavedPlanListData> {
+  return requestData("/api/account/saved-plans");
 }
 
-export function getSavedPlans(): Promise<SavedPlanListData> {
-  return requestData("/api/plans");
-}
-
-export function updateSavedPlan(id: string, pinned: boolean): Promise<SavedPlanData> {
-  return requestData(`/api/plans/${encodeURIComponent(id)}`, {
+export function updateAccountSavedPlan(id: string, pinned: boolean): Promise<SavedPlanData> {
+  return requestData(`/api/account/saved-plans/${encodeURIComponent(id)}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ pinned }),
   });
 }
 
-export function deleteSavedPlan(id: string): Promise<{ deleted: true }> {
-  return requestData(`/api/plans/${encodeURIComponent(id)}`, { method: "DELETE" });
+export function deleteAccountSavedPlan(id: string): Promise<{ deleted: true }> {
+  return requestData(`/api/account/saved-plans/${encodeURIComponent(id)}`, { method: "DELETE" });
 }

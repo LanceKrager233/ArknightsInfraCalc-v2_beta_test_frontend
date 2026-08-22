@@ -9,7 +9,7 @@ import {
   successResponse,
 } from "@/server/api-contract";
 import { requireWebsiteSession } from "@/server/auth/authorization";
-import { getWorkspace, putWorkspace, revokeAccountDataAndDeleteWorkspace } from "@/server/workspace";
+import { getWorkspace, putWorkspace, revokeAccountDataConsentAndPurgeCloudData } from "@/server/workspace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,9 +46,15 @@ export async function DELETE(request: Request) {
     enforceRateLimit("workspace-delete", requestClientIp(request), 3, 60 * 60_000);
     await assertEmptyBody(request, 1024);
     const session = await requireWebsiteSession(request);
-    await revokeAccountDataAndDeleteWorkspace(session.user.id);
-    return successResponse({ deleted: true as const }, requestId);
+    await revokeAccountDataConsentAndPurgeCloudData(session.user.id);
+    const response = successResponse({ deleted: true as const }, requestId);
+    response.headers.set("Deprecation", "true");
+    response.headers.set("Link", "</api/account/data-consent>; rel=\"successor-version\"");
+    return response;
   } catch (error) {
-    return failureResponse(error, requestId, "/api/workspace", startedAt);
+    const response = failureResponse(error, requestId, "/api/workspace", startedAt);
+    response.headers.set("Deprecation", "true");
+    response.headers.set("Link", "</api/account/data-consent>; rel=\"successor-version\"");
+    return response;
   }
 }

@@ -4,7 +4,8 @@ import { randomUUID } from "node:crypto";
 
 import { and, desc, eq, gte, lte, lt, sql, type SQL } from "drizzle-orm";
 
-import type { AppErrorCode, FeedbackRequest, SolverObservation } from "@/types";
+import { PRIVACY_VERSION, TERMS_VERSION } from "@/legal-policy";
+import type { AppErrorCode, FeedbackRequest, SavedPlanCalculationContext, SolverObservation } from "@/types";
 import { BUSINESS_DATA_TTL_MS, isBusinessDatabaseEnabled } from "./business-config";
 import { getDatabase } from "./db";
 import {
@@ -13,6 +14,7 @@ import {
   operboxSnapshot,
   planCache,
   planRun,
+  policyConsent,
   savedPlan,
   userWorkspace,
   workspaceRevision,
@@ -40,6 +42,10 @@ export type PlanRunSummaryInput = {
   errorCode?: AppErrorCode | null;
   solver?: SolverObservation | null;
   artifact?: PrivateArtifactDescriptor | null;
+  calculationContext?: SavedPlanCalculationContext | null;
+  publicResultSha256?: string | null;
+  operboxContentHmac?: string | null;
+  operboxHmacKeyVersion?: string | null;
   createdAt?: Date;
 };
 
@@ -47,8 +53,18 @@ function expiresAt(createdAt: Date): Date {
   return new Date(createdAt.getTime() + BUSINESS_DATA_TTL_MS);
 }
 
-function planRunValues(input: PlanRunSummaryInput) {
+function hasSavedPlanBinding(input: PlanRunSummaryInput): boolean {
+  return input.status === "success"
+    && Boolean(input.userId)
+    && Boolean(input.calculationContext)
+    && /^[a-f0-9]{64}$/.test(input.publicResultSha256 ?? "")
+    && /^[a-f0-9]{64}$/.test(input.operboxContentHmac ?? "")
+    && Boolean(input.operboxHmacKeyVersion);
+}
+
+function planRunValues(input: PlanRunSummaryInput, allowSavedPlanBinding = true) {
   const createdAt = input.createdAt ?? new Date();
+  const includeSavedPlanBinding = allowSavedPlanBinding && hasSavedPlanBinding(input);
   return {
     diagnosticId: input.diagnosticId,
     userId: input.userId ?? null,
@@ -68,18 +84,46 @@ function planRunValues(input: PlanRunSummaryInput) {
     artifactKey: input.artifact?.key ?? null,
     artifactBytes: input.artifact?.bytes ?? null,
     artifactSha256: input.artifact?.sha256 ?? null,
+    calculationContext: includeSavedPlanBinding ? input.calculationContext ?? null : null,
+    publicResultSha256: includeSavedPlanBinding ? input.publicResultSha256 ?? null : null,
+    operboxContentHmac: includeSavedPlanBinding ? input.operboxContentHmac ?? null : null,
+    operboxHmacKeyVersion: includeSavedPlanBinding ? input.operboxHmacKeyVersion ?? null : null,
     createdAt,
     expiresAt: expiresAt(createdAt),
   };
 }
 
 export async function recordPlanRunStrict(input: PlanRunSummaryInput): Promise<boolean> {
-  const inserted = await getDatabase()
-    .insert(planRun)
-    .values(planRunValues(input))
-    .onConflictDoNothing({ target: planRun.diagnosticId })
-    .returning({ diagnosticId: planRun.diagnosticId });
-  return inserted.length > 0;
+  const database = getDatabase();
+  if (!hasSavedPlanBinding(input) || !input.userId) {
+    const inserted = await database
+      .insert(planRun)
+      .values(planRunValues(input))
+      .onConflictDoNothing({ target: planRun.diagnosticId })
+      .returning({ diagnosticId: planRun.diagnosticId });
+    return inserted.length > 0;
+  }
+  const userId = input.userId;
+
+  return database.transaction(async (tx) => {
+    // Consent revocation takes this same account lock. A solve that finishes after
+    // revocation may retain its minimal run summary, but cannot recreate cloud data.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${userId}))`);
+    const [consent] = await tx.select({ revokedAt: policyConsent.revokedAt })
+      .from(policyConsent)
+      .where(and(
+        eq(policyConsent.userId, userId),
+        eq(policyConsent.termsVersion, TERMS_VERSION),
+        eq(policyConsent.privacyVersion, PRIVACY_VERSION),
+      ))
+      .limit(1);
+    const inserted = await tx
+      .insert(planRun)
+      .values(planRunValues(input, Boolean(consent && !consent.revokedAt)))
+      .onConflictDoNothing({ target: planRun.diagnosticId })
+      .returning({ diagnosticId: planRun.diagnosticId });
+    return inserted.length > 0;
+  });
 }
 
 export async function recordPlanRunBestEffort(input: PlanRunSummaryInput): Promise<boolean> {

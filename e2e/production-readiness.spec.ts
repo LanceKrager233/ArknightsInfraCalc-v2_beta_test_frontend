@@ -902,7 +902,7 @@ async function mockApis(
       requestId,
     }),
   }));
-  await page.route("**/api/skland/session*", async (route) => {
+  await page.route(/\/api\/skland\/accounts(?:[/?]|$)/, async (route) => {
     const mode = new URL(route.request().url()).searchParams.get("mode");
     const isSummary = mode === "summary";
     const isLogout = route.request().method() === "DELETE";
@@ -975,7 +975,7 @@ async function mockApis(
       }),
     });
   });
-  await page.route("**/api/skland/status", (route) => {
+  await page.route("**/api/skland/status/refresh", (route) => {
     const accounts = (options.sklandAccounts
       ?? (options.sklandSnapshot ? [primarySklandAccount] : []));
     return route.fulfill({
@@ -993,7 +993,7 @@ async function mockApis(
       }),
     });
   });
-  await page.route("**/api/skland/data", (route) => route.fulfill({
+  await page.route("**/api/skland/account-data", (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
     headers: { "X-Request-Id": requestId },
@@ -1096,6 +1096,65 @@ async function seedV4Session(
   });
 }
 
+test("legacy plans API identifies the account saved-plans successor", async ({ request }) => {
+  const legacy = await request.get("/api/plans");
+  expect(legacy.headers().deprecation).toBe("true");
+  expect(legacy.headers().link).toContain("</api/account/saved-plans>");
+
+  const canonical = await request.get("/api/account/saved-plans");
+  expect(canonical.headers().deprecation).toBeUndefined();
+});
+
+test("legacy overloaded APIs identify their resource-oriented successors", async ({ request }) => {
+  const cases = [
+    { method: "DELETE", path: "/api/workspace", successor: "/api/account/data-consent" },
+    { method: "GET", path: "/api/admin/users?userId=user_test", successor: "/api/admin/users/user_test/sessions" },
+    { method: "GET", path: "/api/admin/records?kind=runs", successor: "/api/admin/plan-runs" },
+    { method: "GET", path: "/api/skland/session", successor: "/api/skland/accounts" },
+    { method: "GET", path: "/api/skland/status", successor: "/api/skland/status/refresh" },
+    { method: "DELETE", path: "/api/skland/data", successor: "/api/skland/account-data" },
+  ] as const;
+  for (const entry of cases) {
+    const response = await request.fetch(entry.path, { method: entry.method });
+    expect(response.headers().deprecation, `${entry.method} ${entry.path}`).toBe("true");
+    expect(response.headers().link, `${entry.method} ${entry.path}`).toContain(`<${entry.successor}>`);
+  }
+  const legacyAdminAction = await request.post("/api/admin/users", {
+    data: { userId: "user_test", action: "revokeSessions" },
+  });
+  expect(legacyAdminAction.headers().deprecation).toBe("true");
+  expect(legacyAdminAction.headers().link).toContain("</api/admin/users/user_test/sessions>");
+
+  const legacyFeedbackUpdate = await request.patch("/api/admin/records", {
+    data: { feedbackId: "feedback_test", status: "working", note: "test" },
+  });
+  expect(legacyFeedbackUpdate.headers().deprecation).toBe("true");
+  expect(legacyFeedbackUpdate.headers().link).toContain("</api/admin/feedback/feedback_test>");
+
+  const legacySingleLogout = await request.delete("/api/skland/session", {
+    data: { accountId: "account_test" },
+  });
+  expect(legacySingleLogout.headers().deprecation).toBe("true");
+  expect(legacySingleLogout.headers().link).toContain("</api/skland/accounts/account_test>");
+});
+
+test("resource-oriented admin APIs keep authentication and method boundaries", async ({ request }) => {
+  const reads = [
+    "/api/admin/users/user_test/sessions",
+    "/api/admin/plan-runs",
+    "/api/admin/feedback",
+  ];
+  for (const path of reads) expect((await request.get(path)).status(), path).toBe(401);
+
+  expect((await request.patch("/api/admin/users/user_test", {
+    data: { banned: true },
+  })).status()).toBe(401);
+  expect((await request.delete("/api/admin/users/user_test/sessions")).status()).toBe(401);
+  expect((await request.patch("/api/admin/feedback/feedback_test", {
+    data: { status: "working", note: "test" },
+  })).status()).toBe(401);
+});
+
 for (const viewport of [
   { width: 390, height: 844 },
   { width: 768, height: 900 },
@@ -1180,6 +1239,12 @@ for (const viewport of [
     let planPinned = false;
     const revisionId = "33333333-3333-4333-8333-333333333333";
     const timestamp = "2026-08-21T08:00:00.000Z";
+    const savedPlanContext = {
+      presetLabel: "333",
+      layout: { ...layout243, template: "333" },
+      rotationProfile: "abc_12_6_6",
+      fiammettaEnabled: false,
+    };
     const fulfill = (route: Route, data: unknown) => route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -1246,11 +1311,13 @@ for (const viewport of [
       }
       return fulfill(route, { deleted: true });
     });
-    await page.route("**/api/plans", (route) => fulfill(route, {
+    await page.route("**/api/account/saved-plans", (route) => fulfill(route, {
       plans: planDeleted ? [] : [{
         id: "saved-plan-1",
         diagnosticId,
-        title: "243 · 本地 MAA",
+        title: "333 · 本地 MAA",
+        calculationContext: savedPlanContext,
+        boxMatchesWorkspace: true,
         pinned: planPinned,
         createdAt: timestamp,
         updatedAt: timestamp,
@@ -1258,13 +1325,15 @@ for (const viewport of [
         result: planData,
       }],
     }));
-    await page.route("**/api/plans/*", async (route) => {
+    await page.route("**/api/account/saved-plans/*", async (route) => {
       if (route.request().method() === "PATCH") {
         planPinned = Boolean((route.request().postDataJSON() as { pinned?: boolean }).pinned);
         return fulfill(route, {
           id: "saved-plan-1",
           diagnosticId,
-          title: "243 · 本地 MAA",
+          title: "333 · 本地 MAA",
+          calculationContext: savedPlanContext,
+          boxMatchesWorkspace: true,
           pinned: planPinned,
           createdAt: timestamp,
           updatedAt: timestamp,
@@ -1369,10 +1438,17 @@ for (const viewport of [
     await expect.poll(() => restoreRequests).toBe(1);
     await cloudPanel.getByRole("button", { name: "固定排班" }).click();
     await expect.poll(() => planPinned).toBe(true);
-    await cloudPanel.getByRole("button", { name: "删除排班" }).click();
+    await cloudPanel.getByRole("button", { name: /333 · 本地 MAA/ }).click();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.locator("[data-plan-result-summary]")).toContainText("333 基建方案");
+    if (viewport.width < 768) await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+    await page.getByRole("button", { name: "账号管理", exact: true }).click();
+    const restoredCloudPanel = page.locator("[data-cloud-data-panel]");
+    await expect(restoredCloudPanel).toBeVisible();
+    await restoredCloudPanel.getByRole("button", { name: "删除排班" }).click();
     await expect.poll(() => planDeleted).toBe(true);
 
-    const revoke = cloudPanel.getByRole("button", { name: /按住撤销并删除/ });
+    const revoke = restoredCloudPanel.getByRole("button", { name: /按住撤销并删除/ });
     await revoke.scrollIntoViewIfNeeded();
     await expect(revoke).toBeVisible();
     const revokeBox = await revoke.boundingBox();
@@ -1382,7 +1458,7 @@ for (const viewport of [
     await page.waitForTimeout(1900);
     await page.mouse.up();
     await expect.poll(() => revokeRequests).toBe(1);
-    await expect(cloudPanel).toContainText("当前保持纯本地模式，不会上传已有数据。");
+    await expect(restoredCloudPanel).toContainText("当前保持纯本地模式，不会上传已有数据。");
   });
 }
 
@@ -1609,12 +1685,18 @@ test("server auth boundaries reject anonymous planning and every development Skl
     ["GET", "/api/skland/session"],
     ["GET", "/api/skland/session?mode=summary"],
     ["DELETE", "/api/skland/session"],
+    ["GET", "/api/skland/accounts"],
+    ["GET", "/api/skland/accounts?mode=summary"],
+    ["DELETE", "/api/skland/accounts"],
+    ["DELETE", "/api/skland/accounts/account_test"],
     ["POST", "/api/skland/auth/qr"],
     ["POST", "/api/skland/auth/qr/status"],
     ["POST", "/api/skland/sync"],
     ["POST", "/api/skland/role"],
     ["GET", "/api/skland/status"],
+    ["POST", "/api/skland/status/refresh"],
     ["DELETE", "/api/skland/data"],
+    ["DELETE", "/api/skland/account-data"],
   ] as const) {
     const response = await request.fetch(path, { method });
     expect(response.status(), `${method} ${path}`).toBe(401);
@@ -1764,19 +1846,19 @@ test("a failed complete Skland restore keeps the independently restored identity
     sklandSnapshot: authenticatedSklandSnapshot,
     sklandSessionFailure: true,
   });
-  await page.unroute("**/api/skland/status");
+  await page.unroute("**/api/skland/status/refresh");
   let releaseStatus!: () => void;
   const statusBarrier = new Promise<void>((resolve) => {
     releaseStatus = resolve;
   });
-  await page.route("**/api/skland/status", async (route) => {
+  await page.route("**/api/skland/status/refresh", async (route) => {
     await statusBarrier;
     await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
   });
   await seedPreferences(page);
   const fullRestoreFailed = page.waitForResponse((response) => {
     const url = new URL(response.url());
-    return url.pathname === "/api/skland/session"
+    return url.pathname === "/api/skland/accounts"
       && !url.searchParams.has("mode")
       && response.status() === 500;
   });
@@ -4008,7 +4090,7 @@ test("Skland full restore starts while website session confirmation is pending a
   });
   page.on("request", (request) => {
     const url = new URL(request.url());
-    if (url.pathname === "/api/skland/session" && !url.searchParams.has("mode") && request.method() === "GET") {
+    if (url.pathname === "/api/skland/accounts" && !url.searchParams.has("mode") && request.method() === "GET") {
       fullSessionRequests += 1;
     }
   });
@@ -4042,7 +4124,7 @@ test("Skland login loads full status by default and deletion preserves non-Sklan
     });
   });
   page.on("request", (request) => {
-    if (new URL(request.url()).pathname === "/api/skland/status") statusMethods.push(request.method());
+    if (new URL(request.url()).pathname === "/api/skland/status/refresh") statusMethods.push(request.method());
   });
   await mockApis(page, {
     sklandConfigured: true,
@@ -4120,7 +4202,7 @@ test("Skland status center keeps profile and recruitment in overview and support
   let currentStatusSnapshot: typeof authenticatedSklandSnapshot | typeof switchedSnapshot = authenticatedSklandSnapshot;
   page.on("request", (request) => {
     if (/attendance|sign/i.test(request.url())) attendanceRequests += 1;
-    if (new URL(request.url()).pathname === "/api/skland/status") statusRequests += 1;
+    if (new URL(request.url()).pathname === "/api/skland/status/refresh") statusRequests += 1;
   });
   await mockApis(page, {
     sklandConfigured: true,
@@ -4151,7 +4233,7 @@ test("Skland status center keeps profile and recruitment in overview and support
       }),
     });
   });
-  await page.route("**/api/skland/status", (route) => {
+  await page.route("**/api/skland/status/refresh", (route) => {
     return route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -4440,10 +4522,10 @@ test("Skland supports adding, switching, and individually logging out multiple a
     sklandConfigured: true,
     sklandSnapshot: authenticatedSklandSnapshot,
   });
-  await page.route("**/api/skland/session*", async (route) => {
+  await page.route(/\/api\/skland\/accounts(?:[/?]|$)/, async (route) => {
     if (route.request().method() === "DELETE") {
-      const body = route.request().postDataJSON() as { accountId?: string } | null;
-      currentAccounts = currentAccounts.filter((account) => account.accountId !== body?.accountId);
+      const accountId = decodeURIComponent(new URL(route.request().url()).pathname.split("/").pop() ?? "");
+      currentAccounts = currentAccounts.filter((account) => account.accountId !== accountId);
       if (currentAccounts.length) {
         const nextAccount = currentAccounts[0];
         currentAccountId = nextAccount.accountId;
@@ -4543,7 +4625,7 @@ test("Skland supports adding, switching, and individually logging out multiple a
       }),
     });
   });
-  await page.route("**/api/skland/status", (route) => route.fulfill({
+  await page.route("**/api/skland/status/refresh", (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
     headers: { "X-Request-Id": requestId },
@@ -4710,7 +4792,7 @@ test("settings clears local product data without logging out of Skland", async (
   await seedV4Session(page);
   let logoutRequests = 0;
   page.on("request", (request) => {
-    if (request.url().includes("/api/skland/session") && request.method() === "DELETE") {
+    if (request.url().includes("/api/skland/accounts/") && request.method() === "DELETE") {
       logoutRequests += 1;
     }
   });

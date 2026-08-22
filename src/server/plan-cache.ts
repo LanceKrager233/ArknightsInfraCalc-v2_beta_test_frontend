@@ -4,11 +4,12 @@ import { randomUUID } from "node:crypto";
 
 import { and, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
 
+import { PRIVACY_VERSION, TERMS_VERSION } from "@/legal-policy";
 import { normalizePersistedPlanData } from "@/persistence";
 import type { BaseBlueprint, OperBoxEntry, PublicPlanData, SolverObservation } from "@/types";
 import { isPlanCacheEnabled, PLAN_CACHE_TTL_MS, planCacheHmacKey } from "./business-config";
 import { getDatabase } from "./db";
-import { planCache, planCacheReference } from "./db/schema";
+import { planCache, planCacheReference, policyConsent } from "./db/schema";
 import { stablePlanCacheHmac } from "./plan-cache-key";
 
 export type PlanCacheKeyInput = {
@@ -161,13 +162,30 @@ export async function recordPlanCacheReferenceBestEffort(input: {
   userId?: string | null;
 }): Promise<boolean> {
   try {
-    await getDatabase().insert(planCacheReference).values({
-      id: randomUUID(),
-      cacheKeyHmac: input.cacheKeyHmac,
-      diagnosticId: input.diagnosticId,
-      userId: input.userId ?? null,
-    }).onConflictDoNothing({ target: [planCacheReference.cacheKeyHmac, planCacheReference.diagnosticId] });
-    return true;
+    const userId = input.userId ?? null;
+    return await getDatabase().transaction(async (tx) => {
+      if (userId) {
+        // Revocation takes the same account lock and evicts references inside its
+        // transaction, so a late solve cannot recreate a user-owned cache entry.
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${userId}))`);
+        const [consent] = await tx.select({ revokedAt: policyConsent.revokedAt })
+          .from(policyConsent)
+          .where(and(
+            eq(policyConsent.userId, userId),
+            eq(policyConsent.termsVersion, TERMS_VERSION),
+            eq(policyConsent.privacyVersion, PRIVACY_VERSION),
+          ))
+          .limit(1);
+        if (consent?.revokedAt) return false;
+      }
+      await tx.insert(planCacheReference).values({
+        id: randomUUID(),
+        cacheKeyHmac: input.cacheKeyHmac,
+        diagnosticId: input.diagnosticId,
+        userId,
+      }).onConflictDoNothing({ target: [planCacheReference.cacheKeyHmac, planCacheReference.diagnosticId] });
+      return true;
+    });
   } catch {
     console.error(JSON.stringify({ level: "error", event: "plan_cache_reference_write_failed", diagnosticId: input.diagnosticId }));
     return false;

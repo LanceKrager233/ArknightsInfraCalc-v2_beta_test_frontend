@@ -13,7 +13,7 @@ import {
   acceptAccountDataConsent,
   accountDataConsent,
 } from "@/server/data-consent";
-import { revokeAccountDataAndDeleteWorkspace } from "@/server/workspace";
+import { revokeAccountDataConsentAndPurgeCloudData } from "@/server/workspace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,7 +51,7 @@ export async function DELETE(request: Request) {
     enforceRateLimit("data-consent-delete", requestClientIp(request), 3, 60 * 60_000);
     await assertEmptyBody(request, 1024);
     const session = await requireWebsiteSession(request);
-    await revokeAccountDataAndDeleteWorkspace(session.user.id);
+    await revokeAccountDataConsentAndPurgeCloudData(session.user.id);
     return successResponse({ revoked: true as const, deleted: true as const }, requestId);
   } catch (error) {
     return failureResponse(error, requestId, "/api/account/data-consent", startedAt);

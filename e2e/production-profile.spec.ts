@@ -43,12 +43,14 @@ test("production profile removes Skland UI, requests, health data, and API acces
   expect(health.data).not.toHaveProperty("skland");
   expect(health.data.features).toMatchObject({ debugTools: false, rateLimit: true });
 
-  const sessionResponse = await request.get("/api/skland/session");
-  expect(sessionResponse.status()).toBe(404);
-  expect(await sessionResponse.json()).toMatchObject({
-    success: false,
-    error: { code: "AIC-AUTH-2007", retryable: false },
-  });
+  for (const path of ["/api/skland/session", "/api/skland/accounts"]) {
+    const sessionResponse = await request.get(path);
+    expect(sessionResponse.status(), path).toBe(404);
+    expect(await sessionResponse.json()).toMatchObject({
+      success: false,
+      error: { code: "AIC-AUTH-2007", retryable: false },
+    });
+  }
 
   await page.goto("/terms");
   await expect(page.getByText("森空岛", { exact: false })).toHaveCount(0);

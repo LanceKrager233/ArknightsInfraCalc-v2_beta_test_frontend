@@ -21,13 +21,13 @@ import { WORKBENCH_PAGE_PATHS, workbenchHref, workbenchPageFromPathname, type Ap
 import { useWebsiteSessionIdentity } from "@/website-session";
 
 import {
-  deleteAllSklandData,
+  deleteAllSklandAccountData,
+  deleteSklandAccount,
   getHealth,
   getSampleOperbox,
-  getSklandSession,
-  getSklandStatus,
-  logoutSkland,
-  runPlan,
+  getSklandAccounts,
+  refreshSklandStatus,
+  computePlan,
   saveFeedback,
   selectSklandRole,
   toDisplayError,
@@ -36,8 +36,6 @@ import {
   buildBlueprint,
   computePowerBudget,
   FACTORY_RECIPE_OPTIONS,
-  factoryRecipeFor,
-  factoryRecipeFromMaaProduct,
   FactoryRecipe,
   PRESETS,
   TRADE_ORDER_OPTIONS,
@@ -50,6 +48,7 @@ import { copyText, downloadJson } from "./download";
 import { ONBOARDING_STORAGE_KEY, initialSetupStep, shouldAutoOpenSetup, type SetupStep } from "./onboarding";
 import { readOperboxFile, readOperboxText } from "./operbox";
 import { normalizeOperboxEntries } from "./operbox-normalization";
+import { effectiveFiammettaSetting, resolvePlanPresentationLayout } from "./plan-presentation";
 import {
   applyLocalLayoutPatch,
   clearLocalProductData,
@@ -75,6 +74,7 @@ import {
   PublicPlanData,
   PresetDef,
   RotationProfile,
+  SavedPlanData,
   SklandAccountSummary,
   SklandBindingSummary,
   SklandSessionData,
@@ -329,9 +329,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     return () => { cancelled = true; };
   }, [baseRows]);
   const rows = presentedRows?.source === baseRows ? presentedRows.rows : baseRows;
-  const ownsFiammetta = Boolean(operbox?.some((operator) => operator.own && operator.name === "菲亚梅塔"));
-  const fiammettaForcedByRotation = rotationProfile === "fiammetta_8_8_4_4";
-  const effectiveFiammettaEnabled = ownsFiammetta && (fiammettaForcedByRotation || fiammettaEnabled);
+  const effectiveFiammettaEnabled = effectiveFiammettaSetting(operbox, rotationProfile, fiammettaEnabled);
   const setupConfigurationKey = useMemo(() => setupConfigurationFingerprint({
     layout,
     rotationProfile,
@@ -589,12 +587,12 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       sklandFullRestore.current = {
         generation,
         reloadKey: websiteAuthReloadKey,
-        result: getSklandSession()
+        result: getSklandAccounts()
           .then((session) => ({ session }))
           .catch((error: unknown) => ({ error })),
       };
     }
-    void getSklandSession("summary")
+    void getSklandAccounts("summary")
       .then((session) => {
         if (
           cancelled
@@ -643,7 +641,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       restore = {
         generation,
         reloadKey: websiteAuthReloadKey,
-        result: getSklandSession()
+        result: getSklandAccounts()
           .then((session) => ({ session }))
           .catch((error: unknown) => ({ error })),
       };
@@ -728,7 +726,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     let cancelled = false;
     statusLoadingAccount.current = activeSklandAccount.accountId;
     setSklandBusy(true);
-    void getSklandStatus()
+    void refreshSklandStatus()
       .then((status) => {
         if (cancelled) return;
         setSklandAccounts(status.accounts);
@@ -830,7 +828,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       const normalized = toDisplayError(error, "角色切换失败，请稍后重试。");
       setSklandError(normalized);
       try {
-        const current = await getSklandSession();
+        const current = await getSklandAccounts();
         if (!sklandRestoreGuard.current.acceptFull(generation)) return;
         setSklandAccounts(current.accounts);
         setSklandActiveAccountId(current.activeAccountId);
@@ -850,7 +848,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     setSklandBusy(true);
     setSklandError(null);
     try {
-      const session = await logoutSkland(sklandActiveAccountId);
+      const session = await deleteSklandAccount(sklandActiveAccountId);
       if (!sklandRestoreGuard.current.acceptFull(generation)) return;
       applySklandSession(session, false);
     } catch (error) {
@@ -895,7 +893,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     clearIssueState();
 
     try {
-      const response = await runPlan({
+      const response = await computePlan({
         layout: planLayout,
         operbox: normalizeOperboxEntries(operbox),
         sourceName: fileName,
@@ -907,26 +905,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       setActiveShift(0);
       const finalizedResult = response;
       setResult(finalizedResult);
-      if (response.maa.plans[0]) {
-        const plan = response.maa.plans[0];
-        const maaFactoryRooms = plan.rooms?.manufacture;
-        if (maaFactoryRooms) {
-          setLayout((current) => {
-            let next = current;
-            const factoryLayoutRooms = next.rooms.filter((r) => r.kind === "factory");
-            maaFactoryRooms.forEach((maaRoom, index) => {
-              const layoutRoom = factoryLayoutRooms[index];
-              if (!layoutRoom || !maaRoom.product) return;
-              if (factoryRecipeFor(layoutRoom) !== "all") return;
-              const recipe = factoryRecipeFromMaaProduct(maaRoom.product);
-              if (recipe) {
-                next = updateFactoryRecipe(next, layoutRoom.id, recipe);
-              }
-            });
-            return next;
-          });
-        }
-      }
+      setLayout((current) => resolvePlanPresentationLayout(current, response));
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       setApiError(toDisplayError(error, "排班请求失败，请稍后重试。"));
@@ -1302,7 +1281,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     setSklandBusy(true);
     setSklandError(null);
     try {
-      await deleteAllSklandData();
+      await deleteAllSklandAccountData();
       if (!sklandRestoreGuard.current.acceptFull(generation)) return;
       const clearsBox = boxSource === "skland";
       const clearsLayout = layoutSource === "skland";
@@ -1491,8 +1470,19 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       ...(CLIENT_ACCOUNT_CLOUD_SYNC_ENABLED ? {
         cloudWorkspace: accountCloudWorkspace.cloudWorkspaceData,
         onRestoreCloudWorkspace: accountCloudWorkspace.applyWorkspace,
-        onRestoreSavedPlan: (saved: PublicPlanData) => {
-          setResult(saved);
+        onRestoreSavedPlan: (saved: SavedPlanData) => {
+          const context = saved.calculationContext;
+          if (!context) return;
+          const restoredPreset = resolvePreset(PRESETS.find((item) => item.label === context.presetLabel));
+          const restoredLayout = structuredClone(context.layout);
+          setPreset(restoredPreset);
+          setLayout(restoredLayout);
+          setLayoutDirty(JSON.stringify(restoredLayout) !== JSON.stringify(buildBlueprint(restoredPreset)));
+          setLayoutSource("local");
+          setLocalLayoutBackup(null);
+          setRotationProfile(context.rotationProfile);
+          setFiammettaEnabled(context.fiammettaEnabled);
+          setResult(saved.result);
           setActiveShift(0);
           router.push(workbenchHref("calculator", betaRequested));
         },

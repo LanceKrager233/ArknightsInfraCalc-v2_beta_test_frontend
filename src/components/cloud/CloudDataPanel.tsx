@@ -4,12 +4,12 @@ import { Cloud } from "lucide-react";
 import { useCallback, useEffect, useId, useState } from "react";
 
 import {
-  deleteSavedPlan,
+  deleteAccountSavedPlan,
   getAccountDataConsent,
-  getSavedPlans,
+  getAccountSavedPlans,
   putCloudWorkspace,
   revokeAccountDataConsent,
-  updateSavedPlan,
+  updateAccountSavedPlan,
 } from "@/api";
 import { cloudSyncMetadataKey } from "@/cloud-sync";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { HoldToConfirm } from "@/components/ui/hold-to-confirm";
 import { InfraTechnicalCard, InfraTechnicalHeading } from "@/components/InfraTechnicalCard";
 import { PRIVACY_VERSION, TERMS_VERSION } from "@/legal-policy";
-import type { AccountDataConsentData, CloudWorkspaceData, PublicPlanData, SavedPlanData } from "@/types";
+import type { AccountDataConsentData, CloudWorkspaceData, SavedPlanData } from "@/types";
 
 const CLOUD_PRIMARY_BUTTON_CLASS = "w-full bg-white text-[#272a2b] hover:bg-white/90 sm:w-auto";
 const CLOUD_INLINE_BUTTON_CLASS = "min-w-0 bg-white text-[#272a2b] hover:bg-white/90 max-sm:min-w-0 sm:min-w-32";
@@ -41,7 +41,7 @@ export function CloudDataPanel({
   userId: string;
   workspace?: CloudWorkspaceData | null;
   onRestoreWorkspace?: (workspace: CloudWorkspaceData) => void;
-  onRestorePlan?: (plan: PublicPlanData) => void;
+  onRestorePlan?: (plan: SavedPlanData) => void;
   onCloudDataChanged?: () => void;
 }) {
   const [consent, setConsent] = useState<AccountDataConsentData | null>(null);
@@ -53,7 +53,7 @@ export function CloudDataPanel({
   const reload = useCallback(async () => {
     const next = await getAccountDataConsent();
     setConsent(next);
-    setPlans(next.current ? (await getSavedPlans()).plans : []);
+    setPlans(next.current ? (await getAccountSavedPlans()).plans : []);
   }, []);
 
   useEffect(() => {
@@ -127,16 +127,27 @@ export function CloudDataPanel({
               </div>
               {plans.length ? plans.map((plan) => (
                 <div key={plan.id} className="grid gap-3 border border-white/16 bg-black/12 px-4 py-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-                  <button type="button" className="min-h-11 min-w-0 text-left" onClick={() => onRestorePlan?.(plan.result)}>
+                  <button
+                    type="button"
+                    className="min-h-11 min-w-0 text-left disabled:cursor-not-allowed disabled:opacity-55"
+                    disabled={!plan.calculationContext || !plan.boxMatchesWorkspace}
+                    onClick={() => onRestorePlan?.(plan)}
+                  >
                     <span className="block truncate text-sm font-medium text-white">{plan.title}</span>
-                    <span className="block text-xs leading-5 text-white/64">{formatDate(plan.updatedAt)} · 点击恢复此排班</span>
+                    <span className="block text-xs leading-5 text-white/64">
+                      {formatDate(plan.updatedAt)} · {!plan.calculationContext
+                        ? "旧记录缺少计算配置，无法安全恢复"
+                        : plan.boxMatchesWorkspace
+                          ? "点击恢复排班及其计算配置"
+                          : "当前 MAA Box 与该排班不一致，无法安全恢复"}
+                    </span>
                   </button>
                   <div className="grid grid-cols-2 gap-2">
                     <Button type="button" size="dialog" className={CLOUD_INLINE_BUTTON_CLASS} disabled={busy !== null} onClick={() => void run(`pin:${plan.id}`, async () => {
-                      await updateSavedPlan(plan.id, !plan.pinned); await reload();
+                      await updateAccountSavedPlan(plan.id, !plan.pinned); await reload();
                     })}>{plan.pinned ? "取消固定排班" : "固定排班"}</Button>
                     <Button type="button" size="dialog" variant="destructive" className="min-w-0 max-sm:min-w-0 sm:min-w-32" disabled={busy !== null} onClick={() => void run(`delete:${plan.id}`, async () => {
-                      await deleteSavedPlan(plan.id); await reload();
+                      await deleteAccountSavedPlan(plan.id); await reload();
                     })}>删除排班</Button>
                   </div>
                 </div>
