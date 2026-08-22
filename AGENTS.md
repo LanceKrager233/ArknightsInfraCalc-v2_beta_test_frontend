@@ -90,24 +90,31 @@ UI 控件优先组合 `src/components/ui/*` 中的现有 primitive。不要另�
 - `GET /api/sample-operbox`
 - `POST /api/plan`
 - `POST /api/feedback`
-- `GET`、`DELETE /api/skland/session`
+- `GET`、`DELETE /api/skland/accounts`
+- `DELETE /api/skland/accounts/[id]`
 - `POST /api/skland/auth/qr`
 - `POST /api/skland/auth/qr/status`
 - `POST /api/skland/sync`
 - `POST /api/skland/role`
-- `GET /api/skland/status`
-- `DELETE /api/skland/data`
+- `POST /api/skland/status/refresh`
+- `DELETE /api/skland/account-data`
 - `GET`、`POST /api/auth/*`（Better Auth 原生协议，不使用公共响应信封）
-- `GET`、`POST /api/admin/users`
-- `GET`、`PATCH /api/admin/records`
+- `GET /api/admin/users`
+- `PATCH /api/admin/users/[id]`
+- `GET`、`DELETE /api/admin/users/[id]/sessions`
+- `GET /api/admin/plan-runs`
+- `GET /api/admin/feedback`
+- `PATCH /api/admin/feedback/[id]`
 - `GET`、`POST`、`DELETE /api/account/data-consent`
-- `GET`、`PUT`、`DELETE /api/workspace`
-- `GET /api/plans`
-- `PATCH`、`DELETE /api/plans/[id]`
+- `GET`、`PUT /api/workspace`
+- `GET /api/account/saved-plans`
+- `PATCH`、`DELETE /api/account/saved-plans/[id]`
+
+旧 `/api/plans`、`/api/plans/[id]` 与 `DELETE /api/workspace` 仅作为带 `Deprecation` 响应头的兼容入口；新客户端不得继续调用。
 
 所有公共响应使用 `ApiSuccess<T> | ApiFailure` 信封并返回 `X-Request-Id`。健康检查的公开就绪字段是 `data.plannerReady`，不是内部 `HealthApiResponse` 的 `ok` / `cliReady`。
 `/api/auth/*` 是唯一明确例外，保持 Better Auth 原生协议；应用自有管理接口仍使用统一信封。
-`BETTER_AUTH_ADMIN_USER_IDS` 中的初始管理员不可由网页降级；只有初始管理员可通过 `/api/admin/users` 授予或撤销数据库管理员角色。受委派管理员不得继续扩权，也不得封禁初始管理员或撤销其 Session；所有管理接口必须按当前数据库角色实时鉴权。
+`BETTER_AUTH_ADMIN_USER_IDS` 中的初始管理员不可由网页降级；只有初始管理员可通过 `/api/admin/users/[id]` 授予或撤销数据库管理员角色。受委派管理员不得继续扩权，也不得封禁初始管理员或撤销其 Session；所有管理接口必须按当前数据库角色实时鉴权。旧 `/api/admin/records`、`POST /api/admin/users`、带 `userId` 查询的 `/api/admin/users`，以及旧 `/api/skland/session`、`/api/skland/status`、`/api/skland/data` 仅为兼容入口，必须返回 `Deprecation: true` 与 successor `Link`，新代码不得使用。
 
 ### 必须保持的安全与契约边界
 

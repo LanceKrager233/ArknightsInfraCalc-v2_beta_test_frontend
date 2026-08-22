@@ -40,7 +40,7 @@ import { authClient } from "@/lib/auth-client";
 import { PRIVACY_VERSION, TERMS_VERSION } from "@/legal-policy";
 import { clearLocalProductData } from "@/persistence";
 import { CloudDataPanel } from "@/components/cloud/CloudDataPanel";
-import type { CloudWorkspaceData, PublicPlanData } from "@/types";
+import type { CloudWorkspaceData, SavedPlanData } from "@/types";
 
 type AuthMode = "signin" | "signup" | "forgot";
 type AuthStep = "details" | "verify" | "complete";
@@ -58,7 +58,7 @@ interface WebsiteAccountPanelProps {
   onSessionChanged?: (authenticated: boolean) => void | Promise<void>;
   cloudWorkspace?: CloudWorkspaceData | null;
   onRestoreCloudWorkspace?: (workspace: CloudWorkspaceData) => void;
-  onRestoreSavedPlan?: (plan: PublicPlanData) => void;
+  onRestoreSavedPlan?: (plan: SavedPlanData) => void;
   onCloudDataChanged?: () => void;
 }
 

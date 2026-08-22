@@ -1,6 +1,7 @@
 import { describePlanArtifact, getPlanCacheSolverIdentity, runPlan } from "@/server/infra";
 import { validateLayoutJson } from "@/layout-validation";
 import { assertOperbox } from "@/operbox";
+import { normalizePersistedPlanData } from "@/persistence";
 import {
   acquirePlanSlot,
   assertFiammettaEnableCompatible,
@@ -17,12 +18,17 @@ import {
 } from "@/server/api-contract";
 import { safeDisplayName, toPublicPlanData } from "@/server/public-plan";
 import { isRotationProfile } from "@/rotation-settings";
-import type { BaseBlueprint, OperBoxEntry, RotationProfile } from "@/types";
+import type { BaseBlueprint, OperBoxEntry, PublicPlanData, RotationProfile, SavedPlanCalculationContext } from "@/types";
 import { activeSklandAccount, readSklandAccountStore } from "@/server/skland/http";
 import { sklandDataOwnerTag } from "@/server/skland/session";
 import { requireWebsiteSession } from "@/server/auth/authorization";
 import { planAccessMode } from "@/server/plan-access";
 import { recordPlanRunBestEffort } from "@/server/business-records";
+import { isAccountCloudSyncEnabled, workspaceMasterKeys } from "@/server/business-config";
+import { accountDataConsent } from "@/server/data-consent";
+import { publicPlanSha256, resolveSavedPlanCalculationContext } from "@/server/plan-result-binding";
+import { validateSavedPlanCalculationContext } from "@/server/workspace-payload";
+import { planOperboxContentHmac } from "@/server/workspace-crypto";
 import type { AppErrorCode, PlanApiResponse } from "@/types";
 import {
   completePlanCache,
@@ -51,9 +57,22 @@ export async function POST(request: Request) {
     operatorCount: number;
     rotation: RotationProfile;
     fiammettaEnable: boolean;
+    solverContext: SavedPlanCalculationContext;
+    operboxContentHmac: string | null;
+    operboxHmacKeyVersion: string | null;
   } | undefined;
-  const recordRun = async (status: "success" | "failed", errorCode: AppErrorCode | null): Promise<boolean> => {
+  const recordRun = async (
+    status: "success" | "failed",
+    errorCode: AppErrorCode | null,
+    publicResult?: PublicPlanData,
+  ): Promise<boolean> => {
     if (!runResult || !recordContext) return false;
+    const persistedResult = publicResult
+      ? normalizePersistedPlanData(publicResult, recordContext.rotation)
+      : null;
+    const calculationContext = persistedResult && recordContext.operboxContentHmac && recordContext.operboxHmacKeyVersion
+      ? resolveSavedPlanCalculationContext(recordContext.solverContext, persistedResult)
+      : null;
     return recordPlanRunBestEffort({
       diagnosticId: runResult.runId ?? requestId,
       ...recordContext,
@@ -62,6 +81,10 @@ export async function POST(request: Request) {
       errorCode,
       solver: runResult.solver,
       artifact: await describePlanArtifact(runResult),
+      calculationContext,
+      publicResultSha256: calculationContext && persistedResult ? publicPlanSha256(persistedResult) : null,
+      operboxContentHmac: calculationContext ? recordContext.operboxContentHmac : null,
+      operboxHmacKeyVersion: calculationContext ? recordContext.operboxHmacKeyVersion : null,
       createdAt: runResult.startedAt ? new Date(runResult.startedAt) : new Date(),
     });
   };
@@ -142,15 +165,41 @@ export async function POST(request: Request) {
       const account = activeSklandAccount(await readSklandAccountStore());
       if (account) dataOwnerTag = sklandDataOwnerTag(account.session.userId);
     }
+    const calculationContext = validateSavedPlanCalculationContext({
+      presetLabel: body.layout.template,
+      layout: body.layout,
+      rotationProfile: rotation,
+      fiammettaEnabled: fiammettaEnable,
+    });
+    if (!calculationContext) throw new PublicApiError("AIC-LAYOUT-1201");
+    const sourceType = body.boxSource === "skland" ? "skland" : body.boxSource === "sample" ? "sample" : "maa";
+    let operboxContentHmac: string | null = null;
+    let operboxHmacKeyVersion: string | null = null;
+    if (websiteUserId && sourceType === "maa" && isAccountCloudSyncEnabled()) {
+      try {
+        if ((await accountDataConsent(websiteUserId)).current) {
+          const { activeVersion, keys } = workspaceMasterKeys();
+          const activeKey = keys.get(activeVersion);
+          if (!activeKey) throw new Error("Active workspace key is unavailable.");
+          operboxContentHmac = planOperboxContentHmac({ userId: websiteUserId, operbox, masterKey: activeKey });
+          operboxHmacKeyVersion = activeVersion;
+        }
+      } catch {
+        console.error(JSON.stringify({ level: "error", event: "plan_operbox_binding_skipped", requestId }));
+      }
+    }
     recordContext = {
       userId: websiteUserId,
       dataOwnerTag,
-      sourceType: body.boxSource === "skland" ? "skland" : body.boxSource === "sample" ? "sample" : "maa",
+      sourceType,
       layoutTemplate: body.layout.template,
       roomCount: body.layout.rooms.length,
       operatorCount: operbox.length,
       rotation,
       fiammettaEnable,
+      solverContext: calculationContext,
+      operboxContentHmac,
+      operboxHmacKeyVersion,
     };
     if (!includeDebug) {
       const cacheSolver = await getPlanCacheSolverIdentity();
@@ -165,6 +214,11 @@ export async function POST(request: Request) {
           solver: cacheSolver,
         });
         if (cache.kind === "hit") {
+          const persistedResult = normalizePersistedPlanData(cache.result, rotation);
+          if (!persistedResult) throw new PublicApiError("AIC-SYS-5000");
+          const savedPlanContext = recordContext.operboxContentHmac && recordContext.operboxHmacKeyVersion
+            ? resolveSavedPlanCalculationContext(recordContext.solverContext, persistedResult)
+            : null;
           const runStored = await recordPlanRunBestEffort({
             diagnosticId: cache.result.diagnosticId,
             ...recordContext,
@@ -172,6 +226,10 @@ export async function POST(request: Request) {
             durationMs: cache.result.durationMs,
             solver: cacheSolver,
             artifact: null,
+            calculationContext: savedPlanContext,
+            publicResultSha256: savedPlanContext ? publicPlanSha256(persistedResult) : null,
+            operboxContentHmac: savedPlanContext ? recordContext.operboxContentHmac : null,
+            operboxHmacKeyVersion: savedPlanContext ? recordContext.operboxHmacKeyVersion : null,
           });
           const referenceStored = runStored && await recordPlanCacheReferenceBestEffort({
             cacheKeyHmac: cache.keyHmac,
@@ -191,7 +249,7 @@ export async function POST(request: Request) {
       requestId,
       { includeDebug }
     );
-    const runStored = await recordRun("success", null);
+    const runStored = await recordRun("success", null, publicResult);
     if (cacheLease) {
       const activeLease = cacheLease;
       if (!runStored) {
@@ -199,13 +257,19 @@ export async function POST(request: Request) {
         cacheLease = undefined;
       } else {
         try {
-          await completePlanCache(activeLease, publicResult);
           const referenceStored = await recordPlanCacheReferenceBestEffort({
             cacheKeyHmac: activeLease.keyHmac,
             diagnosticId: publicResult.diagnosticId,
             userId: websiteUserId,
           });
-          if (!referenceStored) await evictPlanCacheKeys([activeLease.keyHmac]);
+          if (!referenceStored) {
+            await releasePlanCacheLease(activeLease);
+          } else {
+            // Publish only after the user reference is durable. Revocation takes
+            // the same account lock and may delete this lease before the update,
+            // in which case completePlanCache safely becomes a no-op.
+            await completePlanCache(activeLease, publicResult);
+          }
           cacheLease = undefined;
         } catch {
           await releasePlanCacheLease(activeLease);

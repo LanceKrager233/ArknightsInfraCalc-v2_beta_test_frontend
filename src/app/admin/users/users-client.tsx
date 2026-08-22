@@ -44,11 +44,16 @@ export function AdminUsers() {
     setBusyKey(`${userId}:${action}`);
     setMessage(null);
     try {
-      const response = await fetch("/api/admin/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, action }),
-      });
+      const userPath = `/api/admin/users/${encodeURIComponent(userId)}`;
+      const response = action === "revokeSessions"
+        ? await fetch(`${userPath}/sessions`, { method: "DELETE" })
+        : await fetch(userPath, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(action === "ban" || action === "unban"
+              ? { banned: action === "ban" }
+              : { isAdmin: action === "grantAdmin" }),
+          });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error?.message ?? "操作失败");
       setMessage(action === "grantAdmin" ? "已设为管理员。" : action === "revokeAdmin" ? "已取消管理员权限。" : "操作已完成。");
@@ -73,7 +78,7 @@ export function AdminUsers() {
     setBusyKey(`${userId}:sessions`);
     setMessage(null);
     try {
-      const response = await fetch(`/api/admin/users?userId=${encodeURIComponent(userId)}`);
+      const response = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/sessions`);
       const body = await response.json();
       if (!response.ok) throw new Error(body.error?.message ?? "无法读取 Session");
       setSessionsByUser((current) => ({ ...current, [userId]: body.data.sessions }));

@@ -79,7 +79,7 @@ export function useAccountCloudWorkspace(value: AccountCloudWorkspaceInput | nul
       activeShift: input.activeShift,
     },
     operbox: input.boxSource === "maa" ? input.operbox : null,
-    result: input.result,
+    result: input.boxSource === "maa" ? input.result : null,
   }), [input.activeShift, input.boxSource, input.fiammettaEnabled, input.fileName, input.layout, input.layoutDirty, input.layoutSource, input.localLayoutBackup, input.operbox, input.preset.label, input.result, input.rotationProfile]);
 
   const applyWorkspace = useCallback((cloud: CloudWorkspaceData) => {

@@ -2,7 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 
 import { PRIVACY_VERSION, TERMS_VERSION } from "@/legal-policy";
 import type { AccountDataConsentData, AccountDataConsentRequest } from "@/types";
@@ -57,16 +57,21 @@ export async function acceptAccountDataConsent(userId: string, value: unknown): 
   assertCloudAvailable();
   if (!isCurrentAccountDataConsent(value)) throw new PublicApiError("AIC-DATA-8003");
   const now = new Date();
-  await getDatabase().insert(policyConsent).values({
-    id: randomUUID(),
-    userId,
-    termsVersion: TERMS_VERSION,
-    privacyVersion: PRIVACY_VERSION,
-    acceptedAt: now,
-    revokedAt: null,
-  }).onConflictDoUpdate({
-    target: [policyConsent.userId, policyConsent.termsVersion, policyConsent.privacyVersion],
-    set: { acceptedAt: now, revokedAt: null },
+  await getDatabase().transaction(async (tx) => {
+    // Serialize explicit acceptance with revocation and workspace writes so the
+    // last completed account action has an unambiguous policy state.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${userId}))`);
+    await tx.insert(policyConsent).values({
+      id: randomUUID(),
+      userId,
+      termsVersion: TERMS_VERSION,
+      privacyVersion: PRIVACY_VERSION,
+      acceptedAt: now,
+      revokedAt: null,
+    }).onConflictDoUpdate({
+      target: [policyConsent.userId, policyConsent.termsVersion, policyConsent.privacyVersion],
+      set: { acceptedAt: now, revokedAt: null },
+    });
   });
   return accountDataConsent(userId);
 }

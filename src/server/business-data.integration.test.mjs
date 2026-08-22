@@ -18,8 +18,15 @@ test("app schema stores only encrypted Box data and cascades account-owned busin
   const planId = randomUUID();
   const feedbackId = randomUUID();
   const cacheKey = "c".repeat(64);
+  const operboxContentHmac = "f".repeat(64);
   const key = Buffer.alloc(32, 9);
   const plaintext = '[{"id":"char_secret","name":"测试干员"}]';
+  const calculationContext = {
+    presetLabel: "243",
+    layout: { template: "243", drone_cap: 235, scenario: {}, rooms: [] },
+    rotationProfile: "abc_12_6_6",
+    fiammettaEnabled: false,
+  };
   const envelope = encryptOperboxSnapshot({ userId, snapshotId, plaintext, activeVersion: "v1", masterKey: key });
   try {
     await pool.query('INSERT INTO "user" (id,name,email,email_verified,created_at,updated_at) VALUES ($1,$2,$3,true,now(),now())', [userId, "Business Test", `${userId}@example.test`]);
@@ -34,10 +41,24 @@ test("app schema stores only encrypted Box data and cascades account-owned busin
     assert.equal(decryptOperboxSnapshot({ userId, snapshotId, envelope, keys: new Map([["v1", key]]) }), plaintext);
 
     await pool.query(`INSERT INTO app.policy_consent (id,user_id,terms_version,privacy_version,accepted_at) VALUES ($1,$2,'terms','privacy',now())`, [randomUUID(), userId]);
-    await pool.query(`INSERT INTO app.saved_plan (id,user_id,diagnostic_id,title,public_result,pinned,expires_at) VALUES ($1,$2,$3,'test','{}',false,now()+interval '30 days')`, [planId, userId, randomUUID()]);
+    await pool.query(`INSERT INTO app.saved_plan (id,user_id,diagnostic_id,title,public_result,calculation_context,operbox_content_hmac,operbox_hmac_key_version,pinned,expires_at) VALUES ($1,$2,$3,'test','{}',$4,$5,'v1',false,now()+interval '30 days')`, [planId, userId, randomUUID(), calculationContext, operboxContentHmac]);
+    const storedPlan = await pool.query(`SELECT calculation_context,operbox_content_hmac,operbox_hmac_key_version FROM app.saved_plan WHERE id=$1`, [planId]);
+    assert.deepEqual(storedPlan.rows[0], {
+      calculation_context: calculationContext,
+      operbox_content_hmac: operboxContentHmac,
+      operbox_hmac_key_version: "v1",
+    });
     await pool.query(`INSERT INTO app.user_workspace (user_id,current_revision,state,operbox_snapshot_id,current_saved_plan_id) VALUES ($1,1,'{}',$2,$3)`, [userId, snapshotId, planId]);
     const diagnosticId = randomUUID();
-    await pool.query(`INSERT INTO app.plan_run (diagnostic_id,user_id,source_type,status,layout_template,room_count,operator_count,rotation,fiammetta_enable,expires_at) VALUES ($1,$2,'maa','success','243',1,1,'abc',false,now()+interval '30 days')`, [diagnosticId, userId]);
+    const publicResultSha256 = "b".repeat(64);
+    await pool.query(`INSERT INTO app.plan_run (diagnostic_id,user_id,source_type,status,layout_template,room_count,operator_count,rotation,fiammetta_enable,calculation_context,public_result_sha256,operbox_content_hmac,operbox_hmac_key_version,expires_at) VALUES ($1,$2,'maa','success','243',1,1,'abc',false,$3,$4,$5,'v1',now()+interval '30 days')`, [diagnosticId, userId, calculationContext, publicResultSha256, operboxContentHmac]);
+    const storedRun = await pool.query(`SELECT calculation_context,public_result_sha256,operbox_content_hmac,operbox_hmac_key_version FROM app.plan_run WHERE diagnostic_id=$1`, [diagnosticId]);
+    assert.deepEqual(storedRun.rows[0], {
+      calculation_context: calculationContext,
+      public_result_sha256: publicResultSha256,
+      operbox_content_hmac: operboxContentHmac,
+      operbox_hmac_key_version: "v1",
+    });
     await pool.query(`INSERT INTO app.feedback (id,diagnostic_id,plan_run_diagnostic_id,user_id,kind,note,consent_at,expires_at) VALUES ($1,$2,$2,$3,'performance_issue','test',now(),now()+interval '30 days')`, [feedbackId, diagnosticId, userId]);
     await pool.query(`INSERT INTO app.plan_cache (key_hmac,solver_executable_sha256,protocol_version,plan_schema_version,expires_at) VALUES ($1,$2,1,3,now()+interval '1 day')`, [cacheKey, "a".repeat(64)]);
     await pool.query(`INSERT INTO app.plan_cache_reference (id,cache_key_hmac,diagnostic_id,user_id) VALUES ($1,$2,$3,$4)`, [randomUUID(), cacheKey, diagnosticId, userId]);

@@ -12,6 +12,7 @@ import type {
   CloudWorkspaceState,
   OperBoxEntry,
   PublicPlanData,
+  SavedPlanCalculationContext,
   SavedPlanData,
   SavedPlanListData,
 } from "@/types";
@@ -26,6 +27,9 @@ import { requireAccountDataConsent } from "./data-consent";
 import { getDatabase } from "./db";
 import {
   operboxSnapshot,
+  planCache,
+  planCacheReference,
+  planRun,
   policyConsent,
   savedPlan,
   userWorkspace,
@@ -34,14 +38,18 @@ import {
 import {
   decryptOperboxSnapshot,
   encryptOperboxSnapshot,
+  planOperboxContentHmac,
+  verifyPlanOperboxContentHmac,
   type OperboxEnvelope,
 } from "./workspace-crypto";
-import { evictUserPlanCaches } from "./plan-cache";
 import {
+  validateSavedPlanCalculationContext,
   validateWorkspacePutRequest,
   validateWorkspaceState,
+  workspaceMatchesSavedPlanContext,
   type ValidatedWorkspace,
 } from "./workspace-payload";
+import { publicPlanSha256 } from "./plan-result-binding";
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -126,39 +134,144 @@ async function storeSnapshot(userId: string, operbox: OperBoxEntry[] | null, now
   return existing.id;
 }
 
-function planTitle(state: CloudWorkspaceState): string {
-  return `${state.presetLabel || state.layout.template} · ${state.sourceName || "排班"}`.slice(0, 120);
+function planTitle(context: SavedPlanCalculationContext, sourceName: string | null): string {
+  return `${context.presetLabel || context.layout.template} · ${sourceName || "排班"}`.slice(0, 120);
 }
 
-async function storeSavedPlan(userId: string, state: CloudWorkspaceState, result: PublicPlanData | null, now: Date): Promise<string | null> {
+function invalidSavedPlanBinding(message: string): never {
+  throw new PublicApiError("AIC-DATA-8003", {
+    fieldErrors: [{ path: "result", code: "plan_context_mismatch", message }],
+  });
+}
+
+type SavedPlanOperboxBinding = { contentHmac: string; keyVersion: string };
+
+function activeOperboxBinding(
+  userId: string,
+  operbox: OperBoxEntry[] | null,
+  contentHmac: unknown,
+  keyVersion: unknown,
+): SavedPlanOperboxBinding | null {
+  if (!operbox || typeof keyVersion !== "string") return null;
+  const { activeVersion, keys } = workspaceMasterKeys();
+  const sourceKey = keys.get(keyVersion);
+  if (!sourceKey || !verifyPlanOperboxContentHmac({
+    userId,
+    operbox,
+    masterKey: sourceKey,
+    expected: contentHmac,
+  })) return null;
+  const activeKey = keys.get(activeVersion);
+  if (!activeKey) return null;
+  return {
+    contentHmac: planOperboxContentHmac({ userId, operbox, masterKey: activeKey }),
+    keyVersion: activeVersion,
+  };
+}
+
+async function storeSavedPlan(
+  userId: string,
+  state: CloudWorkspaceState,
+  operbox: OperBoxEntry[] | null,
+  result: PublicPlanData | null,
+  now: Date,
+): Promise<string | null> {
   if (!result) return null;
-  const normalized = normalizePersistedPlanData(result, state.rotationProfile);
-  if (!normalized) throw new PublicApiError("AIC-DATA-8003");
+  const candidate = normalizePersistedPlanData(result, state.rotationProfile);
+  if (!candidate) throw new PublicApiError("AIC-DATA-8003");
+  const [ownedPlan] = await getDatabase().select({
+    id: savedPlan.id,
+    pinned: savedPlan.pinned,
+    publicResult: savedPlan.publicResult,
+    calculationContext: savedPlan.calculationContext,
+    operboxContentHmac: savedPlan.operboxContentHmac,
+    operboxHmacKeyVersion: savedPlan.operboxHmacKeyVersion,
+  }).from(savedPlan).where(and(
+    eq(savedPlan.userId, userId),
+    eq(savedPlan.diagnosticId, candidate.diagnosticId),
+  )).limit(1);
+  if (ownedPlan) {
+    const calculationContext = validateSavedPlanCalculationContext(ownedPlan.calculationContext);
+    const storedResult = calculationContext
+      ? normalizePersistedPlanData(ownedPlan.publicResult, calculationContext.rotationProfile)
+      : null;
+    const normalized = calculationContext
+      ? normalizePersistedPlanData(result, calculationContext.rotationProfile)
+      : null;
+    const activeBinding = activeOperboxBinding(
+      userId,
+      operbox,
+      ownedPlan.operboxContentHmac,
+      ownedPlan.operboxHmacKeyVersion,
+    );
+    if (
+      !calculationContext
+      || !storedResult
+      || !normalized
+      || publicPlanSha256(normalized) !== publicPlanSha256(storedResult)
+      || !activeBinding
+    ) {
+      return invalidSavedPlanBinding("排班结果与已保存的计算记录不一致，请重新求解后再同步。");
+    }
+    if (!workspaceMatchesSavedPlanContext(state, calculationContext, operbox)) {
+      return invalidSavedPlanBinding("当前工作区配置与排班结果不一致，请重新求解后再同步。");
+    }
+    await getDatabase().update(savedPlan).set({
+      title: planTitle(calculationContext, state.sourceName),
+      operboxContentHmac: activeBinding.contentHmac,
+      operboxHmacKeyVersion: activeBinding.keyVersion,
+      updatedAt: now,
+      expiresAt: ownedPlan.pinned ? null : new Date(now.getTime() + BUSINESS_DATA_TTL_MS),
+    }).where(eq(savedPlan.id, ownedPlan.id));
+    return ownedPlan.id;
+  }
+  const [binding] = await getDatabase().select({
+    calculationContext: planRun.calculationContext,
+    publicResultSha256: planRun.publicResultSha256,
+    operboxContentHmac: planRun.operboxContentHmac,
+    operboxHmacKeyVersion: planRun.operboxHmacKeyVersion,
+  }).from(planRun).where(and(
+    eq(planRun.diagnosticId, candidate.diagnosticId),
+    eq(planRun.status, "success"),
+    eq(planRun.userId, userId),
+  )).limit(1);
+  const calculationContext = validateSavedPlanCalculationContext(binding?.calculationContext);
+  if (!calculationContext || !/^[a-f0-9]{64}$/.test(binding?.publicResultSha256 ?? "")) {
+    return invalidSavedPlanBinding("找不到与该结果绑定的求解记录，请重新求解后再同步。");
+  }
+  const normalized = normalizePersistedPlanData(result, calculationContext.rotationProfile);
+  if (!normalized || publicPlanSha256(normalized) !== binding.publicResultSha256) {
+    return invalidSavedPlanBinding("排班结果校验失败，请重新求解后再同步。");
+  }
+  const activeBinding = activeOperboxBinding(
+    userId,
+    operbox,
+    binding.operboxContentHmac,
+    binding.operboxHmacKeyVersion,
+  );
+  if (!activeBinding) {
+    return invalidSavedPlanBinding("当前 MAA Box 与该排班的求解输入不一致，请重新求解后再同步。");
+  }
+  if (!workspaceMatchesSavedPlanContext(state, calculationContext, operbox)) {
+    return invalidSavedPlanBinding("当前工作区配置与排班结果不一致，请重新求解后再同步。");
+  }
   const id = randomUUID();
   const inserted = await getDatabase().insert(savedPlan).values({
     id,
     userId,
     diagnosticId: normalized.diagnosticId,
-    title: planTitle(state),
+    title: planTitle(calculationContext, state.sourceName),
     publicResult: normalized,
+    calculationContext,
+    operboxContentHmac: activeBinding.contentHmac,
+    operboxHmacKeyVersion: activeBinding.keyVersion,
     pinned: false,
     createdAt: now,
     updatedAt: now,
     expiresAt: new Date(now.getTime() + BUSINESS_DATA_TTL_MS),
   }).onConflictDoNothing({ target: [savedPlan.userId, savedPlan.diagnosticId] }).returning({ id: savedPlan.id });
   if (inserted[0]) return inserted[0].id;
-  const [existing] = await getDatabase().select({ id: savedPlan.id, pinned: savedPlan.pinned }).from(savedPlan).where(and(
-    eq(savedPlan.userId, userId),
-    eq(savedPlan.diagnosticId, normalized.diagnosticId),
-  )).limit(1);
-  if (!existing) throw new PublicApiError("AIC-SYS-5000");
-  await getDatabase().update(savedPlan).set({
-    title: planTitle(state),
-    publicResult: normalized,
-    updatedAt: now,
-    expiresAt: existing.pinned ? null : new Date(now.getTime() + BUSINESS_DATA_TTL_MS),
-  }).where(eq(savedPlan.id, existing.id));
-  return existing.id;
+  return storeSavedPlan(userId, state, operbox, result, now);
 }
 
 async function pruneUserHistory(userId: string, now: Date): Promise<void> {
@@ -185,20 +298,63 @@ async function pruneUserHistory(userId: string, now: Date): Promise<void> {
   ));
 }
 
-async function savedPlanResult(userId: string, id: string | null): Promise<PublicPlanData | null> {
+async function savedPlanAttachment(
+  userId: string,
+  id: string | null,
+): Promise<{
+  id: string;
+  result: PublicPlanData;
+  calculationContext: SavedPlanCalculationContext;
+  operboxContentHmac: string | null;
+  operboxHmacKeyVersion: string | null;
+} | null> {
   if (!id) return null;
-  const [row] = await getDatabase().select({ result: savedPlan.publicResult }).from(savedPlan).where(and(
+  const [row] = await getDatabase().select({
+    id: savedPlan.id,
+    result: savedPlan.publicResult,
+    calculationContext: savedPlan.calculationContext,
+    operboxContentHmac: savedPlan.operboxContentHmac,
+    operboxHmacKeyVersion: savedPlan.operboxHmacKeyVersion,
+  }).from(savedPlan).where(and(
     eq(savedPlan.id, id), eq(savedPlan.userId, userId),
   )).limit(1);
-  return row ? normalizePersistedPlanData(row.result, "abc_12_6_6") : null;
+  const calculationContext = validateSavedPlanCalculationContext(row?.calculationContext);
+  const result = calculationContext
+    ? normalizePersistedPlanData(row?.result, calculationContext.rotationProfile)
+    : null;
+  return result && calculationContext ? {
+    id: row.id,
+    result,
+    calculationContext,
+    operboxContentHmac: row.operboxContentHmac,
+    operboxHmacKeyVersion: row.operboxHmacKeyVersion,
+  } : null;
 }
 
 async function putValidatedWorkspace(userId: string, value: ValidatedWorkspace): Promise<CloudWorkspaceData> {
   const now = new Date();
+  const savedPlanId = await storeSavedPlan(userId, value.state, value.operbox, value.result, now);
   const snapshotId = await storeSnapshot(userId, value.operbox, now);
-  const savedPlanId = await storeSavedPlan(userId, value.state, value.result, now);
-  await getDatabase().transaction(async (tx) => {
+  const written = await getDatabase().transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${userId}))`);
+    const [consent] = await tx.select({ revokedAt: policyConsent.revokedAt })
+      .from(policyConsent)
+      .where(and(
+        eq(policyConsent.userId, userId),
+        eq(policyConsent.termsVersion, TERMS_VERSION),
+        eq(policyConsent.privacyVersion, PRIVACY_VERSION),
+      ))
+      .limit(1);
+    if (!consent || consent.revokedAt) {
+      // A request that started before revocation may already have prepared a
+      // snapshot or saved plan. Commit their cleanup before returning the
+      // consent error so an in-flight upload cannot recreate cloud data.
+      await tx.delete(workspaceRevision).where(eq(workspaceRevision.userId, userId));
+      await tx.delete(userWorkspace).where(eq(userWorkspace.userId, userId));
+      await tx.delete(savedPlan).where(eq(savedPlan.userId, userId));
+      await tx.delete(operboxSnapshot).where(eq(operboxSnapshot.userId, userId));
+      return false;
+    }
     const [current] = await tx.select().from(userWorkspace).where(eq(userWorkspace.userId, userId)).limit(1);
     const revision = (current?.currentRevision ?? 0) + 1;
     if (current) {
@@ -242,7 +398,9 @@ async function putValidatedWorkspace(userId: string, value: ValidatedWorkspace):
         syncedAt: now,
       });
     }
+    return true;
   });
+  if (!written) throw new PublicApiError("AIC-DATA-8001");
   await pruneUserHistory(userId, now);
   return getWorkspace(userId);
 }
@@ -274,12 +432,33 @@ export async function getWorkspace(userId: string): Promise<CloudWorkspaceData> 
     }
   });
   const state = validateWorkspaceState(current.state);
+  const operbox = state.boxSource === "maa" ? await decryptSnapshot(userId, current.operboxSnapshotId) : null;
+  const attachment = await savedPlanAttachment(userId, current.currentSavedPlanId);
+  const attachmentBinding = attachment ? activeOperboxBinding(
+    userId,
+    operbox,
+    attachment.operboxContentHmac,
+    attachment.operboxHmacKeyVersion,
+  ) : null;
+  if (attachment && attachmentBinding && (
+    attachmentBinding.contentHmac !== attachment.operboxContentHmac
+    || attachmentBinding.keyVersion !== attachment.operboxHmacKeyVersion
+  )) {
+    await getDatabase().update(savedPlan).set({
+      operboxContentHmac: attachmentBinding.contentHmac,
+      operboxHmacKeyVersion: attachmentBinding.keyVersion,
+    }).where(and(eq(savedPlan.id, attachment.id), eq(savedPlan.userId, userId)));
+  }
   return {
     exists: true,
     revision: current.currentRevision,
     state,
-    operbox: state.boxSource === "maa" ? await decryptSnapshot(userId, current.operboxSnapshotId) : null,
-    result: await savedPlanResult(userId, current.currentSavedPlanId),
+    operbox,
+    result: attachment
+      && workspaceMatchesSavedPlanContext(state, attachment.calculationContext, operbox)
+      && attachmentBinding
+      ? attachment.result
+      : null,
     updatedAt: current.updatedAt.toISOString(),
     syncedAt: syncedAt.toISOString(),
     revisions: revisions.map((item) => ({ ...item, createdAt: item.createdAt.toISOString(), expiresAt: item.expiresAt.toISOString() })),
@@ -296,22 +475,49 @@ export async function putWorkspace(userId: string, body: unknown): Promise<Cloud
     )).limit(1);
     if (!revision || revision.expiresAt <= new Date()) throw new PublicApiError("AIC-DATA-8004");
     const state = validateWorkspaceState(revision.state);
+    const operbox = state.boxSource === "maa" ? await decryptSnapshot(userId, revision.operboxSnapshotId) : null;
+    const attachment = await savedPlanAttachment(userId, revision.savedPlanId);
+    const attachmentBinding = attachment ? activeOperboxBinding(
+      userId,
+      operbox,
+      attachment.operboxContentHmac,
+      attachment.operboxHmacKeyVersion,
+    ) : null;
+    if (attachment && attachmentBinding && (
+      attachmentBinding.contentHmac !== attachment.operboxContentHmac
+      || attachmentBinding.keyVersion !== attachment.operboxHmacKeyVersion
+    )) {
+      await getDatabase().update(savedPlan).set({
+        operboxContentHmac: attachmentBinding.contentHmac,
+        operboxHmacKeyVersion: attachmentBinding.keyVersion,
+      }).where(and(eq(savedPlan.id, attachment.id), eq(savedPlan.userId, userId)));
+    }
     return putValidatedWorkspace(userId, {
       state,
-      operbox: state.boxSource === "maa" ? await decryptSnapshot(userId, revision.operboxSnapshotId) : null,
-      result: await savedPlanResult(userId, revision.savedPlanId),
+      operbox,
+      result: attachment
+        && workspaceMatchesSavedPlanContext(state, attachment.calculationContext, operbox)
+        && attachmentBinding
+        ? attachment.result
+        : null,
     });
   }
   return putValidatedWorkspace(userId, request);
 }
 
-function toSavedPlanData(row: typeof savedPlan.$inferSelect): SavedPlanData | null {
-  const result = normalizePersistedPlanData(row.publicResult, "abc_12_6_6");
+function toSavedPlanData(row: typeof savedPlan.$inferSelect, boxMatchesWorkspace: boolean): SavedPlanData | null {
+  const calculationContext = validateSavedPlanCalculationContext(row.calculationContext);
+  const result = normalizePersistedPlanData(
+    row.publicResult,
+    calculationContext?.rotationProfile ?? "abc_12_6_6",
+  );
   if (!result) return null;
   return {
     id: row.id,
     diagnosticId: row.diagnosticId,
     title: row.title,
+    calculationContext,
+    boxMatchesWorkspace,
     pinned: row.pinned,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -324,13 +530,40 @@ export async function listSavedPlans(userId: string): Promise<SavedPlanListData>
   await requireAccountDataConsent(userId);
   await pruneUserHistory(userId, new Date());
   const rows = await getDatabase().select().from(savedPlan).where(eq(savedPlan.userId, userId)).orderBy(desc(savedPlan.pinned), desc(savedPlan.updatedAt));
-  return { plans: rows.map(toSavedPlanData).filter((item): item is SavedPlanData => item !== null) };
+  const [current] = await getDatabase().select({
+    operboxSnapshotId: userWorkspace.operboxSnapshotId,
+  }).from(userWorkspace).where(eq(userWorkspace.userId, userId)).limit(1);
+  const operbox = current?.operboxSnapshotId ? await decryptSnapshot(userId, current.operboxSnapshotId) : null;
+  const plans: SavedPlanData[] = [];
+  for (const row of rows) {
+    const binding = activeOperboxBinding(
+      userId,
+      operbox,
+      row.operboxContentHmac,
+      row.operboxHmacKeyVersion,
+    );
+    if (binding && (
+      binding.contentHmac !== row.operboxContentHmac
+      || binding.keyVersion !== row.operboxHmacKeyVersion
+    )) {
+      await getDatabase().update(savedPlan).set({
+        operboxContentHmac: binding.contentHmac,
+        operboxHmacKeyVersion: binding.keyVersion,
+      }).where(and(eq(savedPlan.id, row.id), eq(savedPlan.userId, userId)));
+    }
+    const data = toSavedPlanData(row, Boolean(binding));
+    if (data) plans.push(data);
+  }
+  return { plans };
 }
 
 export async function updateSavedPlan(userId: string, id: string, value: unknown): Promise<SavedPlanData> {
   await requireAccountDataConsent(userId);
   if (!isObject(value) || typeof value.pinned !== "boolean") throw new PublicApiError("AIC-DATA-8003");
   const pinnedValue = value.pinned;
+  const [current] = await getDatabase().select({ operboxSnapshotId: userWorkspace.operboxSnapshotId })
+    .from(userWorkspace).where(eq(userWorkspace.userId, userId)).limit(1);
+  const operbox = current?.operboxSnapshotId ? await decryptSnapshot(userId, current.operboxSnapshotId) : null;
   return getDatabase().transaction(async (tx) => {
     // Serialize pin-count checks per account so concurrent devices cannot exceed
     // the five long-lived plans limit.
@@ -349,12 +582,22 @@ export async function updateSavedPlan(userId: string, id: string, value: unknown
         throw new PublicApiError("AIC-DATA-8003", { message: "最多固定 5 条排班。" });
       }
     }
+    const binding = activeOperboxBinding(
+      userId,
+      operbox,
+      existing.operboxContentHmac,
+      existing.operboxHmacKeyVersion,
+    );
     const [updated] = await tx.update(savedPlan).set({
       pinned: pinnedValue,
       expiresAt: pinnedValue ? null : new Date(Date.now() + BUSINESS_DATA_TTL_MS),
       updatedAt: new Date(),
+      ...(binding ? {
+        operboxContentHmac: binding.contentHmac,
+        operboxHmacKeyVersion: binding.keyVersion,
+      } : {}),
     }).where(and(eq(savedPlan.id, id), eq(savedPlan.userId, userId))).returning();
-    const result = updated && toSavedPlanData(updated);
+    const result = updated && toSavedPlanData(updated, Boolean(binding));
     if (!result) throw new PublicApiError("AIC-DATA-8004");
     return result;
   });
@@ -366,14 +609,31 @@ export async function deleteSavedPlan(userId: string, id: string): Promise<void>
   if (!deleted.length) throw new PublicApiError("AIC-DATA-8004");
 }
 
-export async function revokeAccountDataAndDeleteWorkspace(userId: string): Promise<void> {
+export async function revokeAccountDataConsentAndPurgeCloudData(userId: string): Promise<void> {
   await requireAccountDataConsent(userId);
-  await evictUserPlanCaches(userId);
   await getDatabase().transaction(async (tx) => {
+    // Serialize revocation with late plan-run writes. The writer rechecks current
+    // consent while holding this same lock before persisting any cloud binding.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${userId}))`);
+    const referencedCaches = await tx.selectDistinct({ key: planCacheReference.cacheKeyHmac })
+      .from(planCacheReference)
+      .where(eq(planCacheReference.userId, userId));
+    if (referencedCaches.length) {
+      await tx.delete(planCache).where(inArray(
+        planCache.keyHmac,
+        referencedCaches.map((row) => row.key),
+      ));
+    }
     await tx.delete(workspaceRevision).where(eq(workspaceRevision.userId, userId));
     await tx.delete(userWorkspace).where(eq(userWorkspace.userId, userId));
     await tx.delete(savedPlan).where(eq(savedPlan.userId, userId));
     await tx.delete(operboxSnapshot).where(eq(operboxSnapshot.userId, userId));
+    await tx.update(planRun).set({
+      calculationContext: null,
+      publicResultSha256: null,
+      operboxContentHmac: null,
+      operboxHmacKeyVersion: null,
+    }).where(eq(planRun.userId, userId));
     await tx.update(policyConsent).set({ revokedAt: new Date() }).where(and(
       eq(policyConsent.userId, userId),
       eq(policyConsent.termsVersion, TERMS_VERSION),

@@ -1,4 +1,6 @@
-import { createCipheriv, createDecipheriv, createHmac, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+
+import type { OperBoxEntry } from "../types.ts";
 
 const AUTH_TAG_BYTES = 16;
 export const OPERBOX_ENVELOPE_SCHEMA_VERSION = 1;
@@ -36,6 +38,37 @@ function aad(userId: string, snapshotId: string, schemaVersion: number, purpose:
 
 function contentHmacKey(masterKey: Buffer): Buffer {
   return createHmac("sha256", masterKey).update("arknights-infra-workspace-operbox-hmac-v1").digest();
+}
+
+function planOperboxHmacKey(masterKey: Buffer): Buffer {
+  return createHmac("sha256", masterKey).update("arknights-infra-saved-plan-operbox-hmac-v1").digest();
+}
+
+export function planOperboxContentHmac(input: {
+  userId: string;
+  operbox: readonly OperBoxEntry[];
+  masterKey: Buffer;
+}): string {
+  if (input.masterKey.byteLength !== 32) throw new Error("Workspace master key must contain exactly 32 bytes.");
+  const canonical = [...input.operbox]
+    .sort((left, right) => left.id.localeCompare(right.id) || left.name.localeCompare(right.name))
+    .map(({ id, name, elite, level, own, potential, rarity }) => ({ id, name, elite, level, own, potential, rarity }));
+  return createHmac("sha256", planOperboxHmacKey(input.masterKey))
+    .update(input.userId, "utf8")
+    .update("\0", "utf8")
+    .update(JSON.stringify(canonical), "utf8")
+    .digest("hex");
+}
+
+export function verifyPlanOperboxContentHmac(input: {
+  userId: string;
+  operbox: readonly OperBoxEntry[];
+  masterKey: Buffer;
+  expected: unknown;
+}): boolean {
+  if (typeof input.expected !== "string" || !/^[a-f0-9]{64}$/.test(input.expected)) return false;
+  const actual = planOperboxContentHmac(input);
+  return timingSafeEqual(Buffer.from(actual, "hex"), Buffer.from(input.expected, "hex"));
 }
 
 export function encryptOperboxSnapshot(input: {

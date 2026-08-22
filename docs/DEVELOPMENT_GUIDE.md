@@ -9,7 +9,7 @@
 以下产品约束必须作为 UI 回归项保留：
 
 - “全角色导入”保持在计算器顶部操作栏，并维持主按钮层级。
-- dev 保持“基建计算器 / 练卡建议 / 森空岛状态”三个同级导航；production 只显示前两个导航，且不得请求森空岛 API。
+- production 保持“基建计算器 / 练卡建议 / 技能查询 / 账号管理”四个一级导航；development 额外显示“森空岛状态中心”，production 不得请求森空岛 API。
 - 桌面与平板默认使用“一图流布局”；手机端默认“列表式布局”，并继续显示禁用态的“一图流布局”。
 - 加工站继续使用现有“暂不显示”按钮和交互。
 
@@ -101,18 +101,27 @@ type ApiFailure = {
 - `GET /api/sample-operbox`
 - `POST /api/plan`
 - `POST /api/feedback`
-- `GET/DELETE /api/skland/session`
+- `GET/DELETE /api/skland/accounts`
+- `DELETE /api/skland/accounts/[id]`
 - `POST /api/skland/auth/qr`
 - `POST /api/skland/auth/qr/status`
 - `POST /api/skland/sync`
 - `POST /api/skland/role`
+- `POST /api/skland/status/refresh`
+- `DELETE /api/skland/account-data`
 - `GET/POST /api/auth/*`（Better Auth 原生协议，不使用公共响应信封）
-- `GET/POST /api/admin/users`
-- `GET/PATCH /api/admin/records`
+- `GET /api/admin/users`
+- `PATCH /api/admin/users/[id]`
+- `GET/DELETE /api/admin/users/[id]/sessions`
+- `GET /api/admin/plan-runs`
+- `GET /api/admin/feedback`
+- `PATCH /api/admin/feedback/[id]`
 - `GET/POST/DELETE /api/account/data-consent`
-- `GET/PUT/DELETE /api/workspace`
-- `GET /api/plans`
-- `PATCH/DELETE /api/plans/[id]`
+- `GET/PUT /api/workspace`
+- `GET /api/account/saved-plans`
+- `PATCH/DELETE /api/account/saved-plans/[id]`
+
+`POST /api/plan` 是即时求解，`/api/account/saved-plans*` 是账号排班历史。旧 `/api/plans*`、`DELETE /api/workspace`、`/api/admin/records`、`POST /api/admin/users`、带 `userId` 查询的 `/api/admin/users`，以及旧 `/api/skland/session`、`/api/skland/status`、`/api/skland/data` 仅保留兼容并返回 successor 链接，不应在新代码中使用。撤销云端同意并清除数据统一使用 `DELETE /api/account/data-consent`。
 
 `/api/auth/*` 是统一响应信封的唯一例外。Better Auth 原生 admin 路由全部返回 404；管理员只能使用应用自有的中文用户管理接口。`BETTER_AUTH_ADMIN_USER_IDS` 定义不可由网页降级的初始管理员；只有初始管理员能在该接口中授予或撤销数据库管理员角色，受委派管理员不能继续扩权。
 
@@ -134,7 +143,7 @@ type ApiFailure = {
 
 排班输入还限制干员数据不超过 1000 条、布局不超过 64 个房间、来源名称不超过 80 字。限流响应带 `Retry-After`。
 
-POST 和 DELETE 路由执行同源检查。生产部署在 Nginx 后时启用受信代理头，并保证 Next 内部端口不直接暴露公网。
+所有 POST、PUT、PATCH 和 DELETE 写路由执行同源检查。生产部署在 Nginx 后时启用受信代理头，并保证 Next 内部端口不直接暴露公网。
 
 ## 环境变量
 
@@ -244,7 +253,7 @@ Production client isolation scans static JavaScript and public HTML/RSC; product
 
 production 和 dev 的 Funnel Nginx 分别只监听`127.0.0.1:4176`与`127.0.0.1:4274`。公网访问由 Tailscale Funnel 的 8443 与 443 HTTPS 入口提供；用`tailscale funnel status`核对持久化配置、公开地址和实际目标。production 另有受 Host 限制的`0.0.0.0:4174`直连/IP 兼容 vhost，它不是 Funnel 目标，不得作为公开 Origin 或发布健康检查地址。服务器 80 端口只重定向到 production HTTPS，不要把两个回环应用端口重新暴露到公网。Actions 部署用户使用独立密钥，sudo 只允许固定的`/usr/local/sbin/arknights-infra-deploy`。root 所有的 deploy runner 和`/usr/local/sbin/arknights-infra-prepare-release`必须保持 LF、普通文件和`root:root 0755`；二者用`--contract-version`报告当前接口版本，文件 SHA-256只作安装/回滚审计。prepare helper 以`arkdeploy`运行，不新增 sudo 权限；缓存根必须由该用户拥有且不能被 group/other 写入。
 
-E2E 使用固定数据和接口拦截，不要求 CI 中存在真实 CLI。每次 UI 修改至少检查 390px、768px、1440px、三个一级导航和两处锁定区域。错误码新增或修改必须同步更新：
+E2E 使用固定数据和接口拦截，不要求 CI 中存在真实 CLI。每次 UI 修改至少检查 390px、768px、1440px、四个常驻一级导航、development 的森空岛状态中心和两处锁定区域。错误码新增或修改必须同步更新：
 
 - `src/types.ts`
 - `src/server/api-contract.ts`

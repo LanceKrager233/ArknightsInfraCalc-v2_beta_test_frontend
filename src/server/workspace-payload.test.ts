@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { validateWorkspacePutRequest } from "./workspace-payload.ts";
+import {
+  validateSavedPlanCalculationContext,
+  validateWorkspacePutRequest,
+  workspaceMatchesSavedPlanContext,
+} from "./workspace-payload.ts";
 
 function state(boxSource: "maa" | "sample" | "skland" = "maa") {
   return {
@@ -63,4 +67,52 @@ test("Skland-derived identity, Box and plan data cannot enter a cloud payload", 
     operbox: [{ id: "char_1" }],
     result: null,
   }));
+});
+
+test("saved plans retain only the calculation context needed to render the original result", () => {
+  const workspace = validateWorkspacePutRequest({
+    state: state("maa"),
+    operbox: [{ id: "char_1", name: "测试干员", elite: 2, level: 80, own: true, potential: 1, rarity: 6 }],
+    result: null,
+  });
+  assert.ok("state" in workspace);
+  const context = {
+    presetLabel: workspace.state.presetLabel,
+    layout: workspace.state.layout,
+    rotationProfile: workspace.state.rotationProfile,
+    fiammettaEnabled: workspace.state.fiammettaEnabled,
+  };
+  assert.deepEqual(Object.keys(context).sort(), ["fiammettaEnabled", "layout", "presetLabel", "rotationProfile"]);
+  assert.equal(JSON.stringify(context).includes("box.json"), false);
+
+  const restored = validateSavedPlanCalculationContext({ ...context, token: "private" });
+  assert.deepEqual(restored, context);
+  assert.equal(workspaceMatchesSavedPlanContext(workspace.state, context, workspace.operbox), true);
+  assert.equal(workspaceMatchesSavedPlanContext(
+    { ...workspace.state, layout: { ...workspace.state.layout, template: "333" } },
+    context,
+    workspace.operbox,
+  ), false);
+  assert.equal(validateSavedPlanCalculationContext({
+    ...context,
+    layout: { ...context.layout, scenario: { base_workforce: ["private-operator"] } },
+  })?.layout.scenario.base_workforce, undefined);
+  assert.equal(validateSavedPlanCalculationContext({ ...context, rotationProfile: "invalid" }), null);
+});
+
+test("saved plan context compares the effective Fiammetta setting", () => {
+  const workspace = validateWorkspacePutRequest({
+    state: { ...state("maa"), rotationProfile: "fiammetta_8_8_4_4", fiammettaEnabled: false },
+    operbox: [{ id: "char_300422_fiamme", name: "菲亚梅塔", elite: 2, level: 80, own: true, potential: 1, rarity: 6 }],
+    result: null,
+  });
+  assert.ok("state" in workspace);
+  const context = validateSavedPlanCalculationContext({
+    presetLabel: workspace.state.presetLabel,
+    layout: workspace.state.layout,
+    rotationProfile: workspace.state.rotationProfile,
+    fiammettaEnabled: true,
+  });
+  assert.ok(context);
+  assert.equal(workspaceMatchesSavedPlanContext(workspace.state, context, workspace.operbox), true);
 });

@@ -2,13 +2,13 @@
 
 import { WebsiteAccountPanel } from "@/components/auth/WebsiteAccountPanel";
 import { StatusCenterPage } from "@/components/pages/StatusCenterShell";
-import type { CloudWorkspaceData, PublicPlanData } from "@/types";
+import type { CloudWorkspaceData, SavedPlanData } from "@/types";
 
 export interface AccountStatusCenterProps {
   onSessionChanged?: (authenticated: boolean) => void | Promise<void>;
   cloudWorkspace?: CloudWorkspaceData | null;
   onRestoreCloudWorkspace?: (workspace: CloudWorkspaceData) => void;
-  onRestoreSavedPlan?: (plan: PublicPlanData) => void;
+  onRestoreSavedPlan?: (plan: SavedPlanData) => void;
   onCloudDataChanged?: () => void;
 }
 

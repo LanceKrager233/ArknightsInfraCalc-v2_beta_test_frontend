@@ -1,6 +1,7 @@
 import { validateLayoutJson } from "../layout-validation.ts";
 import { assertOperbox } from "../operbox.ts";
 import { normalizePersistedPlanData } from "../persistence.ts";
+import { effectiveFiammettaSetting } from "../plan-presentation.ts";
 import { isRotationProfile } from "../rotation-settings.ts";
 import type {
   BaseBlueprint,
@@ -9,6 +10,7 @@ import type {
   CloudWorkspaceState,
   OperBoxEntry,
   PublicPlanData,
+  SavedPlanCalculationContext,
 } from "../types.ts";
 import { PublicApiError } from "./api-contract.ts";
 
@@ -112,6 +114,48 @@ export function validateWorkspaceState(value: unknown): CloudWorkspaceState {
     fiammettaEnabled: value.fiammettaEnabled,
     activeShift: Number(value.activeShift),
   };
+}
+
+export function validateSavedPlanCalculationContext(value: unknown): SavedPlanCalculationContext | null {
+  if (!isObject(value)) return null;
+  try {
+    const layout = sanitizeLayout(value.layout);
+    delete layout.scenario.base_workforce;
+    if (typeof value.presetLabel !== "string" || value.presetLabel.length > 120) return null;
+    if (!isRotationProfile(value.rotationProfile) || typeof value.fiammettaEnabled !== "boolean") return null;
+    const context = {
+      presetLabel: value.presetLabel,
+      layout,
+      rotationProfile: value.rotationProfile,
+      fiammettaEnabled: value.fiammettaEnabled,
+    };
+    if (new TextEncoder().encode(JSON.stringify(context)).byteLength > 32 * 1024) return null;
+    return context;
+  } catch {
+    return null;
+  }
+}
+
+export function workspaceMatchesSavedPlanContext(
+  state: CloudWorkspaceState,
+  context: SavedPlanCalculationContext,
+  operbox: OperBoxEntry[] | null,
+): boolean {
+  const stateContext = validateSavedPlanCalculationContext({
+    presetLabel: state.presetLabel,
+    layout: state.layout,
+    rotationProfile: state.rotationProfile,
+    fiammettaEnabled: state.fiammettaEnabled,
+  });
+  if (!stateContext) return false;
+  const effectiveFiammettaEnabled = effectiveFiammettaSetting(
+    operbox,
+    state.rotationProfile,
+    state.fiammettaEnabled,
+  );
+  return state.rotationProfile === context.rotationProfile
+    && effectiveFiammettaEnabled === context.fiammettaEnabled
+    && JSON.stringify(stateContext.layout) === JSON.stringify(context.layout);
 }
 
 export type ValidatedWorkspacePutRequest =
