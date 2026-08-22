@@ -119,7 +119,7 @@ UI 控件优先组合 `src/components/ui/*` 中的现有 primitive。不要另�
 ### 必须保持的安全与契约边界
 
 - 不得直接从 route handler 返回 `src/server/infra.ts` 的内部对象。排班结果必须经过 `toPublicPlanData`，错误必须经过统一的 `failureResponse`。
-- 生产 `plan` 数据只允许公开 `profile`、`maa`、`rotation`、`durationMs`、`diagnosticId`；健康检查不得公开 CLI 路径、PID、候选文件、仓库路径、存储路径或原始 serve 错误。
+- 生产 `plan` 数据只允许公开 `profile`、`maa`、`rotation`、可选的白名单 `trainingAdvice`、`durationMs`、`diagnosticId`；健康检查不得公开 CLI 路径、PID、候选文件、仓库路径、存储路径或原始 serve 错误。
 - `command`、stdout、stderr 和 debug bundle 只有在服务端 `BETA_DEBUG_TOOLS_ENABLED=1` 时才能进入 `data.debug`；页面还必须同时带 `?beta` 才显示调试面板。任一条件缺失都不能暴露调试数据。
 - 新增或修改公共 DTO 时，同时更新 `src/types.ts`、白名单 mapper、客户端调用和 `src/server/public-plan.test.ts` / `src/server/api-contract.test.ts`。
 - 新增或修改错误码时，同时更新 `AppErrorCode`、`ERROR_DEFINITIONS`、HTTP 映射和契约测试。日志只记录 requestId、code、route、status、durationMs 等最小诊断信息，不打印请求正文或凭据。
