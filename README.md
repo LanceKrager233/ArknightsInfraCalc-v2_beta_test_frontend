@@ -199,9 +199,15 @@ fixtures/operbox_full_e2.json
 ## 文档入口
 
 - [开发指南](./docs/DEVELOPMENT_GUIDE.md)：API 契约、环境变量、本地调试和质量门禁。
+- [网站账号与 PostgreSQL 上线手册](./docs/AUTHENTICATION_DATABASE.md)：认证生命周期、管理员权限、数据库迁移、备份与 development 验收。
 - [业务数据存储与分阶段启用手册](./docs/BUSINESS_DATA_STORAGE.md)：`app` schema、保留策略、加密、回填、备份与功能开关顺序。
+- [预计日产物计算逻辑](./docs/计算逻辑.md)：经验、龙门币、赤金、源石碎片、合成玉和历史排班上下文的计算口径。
+- [森空岛数据能力矩阵](./docs/SKLAND_DATA_CAPABILITIES.md)：账号状态白名单、排班最小字段与禁止持久化的数据。
 - [开发与发布维护准则](./docs/DEVELOPMENT_RELEASE_GUARDRAILS.md)：Windows/Linux 差异、求解器身份、helper 契约和双分支发布。
 - [上线产品化报告](./docs/FRONTEND_PRODUCTION_READINESS_REPORT.md)：改造基线、错误码、数据流、验证结果和 DevTools 排查方法。
 - [Frontend Serve Guide](./docs/FRONTEND_SERVE_GUIDE.md)：`infra-cli serve` 协议及公共 DTO 边界。
 - [`infra-cli advice` 输出评估](./docs/INFRA_CLI_ADVICE_REPORT.md)：结构化练卡报告、字段说明、安全边界和未来前端接入方案。
+- [贸易产出契约差异](./docs/TRADE_PRODUCTION_CONTRACT_GAP.md)：求解器贸易效率与展示换算的已知边界。
+- [键盘快捷键](./docs/keyboard-shortcuts.md)：当前快捷键约定及实现状态。
 - [更新线上求解器](./docs/UPDATE_SOLVER.md)：仅在契约或真实求解验证需要时更新服务器 CLI。
+- [第三方素材说明](./THIRD_PARTY_ASSETS.md)：素材来源、许可与再分发说明。
