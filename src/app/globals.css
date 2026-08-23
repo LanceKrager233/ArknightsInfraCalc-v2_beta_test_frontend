@@ -466,28 +466,32 @@
   gap: 0.75rem;
 }
 
+.skland-auxiliary-column {
+  display: contents;
+}
+
 @media (min-width: 640px) {
   .skland-auxiliary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-rows: repeat(2, minmax(0, 1fr));
   }
 
-  .skland-auxiliary-grid > [data-room-group="meeting"] {
+  .skland-auxiliary-primary > [data-room-group="meeting"] {
     grid-column: 1;
     grid-row: 1;
   }
 
-  .skland-auxiliary-grid > [data-room-group="training"] {
+  .skland-auxiliary-primary > [data-room-group="training"] {
     grid-column: 1;
     grid-row: 2;
   }
 
-  .skland-auxiliary-grid > [data-room-group="hire"] {
+  .skland-auxiliary-secondary > [data-room-group="hire"] {
     grid-column: 2;
     grid-row: 1;
   }
 
-  .skland-auxiliary-grid > [data-room-group="processing"] {
+  .skland-auxiliary-secondary > [data-room-group="processing"] {
     grid-column: 2;
     grid-row: 2;
   }
@@ -496,7 +500,21 @@
 @media (min-width: 1280px) {
   .skland-auxiliary-grid {
     grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-    grid-template-rows: minmax(11.25rem, 9fr) minmax(0, 8fr);
+    grid-template-rows: none;
+  }
+
+  .skland-auxiliary-column {
+    display: grid;
+    align-content: start;
+    gap: 0.75rem;
+  }
+
+  .skland-auxiliary-primary > [data-room-group="meeting"] {
+    min-height: 9.25rem;
+  }
+
+  .skland-dense-auxiliary-column > [data-room-group="dormitory"] {
+    flex: 1 1 0;
   }
 }
 

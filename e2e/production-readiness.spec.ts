@@ -4621,7 +4621,7 @@ test("Skland status center keeps profile and recruitment in overview and support
   await expect(currentTrainingRoom.locator('img[title^="职业："]')).toHaveCount(2);
   await expect(page.locator('[data-skland-compact-layout] [data-room-group="processing"]')).toBeVisible();
   await expect(page.getByText(/^线索板：/)).toHaveCount(0);
-  const auxiliaryRoomBoxes = await page.locator(".skland-auxiliary-grid > article").evaluateAll((rooms) => Object.fromEntries(
+  const auxiliaryRoomBoxes = await page.locator(".skland-auxiliary-grid article").evaluateAll((rooms) => Object.fromEntries(
     rooms.map((room) => {
       const bounds = room.getBoundingClientRect();
       return [room.dataset.roomGroup, { x: bounds.x, width: bounds.width }];
@@ -4659,8 +4659,7 @@ test("Skland status center keeps profile and recruitment in overview and support
   await expect(page.getByText("当前进驻", { exact: true })).toHaveCount(0);
   await expect(page.getByText("设施运行正常", { exact: true })).toHaveCount(0);
   await expect(page.locator("[data-infra-complete-time]").first()).toHaveText(/^\d{4}\.\d{1,2}\.\d{1,2} \d{2}:\d{2}$/);
-  const clueStatus = page.locator("p").filter({ hasText: "已有 4 · 待接收 2 · 已接收 1" });
-  await expect(clueStatus).toContainText("线索交流至");
+  await expect(page.getByText("已有 4 · 待接收 2 · 已接收 1", { exact: false })).toHaveCount(0);
 
   await accountCombobox.click();
   await page.getByRole("option", { name: "测试博士二号 · B服" }).click();
@@ -4786,7 +4785,7 @@ test("Skland compact layout aligns both column endings when production is taller
   await expect(compactColumns).toHaveCount(2);
   await expect.poll(() => compactColumns.nth(1).evaluate((column) => (
     getComputedStyle(column).justifyContent
-  ))).toBe("space-between");
+  ))).toBe("normal");
 
   const compactLastRoomBottoms = await compactColumns.evaluateAll((columns) => columns.map((column) => {
     const rooms = column.querySelectorAll<HTMLElement>("article[data-room-group]");
@@ -4801,6 +4800,7 @@ test("Skland compact layout aligns both column endings when production is taller
     });
     const group = (name: string) => boxes.filter((box) => box.group === name);
     return {
+      controlBottom: group("control")[0]?.bottom,
       tradeTop: group("trading")[0]?.top,
       trainingTop: group("training")[0]?.top,
       trainingHeight: group("training")[0]?.height,
@@ -4810,8 +4810,12 @@ test("Skland compact layout aligns both column endings when production is taller
     };
   });
   expect(Math.abs((alignedRoomBoxes.tradeTop ?? 0) - (alignedRoomBoxes.trainingTop ?? 0))).toBeLessThanOrEqual(1);
+  expect((alignedRoomBoxes.tradeTop ?? 0) - (alignedRoomBoxes.controlBottom ?? 0)).toBeCloseTo(12, 0);
   expect(alignedRoomBoxes.trainingHeight).toBeLessThan(alignedRoomBoxes.meetingHeight ?? 0);
+  expect(alignedRoomBoxes.meetingHeight).toBeLessThanOrEqual(150);
+  expect(alignedRoomBoxes.trainingHeight).toBeLessThanOrEqual(112);
   expect((alignedRoomBoxes.powerTop ?? 0) - (alignedRoomBoxes.lastManufactureBottom ?? 0)).toBeCloseTo(12, 0);
+  await expect(page.locator('[data-skland-compact-column="auxiliary"] > [data-room-group="dormitory"]').first()).toHaveCSS("flex-grow", "1");
   await expect(page.locator('[data-room-group="power"] [data-skland-power-efficiency]')).toHaveCount(3);
   await expect(page.locator('[data-room-group="power"] [data-skland-power-efficiency]').first()).toHaveText("效率基准 100%");
 
