@@ -1,12 +1,11 @@
 "use client";
 
-import { Download, FileJson, FlaskConical, HeartPulse, Keyboard, Loader2, Play, Search, Settings2, Terminal, X } from "lucide-react";
+import { Download, FlaskConical, HeartPulse, Keyboard, Loader2, Play, Search, Settings2, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { ScheduleBoard, ShiftTabs } from "@/components";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { PlanResultSummarySkeleton } from "@/components/PlanResultSummarySkeleton";
 
 import type { FactoryRecipe, TradeOrder } from "@/blueprint";
@@ -17,15 +16,12 @@ import type { RoomRow } from "@/schedule";
 import type {
   BaseBlueprint,
   FeedbackData,
-  IssueReport,
   MaaPlan,
   PublicPlanData,
   ShiftComparison,
 } from "@/types";
 
 const PlanResultSummary = lazy(() => loadClientFeature("planResultSummary").then((module) => ({ default: module.PlanResultSummary })));
-const DebugActions = lazy(() => loadClientFeature("sharedComponents").then((module) => ({ default: module.DebugActions })));
-const IssuePanel = lazy(() => loadClientFeature("sharedComponents").then((module) => ({ default: module.IssuePanel })));
 const ShortcutGuideDialog = lazy(() => loadClientFeature("sharedComponents").then((module) => ({ default: module.ShortcutGuideDialog })));
 
 function DeferredResultLoading() {
@@ -83,7 +79,6 @@ function RunButton({
 
 export interface InfraCalculatorProps {
   layout: BaseBlueprint;
-  showBetaPanels: boolean;
   result: PublicPlanData | null;
   scheduleResult: PublicPlanData | null;
   activeShift: number;
@@ -92,10 +87,7 @@ export interface InfraCalculatorProps {
   activePlan: MaaPlan | undefined;
   closestComparison: ShiftComparison | null;
   resultClearNotice: string | null;
-  issueForPanel: { row: RoomRow; note: string } | null;
-  issueReport: IssueReport | null;
   feedbackResult: FeedbackData | null;
-  feedbackError: string | null;
   sampleLoading: boolean;
   loading: boolean;
   canRun: boolean;
@@ -115,33 +107,29 @@ export interface InfraCalculatorProps {
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
   onDownloadMaa: () => void;
-  onDownloadBundle: () => void;
-  onCopyCommand: () => void;
   onClearResultNotice: () => void;
   onDismissResultClearWarning: () => void;
 }
 
 export function InfraCalculator(props: InfraCalculatorProps) {
   const {
-    layout, showBetaPanels,
+    layout,
     result, scheduleResult, activeShift, rows, currentMoraleByOperator,
     activePlan, closestComparison,
     resultClearNotice,
-    issueForPanel, issueReport, feedbackResult, feedbackError,
+    feedbackResult,
     sampleLoading, loading, canRun, plannerReady, animatePlanEntrance, animateEmptyScheduleEntrance, onPlanEntranceConsumed, requiresAccount = false, accountControl,
     onLoadSample, onOpenSetup, onRun, onCancelRun,
     onSetActiveShift, onMarkIssue, onPerformanceIssue,
     onFactoryRecipeChange, onTradeOrderChange,
-    onDownloadMaa, onDownloadBundle, onCopyCommand,
+    onDownloadMaa,
     onClearResultNotice, onDismissResultClearWarning,
   } = props;
-  const [scheduleViewMode, setScheduleViewMode] = useState<"list" | "compact">("compact");
   const [shortcutGuideOpen, setShortcutGuideOpen] = useState(false);
   const [operatorQuery, setOperatorQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [shiftDirection, setShiftDirection] = useState<ShiftDirection>(0);
   const [fiammettaPortrait, setFiammettaPortrait] = useState<string | null>(null);
-  const showBetaSidebar = showBetaPanels && scheduleViewMode === "list";
   const fiammettaTarget = activePlan?.Fiammetta?.enable
     ? (Array.isArray(activePlan.Fiammetta.target) ? activePlan.Fiammetta.target[0] : activePlan.Fiammetta.target)
     : undefined;
@@ -202,10 +190,10 @@ export function InfraCalculator(props: InfraCalculatorProps) {
   return (
     <>
       <section
-        className={showBetaSidebar ? "infra-technical-canvas grid grid-cols-[minmax(0,1fr)_clamp(320px,22vw,360px)] items-start max-[1100px]:block" : "infra-technical-canvas block"}
+        className="infra-technical-canvas block"
         data-infra-canvas
       >
-        <section className={showBetaSidebar ? "min-w-0 pr-5 max-[1100px]:pr-0" : "min-w-0"}>
+        <section className="min-w-0">
           <Panel
             className="min-h-[calc(100vh-112px)]"
             action={(
@@ -325,7 +313,6 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               onIssue={onMarkIssue}
               onFactoryRecipeChange={onFactoryRecipeChange}
               onTradeOrderChange={onTradeOrderChange}
-              onViewModeChange={setScheduleViewMode}
             /> : (
               <div className="flex min-h-[420px] items-center justify-center border-y border-dashed border-border/70 py-6 text-center text-sm text-muted-foreground">
                 没有可展示的布局房间。
@@ -338,21 +325,6 @@ export function InfraCalculator(props: InfraCalculatorProps) {
             </div>
           ) : null}
         </section>
-
-        {showBetaSidebar ? (
-          <aside className="min-w-0 divide-y divide-border/70 border-l border-border/70 pl-5 max-[1100px]:mt-5 max-[1100px]:grid max-[1100px]:grid-cols-[repeat(auto-fit,minmax(280px,1fr))] max-[1100px]:divide-x max-[1100px]:divide-y-0 max-[1100px]:border-l-0 max-[1100px]:border-t max-[1100px]:pl-0 max-[1100px]:[&>section]:px-5 max-[700px]:block max-[700px]:divide-x-0 max-[700px]:divide-y max-[700px]:[&>section]:px-0">
-            <Panel title="问题上下文" icon={<FileJson className="size-4" />}>
-              <Suspense fallback={null}><IssuePanel issue={issueForPanel} report={issueReport} feedback={feedbackResult} feedbackError={feedbackError} /></Suspense>
-            </Panel>
-            <Panel title="调试输出" icon={<Terminal className="size-4" />}>
-              <Suspense fallback={null}><DebugActions result={result} onDownloadMaa={onDownloadMaa} onDownloadBundle={onDownloadBundle} onCopyCommand={onCopyCommand} /></Suspense>
-              <details className="mt-3 text-sm text-muted-foreground">
-                <summary className="cursor-pointer">stdout / stderr</summary>
-                <Textarea readOnly value={result?.debug?.stdout || result?.debug?.stderr || "暂无输出。"} className="mt-2 max-h-64 min-h-32 resize-y font-mono text-xs" />
-              </details>
-            </Panel>
-          </aside>
-        ) : null}
       </section>
 
       {resultClearNotice ? (

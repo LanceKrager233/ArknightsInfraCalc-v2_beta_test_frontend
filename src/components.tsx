@@ -1,11 +1,9 @@
 import {
   AlertTriangle,
   Check,
-  CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Download,
   FileWarning,
   Loader2,
   Play,
@@ -18,7 +16,6 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { CSSProperties, ChangeEvent, lazy, ReactElement, ReactNode, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { AnimatedNumber, AnimatedText } from "@/components/AnimatedText";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Accordion, AccordionItem, AccordionPanel, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import {
@@ -104,12 +101,9 @@ import {
 } from "./schedule-list-layout";
 import {
   BaseBlueprint,
-  FeedbackData,
   FeedbackKind,
-  IssueReport,
   MaaJson,
   MaaPlan,
-  PublicPlanData,
   PresetDef,
   RotationJson,
   UserProfile,
@@ -1939,82 +1933,5 @@ export function ProductChangeConfirmModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-export function IssuePanel({
-  issue,
-  report,
-  feedback,
-  feedbackError,
-}: {
-  issue: { row: RoomRow; note: string } | null;
-  report: IssueReport | null;
-  feedback: FeedbackData | null;
-  feedbackError: string | null;
-}) {
-  if (!issue || !report) {
-    return (
-      <div className="flex min-h-24 items-center justify-center border-y border-dashed border-border/70 py-4 text-center text-sm text-muted-foreground">
-        点击房间里的“标记问题”，这里会生成反馈上下文。
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      <div>
-        <div className="font-number font-medium">{issue.row.title}</div>
-        <div className="text-sm text-muted-foreground">{issue.row.operators.join(" / ") || "空置"}</div>
-        <p className="mt-2 text-sm text-muted-foreground">{issue.note}</p>
-      </div>
-      {feedback ? (
-        <Alert className="rounded-none border-x-0 border-emerald-200 bg-emerald-50 text-emerald-700">
-          <CheckCircle2 />
-          <AlertDescription className="text-emerald-700">
-            反馈已提交，编号：{feedback.feedbackId}
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      {feedbackError ? (
-        <Alert variant="destructive" className="rounded-none border-x-0">
-          <AlertTriangle />
-          <AlertDescription>{feedbackError}</AlertDescription>
-        </Alert>
-      ) : null}
-      <Textarea
-        readOnly
-        value={JSON.stringify(report, null, 2)}
-        className="min-h-56 resize-y font-mono text-xs"
-      />
-    </div>
-  );
-}
-
-export function DebugActions({
-  result,
-  onDownloadMaa,
-  onDownloadBundle,
-  onCopyCommand,
-}: {
-  result: PublicPlanData | null;
-  onDownloadMaa: () => void;
-  onDownloadBundle: () => void;
-  onCopyCommand: () => void;
-}) {
-  return (
-    <div className="grid gap-2">
-      <Button variant="outline" disabled={!result?.maa} onClick={onDownloadMaa}>
-        <Download />
-        下载 MAA
-      </Button>
-      <Button variant="outline" disabled={!result?.debug?.debugBundle} onClick={onDownloadBundle}>
-        <Download />
-        下载调试包
-      </Button>
-      <Button variant="outline" disabled={!result?.debug?.command} onClick={onCopyCommand}>
-        复制 CLI 命令
-      </Button>
-    </div>
   );
 }

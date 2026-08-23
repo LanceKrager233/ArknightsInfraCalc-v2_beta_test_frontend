@@ -206,7 +206,7 @@ export function PlanResultSummary({
                 <span className="min-w-0 truncate">最接近第 <strong className="font-number"><AnimatedText value={comparison.planIndex + 1} /></strong> 班 · 匹配率 <strong className="font-number"><AnimatedText value={`${comparison.score}%`} /></strong></span>
                 <span className="shrink-0 text-[#313131]/60">需调整 <strong className="font-number text-[#313131]"><AnimatedText value={adjustmentCount} /></strong> 处</span>
               </span>
-              <span className="mt-1 block h-1 overflow-hidden bg-[#313131]/10" role="progressbar" aria-label="房间匹配百分比" aria-valuemin={0} aria-valuemax={100} aria-valuenow={comparison.score}>
+              <span className="mt-1 block h-1 overflow-hidden bg-[#313131]/10" role="progressbar" aria-label="非宿舍设施匹配百分比" aria-valuemin={0} aria-valuemax={100} aria-valuenow={comparison.score}>
                 <motion.span
                   className="block h-full bg-primary"
                   initial={animateOnMount

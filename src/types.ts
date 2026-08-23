@@ -866,28 +866,6 @@ export interface DebugBundle {
   };
 }
 
-export interface IssueReport {
-  type: "room_issue";
-  sourceName: string | null;
-  room: {
-    title: string;
-    group: string;
-    product?: string;
-    operators: string[];
-    inferredRule: string;
-    efficiency?: RoomEfficiency;
-    efficiencyLabel?: string;
-  };
-  command?: string;
-  savedFiles?: {
-    feedbackDir?: string;
-    issue?: string;
-    operbox?: string;
-    debugBundle?: string;
-  };
-  note: string;
-}
-
 export interface FeedbackApiResponse {
   success: boolean;
   feedbackId?: string;

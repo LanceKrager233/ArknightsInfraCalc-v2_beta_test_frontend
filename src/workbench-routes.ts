@@ -16,7 +16,6 @@ export function workbenchPageFromPathname(pathname: string): AppPage {
   return "calculator";
 }
 
-export function workbenchHref(page: AppPage, betaRequested: boolean): string {
-  const pathname = WORKBENCH_PAGE_PATHS[page];
-  return betaRequested ? `${pathname}?beta` : pathname;
+export function workbenchHref(page: AppPage): string {
+  return WORKBENCH_PAGE_PATHS[page];
 }
