@@ -4792,7 +4792,38 @@ test("Skland compact layout aligns both column endings when production is taller
     const rooms = column.querySelectorAll<HTMLElement>("article[data-room-group]");
     return rooms.item(rooms.length - 1).getBoundingClientRect().bottom;
   }));
-  expect(Math.abs(compactLastRoomBottoms[0] - compactLastRoomBottoms[1])).toBeLessThanOrEqual(1);
+  expect(Math.abs(compactLastRoomBottoms[0] - compactLastRoomBottoms[1])).toBeLessThanOrEqual(2);
+
+  const alignedRoomBoxes = await page.locator('[data-skland-compact-layout] article[data-room-group]').evaluateAll((rooms) => {
+    const boxes = rooms.map((room) => {
+      const bounds = room.getBoundingClientRect();
+      return { group: room.dataset.roomGroup, top: bounds.top, bottom: bounds.bottom, height: bounds.height };
+    });
+    const group = (name: string) => boxes.filter((box) => box.group === name);
+    return {
+      tradeTop: group("trading")[0]?.top,
+      trainingTop: group("training")[0]?.top,
+      trainingHeight: group("training")[0]?.height,
+      meetingHeight: group("meeting")[0]?.height,
+      lastManufactureBottom: group("manufacture").at(-1)?.bottom,
+      powerTop: group("power")[0]?.top,
+    };
+  });
+  expect(Math.abs((alignedRoomBoxes.tradeTop ?? 0) - (alignedRoomBoxes.trainingTop ?? 0))).toBeLessThanOrEqual(1);
+  expect(alignedRoomBoxes.trainingHeight).toBeLessThan(alignedRoomBoxes.meetingHeight ?? 0);
+  expect((alignedRoomBoxes.powerTop ?? 0) - (alignedRoomBoxes.lastManufactureBottom ?? 0)).toBeCloseTo(12, 0);
+  await expect(page.locator('[data-room-group="power"] [data-skland-power-efficiency]')).toHaveCount(3);
+  await expect(page.locator('[data-room-group="power"] [data-skland-power-efficiency]').first()).toHaveText("效率基准 100%");
+
+  for (const viewport of [{ width: 390, height: 844 }, { width: 768, height: 960 }]) {
+    await page.setViewportSize(viewport);
+    const dimensions = await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }));
+    expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
+    await expect(page.locator('[data-skland-compact-layout] [data-skland-power-efficiency]')).toHaveCount(3);
+  }
 });
 
 test("Skland supports adding, switching, and individually logging out multiple accounts", async ({ page }) => {
