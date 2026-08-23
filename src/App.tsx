@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { WebsiteAccountDialogSkeleton } from "@/components/auth/WebsiteAccountDialogSkeleton";
+import { WebsiteAccountDialogLoading } from "@/components/auth/WebsiteAccountDialogLoading";
 import { useAccountCloudWorkspace } from "account-cloud-workspace-bridge";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { AppTopBar, SklandAccountControl } from "@/components/layout/AppTopBar";
@@ -58,6 +58,7 @@ import {
 } from "./persistence";
 import { planToRows, RoomRow } from "./schedule";
 import { DEFAULT_ROTATION_PROFILE } from "./rotation-settings";
+import { MOTION_DURATION } from "./motion";
 import { closestShift, compareShifts } from "./skland";
 import { emptySklandBindingSummary } from "./skland-binding-state";
 import { createSklandRestoreGuard } from "./skland-restore-guard";
@@ -84,6 +85,7 @@ import {
 
 const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
 const CLIENT_ACCOUNT_CLOUD_SYNC_ENABLED = process.env.APP_CLIENT_ACCOUNT_CLOUD_SYNC_ENABLED === "1";
+const WEBSITE_AUTH_FOCUS_RETURN_DELAY_MS = Math.ceil(MOTION_DURATION.fast * 1_000) + 50;
 
 function bindingSummaryFromSession(session: Pick<SklandSessionData, "accounts" | "bindingCount" | "bindingSummary">): SklandBindingSummary {
   if (session.bindingSummary) return session.bindingSummary;
@@ -233,6 +235,8 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const defaultLayout = buildBlueprint(defaultPreset);
   const hasRenderedCalculator = useRef(false);
   const revealedPlanRevisions = useRef(new Set<string>());
+  const websiteAuthReturnFocusRef = useRef<HTMLElement | null>(null);
+  const websiteAuthFocusReturnTimerRef = useRef<number | null>(null);
   const [websiteAuthReloadKey, setWebsiteAuthReloadKey] = useState(0);
   const [websiteAuthDialogOpen, setWebsiteAuthDialogOpen] = useState(false);
   const [websiteAuthDialogMounted, setWebsiteAuthDialogMounted] = useState(false);
@@ -704,6 +708,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     if (page !== "account") leavingAccountAfterLogout.current = false;
     if (websiteSession) {
       if (websiteAuthDialogOpen) {
+        websiteAuthReturnFocusRef.current = null;
         setWebsiteAuthDialogOpen(false);
         router.push(workbenchHref("account", betaRequested));
       }
@@ -1227,14 +1232,33 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     navigateToPage("skland");
   }
 
-  function handleAppPageChange(nextPage: AppPage): boolean {
+  function handleAppPageChange(nextPage: AppPage, trigger?: HTMLElement): boolean {
     if (nextPage === "account" && !websiteSession) {
       if (websiteSessionPending) return true;
+      websiteAuthReturnFocusRef.current = trigger ?? null;
       setWebsiteAuthDialogOpen(true);
       return false;
     }
     if (nextPage === "calculator") hasRenderedCalculator.current = true;
     return true;
+  }
+
+  function handleWebsiteAuthDialogOpenChange(open: boolean) {
+    if (websiteAuthFocusReturnTimerRef.current !== null) {
+      window.clearTimeout(websiteAuthFocusReturnTimerRef.current);
+      websiteAuthFocusReturnTimerRef.current = null;
+    }
+    setWebsiteAuthDialogOpen(open);
+    if (open) return;
+    const trigger = websiteAuthReturnFocusRef.current;
+    websiteAuthReturnFocusRef.current = null;
+    websiteAuthFocusReturnTimerRef.current = window.setTimeout(() => {
+      websiteAuthFocusReturnTimerRef.current = null;
+      const focusTarget = trigger?.isConnected
+        ? trigger
+        : document.querySelector<HTMLElement>('[data-primary-navigation-page="account"]');
+      focusTarget?.focus();
+    }, WEBSITE_AUTH_FOCUS_RETURN_DELAY_MS);
   }
 
   function navigateToPage(nextPage: AppPage) {
@@ -1245,6 +1269,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   async function handleWebsiteSessionChanged(authenticated: boolean) {
     beginSklandStateChange();
     leavingAccountAfterLogout.current = !authenticated;
+    websiteAuthReturnFocusRef.current = null;
     setWebsiteAuthDialogOpen(false);
     router.push(workbenchHref(authenticated ? "account" : "calculator", betaRequested));
     if (!authenticated) {
@@ -1469,7 +1494,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       onSessionChanged: handleWebsiteSessionChanged,
       ...(CLIENT_ACCOUNT_CLOUD_SYNC_ENABLED ? {
         cloudWorkspace: accountCloudWorkspace.cloudWorkspaceData,
-        onRestoreCloudWorkspace: accountCloudWorkspace.applyWorkspace,
         onRestoreSavedPlan: (saved: SavedPlanData) => {
           const context = saved.calculationContext;
           if (!context) return;
@@ -1582,7 +1606,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
             height={390}
             loading="eager"
             decoding="async"
-            className="h-auto w-[7.75rem] sm:w-[8.75rem]"
+            className="h-auto w-24 sm:w-28"
           />
         </a>
       </footer>
@@ -1590,13 +1614,13 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       {CLIENT_ACCOUNT_CLOUD_SYNC_ENABLED ? accountCloudWorkspace.syncElement : null}
 
       {websiteAuthDialogMounted ? <Suspense fallback={(
-        <WebsiteAccountDialogSkeleton
+        <WebsiteAccountDialogLoading
           open={websiteAuthDialogOpen}
-          onOpenChange={setWebsiteAuthDialogOpen}
+          onOpenChange={handleWebsiteAuthDialogOpenChange}
         />
       )}><WebsiteAccountDialog
           open={websiteAuthDialogOpen}
-          onOpenChange={setWebsiteAuthDialogOpen}
+          onOpenChange={handleWebsiteAuthDialogOpenChange}
           onSessionChanged={handleWebsiteSessionChanged}
         /></Suspense> : null}
 

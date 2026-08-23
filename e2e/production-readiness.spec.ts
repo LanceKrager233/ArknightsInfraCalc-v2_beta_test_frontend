@@ -81,17 +81,20 @@ test("Rainyun logo stays at the page footer's right edge and opens safely", asyn
 
     const geometry = await link.evaluate((element) => {
       const linkBox = element.getBoundingClientRect();
+      const logoBox = element.querySelector("img")?.getBoundingClientRect();
       const footer = element.closest("footer");
       const footerBox = footer?.getBoundingClientRect();
       const footerStyle = footer ? getComputedStyle(footer) : null;
       return {
         height: linkBox.height,
+        logoWidth: logoBox?.width ?? Number.NaN,
         right: linkBox.right,
         footerRight: footerBox?.right ?? Number.NaN,
         footerPaddingRight: Number.parseFloat(footerStyle?.paddingRight ?? "0"),
       };
     });
     expect(geometry.height).toBeGreaterThanOrEqual(44 - 0.01);
+    expect(geometry.logoWidth).toBeCloseTo(viewport.width < 640 ? 96 : 112, 0);
     expect(geometry.right).toBeCloseTo(geometry.footerRight - geometry.footerPaddingRight, 0);
   }
 });
@@ -1279,6 +1282,8 @@ for (const viewport of [
     let workspaceWrites = 0;
     let restoreRequests = 0;
     let revokeRequests = 0;
+    let deleteRequests = 0;
+    let failNextDelete = viewport.width === 390;
     let planDeleted = false;
     let planPinned = false;
     const revisionId = "33333333-3333-4333-8333-333333333333";
@@ -1356,18 +1361,44 @@ for (const viewport of [
       return fulfill(route, { deleted: true });
     });
     await page.route("**/api/account/saved-plans", (route) => fulfill(route, {
-      plans: planDeleted ? [] : [{
-        id: "saved-plan-1",
-        diagnosticId,
-        title: "333 · 本地 MAA",
-        calculationContext: savedPlanContext,
-        boxMatchesWorkspace: true,
-        pinned: planPinned,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-        expiresAt: planPinned ? null : "2026-09-20T08:00:00.000Z",
-        result: planData,
-      }],
+      plans: [
+        ...(planDeleted ? [] : [{
+          id: "saved-plan-1",
+          diagnosticId,
+          title: "333 · 本地 MAA",
+          calculationContext: savedPlanContext,
+          boxMatchesWorkspace: true,
+          pinned: planPinned,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          expiresAt: planPinned ? null : "2026-09-20T08:00:00.000Z",
+          result: planData,
+        }]),
+        {
+          id: "saved-plan-legacy",
+          diagnosticId: null,
+          title: "旧版排班",
+          calculationContext: null,
+          boxMatchesWorkspace: true,
+          pinned: false,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          expiresAt: "2026-09-20T08:00:00.000Z",
+          result: planData,
+        },
+        {
+          id: "saved-plan-box-mismatch",
+          diagnosticId: "saved-plan-box-mismatch-diagnostic",
+          title: "Box 已变化的排班",
+          calculationContext: savedPlanContext,
+          boxMatchesWorkspace: false,
+          pinned: false,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          expiresAt: "2026-09-20T08:00:00.000Z",
+          result: planData,
+        },
+      ],
     }));
     await page.route("**/api/account/saved-plans/*", async (route) => {
       if (route.request().method() === "PATCH") {
@@ -1383,6 +1414,25 @@ for (const viewport of [
           updatedAt: timestamp,
           expiresAt: null,
           result: planData,
+        });
+      }
+      deleteRequests += 1;
+      if (failNextDelete) {
+        failNextDelete = false;
+        return route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          headers: { "X-Request-Id": requestId },
+          body: JSON.stringify({
+            success: false,
+            error: {
+              code: "AIC-SYS-5000",
+              message: "排班删除失败，请稍后重试。",
+              requestId,
+              retryable: true,
+            },
+            requestId,
+          }),
         });
       }
       planDeleted = true;
@@ -1450,91 +1500,155 @@ for (const viewport of [
     await page.getByRole("button", { name: "账号管理", exact: true }).click();
     const cloudPanel = page.locator("[data-cloud-data-panel]");
     await expect(cloudPanel).toBeVisible();
-    await expect(cloudPanel).toContainText("已同步至修订 2");
+    await expect(cloudPanel).toContainText("已同步 · 最近同步");
+    await expect(cloudPanel).not.toContainText("可恢复版本");
+    await expect(cloudPanel).not.toContainText("修订 1");
+    await expect(cloudPanel).not.toContainText("最多 10 版");
+    await expect(cloudPanel).not.toContainText("最近 5 条");
     const devicesCard = page.locator("[data-infra-technical-card]").filter({ has: page.getByRole("heading", { name: "登录设备" }) });
     const cloudCard = page.locator('[data-slot="cloud-workspace-card"]');
     const devicesTitle = devicesCard.getByRole("heading", { name: "登录设备" });
     const cloudTitle = cloudCard.getByRole("heading", { name: "账号云端工作区" });
-    const devicesAction = devicesCard.getByRole("button", { name: "退出全部设备" });
-    const cloudAction = cloudCard.getByRole("button", { name: "恢复", exact: true }).first();
+    const restorePlan = cloudCard.getByRole("button", { name: "恢复排班：333 · 本地 MAA" });
+    const pinPlan = cloudCard.getByRole("button", { name: "固定排班：333 · 本地 MAA" });
+    const deletePlan = cloudCard.getByRole("button", { name: "删除排班：333 · 本地 MAA" });
+    const legacyRestore = cloudCard.getByRole("button", { name: "恢复排班：旧版排班" });
+    const mismatchRestore = cloudCard.getByRole("button", { name: "恢复排班：Box 已变化的排班" });
     await expect(cloudCard).toBeVisible();
     await expect(cloudPanel.locator("button svg")).toHaveCount(0);
     expect(await cloudPanel.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
-    const revisionMeta = cloudPanel.getByText("修订 1", { exact: false });
-    const revisionMetaBox = await revisionMeta.boundingBox();
-    expect(revisionMetaBox).not.toBeNull();
-    expect(revisionMetaBox!.height).toBeLessThanOrEqual(50);
+    await expect(cloudPanel.getByText("333 · 本地 MAA", { exact: true })).toBeVisible();
+    await expect(cloudPanel.getByText("旧版排班", { exact: true })).toBeVisible();
+    await expect(cloudPanel.getByText("缺少计算配置，无法恢复", { exact: true })).toBeVisible();
+    await expect(cloudPanel.getByText("MAA Box 不一致，无法恢复", { exact: true })).toBeVisible();
+    await expect(legacyRestore).toBeDisabled();
+    await expect(mismatchRestore).toBeDisabled();
     const matchingStyles = await Promise.all([
       devicesTitle.evaluate((element) => getComputedStyle(element).fontSize),
       cloudTitle.evaluate((element) => getComputedStyle(element).fontSize),
-      devicesAction.evaluate((element) => {
-        const style = getComputedStyle(element);
-        return { borderRadius: style.borderRadius, fontSize: style.fontSize, height: style.height };
-      }),
-      cloudAction.evaluate((element) => {
-        const style = getComputedStyle(element);
-        return { borderRadius: style.borderRadius, fontSize: style.fontSize, height: style.height };
-      }),
+      restorePlan.evaluate((element) => Number.parseFloat(getComputedStyle(element).height)),
+      pinPlan.evaluate((element) => Number.parseFloat(getComputedStyle(element).height)),
+      deletePlan.evaluate((element) => Number.parseFloat(getComputedStyle(element).height)),
     ]);
     expect(matchingStyles[1]).toBe(matchingStyles[0]);
-    expect(matchingStyles[3]).toEqual(matchingStyles[2]);
-    await cloudPanel.getByRole("button", { name: "恢复", exact: true }).click();
-    await expect.poll(() => restoreRequests).toBe(1);
-    await cloudPanel.getByRole("button", { name: "固定排班" }).click();
+    expect(matchingStyles.slice(2)).toEqual([44, 44, 44]);
+    expect(restoreRequests).toBe(0);
+    await pinPlan.click();
     await expect.poll(() => planPinned).toBe(true);
-    await cloudPanel.getByRole("button", { name: /333 · 本地 MAA/ }).click();
+    await expect(cloudPanel.getByRole("button", { name: "取消固定排班：333 · 本地 MAA" })).toBeVisible();
+    await cloudPanel.getByRole("button", { name: "恢复排班：333 · 本地 MAA" }).click();
     await expect(page).toHaveURL(/\/$/);
     await expect(page.locator("[data-plan-result-summary]")).toContainText("333 基建方案");
     if (viewport.width < 768) await page.getByRole("button", { name: "Toggle Sidebar" }).click();
     await page.getByRole("button", { name: "账号管理", exact: true }).click();
     const restoredCloudPanel = page.locator("[data-cloud-data-panel]");
     await expect(restoredCloudPanel).toBeVisible();
-    await restoredCloudPanel.getByRole("button", { name: "删除排班" }).click();
+    await restoredCloudPanel.getByRole("button", { name: "删除排班：333 · 本地 MAA" }).click();
+    expect(deleteRequests).toBe(0);
+    await expect(restoredCloudPanel.getByRole("button", { name: "取消删除排班：333 · 本地 MAA" })).toBeVisible();
+    const confirmDelete = restoredCloudPanel.getByRole("button", { name: "确认删除排班：333 · 本地 MAA" });
+    await expect(confirmDelete).toBeVisible();
+    await expect(restoredCloudPanel.locator("[data-cloud-delete-status]")).toContainText("请确认是否删除排班");
+
+    if (viewport.width === 390) {
+      await restoredCloudPanel.getByRole("button", { name: "取消删除排班：333 · 本地 MAA" }).click();
+      expect(deleteRequests).toBe(0);
+      await expect(restoredCloudPanel.locator("[data-cloud-delete-status]")).toContainText("已取消删除排班");
+
+      await restoredCloudPanel.getByRole("button", { name: "删除排班：333 · 本地 MAA" }).click();
+      await page.waitForTimeout(8_200);
+      expect(deleteRequests).toBe(0);
+      await expect(restoredCloudPanel.getByRole("button", { name: "确认删除排班：333 · 本地 MAA" })).toHaveCount(0);
+      await expect(restoredCloudPanel.locator("[data-cloud-delete-status]")).toContainText("删除确认已超时");
+
+      await restoredCloudPanel.getByRole("button", { name: "删除排班：333 · 本地 MAA" }).click();
+      await restoredCloudPanel.getByRole("button", { name: "确认删除排班：333 · 本地 MAA" }).click();
+      await expect.poll(() => deleteRequests).toBe(1);
+      expect(planDeleted).toBe(false);
+      await expect(restoredCloudPanel).toContainText("排班删除失败，请稍后重试。");
+
+      await restoredCloudPanel.getByRole("button", { name: "删除排班：333 · 本地 MAA" }).click();
+    }
+    await restoredCloudPanel.getByRole("button", { name: "确认删除排班：333 · 本地 MAA" }).click();
     await expect.poll(() => planDeleted).toBe(true);
+    expect(deleteRequests).toBe(viewport.width === 390 ? 2 : 1);
 
     const revoke = restoredCloudPanel.getByRole("button", { name: /按住撤销并删除/ });
     await revoke.scrollIntoViewIfNeeded();
     await expect(revoke).toBeVisible();
     const revokeBox = await revoke.boundingBox();
     expect(revokeBox).not.toBeNull();
-    await page.mouse.move(revokeBox!.x + revokeBox!.width / 2, revokeBox!.y + revokeBox!.height / 2);
+    const revokeX = revokeBox!.x + revokeBox!.width / 2;
+    const revokeY = revokeBox!.y + revokeBox!.height / 2;
+    await page.mouse.move(revokeX, revokeY);
     await page.mouse.down();
-    await page.waitForTimeout(1900);
+    for (let frame = 0; frame < 20; frame += 1) {
+      await page.mouse.move(revokeX + (frame % 2), revokeY);
+      await page.waitForTimeout(100);
+    }
     await page.mouse.up();
     await expect.poll(() => revokeRequests).toBe(1);
     await expect(restoredCloudPanel).toContainText("当前保持纯本地模式，不会上传已有数据。");
   });
 }
 
-test("website login keeps a stable dialog skeleton while its deferred UI loads", async ({ page }) => {
+test("website login keeps one compact loading state across deferred UI and session loading", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.requestIdleCallback = () => 1;
+    window.cancelIdleCallback = () => undefined;
+  });
   await page.unroute("**/api/auth/get-session");
-  await page.route("**/api/auth/get-session", (route) => route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    body: "null",
-  }));
-  await mockApis(page);
-  await seedPreferences(page);
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/");
-
+  let sessionRequests = 0;
+  let releaseSession: (() => void) | undefined;
+  const sessionGate = new Promise<void>((resolve) => {
+    releaseSession = resolve;
+  });
+  await page.route("**/api/auth/get-session", async (route) => {
+    sessionRequests += 1;
+    if (sessionRequests > 2) await sessionGate;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: "null",
+    });
+  });
   let releaseChunks: (() => void) | undefined;
   const chunkGate = new Promise<void>((resolve) => {
     releaseChunks = resolve;
   });
   let deferredChunkRequests = 0;
   await page.route("**/_next/static/chunks/*.js", async (route) => {
-    deferredChunkRequests += 1;
-    await chunkGate;
-    await route.continue();
+    const response = await route.fetch();
+    const body = await response.body();
+    if (body.toString("utf8").includes("function WebsiteAccountDialog({")) {
+      deferredChunkRequests += 1;
+      await chunkGate;
+    }
+    await route.fulfill({ response, body });
   });
+  await mockApis(page);
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await expect.poll(() => sessionRequests).toBe(2);
+  await page.waitForTimeout(100);
 
   await page.getByRole("button", { name: "账号管理", exact: true }).click();
-  const skeleton = page.locator("[data-website-account-dialog-skeleton]");
-  await expect(skeleton).toBeVisible();
-  await expect(skeleton.getByRole("status", { name: "正在加载登录界面" })).toBeVisible();
+  const loadingDialog = page.locator("[data-website-account-dialog-loading]");
+  await expect(loadingDialog).toBeVisible();
+  await expect(loadingDialog.getByRole("status")).toContainText("正在加载登录界面…");
+  await expect(loadingDialog.locator('[data-slot="skeleton"]')).toHaveCount(0);
   await expect(page.locator("[data-website-account-panel]")).toHaveCount(0);
+  await expect(page.getByRole("dialog")).toHaveCount(1);
   await expect.poll(() => deferredChunkRequests).toBeGreaterThan(0);
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(loadingDialog.locator("[data-website-account-loading-spinner]")).toHaveCSS("animation-name", "none");
+  await page.keyboard.press("Escape");
+  await expect(loadingDialog).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "账号管理", exact: true })).toBeFocused();
+  await page.getByRole("button", { name: "账号管理", exact: true }).click();
+  await expect(loadingDialog).toBeVisible();
 
   for (const viewport of [
     { width: 390, height: 844 },
@@ -1542,8 +1656,8 @@ test("website login keeps a stable dialog skeleton while its deferred UI loads",
     { width: 1440, height: 900 },
   ]) {
     await page.setViewportSize(viewport);
-    await expect(skeleton).toBeVisible();
-    const box = await skeleton.boundingBox();
+    await expect(loadingDialog).toBeVisible();
+    const box = await loadingDialog.boundingBox();
     expect(box).not.toBeNull();
     expect(box?.width ?? 0).toBeLessThanOrEqual(viewport.width - 16);
     expect(box?.height ?? 0).toBeLessThanOrEqual(viewport.height - 16);
@@ -1551,8 +1665,25 @@ test("website login keeps a stable dialog skeleton while its deferred UI loads",
 
   releaseChunks?.();
   await page.unroute("**/_next/static/chunks/*.js");
+  await expect(loadingDialog).toHaveCount(0);
+  const accountDialog = page.getByRole("dialog", { name: "登录网站账号" });
+  const sessionLoading = accountDialog.locator("[data-website-account-loading]");
+  await expect.poll(() => sessionRequests).toBeGreaterThan(2);
+  await expect(sessionLoading).toBeVisible();
+  await expect(sessionLoading).toContainText("正在加载登录界面…");
+  await expect(accountDialog.locator('[data-slot="skeleton"]')).toHaveCount(0);
+  await expect(accountDialog.locator("[data-account-action-cards]")).toHaveCount(0);
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+
+  await page.keyboard.press("Escape");
+  await expect(accountDialog).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "账号管理", exact: true })).toBeFocused();
+  await page.getByRole("button", { name: "账号管理", exact: true }).click();
+  await expect(sessionLoading).toBeVisible();
+
+  releaseSession?.();
   await expect(page.locator("[data-website-account-panel]")).toBeVisible();
-  await expect(skeleton).toHaveCount(0);
+  await expect(sessionLoading).toHaveCount(0);
 });
 
 test("website login opens account management after the gated navigation dialog", async ({ page }) => {

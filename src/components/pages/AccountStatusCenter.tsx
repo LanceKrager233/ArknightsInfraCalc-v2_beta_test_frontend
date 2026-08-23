@@ -7,7 +7,6 @@ import type { CloudWorkspaceData, SavedPlanData } from "@/types";
 export interface AccountStatusCenterProps {
   onSessionChanged?: (authenticated: boolean) => void | Promise<void>;
   cloudWorkspace?: CloudWorkspaceData | null;
-  onRestoreCloudWorkspace?: (workspace: CloudWorkspaceData) => void;
   onRestoreSavedPlan?: (plan: SavedPlanData) => void;
   onCloudDataChanged?: () => void;
 }
