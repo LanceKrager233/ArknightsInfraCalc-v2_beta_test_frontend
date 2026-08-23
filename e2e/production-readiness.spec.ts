@@ -12,7 +12,10 @@ const layout243 = {
   template: "243",
   drone_cap: 235,
   scenario: {},
-  rooms: [{ id: "workshop", kind: "workshop", level: 3 }],
+  rooms: [
+    { id: "workshop", kind: "workshop", level: 3 },
+    { id: "training_room", kind: "training_room", level: 3 },
+  ],
 };
 
 test.beforeEach(async ({ page }) => {
@@ -628,6 +631,14 @@ const motionPlanBase = rotationResultData({
 
 const motionPlanData = {
   ...motionPlanBase,
+  trainingRoom: {
+    schema_version: 1 as const,
+    shifts: [
+      { trainee: "Training-A", trainer: "Trainer-A" },
+      { trainee: "Training-B", trainer: null },
+      { trainee: null, trainer: "Trainer-C" },
+    ],
+  },
   maa: {
     ...motionPlanBase.maa,
     plans: [0, 1, 2].map((index) => ({
@@ -772,6 +783,24 @@ const authenticatedSklandSnapshot = {
         refreshCount: 2,
         completeWorkTime: 1_700_002_000,
       },
+      {
+        key: "training-1",
+        group: "training",
+        index: 0,
+        level: 3,
+        operators: [
+          { id: "char_003_kalts", name: "凯尔希", morale: 24, lastMoraleUpdateTs: 1_700_000_050, position: "trainee" },
+          { id: "char_002_amiya", name: "阿米娅", morale: 18, lastMoraleUpdateTs: 1_700_000_050, position: "trainer" },
+        ],
+        occupancy: { current: 2, capacity: 2 },
+      },
+      {
+        key: "workshop",
+        group: "processing",
+        index: 0,
+        level: 3,
+        operators: [],
+      },
     ],
   },
   operators: [
@@ -890,6 +919,7 @@ const productionHeavySklandSnapshot = {
       })),
       authenticatedSklandSnapshot.infrastructure.rooms[4],
       authenticatedSklandSnapshot.infrastructure.rooms[5],
+      authenticatedSklandSnapshot.infrastructure.rooms[6],
       ...Array.from({ length: 4 }, (_, index) => ({
         ...authenticatedSklandSnapshot.infrastructure.rooms[3],
         key: `dorm-${index}`,
@@ -1901,11 +1931,21 @@ test("defers a portrait far below the mobile viewport until it approaches view",
   await mockApis(page);
   await seedV4Session(page, lazyPortraitPlanData);
   await page.addInitScript(() => {
-    document.addEventListener("DOMContentLoaded", () => {
+    const installDeferredPortraitStyle = () => {
+      const target = document.head ?? document.documentElement;
+      if (!target) return false;
       const style = document.createElement("style");
       style.textContent = '[data-room-group="processing"] { margin-top: 3000px !important; }';
-      document.head.append(style);
-    });
+      target.append(style);
+      return true;
+    };
+    if (!installDeferredPortraitStyle()) {
+      const observer = new MutationObserver(() => {
+        if (!installDeferredPortraitStyle()) return;
+        observer.disconnect();
+      });
+      observer.observe(document, { childList: true, subtree: true });
+    }
   });
   await page.setViewportSize({ width: 390, height: 844 });
   const requestedPortraits: string[] = [];
@@ -1916,7 +1956,7 @@ test("defers a portrait far below the mobile viewport until it approaches view",
   });
   await page.goto("/");
 
-  const deferredPortrait = page.locator('img[alt="嘉辛塔"]');
+  const deferredPortrait = page.locator('[data-schedule-view="list"] img[alt="嘉辛塔"]');
   await expect(deferredPortrait).toHaveAttribute("loading", "lazy");
   await expect(deferredPortrait).toBeVisible();
   const position = await deferredPortrait.evaluate((element) => {
@@ -2618,6 +2658,11 @@ test("plan completion reveals status, metrics, and schedule once without resetti
   await expect(summary).toBeVisible();
   await expect(summary).toHaveAttribute("data-plan-entrance", "animated");
   await expect(board).toHaveAttribute("data-plan-revision", diagnosticId);
+  const listTrainingRoom = board.locator('[data-schedule-view="list"] [data-room-group="training"]');
+  await expect(listTrainingRoom).toBeVisible();
+  await expect(listTrainingRoom.locator('[data-position="训练位"]')).toContainText("Training-A");
+  await expect(listTrainingRoom.locator('[data-position="协助位"]')).toContainText("Trainer-A");
+  await expect(listTrainingRoom).not.toContainText("不参与 MAA 导出");
   await expect(board).toHaveAttribute("data-motion-sentinel", "stable");
   expect(await board.evaluate((element) => element.getAnimations().filter((animation) => animation.playState === "running").length)).toBe(0);
   await expect(listTab).toHaveAttribute("aria-selected", "true");
@@ -2683,6 +2728,10 @@ test("plan completion reveals status, metrics, and schedule once without resetti
   await expect(page.locator("[data-shift-actions] [data-shift-tabs]")).toBeVisible();
   await secondShift.click();
   await expect(secondShift).toHaveAttribute("aria-selected", "true");
+  await expect(listTrainingRoom.locator('[data-position="训练位"]')).toContainText("Training-B");
+  const emptyTrainerPosition = listTrainingRoom.locator('[data-position="协助位"]');
+  await expect(emptyTrainerPosition).not.toContainText("空置");
+  await expect(emptyTrainerPosition.locator('[aria-label="协助位：空置"]')).toHaveCount(1);
   await expect(board).toHaveAttribute("data-motion-sentinel", "stable");
   expect(await board.evaluate((element) => element.getAnimations().filter((animation) => animation.playState === "running").length)).toBe(0);
   await expectCapturedStyleMotion(page, "shift-slots");
@@ -2708,11 +2757,37 @@ test("plan completion reveals status, metrics, and schedule once without resetti
   expect(await board.evaluate((element) => element.getAnimations().filter((animation) => animation.playState === "running").length)).toBe(0);
   const compactView = board.locator('[data-schedule-view="compact"]');
   await expect(compactView).toBeVisible();
+  const compactTrainingRoom = compactView.locator('[data-room-group="training"]');
+  await expect(compactTrainingRoom).toBeVisible();
+  await expect(compactTrainingRoom.locator('[data-position="训练位"]')).toContainText("Training-B");
+  await expect(compactView.locator(".compact-auxiliary-grid")).toHaveCSS("grid-template-columns", /px/);
   if (browserName === "webkit") {
     await expectCapturedStyleMotion(page, "compact-view");
   } else {
     await expectCapturedMotion(page, "compact-view", 280);
   }
+  const auxiliaryGrid = compactView.locator(".compact-auxiliary-grid");
+  await expect.poll(() => auxiliaryGrid.evaluate((element) => ({
+    columns: getComputedStyle(element).gridTemplateColumns.split(" ").length,
+    rows: new Set(Array.from(element.children).map((child) => child.getBoundingClientRect().y)).size,
+    fits: element.scrollWidth <= element.clientWidth + 1,
+  }))).toEqual({ columns: 2, rows: 2, fits: true });
+  for (const group of ["hire", "processing"]) {
+    const avatar = auxiliaryGrid.locator(`[data-room-group="${group}"] .infra-operator-slot`).first();
+    await expect.poll(() => avatar.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThanOrEqual(64);
+  }
+
+  await page.setViewportSize({ width: 768, height: 900 });
+  await expect.poll(() => auxiliaryGrid.evaluate((element) => ({
+    columns: getComputedStyle(element).gridTemplateColumns.split(" ").length,
+    rows: new Set(Array.from(element.children).map((child) => child.getBoundingClientRect().y)).size,
+    fits: element.scrollWidth <= element.clientWidth + 1,
+  }))).toEqual({ columns: 2, rows: 2, fits: true });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(board.locator('[data-schedule-view="list"]')).toBeVisible();
+  await expect(board.locator('[data-schedule-view="compact"]')).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
   expect(invalidTransformWarnings).toEqual([]);
 });
 
@@ -3081,6 +3156,13 @@ test("Full E2 stays in place and completes generation, shifts, MAA export, and f
   await page.getByRole("button", { name: "导出到 MAA" }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe("arknights-infra-schedule-maa.json");
+  const downloadStream = await download.createReadStream();
+  const downloadChunks: Buffer[] = [];
+  for await (const chunk of downloadStream) downloadChunks.push(Buffer.from(chunk));
+  const downloadedMaa = JSON.parse(Buffer.concat(downloadChunks).toString("utf8")) as {
+    plans?: Array<{ rooms?: Record<string, unknown> }>;
+  };
+  expect(downloadedMaa.plans?.every((plan) => !("training" in (plan.rooms ?? {})))).toBe(true);
 
   await page.getByRole("button", { name: "加工站 反馈排班问题" }).click();
   const feedbackDialog = page.getByRole("dialog");
@@ -4528,6 +4610,26 @@ test("Skland status center keeps profile and recruitment in overview and support
   await expect(page.getByRole("heading", { name: "当前基建", exact: true })).toBeVisible();
   await expect(page.getByText("按计算器布局排列，快速核对进驻、心情与生产状态。", { exact: true })).toHaveCount(0);
   await expect(page.locator("[data-skland-compact-layout]")).toBeVisible();
+  await expect(page.locator('[data-skland-compact-layout] article[data-room-group]')).toHaveCount(8);
+  const currentTrainingRoom = page.locator('[data-skland-compact-layout] [data-room-group="training"]');
+  await expect(currentTrainingRoom).toBeVisible();
+  await expect(currentTrainingRoom).toContainText("2/2");
+  await expect(currentTrainingRoom.locator('[data-position="训练位"]')).toContainText("凯尔希");
+  await expect(currentTrainingRoom.locator('[data-position="协助位"]')).toContainText("阿米娅");
+  await expect(currentTrainingRoom.locator('[aria-label^="训练位："]')).toHaveCount(1);
+  await expect(currentTrainingRoom.locator('[aria-label^="协助位："]')).toHaveCount(1);
+  await expect(currentTrainingRoom.locator('img[title^="职业："]')).toHaveCount(2);
+  await expect(page.locator('[data-skland-compact-layout] [data-room-group="processing"]')).toBeVisible();
+  await expect(page.getByText(/^线索板：/)).toHaveCount(0);
+  const auxiliaryRoomBoxes = await page.locator(".skland-auxiliary-grid > article").evaluateAll((rooms) => Object.fromEntries(
+    rooms.map((room) => {
+      const bounds = room.getBoundingClientRect();
+      return [room.dataset.roomGroup, { x: bounds.x, width: bounds.width }];
+    }),
+  ));
+  expect(auxiliaryRoomBoxes.meeting.x).toBeCloseTo(auxiliaryRoomBoxes.training.x, 0);
+  expect(auxiliaryRoomBoxes.hire.x).toBeCloseTo(auxiliaryRoomBoxes.processing.x, 0);
+  expect(auxiliaryRoomBoxes.meeting.width).toBeGreaterThan(auxiliaryRoomBoxes.hire.width);
   const compactColumns = page.locator("[data-skland-compact-column]");
   await expect(compactColumns).toHaveCount(2);
   const compactColumnBottoms = await compactColumns.evaluateAll((columns) => columns.map((column) => (

@@ -420,6 +420,85 @@
   --infra-room-shadow-soft: oklch(0.12 0.012 220 / 0.06);
 }
 
+.compact-auxiliary-container {
+  container-type: inline-size;
+}
+
+.compact-auxiliary-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.compact-auxiliary-grid > [data-room-group="meeting"] {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.compact-auxiliary-grid > [data-room-group="training"] {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.compact-auxiliary-grid > [data-room-group="hire"] {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.compact-auxiliary-grid > [data-room-group="processing"] {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+@container (max-width: 539px) {
+  .compact-auxiliary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .compact-auxiliary-grid .infra-operator-slot {
+    --operator-slot-size: clamp(56px, 9cqw, 70px);
+  }
+}
+
+.skland-auxiliary-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .skland-auxiliary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+
+  .skland-auxiliary-grid > [data-room-group="meeting"] {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .skland-auxiliary-grid > [data-room-group="training"] {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .skland-auxiliary-grid > [data-room-group="hire"] {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .skland-auxiliary-grid > [data-room-group="processing"] {
+    grid-column: 2;
+    grid-row: 2;
+  }
+}
+
+@media (min-width: 1280px) {
+  .skland-auxiliary-grid {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  }
+}
+
 .infra-room-surface {
   position: relative;
   isolation: isolate;

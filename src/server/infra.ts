@@ -1045,6 +1045,7 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
     let serveResult: ServeResult;
     let profileJson: unknown;
     let maaJson: unknown;
+    let trainingRoomJson: unknown;
     let trainingAdviceJson: unknown;
     let rotationSource: unknown;
     let serveShifts: unknown[] = [];
@@ -1079,6 +1080,7 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
       }
       profileJson = payload?.profile;
       maaJson = payload?.maa;
+      trainingRoomJson = payload?.trainingRoom;
       trainingAdviceJson = payload?.trainingAdvice;
       rotationSource = payload?.rotation;
       serveShifts = payload && Array.isArray(payload.rotation.shifts) ? payload.rotation.shifts : [];
@@ -1184,6 +1186,7 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
       stderr: serveResult.stderr,
       profileJson: profileJson as PlanApiResponse["profileJson"],
       maaJson: maaJson as PlanApiResponse["maaJson"],
+      trainingRoomJson: trainingRoomJson as PlanApiResponse["trainingRoomJson"],
       trainingAdviceJson: trainingAdviceJson as PlanApiResponse["trainingAdviceJson"],
       rotationJson: rotationJson as PlanApiResponse["rotationJson"],
       solver,

@@ -9,6 +9,7 @@ import type {
 } from "./types";
 import { stripInternalFields } from "./internal-field-safety.ts";
 import { parseTrainingAdviceReport } from "./training-advice-contract.ts";
+import { parseTrainingRoomSchedule } from "./training-room-contract.ts";
 import { sanitizeMaaJson } from "./maa-safety.ts";
 import { normalizeRotationProfile } from "./rotation-settings.ts";
 import { normalizeRotationResult } from "./rotation-result.ts";
@@ -126,6 +127,15 @@ export function normalizePersistedPlanData(value: unknown, fallbackProfile: Rota
     }
   }
 
+  let trainingRoom: PublicPlanData["trainingRoom"];
+  if (value.trainingRoom !== undefined) {
+    try {
+      trainingRoom = parseTrainingRoomSchedule(value.trainingRoom, maa);
+    } catch {
+      trainingRoom = undefined;
+    }
+  }
+
   return {
     profile: stripInternalFields(structuredClone(profile)),
     maa: sanitizeMaaJson(maa),
@@ -134,6 +144,7 @@ export function normalizePersistedPlanData(value: unknown, fallbackProfile: Rota
       profile,
       fallbackProfile,
     }),
+    ...(trainingRoom ? { trainingRoom } : {}),
     ...(trainingAdvice ? { trainingAdvice } : {}),
     durationMs: safeDuration(value.durationMs),
     diagnosticId:

@@ -65,6 +65,10 @@ const result = {
     combinations: [],
     recommendations: [],
   },
+  trainingRoom: {
+    schema_version: 1 as const,
+    shifts: [],
+  },
   durationMs: 10,
   diagnosticId: "diag",
   debug: { command: "must be removed", stdout: "secret" },
@@ -84,6 +88,10 @@ function resultWithShifts(count: number, rotationProfile: RotationProfile = DEFA
         name: `班次 ${index + 1}`,
         rooms: {},
       })),
+    },
+    trainingRoom: {
+      schema_version: 1,
+      shifts: Array.from({ length: count }, () => ({ trainee: null, trainer: null })),
     },
     rotation: {
       profile: rotationProfile,
@@ -127,6 +135,7 @@ test("v5 persistence stores source, expiry metadata, and strips debug fields", (
   assert.equal(saved.rotationProfile, DEFAULT_ROTATION_PROFILE);
   assert.equal(saved.result?.debug, undefined);
   assert.deepEqual(saved.result?.trainingAdvice, result.trainingAdvice);
+  assert.deepEqual(saved.result?.trainingRoom, result.trainingRoom);
   assert.equal(saved.layoutSource, "local");
   assert.deepEqual(saved.localLayoutBackup, layout);
   assert.deepEqual(loadPersistedSession(storage, now)?.localLayoutBackup, layout);
@@ -328,8 +337,13 @@ test("persistence preserves MAA protocol candidates only inside rooms", () => {
         candidates: ["但书", "巫恋"],
         use_operator_groups: true,
       }],
+      training: [{ operators: ["不应导出的训练室干员"] }],
     },
-  }];
+  } as PublicPlanData["maa"]["plans"][number]];
+  protocolResult.trainingRoom = {
+    schema_version: 1,
+    shifts: [{ trainee: "能天使", trainer: "德克萨斯" }],
+  };
 
   const saved = persistSession(storage, {
     presetLabel: "243",
@@ -349,6 +363,8 @@ test("persistence preserves MAA protocol candidates only inside rooms", () => {
   assert.deepEqual(restored?.result?.maa.plans[0].rooms.trading?.[0].candidates, ["但书", "巫恋"]);
   assert.equal(restored?.result?.maa.plans[0].description_post, "换班后说明");
   assert.equal(restored?.result?.maa.plans[0].drones?.rule, "all");
+  assert.equal("training" in saved.result!.maa.plans[0]!.rooms, false);
+  assert.deepEqual(restored?.result?.trainingRoom, protocolResult.trainingRoom);
 });
 
 test("v5 persistence restores the fourth shift when the result has four plans", () => {
