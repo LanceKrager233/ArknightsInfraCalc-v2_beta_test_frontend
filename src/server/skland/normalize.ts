@@ -38,6 +38,12 @@ const CLUE_NAMES: Record<string, string> = {
 
 type FactoryProduct = SklandManufactureRoom["product"];
 
+// Skland's manufacture array reports rooms 3 and 4 opposite to the numbering shown in-game.
+export function manufacturesInGameOrder<T>(rooms: readonly T[]): T[] {
+  if (rooms.length < 4) return [...rooms];
+  return [rooms[0]!, rooms[1]!, rooms[3]!, rooms[2]!, ...rooms.slice(4)];
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -194,7 +200,7 @@ function infrastructureFromPlayerInfo(
     })),
     lastUpdateTime: nonNegative(value.lastUpdateTime),
   }));
-  const manufactures: SklandManufactureRoom[] = building.manufactures.map((value, index) => ({
+  const manufactures: SklandManufactureRoom[] = manufacturesInGameOrder(building.manufactures).map((value, index) => ({
     ...roomBase(info, "manufacture", index, value),
     product: factoryProduct(info, value.formulaId),
     production: {
