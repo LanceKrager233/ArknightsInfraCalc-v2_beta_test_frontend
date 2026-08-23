@@ -496,6 +496,7 @@
 @media (min-width: 1280px) {
   .skland-auxiliary-grid {
     grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    grid-template-rows: minmax(11.25rem, 9fr) minmax(0, 8fr);
   }
 }
 

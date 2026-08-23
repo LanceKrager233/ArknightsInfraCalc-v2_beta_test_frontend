@@ -679,6 +679,15 @@ function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
             ) : null}
           </div>
         </div>
+        {room.group === "power" ? (
+          <div
+            className="mt-1 flex min-h-7 items-center gap-2 text-xs text-white/58"
+            data-skland-power-efficiency
+          >
+            <span>效率</span>
+            <strong className="font-number font-semibold tabular-nums text-[var(--room-accent)]">基准 100%</strong>
+          </div>
+        ) : null}
       </div>
 
       <div
@@ -929,6 +938,7 @@ function InfrastructureTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
     (room) => room.group === "meeting" || room.group === "training" || room.group === "hire" || room.group === "processing",
   );
   const dormitoryRooms = infrastructure.rooms.filter((room) => room.group === "dormitory");
+  const alignDenseInfrastructureRows = powerRooms.length >= 2 && workRooms.length >= 6 && dormitoryRooms.length >= 4;
 
   return (
     <div className="grid gap-7">
@@ -1005,12 +1015,12 @@ function InfrastructureTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
           data-skland-compact-layout
         >
           <div
-            className="flex min-w-0 flex-col gap-3 xl:justify-between"
+            className={`flex min-w-0 flex-col gap-3 ${alignDenseInfrastructureRows ? "" : "xl:justify-between"}`}
             data-skland-compact-column="production"
           >
             {controlRooms.map((room) => <RoomCard key={room.key} room={room} />)}
 
-            {workRooms.length ? <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+            {workRooms.length ? <div className={`grid min-w-0 gap-3 sm:grid-cols-2 ${alignDenseInfrastructureRows ? "xl:mt-8" : ""}`}>
               {workRooms.map((room) => <RoomCard key={room.key} room={room} />)}
             </div> : null}
 
