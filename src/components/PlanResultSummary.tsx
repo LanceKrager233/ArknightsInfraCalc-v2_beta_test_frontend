@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
 import { PRODUCT_ICON_URLS } from "@/product-assets";
 import { formatPlanDuration, relativeMetricDelta, rotationMetricValue, type RotationMetricKind } from "@/rotation-presentation";
+import { countShiftPlacementAdjustments } from "@/skland";
 import type { BaseBlueprint, MaaJson, RotationJson, ShiftComparison, UserProfile } from "@/types";
 
 type DetailSection = "efficiency" | "comparison";
@@ -112,7 +113,7 @@ export function PlanResultSummary({
       supporting: { id: "shards", label: "源石碎片", unit: "枚", icon: PRODUCT_ICON_URLS.shards, amount: production.shards },
     },
   ] : [];
-  const adjustmentCount = comparison?.adjustments.length ?? 0;
+  const adjustmentCount = countShiftPlacementAdjustments(comparison);
   const activeDetailSection = detailSection === "comparison" && comparison ? "comparison" : "efficiency";
   const openDetails = (section: DetailSection) => {
     setDetailSection(section);
@@ -204,7 +205,11 @@ export function PlanResultSummary({
             <motion.button type="button" className="col-start-2 min-w-0 border-t border-[#313131]/10 bg-[#E7E3D8] px-4 py-2.5 text-left transition-colors hover:bg-[#DDD8CA] focus-visible:outline-2 focus-visible:outline-primary max-[820px]:col-start-1 max-sm:min-h-14" data-shift-comparison data-plan-details-trigger="comparison" whileTap={shouldReduceMotion ? undefined : { scale: 0.99 }} onClick={() => openDetails("comparison")}>
               <span className="flex items-center justify-between gap-3 text-xs">
                 <span className="min-w-0 truncate">最接近第 <strong className="font-number"><AnimatedText value={comparison.planIndex + 1} /></strong> 班 · 匹配率 <strong className="font-number"><AnimatedText value={`${comparison.score}%`} /></strong></span>
-                <span className="shrink-0 text-[#313131]/60">需调整 <strong className="font-number text-[#313131]"><AnimatedText value={adjustmentCount} /></strong> 处</span>
+                <span className="shrink-0 text-[#313131]/60">
+                  {adjustmentCount === 0
+                    ? "无需调整"
+                    : <>需调整 <strong className="font-number text-[#313131]"><AnimatedText value={adjustmentCount} /></strong> 处</>}
+                </span>
               </span>
               <span className="mt-1 block h-1 overflow-hidden bg-[#313131]/10" role="progressbar" aria-label="非宿舍设施匹配百分比" aria-valuemin={0} aria-valuemax={100} aria-valuenow={comparison.score}>
                 <motion.span

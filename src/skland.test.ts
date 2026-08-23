@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { compareShifts } from "./skland.ts";
+import { compareShifts, countShiftPlacementAdjustments } from "./skland.ts";
 import type { MaaJson, SklandScheduleInfrastructure } from "./types.ts";
 
 const infrastructure: SklandScheduleInfrastructure = {
@@ -25,6 +25,7 @@ test("compareShifts builds unique room-level adjustments and merges fatigue", ()
   assert.deepEqual(first.adjustments.find((item) => item.operator === "推进之王"), { operator: "推进之王", currentRoomKey: "manufacture:0", targetRoomKey: "trading:0", issues: ["misplaced", "tired"] });
   assert.deepEqual(first.adjustments.find((item) => item.operator === "德克萨斯")?.issues, ["missing"]);
   assert.deepEqual(first.adjustments.find((item) => item.operator === "能天使")?.issues, ["unexpected"]);
+  assert.equal(countShiftPlacementAdjustments(first), 3);
 });
 
 test("compareShifts supports multiple shifts and exact room matches", () => {
@@ -32,6 +33,7 @@ test("compareShifts supports multiple shifts and exact room matches", () => {
   assert.equal(second.score, 100);
   assert.equal(second.adjustments.length, 2);
   assert.ok(second.adjustments.every((item) => item.issues.length === 1 && item.issues[0] === "tired"));
+  assert.equal(countShiftPlacementAdjustments(second), 0);
 });
 
 test("compareShifts reports a fully matching shift with no adjustments", () => {

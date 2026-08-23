@@ -2454,6 +2454,56 @@ test("Skland calculator keeps the schedule visible before and after sidebar navi
   await returnToCalculator("森空岛状态中心", "[data-skland-view-tabs]", "calculator-return-skland-reduced");
 });
 
+test("100% Skland match does not count fatigue-only notices as adjustments", async ({ page }) => {
+  await mockApis(page, {
+    sklandConfigured: true,
+    sklandSnapshot: {
+      ...authenticatedSklandSnapshot,
+      infrastructure: {
+        ...authenticatedSklandSnapshot.infrastructure,
+        layoutSuggestion: null,
+      },
+    },
+  });
+  const exactPlacementPlanData = {
+    ...planData,
+    maa: {
+      ...planData.maa,
+      plans: planData.maa.plans.map((plan) => ({
+        ...plan,
+        rooms: {
+          control: [{ operators: ["阿米娅"] }],
+        },
+      })),
+    },
+  };
+  await page.route("**/api/plan", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ success: true, data: exactPlacementPlanData, requestId }),
+  }));
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  await expect(page.locator("[data-skland-account-control]")).toBeVisible();
+  await expect(page.locator("[data-plan-board] > *")).toHaveCSS("opacity", "1");
+  const runButton = page.getByRole("button", { name: "生成排班" });
+  await expect(runButton).toBeEnabled();
+  await runButton.click();
+  await expect(page.locator('[data-slot="live-activity"]')).toHaveAttribute("data-activity-phase", "success");
+
+  const comparisonSummary = page.locator('[data-plan-details-trigger="comparison"]');
+  await expect(comparisonSummary).toContainText(/匹配率\s*100%/);
+  await expect(comparisonSummary).toContainText("无需调整");
+  await expect(comparisonSummary).not.toContainText(/需调整\s*1\s*处/);
+  for (const width of [768, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(comparisonSummary).toBeVisible();
+    await expect(comparisonSummary).toContainText("无需调整");
+  }
+});
+
 test("empty calculator returns directly to the compact view with one coherent entrance", async ({ page, browserName }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await mockApis(page);
