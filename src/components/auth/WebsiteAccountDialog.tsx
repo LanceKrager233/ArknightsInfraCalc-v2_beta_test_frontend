@@ -24,6 +24,7 @@ export function WebsiteAccountDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         data-website-account-dialog
+        finalFocus={false}
         className="max-h-[calc(100dvh-1rem)] overflow-y-auto sm:max-w-[min(880px,calc(100vw-2rem))]"
       >
         <DialogHeader className="sr-only">
@@ -31,7 +32,7 @@ export function WebsiteAccountDialog({
           <DialogDescription>登录后进入账号管理。</DialogDescription>
         </DialogHeader>
         <div className="relative z-[1]">
-          <WebsiteAccountPanel onSessionChanged={onSessionChanged} />
+          <WebsiteAccountPanel loadingMode="dialog" onSessionChanged={onSessionChanged} />
         </div>
       </DialogContent>
     </Dialog>

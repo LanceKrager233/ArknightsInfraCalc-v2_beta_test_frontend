@@ -21,7 +21,7 @@ const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
 interface AppSidebarProps {
   page: AppPage;
   betaRequested: boolean;
-  onPageChange: (page: AppPage) => boolean;
+  onPageChange: (page: AppPage, trigger?: HTMLElement) => boolean;
 }
 
 interface AppNavigationItemProps extends AppSidebarProps {
@@ -49,8 +49,9 @@ function AppNavigationItem({
             href={href}
             role="button"
             aria-current={page === target ? "page" : undefined}
+            data-primary-navigation-page={target}
             onClick={(event) => {
-              if (!onPageChange(target)) event.preventDefault();
+              if (!onPageChange(target, event.currentTarget)) event.preventDefault();
               if (isMobile) setOpenMobile(false);
             }}
           />

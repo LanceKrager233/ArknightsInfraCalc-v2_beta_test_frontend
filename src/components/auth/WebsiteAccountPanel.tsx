@@ -21,6 +21,7 @@ import {
 } from "@/account-name";
 import { accountOrbColor } from "@/account-orb";
 import { cloudSyncMetadataKey } from "@/cloud-sync";
+import { WebsiteAccountLoadingStatus } from "@/components/auth/WebsiteAccountDialogLoading";
 import { OtpInput, type OtpInputHandle, type OtpStatus } from "@/components/interior/otp-input";
 import { PasswordStrength } from "@/components/interior/password-strength";
 import { WizardSteps } from "@/components/interior/wizard-steps";
@@ -56,8 +57,8 @@ const AUTH_INPUT_CLASS = "border-[#d5d7da] bg-white shadow-none dark:border-[#d5
 
 interface WebsiteAccountPanelProps {
   onSessionChanged?: (authenticated: boolean) => void | Promise<void>;
+  loadingMode?: "page" | "dialog";
   cloudWorkspace?: CloudWorkspaceData | null;
-  onRestoreCloudWorkspace?: (workspace: CloudWorkspaceData) => void;
   onRestoreSavedPlan?: (plan: SavedPlanData) => void;
   onCloudDataChanged?: () => void;
 }
@@ -75,8 +76,8 @@ function formatSessionExpiry(value: unknown): string | null {
 
 export function WebsiteAccountPanel({
   onSessionChanged,
+  loadingMode = "page",
   cloudWorkspace,
-  onRestoreCloudWorkspace,
   onRestoreSavedPlan,
   onCloudDataChanged,
 }: WebsiteAccountPanelProps) {
@@ -246,7 +247,9 @@ export function WebsiteAccountPanel({
   }
 
   if (isPending && !busy && !message && !error) {
-    return <StatusCenterLoading label="正在恢复网站账号" />;
+    return loadingMode === "dialog"
+      ? <WebsiteAccountLoadingStatus />
+      : <StatusCenterLoading label="正在恢复网站账号" />;
   }
 
   if (session) {
@@ -366,7 +369,6 @@ export function WebsiteAccountPanel({
         <CloudDataPanel
           userId={session.user.id}
           workspace={cloudWorkspace}
-          onRestoreWorkspace={onRestoreCloudWorkspace}
           onRestorePlan={onRestoreSavedPlan}
           onCloudDataChanged={onCloudDataChanged}
         />
