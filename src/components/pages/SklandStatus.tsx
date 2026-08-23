@@ -624,7 +624,7 @@ function OverviewTab({
 function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
   const productionRoom = room.group === "trading" || room.group === "manufacture" ? room : null;
   const isAuxiliaryRoom = ["meeting", "training", "hire", "processing"].includes(room.group);
-  const hasRoomDetails = productionRoom !== null || room.group === "meeting" || room.group === "hire";
+  const hasRoomDetails = productionRoom !== null || room.group === "hire";
   const visual = roomVisualFor(room.group);
   const gridTone = roomGridTone(room.group);
   const style = {
@@ -771,20 +771,6 @@ function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
                 </div>
               ) : null}
             </dl>
-          ) : room.group === "meeting" ? (
-            <div className="grid gap-1">
-              <p className="flex flex-wrap items-baseline gap-x-2">
-                <span className="font-number">已有 {room.clue.own} · 待接收 {room.clue.needReceive} · 已接收 {room.clue.received}</span>
-                <span className="flex items-baseline gap-x-2 xl:ml-auto">
-                  <span aria-hidden="true">·</span>
-                  <span className="font-number whitespace-nowrap">
-                    {room.clue.sharing
-                      ? `线索交流至 ${formatDateTime(room.clue.shareCompleteTime)}`
-                      : "当前未进行线索交流"}
-                  </span>
-                </span>
-              </p>
-            </div>
           ) : room.group === "hire" ? (
             <p className="font-number">下次完成 {formatDateTime(room.completeWorkTime)}</p>
           ) : null}
@@ -934,8 +920,11 @@ function InfrastructureTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
   const controlRooms = infrastructure.rooms.filter((room) => room.group === "control");
   const workRooms = infrastructure.rooms.filter((room) => room.group === "trading" || room.group === "manufacture");
   const powerRooms = infrastructure.rooms.filter((room) => room.group === "power");
-  const functionRooms = infrastructure.rooms.filter(
-    (room) => room.group === "meeting" || room.group === "training" || room.group === "hire" || room.group === "processing",
+  const primaryFunctionRooms = infrastructure.rooms.filter(
+    (room) => room.group === "meeting" || room.group === "training",
+  );
+  const secondaryFunctionRooms = infrastructure.rooms.filter(
+    (room) => room.group === "hire" || room.group === "processing",
   );
   const dormitoryRooms = infrastructure.rooms.filter((room) => room.group === "dormitory");
   const alignDenseInfrastructureRows = powerRooms.length >= 2 && workRooms.length >= 6 && dormitoryRooms.length >= 4;
@@ -1020,7 +1009,7 @@ function InfrastructureTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
           >
             {controlRooms.map((room) => <RoomCard key={room.key} room={room} />)}
 
-            {workRooms.length ? <div className={`grid min-w-0 gap-3 sm:grid-cols-2 ${alignDenseInfrastructureRows ? "xl:mt-8" : ""}`}>
+            {workRooms.length ? <div className="grid min-w-0 gap-3 sm:grid-cols-2">
               {workRooms.map((room) => <RoomCard key={room.key} room={room} />)}
             </div> : null}
 
@@ -1030,11 +1019,16 @@ function InfrastructureTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
           </div>
 
           <div
-            className="flex min-w-0 flex-col gap-3 xl:justify-between"
+            className={`flex min-w-0 flex-col gap-3 ${alignDenseInfrastructureRows ? "skland-dense-auxiliary-column" : "xl:justify-between"}`}
             data-skland-compact-column="auxiliary"
           >
-            {functionRooms.length ? <div className="skland-auxiliary-grid min-w-0">
-              {functionRooms.map((room) => <RoomCard key={room.key} room={room} />)}
+            {primaryFunctionRooms.length || secondaryFunctionRooms.length ? <div className="skland-auxiliary-grid min-w-0">
+              <div className="skland-auxiliary-column skland-auxiliary-primary">
+                {primaryFunctionRooms.map((room) => <RoomCard key={room.key} room={room} />)}
+              </div>
+              <div className="skland-auxiliary-column skland-auxiliary-secondary">
+                {secondaryFunctionRooms.map((room) => <RoomCard key={room.key} room={room} />)}
+              </div>
             </div> : null}
 
             {dormitoryRooms.map((room) => <RoomCard key={room.key} room={room} />)}
