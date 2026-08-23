@@ -70,7 +70,6 @@ import {
   DisplayError,
   FeedbackData,
   FeedbackKind,
-  IssueReport,
   OperBoxEntry,
   PublicPlanData,
   PresetDef,
@@ -203,29 +202,6 @@ function mergeSklandLayout(current: BaseBlueprint, suggestion: BaseBlueprint): B
   };
 }
 
-function buildIssueReport(
-  issue: { row: RoomRow; note: string } | null,
-  sourceName: string | null,
-  command?: string
-): IssueReport | null {
-  if (!issue) return null;
-  return {
-    type: "room_issue",
-    sourceName,
-    room: {
-      title: issue.row.title,
-      group: issue.row.group,
-      product: issue.row.product,
-      operators: issue.row.operators,
-      inferredRule: issue.row.rule,
-      efficiency: issue.row.efficiency,
-      efficiencyLabel: issue.row.efficiencyLabel,
-    },
-    command,
-    note: issue.note,
-  };
-}
-
 function WorkbenchApp({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -240,8 +216,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const [websiteAuthReloadKey, setWebsiteAuthReloadKey] = useState(0);
   const [websiteAuthDialogOpen, setWebsiteAuthDialogOpen] = useState(false);
   const [websiteAuthDialogMounted, setWebsiteAuthDialogMounted] = useState(false);
-  const [betaRequested, setBetaRequested] = useState(false);
-  const [debugToolsEnabled, setDebugToolsEnabled] = useState(false);
   const [hasRestoredSession, setHasRestoredSession] = useState(false);
   const [preset, setPreset] = useState<PresetDef>(defaultPreset);
   const [layout, setLayout] = useState<BaseBlueprint>(defaultLayout);
@@ -301,11 +275,9 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const [issueDraftKind, setIssueDraftKind] = useState<FeedbackKind>("room_issue");
   const [issueDraftRow, setIssueDraftRow] = useState<RoomRow | null>(null);
   const [issueDraftNote, setIssueDraftNote] = useState("");
-  const [savedIssue, setSavedIssue] = useState<{ row: RoomRow; note: string } | null>(null);
   const [issueOpen, setIssueOpen] = useState(false);
   const [feedbackSaving, setFeedbackSaving] = useState(false);
   const [feedbackResult, setFeedbackResult] = useState<FeedbackData | null>(null);
-  const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [resultClearNotice, setResultClearNotice] = useState<string | null>(null);
   const [resultClearWarningDismissed, setResultClearWarningDismissed] = useState(false);
   const [pendingProductChange, setPendingProductChange] = useState<ProductChange | null>(null);
@@ -373,7 +345,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   );
   const accountCanUseCurrentBox = boxSource === "sample" || Boolean(websiteSession);
   const canRun = Boolean(operbox && operbox.length > 0 && cliReady && accountCanUseCurrentBox);
-  const showBetaPanels = betaRequested && debugToolsEnabled;
   const sklandBindingCount = sklandBindingSummary.totalCount;
   const websiteUserId = websiteSession?.user.id ?? null;
   const accountCloudWorkspace = useAccountCloudWorkspace(CLIENT_ACCOUNT_CLOUD_SYNC_ENABLED ? {
@@ -412,14 +383,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const syncBetaPanels = () => setBetaRequested(new URLSearchParams(window.location.search).has("beta"));
-    syncBetaPanels();
-    window.addEventListener("popstate", syncBetaPanels);
-    return () => window.removeEventListener("popstate", syncBetaPanels);
-  }, []);
-
-  useEffect(() => {
     if (page === "calculator") hasRenderedCalculator.current = true;
   }, [page]);
 
@@ -429,7 +392,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     const frame = window.requestAnimationFrame(() => {
       for (const target of Object.keys(WORKBENCH_PAGE_PATHS) as AppPage[]) {
         if (target === page || (target === "skland" && !CLIENT_SKLAND_ENABLED)) continue;
-        router.prefetch(workbenchHref(target, betaRequested));
+        router.prefetch(workbenchHref(target));
       }
     });
 
@@ -450,7 +413,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       if (idleCallback !== undefined) window.cancelIdleCallback?.(idleCallback);
       if (fallbackTimer !== undefined) window.clearTimeout(fallbackTimer);
     };
-  }, [betaRequested, hasRestoredSession, page, router]);
+  }, [hasRestoredSession, page, router]);
 
   useEffect(() => {
     if (setupOpen) setSetupMounted(true);
@@ -560,7 +523,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         if (cancelled) return;
         setSklandConfigured(Boolean(CLIENT_SKLAND_ENABLED && health.skland?.available));
         setSklandDisabledReason(CLIENT_SKLAND_ENABLED ? health.skland?.message ?? null : null);
-        setDebugToolsEnabled(health.features.debugTools);
         if (health.plannerReady) {
           setCliReady(true);
           setApiError(null);
@@ -710,15 +672,15 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       if (websiteAuthDialogOpen) {
         websiteAuthReturnFocusRef.current = null;
         setWebsiteAuthDialogOpen(false);
-        router.push(workbenchHref("account", betaRequested));
+        router.push(workbenchHref("account"));
       }
       return;
     }
     if (page === "account") {
       if (!leavingAccountAfterLogout.current) setWebsiteAuthDialogOpen(true);
-      router.replace(workbenchHref("calculator", betaRequested));
+      router.replace(workbenchHref("calculator"));
     }
-  }, [betaRequested, page, router, websiteAuthDialogOpen, websiteSession, websiteSessionPending]);
+  }, [page, router, websiteAuthDialogOpen, websiteSession, websiteSessionPending]);
 
   useEffect(() => {
     if (
@@ -905,7 +867,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         boxSource,
         rotation: rotationProfile,
         fiammetta_enable: effectiveFiammettaEnabled,
-      }, { signal: controller.signal, includeDebug: showBetaPanels });
+      }, { signal: controller.signal });
       setCliReady(true);
       setActiveShift(0);
       const finalizedResult = response;
@@ -959,31 +921,19 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     downloadJson("arknights-infra-schedule-maa.json", result.maa);
   }
 
-  function handleDownloadBundle() {
-    if (result?.debug?.debugBundle) downloadJson("arknights-infra-debug-bundle.json", result.debug.debugBundle);
-  }
-
-  function handleCopyCommand() {
-    if (result?.debug?.command) void copyText(result.debug.command);
-  }
-
   function clearIssueState() {
     setIssueDraftKind("room_issue");
     setIssueDraftRow(null);
     setIssueDraftNote("");
-    setSavedIssue(null);
     setIssueOpen(false);
     setFeedbackResult(null);
-    setFeedbackError(null);
   }
 
   function handleMarkIssue(row: RoomRow) {
     setIssueDraftKind("room_issue");
     setIssueDraftRow(row);
     setIssueDraftNote("");
-    setSavedIssue(null);
     setFeedbackResult(null);
-    setFeedbackError(null);
     setIssueOpen(true);
   }
 
@@ -992,16 +942,14 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     setIssueDraftKind("performance_issue");
     setIssueDraftRow(null);
     setIssueDraftNote("本次求解耗时明显偏长。");
-    setSavedIssue(null);
     setFeedbackResult(null);
-    setFeedbackError(null);
     setIssueOpen(true);
   }
 
   async function handleSaveIssue() {
     if (!issueDraftNote.trim() || (issueDraftKind === "room_issue" && !issueDraftRow)) return;
     if (!result?.diagnosticId) {
-      setFeedbackError("请先生成排班，再提交问题。");
+      setApiError(displayError("AIC-FEEDBACK-4001", "请先生成排班，再提交问题。"));
       return;
     }
 
@@ -1014,7 +962,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     const note = `${issueDraftNote.trim()}\n\n[运行环境] ${environment}`;
 
     setFeedbackSaving(true);
-    setFeedbackError(null);
     setApiError(null);
     try {
       let response: FeedbackData;
@@ -1041,9 +988,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
           consent: true,
         });
       }
-      setSavedIssue(issueDraftKind === "room_issue" && issueDraftRow
-        ? { row: issueDraftRow, note }
-        : null);
       setFeedbackResult(response);
       setIssueOpen(false);
       setIssueDraftKind("room_issue");
@@ -1051,7 +995,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       setIssueDraftNote("");
     } catch (error) {
       const normalized = toDisplayError(error, "反馈保存失败，请稍后重试。");
-      setFeedbackError(normalized.message);
       setApiError(normalized);
     } finally {
       setFeedbackSaving(false);
@@ -1263,7 +1206,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
 
   function navigateToPage(nextPage: AppPage) {
     if (!handleAppPageChange(nextPage)) return;
-    router.push(workbenchHref(nextPage, betaRequested));
+    router.push(workbenchHref(nextPage));
   }
 
   async function handleWebsiteSessionChanged(authenticated: boolean) {
@@ -1271,7 +1214,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     leavingAccountAfterLogout.current = !authenticated;
     websiteAuthReturnFocusRef.current = null;
     setWebsiteAuthDialogOpen(false);
-    router.push(workbenchHref(authenticated ? "account" : "calculator", betaRequested));
+    router.push(workbenchHref(authenticated ? "account" : "calculator"));
     if (!authenticated) {
       setSklandAccounts([]);
       setSklandActiveAccountId(null);
@@ -1404,7 +1347,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     try {
       const health = await getHealth();
       setCliReady(health.plannerReady);
-      setDebugToolsEnabled(health.features.debugTools);
       setApiError(
         health.plannerReady
           ? null
@@ -1415,14 +1357,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     }
   }
 
-  const issueForPanel = useMemo(
-    () => savedIssue ?? (issueDraftRow && issueOpen ? { row: issueDraftRow, note: issueDraftNote } : null),
-    [issueDraftNote, issueDraftRow, issueOpen, savedIssue]
-  );
-  const issueReport = useMemo(
-    () => buildIssueReport(issueForPanel, fileName, result?.debug?.command),
-    [issueForPanel, fileName, result?.debug?.command]
-  );
   const statusError = inputError && !setupOpen
     ? displayError(inputErrorCode, inputError)
     : apiError ?? storageNotice;
@@ -1437,7 +1371,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const workbenchContext = {
     calculator: {
       layout,
-      showBetaPanels,
       result,
       scheduleResult,
       activeShift,
@@ -1446,10 +1379,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       activePlan,
       closestComparison,
       resultClearNotice,
-      issueForPanel,
-      issueReport,
       feedbackResult,
-      feedbackError,
       sampleLoading,
       loading,
       canRun,
@@ -1475,8 +1405,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       onFactoryRecipeChange: handleScheduleFactoryRecipeChange,
       onTradeOrderChange: handleScheduleTradeOrderChange,
       onDownloadMaa: handleDownloadMaa,
-      onDownloadBundle: handleDownloadBundle,
-      onCopyCommand: handleCopyCommand,
       onClearResultNotice: () => setResultClearNotice(null),
       onDismissResultClearWarning: dismissResultClearWarning,
     },
@@ -1508,7 +1436,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
           setFiammettaEnabled(context.fiammettaEnabled);
           setResult(saved.result);
           setActiveShift(0);
-          router.push(workbenchHref("calculator", betaRequested));
+          router.push(workbenchHref("calculator"));
         },
         onCloudDataChanged: accountCloudWorkspace.refreshCloudData,
       } : {}),
@@ -1555,7 +1483,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       data-workbench-hydrated={hasRestoredSession ? "true" : "false"}
     >
     <SidebarProvider defaultOpen={false}>
-      <AppSidebar page={page} betaRequested={betaRequested} onPageChange={handleAppPageChange} />
+      <AppSidebar page={page} onPageChange={handleAppPageChange} />
       <SidebarInset>
         <AppTopBar />
         <LiveActivity
@@ -1581,16 +1509,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         <span>非官方、小范围测试中的排班辅助工具</span>
         <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/terms">本站服务条款</Link>
         <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/privacy">本站隐私政策</Link>
-        {debugToolsEnabled ? (
-          <Link
-            className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground"
-            href={workbenchHref(page, !betaRequested)}
-            prefetch={false}
-            onClick={() => setBetaRequested((current) => !current)}
-          >
-            {betaRequested ? "退出调试工具" : "开启调试工具"}
-          </Link>
-        ) : null}
         <a
           href="https://www.rainyun.com/riic_"
           target="_blank"

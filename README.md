@@ -40,7 +40,7 @@ npm run test:e2e:webkit
 npm run assets:room-emblems
 ```
 
-### 开发调试模式
+### 服务端诊断
 
 Windows PowerShell：
 
@@ -50,13 +50,7 @@ $env:BETA_RATE_LIMIT_ENABLED='0'
 npm run dev
 ```
 
-然后访问：
-
-```text
-http://127.0.0.1:5174/?beta
-```
-
-调试 UI 只有在服务端 `BETA_DEBUG_TOOLS_ENABLED=1` 且 URL 同时带 `?beta` 时出现。开关打开后页脚会显示“开启/退出调试工具”入口；production 会强制关闭入口和调试字段，即使误设为`1`也不会开放。单独添加 `?beta` 不会开启调试字段。hydration、接口泄露、错误码、限流和响应式排查流程见[开发指南](./docs/DEVELOPMENT_GUIDE.md#调试模式)和[上线产品化报告](./docs/FRONTEND_PRODUCTION_READINESS_REPORT.md#开发调试环境使用指南)。
+产品页面不再提供 `/?beta` 调试入口，也不会向排班请求传播 beta 参数或展示 CLI 输出。`BETA_DEBUG_TOOLS_ENABLED=1` 仅保留给本地直接调用 `/api/plan?beta=1` 的服务端排障；production 即使误设为 `1` 也会强制关闭调试字段。hydration、接口泄露、错误码、限流和响应式排查流程见[开发指南](./docs/DEVELOPMENT_GUIDE.md#服务端诊断)和[上线产品化报告](./docs/FRONTEND_PRODUCTION_READINESS_REPORT.md#开发调试环境使用指南)。
 
 ## Box 导入与 dev 森空岛登录
 

@@ -40,6 +40,41 @@ test("compareShifts reports a fully matching shift with no adjustments", () => {
   assert.deepEqual(second.adjustments, []);
 });
 
+test("compareShifts excludes dormitories before calculating the match rate", () => {
+  const comparison = compareShifts(
+    {
+      title: "宿舍不参与比较",
+      plans: [{
+        name: "第一班",
+        rooms: {
+          control: [{ operators: ["阿米娅"] }],
+          trading: [{ operators: ["德克萨斯"] }],
+          dormitory: [{ operators: ["计划宿舍干员"] }],
+        },
+      }],
+    },
+    {
+      storeTs: null,
+      layoutLabel: "243",
+      layoutSuggestion: null,
+      layoutWarning: null,
+      tiredOperators: ["计划宿舍干员"],
+      rooms: [
+        { key: "control:0", group: "control", index: 0, level: 5, operators: [{ id: "a", name: "阿米娅", morale: 20 }] },
+        { key: "trading:0", group: "trading", index: 0, level: 3, operators: [{ id: "b", name: "能天使", morale: 20 }], product: "gold" },
+        { key: "dormitory:0", group: "dormitory", index: 0, level: 5, operators: [{ id: "d", name: "当前宿舍干员", morale: 10 }] },
+      ],
+    },
+  )[0];
+
+  assert.equal(comparison.score, 33);
+  assert.deepEqual(comparison.matched, ["阿米娅"]);
+  assert.deepEqual(comparison.missing, ["德克萨斯"]);
+  assert.deepEqual(comparison.unexpected, ["能天使"]);
+  assert.deepEqual(comparison.tiredScheduled, []);
+  assert.ok(comparison.adjustments.every((item) => !item.operator.includes("宿舍")));
+});
+
 test("compareShifts returns no comparisons without required input", () => {
   assert.deepEqual(compareShifts(undefined, infrastructure), []);
   assert.deepEqual(compareShifts(maa, undefined), []);

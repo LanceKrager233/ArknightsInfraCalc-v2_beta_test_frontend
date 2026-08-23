@@ -5,7 +5,6 @@ const SKLAND_TO_MAA: Partial<Record<SklandInfrastructureGroup, string>> = {
   trading: "trading",
   manufacture: "manufacture",
   power: "power",
-  dormitory: "dormitory",
   meeting: "meeting",
   hire: "hire",
 };
@@ -42,6 +41,7 @@ export function compareShifts(maaJson: MaaJson | undefined, infrastructure: Skla
   return maaJson.plans.map((plan, planIndex) => {
     const plannedLocationByOperator = new Map<string, string>();
     for (const [group, rooms] of Object.entries(plan.rooms) as [keyof MaaRooms, MaaRoom[] | undefined][]) {
+      if (group === "dormitory") continue;
       rooms?.forEach((room, index) => {
         for (const name of roomNames(room)) plannedLocationByOperator.set(name, locationKey(group, index));
       });

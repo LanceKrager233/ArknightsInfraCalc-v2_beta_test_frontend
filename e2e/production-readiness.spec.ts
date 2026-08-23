@@ -2271,33 +2271,7 @@ test("ignores root attributes injected by browser extensions during hydration", 
   expect(consoleErrors.filter((message) => /hydration|did not match/i.test(message))).toEqual([]);
 });
 
-test("?beta cannot enable debug tools without the server feature flag", async ({ page }) => {
-  await mockApis(page, { debugTools: false });
-  await seedPreferences(page);
-  await page.goto("/?beta");
-  await expect(page.getByRole("button", { name: "全角色导入" })).toBeVisible();
-  await expect(page.getByText("调试输出")).toHaveCount(0);
-  await expect(page.getByText("问题上下文")).toHaveCount(0);
-  await expect(page.getByText("开启调试工具", { exact: true })).toHaveCount(0);
-});
-
-test("the development debug entry manages the URL and debug panels", async ({ page }) => {
-  await mockApis(page, { debugTools: true });
-  await seedPreferences(page);
-  await page.goto("/");
-  await expect(page.getByText("调试输出")).toHaveCount(0);
-  await page.getByText("开启调试工具", { exact: true }).click();
-  await expect(page).toHaveURL(/\?beta$/);
-  await page.getByRole("tab", { name: "列表式布局" }).click();
-  await expect(page.getByText("调试输出")).toBeVisible();
-  await expect(page.getByText("问题上下文")).toBeVisible();
-  await page.getByText("退出调试工具", { exact: true }).click();
-  await expect(page).not.toHaveURL(/\?beta/);
-  await expect(page.getByText("调试输出")).toHaveCount(0);
-  await expect(page.getByText("开启调试工具", { exact: true })).toBeVisible();
-});
-
-test("plan requests opt into debug data only while the beta tools are active", async ({ page }) => {
+test("the legacy beta query is inert and never opts plan requests into debug data", async ({ page }) => {
   await mockApis(page, { debugTools: true });
   await seedV4Session(page);
   const planRequests: URL[] = [];
@@ -2309,24 +2283,24 @@ test("plan requests opt into debug data only while the beta tools are active", a
       contentType: "application/json",
       body: JSON.stringify({
         success: true,
-        data: requestUrl.searchParams.get("beta") === "1"
-          ? { ...planData, debug: { command: "infra-cli serve", stdout: "test output", stderr: "" } }
-          : planData,
+        data: { ...planData, debug: { command: "infra-cli serve", stdout: "test output", stderr: "" } },
         requestId,
       }),
     });
   });
 
-  await page.goto("/");
+  await page.goto("/?beta");
+  await expect(page.getByText("开启调试工具", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("退出调试工具", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("调试输出", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("问题上下文", { exact: true })).toHaveCount(0);
+
   await page.getByRole("button", { name: "生成排班" }).click();
   await expect.poll(() => planRequests.length).toBe(1);
   expect(planRequests[0].searchParams.has("beta")).toBe(false);
 
-  await page.getByText("开启调试工具", { exact: true }).click();
-  await expect(page).toHaveURL(/\?beta$/);
-  await page.getByRole("button", { name: "生成排班" }).click();
-  await expect.poll(() => planRequests.length).toBe(2);
-  expect(planRequests[1].searchParams.get("beta")).toBe("1");
+  await page.getByRole("button", { name: "练卡建议" }).click();
+  await expect(page).toHaveURL(/\/training$/);
 });
 
 test("shows the thinking activity and indeterminate progress only while a plan request is running", async ({ page }) => {
@@ -2400,6 +2374,8 @@ test("Skland calculator keeps the schedule visible before and after sidebar navi
   const comparisonSheet = page.locator('[data-slot="drawer-content"]');
   await expect(comparisonSheet.locator("[data-plan-details-section]")).toHaveAttribute("data-plan-details-section", "comparison");
   await expect(comparisonSheet.locator("[data-shift-comparison-details]")).toBeVisible();
+  await expect(comparisonSheet.getByText("非宿舍匹配", { exact: true })).toBeVisible();
+  await expect(comparisonSheet.getByRole("progressbar", { name: "非宿舍设施匹配百分比" })).toBeVisible();
   const desktopAdjustmentGroups = comparisonSheet.locator("[data-desktop-adjustment-groups]");
   await expect(desktopAdjustmentGroups).toBeVisible();
   await expect(desktopAdjustmentGroups.getByRole("heading", { level: 4 })).toContainText(["需换出", "需换入", "位置调整"]);

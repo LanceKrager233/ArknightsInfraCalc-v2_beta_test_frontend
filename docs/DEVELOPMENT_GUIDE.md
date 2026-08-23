@@ -194,7 +194,7 @@ dev 站点使用`APP_DEPLOYMENT_ENV=development`与`SKLAND_FEATURE_ENABLED=1`，
 
 认证与数据库的首次上线、最小权限和恢复演练见[网站账号与 PostgreSQL 上线手册](./AUTHENTICATION_DATABASE.md)。CI 使用临时 PostgreSQL 先执行已提交 migration，再运行注册、验证、登录、密码重置、Session 撤销与封禁集成测试；邮件由测试回调捕获，不发送真实邮件。
 
-## 调试模式
+## 服务端诊断
 
 Windows PowerShell：
 
@@ -204,13 +204,7 @@ $env:BETA_RATE_LIMIT_ENABLED='0'
 npm run dev
 ```
 
-访问：
-
-```text
-http://127.0.0.1:5174/?beta
-```
-
-调试 UI 只有在服务端 feature flag 为 true 且页面 URL 同时带 `?beta` 时出现；该页面会把显式选择传播为 `/api/plan?beta=1`。dev 开关启用后，普通页面仍请求无 `debug` 的公共白名单响应（五个固定字段及可选 `trainingAdvice`），页脚提供“开启/退出调试工具”入口；production 无论环境变量如何都强制隐藏入口并禁止调试字段。单独添加 `?beta`不能绕过关闭的服务端开关。调试字段也不得写入 v5 本地数据。
+产品页面不提供调试入口，`/?beta` 不会改变界面，也不会向排班请求传播 beta 参数。dev 开关启用后，只有直接调用 `/api/plan?beta=1` 才能获得 `data.debug`；普通页面始终请求无 `debug` 的公共白名单响应（五个固定字段及可选 `trainingAdvice`）。production 无论环境变量如何都禁止调试字段，调试字段也不得写入 v5 本地数据。
 
 详细的 DevTools 排查顺序、接口泄露检查和错误模拟方法见[上线产品化报告的开发调试环境使用指南](./FRONTEND_PRODUCTION_READINESS_REPORT.md#开发调试环境使用指南)。
 
@@ -248,7 +242,7 @@ GitHub Actions 在面向`main`或`develop`的 PR 和 push 上使用 Node 22。`C
 
 完整 WebKit E2E 作为 Safari 兼容性回归每日定时运行，也可通过`workflow_dispatch`手动触发。它不阻塞逐次 PR 与发布；涉及响应式、触控或 Safari 行为的改动仍应在提交前运行`npm run test:e2e:webkit`。
 
-`main`和`develop`使用相同分类规则。只有受保护分支 push、`quality`成功且`deploy_required=true`时，部署工作流才使用 GitHub Environments `production`和`development`中的 SSH Secrets 与部署 Variables 发布对应站点；PR、文档、测试和非发布型 CI 变更不创建服务器 release。工作流先验证两个服务器 helper 是`root:root 0755`普通文件且显式契约版本兼容，再从`/var/cache/arknights-infra-deploy/repository.git`增量准备准确 SHA 的发布包；production/development 使用独立 refs 和共享`flock`。helper 在 GitHub 网络、缓存或锁的临时故障时返回`75`；Runner 随后优先读取对应服务器缓存 ref，并发送从该 ref 到已验证 SHA 的增量 Git bundle，缓存 ref 不可用时才使用上一次 push SHA。服务器校验并导入缓存，只有 bundle 基线或传输不可用时才上传完整发布包。SHA、tree、路径、helper 契约和 bundle HEAD 等完整性错误都直接失败。`DEPLOY_DEBUG_TOOLS_ENABLED`和`DEPLOY_RATE_LIMIT_ENABLED`集中管理 dev 的调试入口与限流，production 则固定为调试关闭、限流开启。production-profile 门禁会故意反向设置森空岛、调试和限流变量，确认 production 的强制策略不可被误配置绕过。
+`main`和`develop`使用相同分类规则。只有受保护分支 push、`quality`成功且`deploy_required=true`时，部署工作流才使用 GitHub Environments `production`和`development`中的 SSH Secrets 与部署 Variables 发布对应站点；PR、文档、测试和非发布型 CI 变更不创建服务器 release。工作流先验证两个服务器 helper 是`root:root 0755`普通文件且显式契约版本兼容，再从`/var/cache/arknights-infra-deploy/repository.git`增量准备准确 SHA 的发布包；production/development 使用独立 refs 和共享`flock`。helper 在 GitHub 网络、缓存或锁的临时故障时返回`75`；Runner 随后优先读取对应服务器缓存 ref，并发送从该 ref 到已验证 SHA 的增量 Git bundle，缓存 ref 不可用时才使用上一次 push SHA。服务器校验并导入缓存，只有 bundle 基线或传输不可用时才上传完整发布包。SHA、tree、路径、helper 契约和 bundle HEAD 等完整性错误都直接失败。`DEPLOY_DEBUG_TOOLS_ENABLED`和`DEPLOY_RATE_LIMIT_ENABLED`集中管理 dev 的服务端诊断字段与限流，production 则固定为调试关闭、限流开启。production-profile 门禁会故意反向设置森空岛、调试和限流变量，确认 production 的强制策略不可被误配置绕过。
 Production client isolation scans static JavaScript and public HTML/RSC; production-profile separately verifies hidden UI, absent requests and health fields, and the API 404 boundary. Whenever runtime scope selects the full gate, both checks remain required.
 
 production 和 dev 的 Funnel Nginx 分别只监听`127.0.0.1:4176`与`127.0.0.1:4274`。公网访问由 Tailscale Funnel 的 8443 与 443 HTTPS 入口提供；用`tailscale funnel status`核对持久化配置、公开地址和实际目标。production 另有受 Host 限制的`0.0.0.0:4174`直连/IP 兼容 vhost，它不是 Funnel 目标，不得作为公开 Origin 或发布健康检查地址。服务器 80 端口只重定向到 production HTTPS，不要把两个回环应用端口重新暴露到公网。Actions 部署用户使用独立密钥，sudo 只允许固定的`/usr/local/sbin/arknights-infra-deploy`。root 所有的 deploy runner 和`/usr/local/sbin/arknights-infra-prepare-release`必须保持 LF、普通文件和`root:root 0755`；二者用`--contract-version`报告当前接口版本，文件 SHA-256只作安装/回滚审计。prepare helper 以`arkdeploy`运行，不新增 sudo 权限；缓存根必须由该用户拥有且不能被 group/other 写入。

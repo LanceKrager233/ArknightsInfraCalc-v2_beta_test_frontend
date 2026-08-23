@@ -10,7 +10,7 @@
 - 配置 243、153、333、252、342 布局、设施等级、制造配方和贸易订单。
 - 调用长驻的 `infra-cli serve` 生成三班排班、效率概览和练卡建议。
 - 展示森空岛当前基建状态，比较当前进驻与排班计划，并导出 MAA JSON。
-- 保存 CLI 运行记录和经用户同意的最小反馈；只有显式调试模式才展示额外问题上下文与 CLI 输出。
+- 保存 CLI 运行记录和经用户同意的最小反馈；产品页面不展示额外问题上下文与 CLI 输出。
 
 明确边界：
 
@@ -120,7 +120,7 @@ UI 控件优先组合 `src/components/ui/*` 中的现有 primitive。不要另�
 
 - 不得直接从 route handler 返回 `src/server/infra.ts` 的内部对象。排班结果必须经过 `toPublicPlanData`，错误必须经过统一的 `failureResponse`。
 - 生产 `plan` 数据只允许公开 `profile`、`maa`、`rotation`、可选的白名单 `trainingAdvice`、`durationMs`、`diagnosticId`；健康检查不得公开 CLI 路径、PID、候选文件、仓库路径、存储路径或原始 serve 错误。
-- `command`、stdout、stderr 和 debug bundle 只有在服务端 `BETA_DEBUG_TOOLS_ENABLED=1` 时才能进入 `data.debug`；页面还必须同时带 `?beta` 才显示调试面板。任一条件缺失都不能暴露调试数据。
+- `command`、stdout、stderr 和 debug bundle 只有在服务端 `BETA_DEBUG_TOOLS_ENABLED=1` 且直接请求 `/api/plan?beta=1` 时才能进入 `data.debug`；产品页面不得发送该参数或展示调试字段。
 - 新增或修改公共 DTO 时，同时更新 `src/types.ts`、白名单 mapper、客户端调用和 `src/server/public-plan.test.ts` / `src/server/api-contract.test.ts`。
 - 新增或修改错误码时，同时更新 `AppErrorCode`、`ERROR_DEFINITIONS`、HTTP 映射和契约测试。日志只记录 requestId、code、route、status、durationMs 等最小诊断信息，不打印请求正文或凭据。
 - 所有公开写请求必须保留同源校验、请求体大小限制和适当限流。只有在明确的本地测试中关闭限流；不要用重复请求压测线上实例。
@@ -128,7 +128,7 @@ UI 控件优先组合 `src/components/ui/*` 中的现有 primitive。不要另�
 - 森空岛只提供二维码授权流程，不添加账号密码、短信验证码代填或绕过官方授权的登录方式。
 - `APP_DEPLOYMENT_ENV=production`必须从页面、客户端请求、健康检查字段和公开 API 访问面强制移除森空岛能力；该限制不能被`SKLAND_FEATURE_ENABLED=1`覆盖。dev 使用`APP_DEPLOYMENT_ENV=development`保留森空岛能力。
 - Production browser artifacts must not contain Skland UI copy, `/api/skland` URLs, or the `skland://` app scheme; run `npm run test:production-client` after changing client boundaries.
-- production 必须强制关闭调试工具并启用限流，不能被`BETA_DEBUG_TOOLS_ENABLED=1`或`BETA_RATE_LIMIT_ENABLED=0`覆盖；dev 可由部署环境集中管理这两个开关，调试入口仍需`?beta`二次门控。
+- production 必须强制关闭服务端调试字段并启用限流，不能被`BETA_DEBUG_TOOLS_ENABLED=1`或`BETA_RATE_LIMIT_ENABLED=0`覆盖；dev 可由部署环境集中管理这两个开关，但产品页面始终不提供调试入口。
 - `SKLAND_SESSION_SECRET` 必须至少 32 字节且长期稳定。森空岛会话使用 AES-256-GCM 封装在 HttpOnly Cookie 中；凭据不得进入 localStorage、CLI 运行记录、反馈包、console 或公开响应。
 - 非 localhost 的森空岛请求默认要求 HTTPS。`SKLAND_ALLOW_INSECURE_HTTP=1` 仅允许临时、可信的本地或内网测试，绝不能作为生产默认值。
 - 森空岛凭证从扫码成功起固定 7 天到期，刷新 token、读取会话和切换角色都不得续期；用户同意当前条款与隐私政策并登录后，状态中心默认返回完整状态白名单，排班链路仍只使用最小排班字段。
@@ -237,7 +237,7 @@ npm start
 - `npm start` 默认监听 `0.0.0.0:5174`。
 - CI 先由`Change scope`读取 NUL 分隔的准确变更路径，再按保守白名单决定 Core、Chromium 和 deploy。纯`docs/**`、根目录 Markdown 与`.gitignore`/`.editorconfig`只跑轻量范围检查；`.gitattributes`会影响归档与文件语义，必须走完整门禁。测试和非发布型 GitHub 配置至少跑 Core；浏览器测试还跑 Chromium；两个发布工作流改动会跳过业务 E2E 但必须真实部署；任何运行时或未知路径、空差异、手动触发都失败关闭为完整 Core + Chromium，并在受保护分支 push 时部署。不得用 workflow 级`paths-ignore`让必需检查消失；`quality`必须始终汇总实际成功或按分类预期跳过的 Job。Chromium 与 WebKit Job 使用和 lockfile 中 Playwright 版本一致、以 digest 固定的官方 noble 镜像，不得在临时 runner 上重新执行`playwright install --with-deps`；升级 Playwright 时必须同步镜像标签、digest 和构建工具契约测试。完整 WebKit E2E 每日定时运行，也可手动触发，不阻塞逐次发布。
 
-开发调试模式仅在本地这样开启：
+服务端诊断字段仅在本地这样开启：
 
 ```powershell
 $env:BETA_DEBUG_TOOLS_ENABLED='1'
@@ -245,7 +245,7 @@ $env:BETA_RATE_LIMIT_ENABLED='0'
 npm run dev
 ```
 
-然后访问 `http://127.0.0.1:5174/?beta`。调试结束后恢复默认环境并重启服务。
+产品页面始终请求普通 `/api/plan`；如需检查服务端诊断映射，直接调用 `/api/plan?beta=1`。调试结束后恢复默认环境并重启服务。
 
 ## 验证矩阵
 

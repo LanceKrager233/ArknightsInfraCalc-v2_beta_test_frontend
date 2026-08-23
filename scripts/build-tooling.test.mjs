@@ -148,7 +148,10 @@ test("workbench views use five prefetched route entries under one persistent lay
   assert.doesNotMatch(sidebar, /useLinkStatus|data-navigation-pending/);
   assert.match(sidebar, /data-primary-navigation-prefetch="eager"/);
   assert.doesNotMatch(sidebar, /prefetch=\{false\}/);
-  assert.match(app, /router\.prefetch\(workbenchHref\(target, betaRequested\)\)/);
+  assert.match(app, /router\.prefetch\(workbenchHref\(target\)\)/);
+  assert.doesNotMatch(app, /betaRequested|showBetaPanels|DebugActions|IssuePanel/);
+  assert.doesNotMatch(routeMap, /\?beta|betaRequested/);
+  assert.doesNotMatch(sidebar, /\?beta|betaRequested/);
 });
 
 test("the critical calculator board stays initial while the compact view loads on demand", async () => {
@@ -170,7 +173,7 @@ test("the critical calculator board stays initial while the compact view loads o
   assert.match(components, /viewMode !== "compact"[\s\S]{0,300}loadClientFeature\("compactScheduleView"\)/);
   assert.match(lazyLoader, /case "compactScheduleView":[\s\S]{0,100}import\("@\/components\/CompactScheduleView"\)/);
   assert.doesNotMatch(components, /import \{ CompactScheduleView \} from "@\/components\/CompactScheduleView"/);
-  assert.match(calculator, /useState<"list" \| "compact">\("compact"\)/);
+  assert.doesNotMatch(calculator, /onViewModeChange|showBetaSidebar|showBetaPanels/);
   assert.match(app, /const hasRenderedCalculator = useRef\(false\)/);
   assert.match(calculator, /animateInitialView=\{!scheduleResult && animateEmptyScheduleEntrance\}/);
   assert.doesNotMatch(calculator, /animateInitialView=\{!scheduleResult\}/);
