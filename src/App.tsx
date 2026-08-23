@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -1567,6 +1568,24 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
             {betaRequested ? "退出调试工具" : "开启调试工具"}
           </Link>
         ) : null}
+        <a
+          href="https://www.rainyun.com/riic_"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="访问雨云官网（在新标签页打开）"
+          data-rainyun-link
+          className="ml-auto inline-flex min-h-11 shrink-0 items-center rounded-sm px-1 opacity-70 outline-none transition-[opacity,transform] duration-180 ease-[var(--motion-ease-out)] hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-foreground/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100 max-sm:mt-1"
+        >
+          <Image
+            src="/images/partners/rainyun-logo.png"
+            alt=""
+            width={1120}
+            height={390}
+            sizes="(max-width: 640px) 124px, 140px"
+            loading="eager"
+            className="h-auto w-[7.75rem] sm:w-[8.75rem]"
+          />
+        </a>
       </footer>
 
       {CLIENT_ACCOUNT_CLOUD_SYNC_ENABLED ? accountCloudWorkspace.syncElement : null}
