@@ -122,7 +122,7 @@ function tradeOrder(room: ShiftRoom): TradeOrder {
   const maaProduct = room.maa?.product;
   if (maaProduct !== undefined) {
     if (maaProduct === "LMD" || maaProduct === "Gold" || maaProduct === "gold" || maaProduct === "龙门商法") return "gold";
-    if (maaProduct === "Originium Shard" || maaProduct === "originium" || maaProduct === "开采协力") return "originium";
+    if (maaProduct === "Orundum" || maaProduct === "Originium Shard" || maaProduct === "originium" || maaProduct === "开采协力") return "originium";
     return "ambiguous";
   }
 
