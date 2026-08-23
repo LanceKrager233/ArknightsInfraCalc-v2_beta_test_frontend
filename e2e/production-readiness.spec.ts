@@ -52,6 +52,50 @@ test("a 768px cold start keeps the compact workbench inside the viewport", async
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1);
 });
 
+test("Rainyun logo stays at the page footer's right edge and opens safely", async ({ page }) => {
+  await mockApis(page);
+  await seedPreferences(page);
+  await page.goto("/");
+
+  const link = page.getByRole("link", { name: "访问雨云官网（在新标签页打开）" });
+  const image = link.locator("img");
+  await expect(link).toHaveAttribute("href", "https://www.rainyun.com/riic_");
+  await expect(link).toHaveAttribute("target", "_blank");
+  await expect(link).toHaveAttribute("rel", /noopener/);
+  await expect(link).toHaveAttribute("rel", /noreferrer/);
+  await expect(image).toHaveAttribute("src", /rainyun-logo\.png/);
+  await expect.poll(() => image.evaluate((element) => {
+    const logo = element as HTMLImageElement;
+    return logo.complete && logo.naturalWidth > 0 && logo.naturalHeight > 0;
+  })).toBe(true);
+
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 768, height: 900 },
+    { width: 1440, height: 900 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(link).toBeVisible();
+    await link.focus();
+    await expect(link).toBeFocused();
+
+    const geometry = await link.evaluate((element) => {
+      const linkBox = element.getBoundingClientRect();
+      const footer = element.closest("footer");
+      const footerBox = footer?.getBoundingClientRect();
+      const footerStyle = footer ? getComputedStyle(footer) : null;
+      return {
+        height: linkBox.height,
+        right: linkBox.right,
+        footerRight: footerBox?.right ?? Number.NaN,
+        footerPaddingRight: Number.parseFloat(footerStyle?.paddingRight ?? "0"),
+      };
+    });
+    expect(geometry.height).toBeGreaterThanOrEqual(44 - 0.01);
+    expect(geometry.right).toBeCloseTo(geometry.footerRight - geometry.footerPaddingRight, 0);
+  }
+});
+
 test("primary pages prefetch after hydration and navigate on the first click", async ({ page }) => {
   const trainingRouteRequests: string[] = [];
   page.on("request", (request) => {
