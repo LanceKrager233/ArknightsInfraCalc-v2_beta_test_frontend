@@ -3,7 +3,7 @@ import type { PlayerInfo } from "skland-kit";
 import { buildBlueprint, PRESETS } from "@/blueprint";
 import type { BaseBlueprint, SklandInfrastructure } from "@/types";
 
-import { factoryProduct } from "./normalize";
+import { factoryProduct, manufacturesInGameOrder } from "./normalize";
 
 export function sklandLayoutSuggestion(info: PlayerInfo): {
   layoutLabel: SklandInfrastructure["layoutLabel"];
@@ -26,9 +26,10 @@ export function sklandLayoutSuggestion(info: PlayerInfo): {
   }
 
   const layout = buildBlueprint(preset);
+  const manufactures = manufacturesInGameOrder(building.manufactures);
   const groups = {
     trade_post: building.tradings,
-    factory: building.manufactures,
+    factory: manufactures,
     power_plant: building.powers,
     dormitory: building.dormitories,
   };
@@ -50,7 +51,7 @@ export function sklandLayoutSuggestion(info: PlayerInfo): {
       };
     }
     if (existing.kind === "factory") {
-      const source = building.manufactures[index];
+      const source = manufactures[index];
       if (!source) return existing;
       const recipe = factoryProduct(info, source.formulaId);
       return recipe === "unknown"
