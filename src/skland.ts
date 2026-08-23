@@ -9,6 +9,12 @@ const SKLAND_TO_MAA: Partial<Record<SklandInfrastructureGroup, string>> = {
   hire: "hire",
 };
 
+const PLACEMENT_ADJUSTMENT_ISSUES = new Set<ShiftComparison["adjustments"][number]["issues"][number]>([
+  "missing",
+  "unexpected",
+  "misplaced",
+]);
+
 function operatorName(value: string | MaaOperatorSlot | null): string | null {
   if (typeof value === "string") return value.trim() || null;
   return value?.name?.trim() || null;
@@ -87,4 +93,10 @@ export function compareShifts(maaJson: MaaJson | undefined, infrastructure: Skla
 
 export function closestShift(comparisons: ShiftComparison[]): ShiftComparison | null {
   return comparisons.reduce<ShiftComparison | null>((best, item) => (!best || item.score > best.score ? item : best), null);
+}
+
+export function countShiftPlacementAdjustments(comparison: ShiftComparison | null | undefined): number {
+  return comparison?.adjustments.filter((adjustment) => (
+    adjustment.issues.some((issue) => PLACEMENT_ADJUSTMENT_ISSUES.has(issue))
+  )).length ?? 0;
 }
