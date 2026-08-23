@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { PlanApiResponse, UserProfile } from "../types.ts";
+import { PublicApiError } from "./api-contract.ts";
 import { safeDisplayName, toPublicPlanData } from "./public-plan.ts";
 
 function internalResult(): PlanApiResponse {
@@ -53,6 +54,7 @@ function internalResult(): PlanApiResponse {
             candidates: ["但书", "巫恋"],
             use_operator_groups: true,
           }],
+          training: [{ operators: ["不应进入 MAA"] }],
         },
       }],
       scheduleType: { planTimes: 2, trading: 2, manufacture: 4, power: 3, dormitory: 4 },
@@ -62,7 +64,11 @@ function internalResult(): PlanApiResponse {
         plan_contract_sha256: "a".repeat(64),
         solver_executable_sha256: "b".repeat(64),
       },
-    } as PlanApiResponse["maaJson"] & { nestedInternal: Record<string, unknown> },
+    } as unknown as PlanApiResponse["maaJson"] & { nestedInternal: Record<string, unknown> },
+    trainingRoomJson: {
+      schema_version: 1,
+      shifts: [{ trainee: "能天使", trainer: "德克萨斯" }],
+    },
     trainingAdviceJson: {
       schema_version: 2,
       context: { engineering_robot_count: 12, stdout: "secret" },
@@ -201,6 +207,11 @@ test("production public plan data recursively excludes internal fields", () => {
     assert.equal(publicData.maa.plans[0].rooms.trading?.[0].sort, true);
     assert.deepEqual(publicData.maa.plans[0].rooms.trading?.[0].candidates, ["但书", "巫恋"]);
     assert.equal(publicData.maa.plans[0].rooms.trading?.[0].use_operator_groups, true);
+    assert.equal("training" in publicData.maa.plans[0].rooms, false);
+    assert.deepEqual(publicData.trainingRoom, {
+      schema_version: 1,
+      shifts: [{ trainee: "能天使", trainer: "德克萨斯" }],
+    });
     assert.equal(
       "candidates" in (publicData.maa as typeof publicData.maa & { nestedInternal: Record<string, unknown> }).nestedInternal,
       false
@@ -285,4 +296,16 @@ test("debug fields require both the server switch and request opt-in", () => {
 
 test("safe display names remove path separators and control characters", () => {
   assert.equal(safeDisplayName(" C:\\private/\u0007name ", "fallback"), "C: private name");
+});
+
+test("public plan mapping rejects malformed optional training-room data", () => {
+  const result = internalResult();
+  result.trainingRoomJson = {
+    schema_version: 1,
+    shifts: [],
+  };
+  assert.throws(
+    () => toPublicPlanData(result, { layoutLabel: "243", sourceName: "示例" }, "request"),
+    (error: unknown) => error instanceof PublicApiError && error.code === "AIC-PLAN-3004",
+  );
 });

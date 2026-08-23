@@ -62,7 +62,7 @@ import {
   StatusCenterPage,
 } from "@/components/pages/StatusCenterShell";
 import { cn } from "@/lib/utils";
-import { operatorPortraitFor } from "@/operatorPortraits";
+import { operatorPortraitFor, operatorProfessionFor } from "@/operatorPortraits";
 import { roomGridTone } from "@/schedule-view-presentation";
 import { SklandLoginPanel } from "@/skland-components";
 import {
@@ -111,6 +111,8 @@ const ROOM_LABELS: Record<SklandInfrastructureRoom["group"], string> = {
   dormitory: "宿舍",
   meeting: "会客室",
   hire: "人力办公室",
+  processing: "加工站",
+  training: "训练室",
 };
 
 const INITIAL_LIST_LIMIT = 60;
@@ -291,7 +293,7 @@ function maskedUid(uid: string): string {
 
 function roomLabel(room: SklandInfrastructureRoom): string {
   const base = ROOM_LABELS[room.group];
-  return ["control", "meeting", "hire"].includes(room.group) ? base : `${base} ${room.index + 1}`;
+  return ["control", "meeting", "hire", "processing", "training"].includes(room.group) ? base : `${base} ${room.index + 1}`;
 }
 
 function roomMaxLevel(room: SklandInfrastructureRoom): number {
@@ -621,7 +623,7 @@ function OverviewTab({
 
 function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
   const productionRoom = room.group === "trading" || room.group === "manufacture" ? room : null;
-  const isPowerRoom = room.group === "power";
+  const isAuxiliaryRoom = ["meeting", "training", "hire", "processing"].includes(room.group);
   const hasRoomDetails = productionRoom !== null || room.group === "meeting" || room.group === "hire";
   const visual = roomVisualFor(room.group);
   const gridTone = roomGridTone(room.group);
@@ -636,24 +638,24 @@ function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
   return (
     <article
       className={`infra-room-surface relative gap-2 overflow-hidden px-3 py-2 text-white ${
-        isPowerRoom
-          ? "grid grid-cols-[minmax(0,1fr)_auto] items-start max-sm:grid-cols-1"
+        isAuxiliaryRoom
+          ? "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start"
           : "flex min-h-36 flex-col"
       }`}
       data-room-group={room.group}
       style={style}
     >
-      <div className="contents">
-        <div
-          className="infra-room-emblem absolute inset-0 bg-left bg-no-repeat"
-          style={{
-            backgroundImage: `url(${visual.background})`,
-            backgroundPosition: "-18px center",
-            backgroundSize: "auto 100%",
-          }}
-          aria-hidden="true"
-        />
-        <div className="relative z-10 flex min-h-7 flex-wrap items-center justify-between gap-3">
+      <div
+        className="infra-room-emblem absolute inset-0 bg-left bg-no-repeat"
+        style={{
+          backgroundImage: `url(${visual.background})`,
+          backgroundPosition: "-18px center",
+          backgroundSize: "auto 100%",
+        }}
+        aria-hidden="true"
+      />
+      <div className="relative z-10 min-w-0">
+        <div className="flex min-h-7 flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
             <span className="infra-room-accent h-5 w-1 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
             <h4 className="font-number truncate text-sm font-medium tracking-[-0.02em] text-white [text-shadow:0_2px_3px_rgba(0,0,0,0.75)]">
@@ -670,37 +672,66 @@ function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
             {room.group === "manufacture" ? <span className="font-number">生产力 {Math.round(room.speed * 100)}%</span> : null}
             {room.group === "dormitory" ? <span className="font-number">氛围 {room.comfort}</span> : null}
             {room.group === "hire" ? <span className="font-number">可刷新 {room.refreshCount} 次</span> : null}
+            {room.group === "training" ? (
+              <span className="font-number" aria-label={`实时进驻 ${room.occupancy.current} 人，共 ${room.occupancy.capacity} 个席位`}>
+                {room.occupancy.current}/{room.occupancy.capacity}
+              </span>
+            ) : null}
           </div>
         </div>
       </div>
 
       <div
         className={`relative z-10 min-w-0 ${
-          isPowerRoom
-            ? "flex justify-end max-sm:justify-start"
-            : "grid flex-1 content-between gap-2"
+          isAuxiliaryRoom ? "flex justify-end" : "grid flex-1 content-between gap-2"
         }`}
       >
         <div
           className={`flex flex-wrap items-start gap-3 max-sm:grid max-sm:w-full max-sm:grid-cols-5 max-sm:gap-1.5 max-sm:[&_.infra-operator-slot]:w-full max-sm:[&_.infra-operator-slot]:[--operator-slot-size:clamp(48px,calc((100vw-72px)/5),64px)] ${
-            isPowerRoom ? "justify-end max-sm:justify-start" : ""
+            isAuxiliaryRoom ? "justify-end" : ""
           }`}
         >
-          {room.operators.length ? room.operators.map((operator) => (
+          {room.group === "training" ? ([
+            { position: "trainee" as const, positionLabel: "训练位" },
+            { position: "trainer" as const, positionLabel: "协助位" },
+          ].map(({ position, positionLabel }) => {
+            const operator = room.operators.find((candidate) => candidate.position === position);
+            return (
+              <OperatorSlot
+                key={`${room.key}-${position}`}
+                slot={operator ? {
+                  name: operator.name,
+                  label: operator.name,
+                  portrait: operatorPortraitFor(operator.name, operator.id),
+                  profession: operatorProfessionFor(operator.name),
+                } : undefined}
+                currentMorale={operator?.morale}
+                compactView
+                positionLabel={positionLabel}
+              />
+            );
+          })) : room.operators.length ? room.operators.map((operator) => (
             <OperatorSlot
               key={`${room.key}-${operator.id}`}
               slot={{
                 name: operator.name,
                 label: `${operator.name} · 已工作 ${formatDuration(operator.workTime)}`,
                 portrait: operatorPortraitFor(operator.name, operator.id),
+                profession: operatorProfessionFor(operator.name),
               }}
               currentMorale={operator.morale}
               compactView
             />
-          )) : <span className="py-2 text-sm text-white/48">当前没有进驻干员</span>}
+          )) : isAuxiliaryRoom ? Array.from(
+            { length: room.group === "meeting" ? 2 : 1 },
+            (_, index) => <OperatorSlot key={`${room.key}-empty-${index}`} slot={undefined} compactView />,
+          ) : <span className="py-2 text-sm text-white/48">当前没有进驻干员</span>}
         </div>
+      </div>
 
-        {hasRoomDetails ? <div className="border-t border-white/10 pt-2 text-xs leading-5 text-white/58">
+      {hasRoomDetails ? <div className={`relative z-10 border-t border-white/10 pt-2 text-xs leading-5 text-white/58 ${
+        isAuxiliaryRoom ? "col-span-full" : ""
+      }`}>
           {productionRoom ? (
             <dl className="flex flex-wrap items-baseline gap-x-4 gap-y-1.5 xl:flex-nowrap">
               <div className="flex items-baseline gap-1 whitespace-nowrap">
@@ -733,7 +764,6 @@ function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
             </dl>
           ) : room.group === "meeting" ? (
             <div className="grid gap-1">
-              <p className="font-number">线索板：{room.clue.board.join("、") || "暂无"}</p>
               <p className="flex flex-wrap items-baseline gap-x-2">
                 <span className="font-number">已有 {room.clue.own} · 待接收 {room.clue.needReceive} · 已接收 {room.clue.received}</span>
                 <span className="flex items-baseline gap-x-2 xl:ml-auto">
@@ -766,7 +796,6 @@ function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
             </details>
           ) : null}
         </div> : null}
-      </div>
     </article>
   );
 }
@@ -896,7 +925,9 @@ function InfrastructureTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
   const controlRooms = infrastructure.rooms.filter((room) => room.group === "control");
   const workRooms = infrastructure.rooms.filter((room) => room.group === "trading" || room.group === "manufacture");
   const powerRooms = infrastructure.rooms.filter((room) => room.group === "power");
-  const functionRooms = infrastructure.rooms.filter((room) => room.group === "meeting" || room.group === "hire");
+  const functionRooms = infrastructure.rooms.filter(
+    (room) => room.group === "meeting" || room.group === "training" || room.group === "hire" || room.group === "processing",
+  );
   const dormitoryRooms = infrastructure.rooms.filter((room) => room.group === "dormitory");
 
   return (
@@ -992,7 +1023,7 @@ function InfrastructureTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
             className="flex min-w-0 flex-col gap-3 xl:justify-between"
             data-skland-compact-column="auxiliary"
           >
-            {functionRooms.length ? <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.65fr)]">
+            {functionRooms.length ? <div className="skland-auxiliary-grid min-w-0">
               {functionRooms.map((room) => <RoomCard key={room.key} room={room} />)}
             </div> : null}
 

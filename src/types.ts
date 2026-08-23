@@ -128,6 +128,16 @@ export interface MaaJson {
   };
 }
 
+export interface TrainingRoomShift {
+  trainee: string | null;
+  trainer: string | null;
+}
+
+export interface TrainingRoomSchedule {
+  schema_version: 1;
+  shifts: TrainingRoomShift[];
+}
+
 export interface RoomEfficiency {
   final_efficiency?: number;
   trade_score?: number;
@@ -433,6 +443,7 @@ export type SklandInfrastructureGroup =
   | "dormitory"
   | "meeting"
   | "hire"
+  | "processing"
   | "training";
 
 export interface SklandInfrastructureOperator {
@@ -441,6 +452,16 @@ export interface SklandInfrastructureOperator {
   morale: number;
   workTime: number;
   lastMoraleUpdateTs: number;
+}
+
+export type SklandTrainingPosition = "trainee" | "trainer";
+
+export interface SklandTrainingRoomOperator {
+  id: string;
+  name: string;
+  morale: number;
+  lastMoraleUpdateTs: number;
+  position: SklandTrainingPosition;
 }
 
 export interface SklandInfrastructureProduction {
@@ -514,6 +535,16 @@ export interface SklandHireRoom extends SklandInfrastructureRoomBase<"hire"> {
   completeWorkTime: number;
 }
 
+export type SklandProcessingRoom = SklandInfrastructureRoomBase<"processing">;
+
+export interface SklandTrainingRoom extends Omit<SklandInfrastructureRoomBase<"training">, "operators"> {
+  operators: SklandTrainingRoomOperator[];
+  occupancy: {
+    current: number;
+    capacity: 2;
+  };
+}
+
 export type SklandInfrastructureRoom =
   | SklandControlRoom
   | SklandTradingRoom
@@ -521,7 +552,9 @@ export type SklandInfrastructureRoom =
   | SklandPowerRoom
   | SklandDormitoryRoom
   | SklandMeetingRoom
-  | SklandHireRoom;
+  | SklandHireRoom
+  | SklandProcessingRoom
+  | SklandTrainingRoom;
 
 export interface SklandInfrastructure {
   currentTs: number;
@@ -557,7 +590,7 @@ export interface SklandScheduleOperator {
 
 export interface SklandScheduleRoom {
   key: string;
-  group: Exclude<SklandInfrastructureGroup, "training">;
+  group: Exclude<SklandInfrastructureGroup, "training" | "processing">;
   index: number;
   level: number;
   operators: SklandScheduleOperator[];
@@ -916,6 +949,7 @@ export interface PlanApiResponse {
   stderr?: string;
   profileJson?: UserProfile;
   maaJson?: MaaJson;
+  trainingRoomJson?: TrainingRoomSchedule;
   trainingAdviceJson?: TrainingAdviceReport;
   rotationJson?: RotationJson;
   solver?: SolverObservation;
@@ -1007,6 +1041,7 @@ export interface PublicPlanData {
   profile: UserProfile;
   maa: MaaJson;
   rotation: RotationJson;
+  trainingRoom?: TrainingRoomSchedule;
   trainingAdvice?: TrainingAdviceReport;
   durationMs: number;
   diagnosticId: string;

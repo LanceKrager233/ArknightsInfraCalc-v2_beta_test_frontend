@@ -286,7 +286,11 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const scheduleResult = result;
   const activePlan = scheduleResult?.maa.plans?.[activeShift];
   const activeRotationShift = scheduleResult?.rotation.shifts?.[activeShift];
-  const baseRows = useMemo(() => planToRows(activePlan, activeRotationShift, layout), [activePlan, activeRotationShift, layout]);
+  const activeTrainingRoomShift = result?.trainingRoom?.shifts[activeShift];
+  const baseRows = useMemo(
+    () => planToRows(activePlan, activeRotationShift, layout, activeTrainingRoomShift),
+    [activePlan, activeRotationShift, activeTrainingRoomShift, layout],
+  );
   const [presentedRows, setPresentedRows] = useState<{ source: RoomRow[]; rows: RoomRow[] } | null>(null);
   useEffect(() => {
     if (!baseRows.some((row) => row.operatorSlots.length > 0)) {

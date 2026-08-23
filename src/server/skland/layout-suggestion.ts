@@ -38,6 +38,7 @@ export function sklandLayoutSuggestion(info: PlayerInfo): {
     if (existing.kind === "control_center") return { ...existing, level: building.control.level };
     if (existing.kind === "meeting_room" && building.meeting) return { ...existing, level: building.meeting.level };
     if (existing.kind === "office" && building.hire) return { ...existing, level: building.hire.level };
+    if (existing.kind === "training_room" && building.training) return { ...existing, level: building.training.level };
     if (!(existing.kind in groups)) return existing;
     const index = counters.get(existing.kind) ?? 0;
     counters.set(existing.kind, index + 1);

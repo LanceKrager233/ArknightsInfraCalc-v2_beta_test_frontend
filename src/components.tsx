@@ -899,7 +899,7 @@ export function PlanTelemetry({
 }
 
 const ROOM_SLOT_COUNT = 5;
-const AUXILIARY_ROOM_GROUPS = new Set(["dormitory", "hire", "meeting", "processing"]);
+const AUXILIARY_ROOM_GROUPS = new Set(["dormitory", "hire", "meeting", "processing", "training"]);
 
 function scheduleIssueTriggerId(row: RoomRow) {
   return `schedule-issue-${row.key}`;
@@ -909,6 +909,7 @@ const PLAN_RESULT_PRIMARY_TRIGGER_SELECTOR = "[data-plan-primary-details-trigger
 
 function roomSlotCountFor(group: string) {
   if (group === "trading" || group === "manufacture") return 3;
+  if (group === "training" || group === "meeting") return 2;
   return ROOM_SLOT_COUNT;
 }
 
@@ -1027,6 +1028,10 @@ export function RoomProductControls({
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
 }) {
+  if (row.group === "training") {
+    return null;
+  }
+
   const isTrade = layoutRoom?.kind === "trade_post";
   const isFactory = layoutRoom?.kind === "factory";
   const activeOrder = isTrade ? tradeOrderFor(layoutRoom) : null;
@@ -1085,6 +1090,7 @@ function OperatorSlotShell({
   frameWrapper = (frame) => frame,
   label,
   labelClassName,
+  positionLabel,
   title,
 }: {
   ariaLabel?: string;
@@ -1097,6 +1103,7 @@ function OperatorSlotShell({
   frameWrapper?: (frame: ReactElement) => ReactElement;
   label: ReactNode;
   labelClassName: string;
+  positionLabel?: string;
   title?: string;
 }) {
   const frame = (
@@ -1122,6 +1129,7 @@ function OperatorSlotShell({
         compactFactory && "min-[1800px]:[--operator-slot-size:70px]",
         centerFrameInList && "max-sm:w-full sm:relative sm:h-full sm:w-[var(--operator-slot-size)]",
       )}
+      data-position={positionLabel || undefined}
       title={title}
     >
       {frameWrapper(frame)}
@@ -1133,7 +1141,7 @@ function OperatorSlotShell({
           centerFrameInList && "sm:absolute sm:left-0 sm:top-[calc(50%+var(--operator-slot-size)/2+2px)] sm:mt-0 sm:w-full",
         )}
       >
-        {label}
+        <span className="block truncate">{label}</span>
       </span>
     </div>
   );
@@ -1191,6 +1199,7 @@ export function OperatorSlot({
   shiftDirection = 0,
   transitionDelay = 0,
   portraitSize = 180,
+  positionLabel,
   showSkillTooltip = false,
   searchQuery = "",
 }: {
@@ -1203,6 +1212,7 @@ export function OperatorSlot({
   shiftDirection?: ShiftDirection;
   transitionDelay?: number;
   portraitSize?: number;
+  positionLabel?: string;
   /** 悬停卡片时展示干员全部基建技能 tooltip，并关闭卡片自身的原生 title hover。 */
   showSkillTooltip?: boolean;
   searchQuery?: string;
@@ -1213,7 +1223,8 @@ export function OperatorSlot({
   const profession = slot ? operatorProfessionPresentationForCode(slot.profession) : undefined;
   const enterX = shouldReduceMotion ? 0 : shiftDirection * 6;
   const exitX = shouldReduceMotion ? 0 : shiftDirection * -4;
-  const ariaLabel = slot?.name ?? (autofill ? "自动补位" : "空置");
+  const occupantLabel = slot?.name ?? (autofill ? "自动补位" : "空置");
+  const ariaLabel = positionLabel ? `${positionLabel}：${occupantLabel}` : occupantLabel;
   const searchMatched = Boolean(slot && searchQuery && slot.name.toLocaleLowerCase("zh-CN").includes(searchQuery));
   const frameClassName = slot
     ? "border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)]"
@@ -1317,7 +1328,12 @@ export function OperatorSlot({
         </Suspense>
       ) : undefined}
       label={slot ? <AnimatedText value={slot.name} trend={shiftDirection} /> : autofill ? "自动补位" : "占"}
-      labelClassName={slot ? (searchMatched ? "bg-[#FFD501] px-1 text-[#202020]" : "text-white") : autofill ? "text-white/55" : "text-transparent select-none"}
+      labelClassName={slot
+        ? (searchMatched ? "bg-[#FFD501] px-1 text-[#202020]" : "text-white")
+        : autofill
+          ? "text-white/55"
+          : "text-transparent select-none"}
+      positionLabel={positionLabel}
       title={suppressNativeTitles ? undefined : slot?.label}
     />
   );
@@ -1540,6 +1556,7 @@ export function ScheduleBoard({
         } as CSSProperties;
         const collapsed = collapsedGroups[group.label];
         const auxiliary = AUXILIARY_ROOM_GROUPS.has(group.rows[0]?.group ?? "");
+        const functionalPowerCount = group.rows.filter((row) => row.group === "power").length;
         if (hiddenGroups[group.label]) return null;
 
         return (
@@ -1592,8 +1609,15 @@ export function ScheduleBoard({
                 const compactFactoryRoom = row.group === "manufacture";
                 const functionalOperatorPosition = listFunctionalOperatorPosition(row.group);
                 const functionalOperatorPlacementClass = listFunctionalOperatorPlacementClass(row.group);
-                const slotCount = compactInlineRoom ? (row.group === "meeting" ? 2 : 1) : roomSlotCountFor(row.group);
-                const slots = Array.from({ length: slotCount }, (_, index) => row.operatorSlots[index]);
+                const slotCount = compactInlineRoom
+                  ? (row.group === "meeting" || row.group === "training" ? 2 : 1)
+                  : roomSlotCountFor(row.group);
+                const slots: Array<{
+                  slot: RoomRow["operatorSlots"][number] | undefined;
+                  positionLabel?: string;
+                }> = row.positionSlots
+                  ? row.positionSlots.map(({ slot, positionLabel }) => ({ slot, positionLabel }))
+                  : Array.from({ length: slotCount }, (_, index) => ({ slot: row.operatorSlots[index] }));
                 const gridTone = roomGridTone(row.group);
                 const rowStyle = {
                   "--room-accent": rowVisual.accent,
@@ -1610,7 +1634,7 @@ export function ScheduleBoard({
                       "infra-room-surface relative flex w-full overflow-hidden text-white max-[819px]:h-auto max-[819px]:flex-col",
                       listRoomHeightClass(row.group),
                       compactInlineRoom && "[container-type:inline-size]",
-                      listFunctionalRoomSpanClass(row.group),
+                      listFunctionalRoomSpanClass(row.group, functionalPowerCount),
                       row.suspicious && "ring-2 ring-destructive ring-offset-2",
                     )}
                     data-room-group={row.group}
@@ -1676,7 +1700,7 @@ export function ScheduleBoard({
                             : {}),
                         } as CSSProperties}
                       >
-                        {slots.map((slot, index) => (
+                        {slots.map(({ slot, positionLabel }, index) => (
                           <OperatorSlot
                             key={`${row.key}-${index}`}
                             slot={slot}
@@ -1688,6 +1712,7 @@ export function ScheduleBoard({
                             shiftDirection={shiftDirection}
                             transitionDelay={Math.min(index, 2) * 0.02}
                             searchQuery={normalizedQuery}
+                            positionLabel={positionLabel}
                           />
                         ))}
                       </div>

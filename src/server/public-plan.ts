@@ -12,6 +12,7 @@ import { DEFAULT_ROTATION_PROFILE } from "../rotation-settings.ts";
 import { isDebugToolsEnabled, PublicApiError } from "./api-contract.ts";
 import { normalizeRotationResult, rotationFallbackProfile } from "../rotation-result.ts";
 import { parseTrainingAdviceReport } from "../training-advice-contract.ts";
+import { parseTrainingRoomSchedule } from "../training-room-contract.ts";
 
 const PATH_SEPARATOR = /[/\\]+/g;
 const SOLVER_DIAGNOSTIC_FIELDS = new Set([
@@ -112,9 +113,19 @@ export function toPublicPlanData(
     }
   }
 
+  let trainingRoom: PublicPlanData["trainingRoom"];
+  if (result.trainingRoomJson !== undefined) {
+    try {
+      trainingRoom = parseTrainingRoomSchedule(result.trainingRoomJson, result.maaJson);
+    } catch (error) {
+      throw new PublicApiError("AIC-PLAN-3004", { cause: error });
+    }
+  }
+
   const data: PublicPlanData = {
     profile: sanitizeProfile(result.profileJson, input.layoutLabel, input.sourceName),
     maa: sanitizeMaa(result.maaJson, input.layoutLabel),
+    ...(trainingRoom ? { trainingRoom } : {}),
     ...(trainingAdvice ? { trainingAdvice } : {}),
     rotation: normalizeRotationResult({
       source: result.rotationJson as RotationJson,

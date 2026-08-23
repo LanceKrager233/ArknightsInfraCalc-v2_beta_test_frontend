@@ -1,5 +1,12 @@
-import type { OperBoxEntry, SolverObservation, TrainingAdviceReport } from "../types";
+import type {
+  MaaJson,
+  OperBoxEntry,
+  SolverObservation,
+  TrainingAdviceReport,
+  TrainingRoomSchedule,
+} from "../types";
 import { parseTrainingAdviceReport } from "../training-advice-contract.ts";
+import { parseTrainingRoomSchedule } from "../training-room-contract.ts";
 
 export type ProtocolRecord = Record<string, unknown>;
 
@@ -27,6 +34,7 @@ export type PlanComputePayload = {
   profile: ProtocolRecord;
   rotation: ProtocolRecord & { shifts: unknown[] };
   maa: ProtocolRecord;
+  trainingRoom?: TrainingRoomSchedule;
   trainingAdvice: TrainingAdviceReport;
 };
 
@@ -201,10 +209,15 @@ export function parsePlanComputePayload(response: unknown): PlanComputePayload |
     throw new Error("plan.compute 成功响应缺少 maa 对象。");
   }
 
+  const trainingRoom = result.training_room === undefined
+    ? undefined
+    : parseTrainingRoomSchedule(result.training_room, result.maa as unknown as MaaJson);
+
   return {
     profile: result.profile,
     rotation: { ...result.rotation, shifts: result.rotation.shifts },
     maa: result.maa,
+    ...(trainingRoom ? { trainingRoom } : {}),
     trainingAdvice: parseTrainingAdviceReport(result.training_advice),
   };
 }
