@@ -62,8 +62,9 @@ test("an anonymous cold start probes the shared session once and does not touch 
   await expect(page.getByText("登录网站账号", { exact: true })).toBeVisible();
   await expect(page.getByText("导入自己的 BOX", { exact: true })).toBeVisible();
   await expect(page.getByText("生成第一份方案", { exact: true })).toBeVisible();
-  await expect(page.locator("[data-onboarding-card]")).toHaveCount(3);
-  await expect(page.locator("[data-onboarding-card] [data-infra-technical-card]")).toHaveCount(3);
+  const onboardingSteps = page.getByRole("list", { name: "生成个人排班的步骤" }).locator(":scope > li");
+  await expect(onboardingSteps).toHaveCount(3);
+  await expect(onboardingSteps.locator("article.infra-room-surface")).toHaveCount(3);
   await expect(page.getByRole("dialog", { name: "登录网站账号" })).toHaveCount(0);
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByText(/正在恢复网站账号|正在确认网站账号|正在打开账号登录/)).toHaveCount(0);
@@ -84,7 +85,8 @@ test("the onboarding cards reuse the Skland technical grid and can be reopened a
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
 
-  const cards = page.locator("[data-onboarding-card]");
+  const onboardingList = page.getByRole("list", { name: "生成个人排班的步骤" });
+  const cards = onboardingList.locator(":scope > li");
   await expect(cards).toHaveCount(3);
 
   const mobileBoxes = await cards.evaluateAll((elements) => elements.map((element) => {
@@ -134,13 +136,13 @@ test("the onboarding cards reuse the Skland technical grid and can be reopened a
 
   await page.getByRole("button", { name: "暂时跳过引导" }).click();
   await expect(page.locator('[data-calculator-start-panel][data-onboarding-active="false"]')).toBeVisible();
-  await expect(page.locator("[data-onboarding-card-grid]")).toHaveCount(0);
+  await expect(onboardingList).toHaveCount(0);
   await expect(page.getByRole("button", { name: "重新查看三步起步卡" })).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.localStorage.getItem("arknights-infra-calc-beta-onboarding-v1"))).toBe("dismissed");
 
   await page.getByRole("button", { name: "重新查看三步起步卡" }).click();
   await expect(page.locator('[data-calculator-start-panel][data-onboarding-active="true"]')).toBeVisible();
-  await expect(page.locator("[data-onboarding-card]")).toHaveCount(3);
+  await expect(cards).toHaveCount(3);
   await expect.poll(() => page.evaluate(() => window.localStorage.getItem("arknights-infra-calc-beta-onboarding-v1"))).toBeNull();
 });
 

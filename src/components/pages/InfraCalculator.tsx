@@ -1,10 +1,9 @@
 "use client";
 
-import { Check, Download, Ellipsis, FlaskConical, HeartPulse, Keyboard, Loader2, LogIn, Play, RotateCcw, Search, Settings2, Sparkles, Upload, X } from "lucide-react";
+import { Download, Ellipsis, FlaskConical, HeartPulse, Keyboard, Loader2, Play, Search, Settings2, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { ScheduleBoard, ShiftTabs } from "@/components";
-import { InfraTechnicalCard, InfraTechnicalHeading } from "@/components/InfraTechnicalCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PlanResultSummarySkeleton } from "@/components/PlanResultSummarySkeleton";
@@ -123,21 +122,18 @@ function CalculatorStartPanel({
       eyebrow: "网站账号",
       description: websiteAuthenticated ? "账号状态已确认，可以继续导入个人数据。" : "保护个人 BOX、排班记录与后续同步。",
       group: "control",
-      icon: <LogIn className="size-4" aria-hidden="true" />,
     },
     {
       title: "导入自己的 BOX",
       eyebrow: "干员数据",
       description: hasPersonalBox ? "个人 BOX 已就绪，可以配置布局并生成方案。" : "支持 MAA JSON 与兼容的一图流表格。",
       group: "trading",
-      icon: <Upload className="size-4" aria-hidden="true" />,
     },
     {
       title: "生成第一份方案",
       eyebrow: "三班排班",
       description: "得到三班排班、关键房间提示与 MAA 文件。",
       group: "manufacture",
-      icon: <Sparkles className="size-4" aria-hidden="true" />,
     },
   ] as const;
   const personalActionLabel = !websiteAuthenticated
@@ -167,7 +163,6 @@ function CalculatorStartPanel({
           <ol
             className="mt-7 grid gap-3 md:grid-cols-2 xl:grid-cols-3"
             aria-label="生成个人排班的步骤"
-            data-onboarding-card-grid
           >
             {steps.map((step, index) => {
               const status = statuses[index];
@@ -179,23 +174,24 @@ function CalculatorStartPanel({
                     "min-w-0",
                     index === 2 && "md:col-span-2 xl:col-span-1",
                   )}
-                  data-onboarding-step={index + 1}
-                  data-onboarding-card
-                  data-step-status={status}
                   aria-current={status === "current" ? "step" : undefined}
                 >
-                  <InfraTechnicalCard
-                    group={step.group}
+                  <article
                     className={cn(
-                      "h-full min-h-40",
+                      "infra-room-surface onboarding-technical-card relative h-full min-h-40 overflow-hidden px-4 py-4 text-white",
                       status === "current" && "ring-1 ring-[var(--room-accent)]",
                     )}
+                    data-room-group={step.group}
                   >
-                    <div className="flex h-full flex-col">
+                    <div className="infra-room-emblem onboarding-technical-card-emblem pointer-events-none absolute inset-0 bg-left bg-no-repeat" aria-hidden="true" />
+                    <div className="relative z-10 flex h-full flex-col">
                       <div className="flex items-start justify-between gap-3">
-                        <InfraTechnicalHeading icon={step.icon}>
-                          <span className="font-number">0{index + 1}</span> · {step.eyebrow}
-                        </InfraTechnicalHeading>
+                        <div className="flex min-h-6 items-center gap-2">
+                          <span className="h-5 w-1 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
+                          <h3 className="text-xs font-medium tracking-wide text-white/66">
+                            <span className="font-number">0{index + 1}</span> · {step.eyebrow}
+                          </h3>
+                        </div>
                         <span
                           className={cn(
                             "shrink-0 border border-white/14 bg-white/6 px-2 py-1 text-[0.68rem] font-medium tracking-wide text-white/58",
@@ -210,12 +206,8 @@ function CalculatorStartPanel({
                         {step.title}
                       </p>
                       <p className="mt-2 text-xs leading-5 text-white/58">{step.description}</p>
-                      <div className="mt-auto flex items-center gap-2 border-t border-white/10 pt-3 text-xs text-white/58">
-                        {status === "complete" ? <Check className="size-3.5 text-[var(--room-accent)]" aria-hidden="true" /> : null}
-                        <span>{status === "complete" ? "可以继续下一步" : status === "current" ? "从这里继续" : "完成前一步后继续"}</span>
-                      </div>
                     </div>
-                  </InfraTechnicalCard>
+                  </article>
                 </li>
               );
             })}
@@ -271,7 +263,7 @@ function CalculatorStartPanel({
             </Button>
           ) : (
             <Button type="button" variant="ghost" className="min-h-11 sm:ms-auto" onClick={onRestartOnboarding}>
-              <RotateCcw />重新查看三步起步卡
+              重新查看三步起步卡
             </Button>
           )}
         </div>
