@@ -556,6 +556,41 @@
   mask-size: 96px 96px;
 }
 
+.onboarding-technical-card[data-room-group="control"] {
+  --room-accent: #ffffff;
+  --room-level: #ffffff;
+  --room-grid-color: #d58a32;
+  --room-grid-opacity: 0.15;
+  --room-grid-fade-start: 8%;
+}
+
+.onboarding-technical-card[data-room-group="trading"] {
+  --room-accent: #22bbff;
+  --room-level: #22bbff;
+}
+
+.onboarding-technical-card[data-room-group="manufacture"] {
+  --room-accent: #ffd800;
+  --room-level: #ffd800;
+}
+
+.onboarding-technical-card-emblem {
+  background-position: -18px center;
+  background-size: auto 100%;
+}
+
+.onboarding-technical-card[data-room-group="control"] .onboarding-technical-card-emblem {
+  background-image: url("/images/building-room-emblems/emblem_control.png");
+}
+
+.onboarding-technical-card[data-room-group="trading"] .onboarding-technical-card-emblem {
+  background-image: url("/images/building-room-emblems/emblem_trading.png");
+}
+
+.onboarding-technical-card[data-room-group="manufacture"] .onboarding-technical-card-emblem {
+  background-image: url("/images/building-room-emblems/emblem_manufacture.png");
+}
+
 .infra-room-emblem {
   opacity: 0.16;
   mix-blend-mode: normal;
