@@ -27,10 +27,15 @@ test("CI enforces route and document preload JavaScript budgets after building",
 
   assert.equal(packageJson.scripts["test:bundle-budget"], "node scripts/check-bundle-budget.mjs");
   assert.match(workflow, /Production build[\s\S]+npm run test:bundle-budget/);
-  assert.match(budgetCheck, /MAX_ROUTE_INITIAL_JS_BYTES = 1_130_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_DISABLED_ROUTE_INITIAL_JS_BYTES = 1_130_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_150_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_ROUTE_INITIAL_JS_BYTES = 1_590_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_JS_BYTES = 1_240_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_JS_BYTES = 1_270_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 395_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 405_000/);
+  assert.match(budgetCheck, /const sklandEnabled = sklandRoute\.firstLoadChunkPaths\.some/);
   assert.match(budgetCheck, /MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_525_000/);
-  assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_JS_BYTES = 1_240_000/);
-  assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_GZIP_JS_BYTES = 395_000/);
   assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_JS_FILES = 18/);
   assert.match(budgetCheck, /WORKBENCH_ROUTES = \["\/", "\/training", "\/skills", "\/skland", "\/account"\]/);
   assert.match(budgetCheck, /firstLoadUncompressedJsBytes/);
@@ -114,7 +119,8 @@ test("production injects the client feature flag at every browser boundary", asy
   assert.match(sklandPage, /process\.env\.APP_CLIENT_SKLAND_ENABLED !== "1"/);
   assert.match(setupDialog, /process\.env\.APP_CLIENT_SKLAND_ENABLED === "1"/);
   assert.match(developmentSklandCenter, /SklandStatus/);
-  assert.match(workflow, /Production build[\s\S]+APP_DEPLOYMENT_ENV: production/);
+  assert.match(workflow, /Production build[\s\S]+APP_DEPLOYMENT_ENV: production[\s\S]+SKLAND_FEATURE_ENABLED: "1"/);
+  assert.match(workflow, /Production client feature boundary[\s\S]+APP_DEPLOYMENT_ENV: production[\s\S]+SKLAND_FEATURE_ENABLED: "1"/);
 });
 
 test("workbench views use five prefetched route entries under one persistent layout", async () => {

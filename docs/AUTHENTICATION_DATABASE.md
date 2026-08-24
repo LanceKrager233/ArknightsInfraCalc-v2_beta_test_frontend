@@ -181,7 +181,7 @@ PostgreSQL 保存网站账号、数据库 Session、验证记录、Better Auth �
 | `GET /api/admin/users`、`PATCH /api/admin/users/[id]`、`GET/DELETE /api/admin/users/[id]/sessions` | 项目统一信封；要求实时管理员权限；写操作要求同源 |
 | `GET /api/admin/plan-runs`、`GET /api/admin/feedback`、`PATCH /api/admin/feedback/[id]` | 项目统一信封；要求实时管理员权限；写操作要求同源 |
 | `POST /api/plan` | sample 可匿名，MAA/森空岛/旧来源要求网站 Session |
-| `/api/skland/*` | 项目统一信封；要求网站 Session，且只在 development 开放 |
+| `/api/skland/*` | 项目统一信封；要求网站 Session，且只在当前部署显式启用森空岛时开放 |
 | `GET/POST/DELETE /api/account/data-consent` | 项目统一信封；要求网站 Session；写操作要求同源；云同步开关关闭时返回功能不可用 |
 | `GET/PUT /api/workspace` | 项目统一信封；要求网站 Session 与当前政策同意；写操作要求同源 |
 | `GET /api/account/saved-plans`、`PATCH/DELETE /api/account/saved-plans/[id]` | 账号排班历史；项目统一信封；要求网站 Session 与当前政策同意；写操作要求同源 |
@@ -190,7 +190,7 @@ PostgreSQL 保存网站账号、数据库 Session、验证记录、Better Auth �
 
 旧 `DELETE /api/workspace`、`/api/admin/records`、`POST /api/admin/users`、带 `userId` 查询的 `/api/admin/users`，以及 `/api/skland/session`、`/api/skland/status`、`/api/skland/data` 暂时作为兼容入口并返回 `Deprecation: true` 与 successor `Link`。新客户端应使用资源型路由；撤销云端同意并级联删除统一使用 `DELETE /api/account/data-consent`。
 
-production 构建强制从客户端和公开 API 面移除森空岛能力，不能由 `SKLAND_FEATURE_ENABLED=1` 覆盖。网站账号与数据库能力本身仍可在 production 使用。
+production 的森空岛能力默认失败关闭，只有精确设置`SKLAND_FEATURE_ENABLED=1`才会进入客户端、健康检查和公开 API 面；未设置、空值或其他值均保持关闭。网站账号与数据库能力不依赖该开关。
 
 ## 5. 配置、惰性初始化与 migration
 
@@ -266,10 +266,11 @@ npm run test:auth-integration
 
 ### 6.1 准备发信域名
 
-在 Resend 中添加发信域名，按照 Resend 控制台给出的值在 DNS 服务商配置 SPF 与 DKIM，并为该域名添加 DMARC。当前 development 使用已验证的 `yeyouchuan.me`，并创建仅供 development 使用的 API key。From 地址为：
+在 Resend 中添加发信域名，按照 Resend 控制台给出的值在 DNS 服务商配置 SPF 与 DKIM，并为该域名添加 DMARC。当前 development 使用已验证的 `yeyouchuan.me`；production 使用独立的`auth.riic.autos`和独立 API key。DNS 与 Resend 均显示验证成功前不得发布 production 认证流。From 地址分别为：
 
 ```text
 可露希尔基建终端 <noreply@yeyouchuan.me>
+可露希尔基建终端 <noreply@auth.riic.autos>
 ```
 
 development 和 production 使用不同的 API key、发信配置与公开 Origin。注册邮箱验证码 10 分钟后失效且数据库只保存哈希，密码重置链接一小时后失效。
@@ -367,7 +368,7 @@ sudo install -o root -g root -m 0644 deploy/postgres/arknights-infra-db-backup@.
 
 development 的 `BACKUP_LOCAL_DIR` 固定填写 `/var/backups/arknights-infra/development`。在 `/etc/arknights-infra/db-backup-development.env` 配置不含密码的 `DATABASE_BACKUP_URL`（例如 `postgresql://arknights_dev_backup@127.0.0.1:55433/arknights_infra_auth`）、独立的 `PGPASSWORD`、`BACKUP_AGE_RECIPIENT` 与 `BACKUP_LOCAL_DIR`。不要把密码嵌入连接 URL，否则会暴露在 `pg_dump` 的进程参数中。环境文件权限设为 `root:arkbackup 0640`。
 
-development 测试期可以省略异地存储；此时脚本只保留最近 14 天的本地加密文件。配置异地存储时，必须同时设置 `RESTIC_REPOSITORY` 与 `RESTIC_PASSWORD_FILE`，并提供对象存储凭据；两个变量只设置一个会使任务失败。restic 密码文件必须只允许 `arkbackup` 读取。production 必须使用与 development 分离的异地仓库。先手动运行一次，再启用定时器：
+development 测试期可以省略异地存储；此时脚本只保留最近 14 天的本地加密文件。配置异地存储时，必须同时设置 `RESTIC_REPOSITORY` 与 `RESTIC_PASSWORD_FILE`，并提供对象存储凭据；两个变量只设置一个会使任务失败。restic 密码文件必须只允许 `arkbackup` 读取。首期 production 按已接受风险只配置服务器本机 age 加密备份，不配置 restic/S3；后续若启用异地仓库必须与 development 完全隔离。先手工运行一次并完成隔离恢复，再启用定时器：
 
 ```bash
 sudo systemctl daemon-reload
@@ -376,7 +377,7 @@ sudo systemctl enable --now arknights-infra-db-backup@development.timer
 systemctl list-timers 'arknights-infra-db-backup@*'
 ```
 
-本地模式保留最近 14 天的加密文件；异地模式另由 restic 保留 14 个日快照和 8 个周快照。每季度必须在隔离 PostgreSQL 中执行一次解密恢复，并验证迁移版本、账号行数以及注册/验证/登录链路；“备份任务成功”不能代替恢复演练。仅有本地备份无法抵御服务器磁盘损坏或整机丢失，只适合作为 development 测试期的临时方案。
+本地模式保留最近 14 天的加密文件；异地模式另由 restic 保留 14 个日快照和 8 个周快照。每季度必须在隔离 PostgreSQL 中执行一次解密恢复，并验证迁移版本、账号行数以及注册/验证/登录链路；“备份任务成功”不能代替恢复演练。仅有本地备份无法抵御服务器磁盘损坏或整机丢失；首期 production 明确接受该风险，但必须在每次发布与恢复演练记录中继续披露。
 
 ### 6.8 development 上线验收
 
@@ -392,7 +393,55 @@ systemctl list-timers 'arknights-infra-db-backup@*'
 8. 390px、768px、1440px 下分别完成账号管理的注册、验证提示与账号设置，以及森空岛状态中心的权限引导、七天扫码续期和管理页检查。
 9. backup service 成功且本地加密文件存在；配置异地存储时还需确认 restic 快照存在，并在隔离库完成至少一次恢复验证。
 
-production 仍必须保持森空岛代码、文案和 API 从浏览器制品及公开访问面移除。production 数据库、密钥、Resend Key、发信配置和备份路径不得复用 development 的值。
+production 显式启用森空岛后必须保留对应代码、文案、健康字段和 API 访问面；关闭构建仍必须完整移除。production 数据库、Better Auth、Resend、工作区主密钥和备份凭据不得复用 development 的值，既有 production `SKLAND_SESSION_SECRET`则应长期保持稳定。
+
+### 6.9 production 一次性启用清单
+
+production 使用全新账号库，不复制 development 用户、Session、管理员、政策同意、云工作区、排班历史或森空岛绑定。上线前按以下原子顺序执行，任一前置条件失败都不得合并`main`：
+
+1. 确认`riic.autos`指向 production HTTPS 入口，`ark.riic.autos`只做永久跳转；`auth.riic.autos`的 SPF、DKIM、DMARC 与 Resend 验证全部通过。
+2. 使用仅属于 production 的 bootstrap、runtime、migration、backup 四组随机密码创建`production.env`，再启动并核对数据库：
+
+   ```bash
+   cd /opt/arknights-infra-databases
+   sudo docker compose -f compose.yml up -d production
+   sudo docker compose -f compose.yml ps production
+   sudo ss -ltnp | grep 55432
+   ```
+
+   只允许`127.0.0.1:55432`监听，production volume 不得复用 development。
+3. 将`/opt/arknights-infra/shared/.env.local`设为`root:arkinfra 0640`或更严格，并配置下列非仓库值：
+
+   ```text
+   APP_DEPLOYMENT_ENV=production
+   SKLAND_FEATURE_ENABLED=1
+   DATABASE_URL=postgresql://<prod-runtime-user>:<prod-runtime-password>@127.0.0.1:55432/<prod-db>
+   DATABASE_MIGRATION_URL=postgresql://<prod-migration-user>:<prod-migration-password>@127.0.0.1:55432/<prod-db>
+   BETTER_AUTH_SECRET=<production专用且至少32字节的长期随机值>
+   BETTER_AUTH_URL=https://riic.autos
+   BETTER_AUTH_ADMIN_USER_IDS=
+   RESEND_API_KEY=<production专用Resend key>
+   AUTH_EMAIL_FROM=可露希尔基建终端 <noreply@auth.riic.autos>
+   BETA_PUBLIC_ORIGIN=https://riic.autos
+   SKLAND_PUBLIC_ORIGIN=https://riic.autos
+   SKLAND_SESSION_SECRET=<保留既有production长期稳定值>
+   SKLAND_ALLOW_INSECURE_HTTP=0
+   BETA_BUSINESS_DB_ENABLED=1
+   BETA_BUSINESS_DB_READ_ENABLED=1
+   BETA_BUSINESS_FILE_READ_FALLBACK=1
+   ACCOUNT_CLOUD_SYNC_ENABLED=1
+   WORKSPACE_ACTIVE_KEY_VERSION=v1
+   WORKSPACE_MASTER_KEYS=<production专用版本化32字节主密钥JSON>
+   PLAN_CACHE_ENABLED=0
+   ```
+
+   三个公开 Origin 必须完全一致，不得使用内部 Next、Nginx、旧 Tailscale 地址或`ark.riic.autos`。production `BETTER_AUTH_SECRET`、Resend key、工作区主密钥和备份凭据均不得复用 development。
+4. 从待合并、已评审 commit 原子安装固定 deploy helper，确认普通文件、`root:root 0755`、契约版本`1`和 SHA-256。该兼容修改不增加参数，也不升级契约版本；helper 会从`shared/.env.local`读取严格的`SKLAND_FEATURE_ENABLED=0|1`，production 未设置时继续失败关闭。
+5. 为 production 生成独立 age recipient，把`BACKUP_LOCAL_DIR`设为`/var/backups/arknights-infra/production`，手工运行`arknights-infra-db-backup@production.service`并在隔离 PostgreSQL 完成一次解密恢复。首期不设置`RESTIC_REPOSITORY`或`RESTIC_PASSWORD_FILE`。
+6. 合并并发布准确的已验证`main` SHA；migration 与`auth:check`必须在切换`current`前成功。发布后运行一次`npm run db:backfill-business`，只回填 production 当前七天内的运行/反馈白名单摘要，并记录成功、跳过与数据库行数。
+7. 在 production 新注册并验证运营网站账号，用 backup 只读账号查询 Better Auth user ID，把确认后的 ID 写入`BETTER_AUTH_ADMIN_USER_IDS`再重启服务。不得填写邮箱或复制 development 管理员 ID。
+
+首发验收必须覆盖邮件验证码、登录/退出、找回密码、Session 撤销、管理员权限、MAA 求解、云工作区、排班历史、森空岛扫码/切角/同步/求解/退出/删除全部数据，并确认公开响应、日志、数据库和浏览器存储不含凭据、明文 Box、内部路径或调试字段。失败时原子回滚应用 release；已执行的向前兼容 migration 保留。关闭森空岛需要修改开关后重新构建发布，不能只重启旧构建。
 
 ## 7. 故障定位
 
