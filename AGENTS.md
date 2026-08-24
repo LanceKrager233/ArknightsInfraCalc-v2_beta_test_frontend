@@ -231,7 +231,7 @@ npm start
 - `npm run test:deploy`验证数据库备份模式、发布包准备、release 淘汰、失败清理、回滚和磁盘空间保护。
 - `npm run test:solver-contract` 仅在 Linux 执行，验证仓库内 ELF 制品指纹并用 Full E2 真实调用 `plan.compute`。
 - `npm run build` 进行 Next 生产构建并覆盖 TypeScript 集成检查。
-- `npm run test:production-client` checks the production browser build for forbidden Skland login content.
+- `npm run test:production-client` checks that the production browser build includes or excludes Skland boundaries according to the resolved deployment switch.
 - `npm run test:e2e` 默认在 5184 端口自动启动 Next，并用 Playwright 拦截外部 API；通常不需要真实 CLI 或森空岛凭据。
 - `npm run test:e2e:webkit` 使用同一套 E2E 场景执行独立 WebKit 兼容性门禁。
 - `npm start` 默认监听 `0.0.0.0:5174`。
