@@ -8,9 +8,9 @@
 
 以下产品约束必须作为 UI 回归项保留：
 
-- “全角色导入”保持在计算器顶部操作栏，并维持主按钮层级。
+- 未生成结果时突出“导入自己的 BOX”和“先看全角色示例”；搜索、导出、班次与折叠控制只在有结果后出现。
 - production 保持“基建计算器 / 练卡建议 / 技能查询 / 账号管理”四个一级导航；development 额外显示“森空岛状态中心”，production 不得请求森空岛 API。
-- 桌面与平板默认使用“一图流布局”；手机端默认“列表式布局”，并继续显示禁用态的“一图流布局”。
+- 1024px 及以上默认使用“一图流布局”；768–1023px 和手机端默认“列表式布局”，手机端继续显示禁用态的“一图流布局”。
 - 加工站继续使用现有“暂不显示”按钮和交互。
 
 ## 本地启动
@@ -42,6 +42,8 @@ Windows 前端命令使用 PowerShell。部署 shell 测试只以 Linux CI 或�
 | 路径 | 责任 |
 | --- | --- |
 | `src/App.tsx` | 工作台状态、恢复门控、页面编排 |
+| `src/website-session.ts`、`src/website-session-data.ts` | 工作台唯一 Website Session Provider、静默请求与公开字段白名单 |
+| `src/onboarding.ts` | 内联起步卡偏好迁移与三步状态推导 |
 | `src/components/layout/AppTopBar.tsx` | 全局粘性账号入口与移动端侧栏触发器 |
 | `src/api.ts` | 统一解析公开 API envelope，抛出带错误码的 `ApiClientError` |
 | `src/types.ts` | 内部类型、公开 DTO、错误码 |

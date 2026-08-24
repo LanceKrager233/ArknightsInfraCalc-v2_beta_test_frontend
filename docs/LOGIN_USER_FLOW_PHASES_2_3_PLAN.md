@@ -238,7 +238,16 @@ type TrainingAdviceFilter =
 在 `src/types.ts` 增加严格联合类型，所有事件带粗粒度视口 `small | medium | large`：
 
 ```ts
-type ExperienceEvent =
+type ExperienceViewport = "small" | "medium" | "large";
+type ExperienceDurationBucket =
+  | "lt_1s"
+  | "1_2_5s"
+  | "2_5_5s"
+  | "5_10s"
+  | "10_30s"
+  | "gte_30s";
+
+type ExperienceEvent = { viewport: ExperienceViewport } & (
   | { name: "auth_gate_shown"; intent: "account" | "run" | "setup" | "skland" }
   | { name: "box_import_succeeded"; source: "maa_json" | "xlsx" | "skland" }
   | { name: "first_plan_started"; source: "maa" | "skland" }
@@ -246,7 +255,8 @@ type ExperienceEvent =
   | { name: "first_plan_failed"; code: AppErrorCode }
   | { name: "onboarding_completed" }
   | { name: "onboarding_skipped" }
-  | { name: "web_vital"; metric: "LCP" | "INP" | "CLS"; rating: "good" | "needs_improvement" | "poor" };
+  | { name: "web_vital"; metric: "LCP" | "INP" | "CLS"; rating: "good" | "needs_improvement" | "poor" }
+);
 ```
 
 耗时只允许以下区间，不上传毫秒值：
