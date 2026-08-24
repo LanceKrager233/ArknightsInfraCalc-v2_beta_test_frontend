@@ -35,6 +35,10 @@ test("cold HTML contains the workbench shell instead of only the client loading 
   const html = await response.text();
   expect(html).toContain("data-calculator-controls");
   expect(html).toContain("data-calculator-start-panel");
+  expect(html).not.toContain("从可执行的排班开始");
+  expect(html).not.toContain("把你的 BOX 变成今天就能照着换的三班方案");
+  expect(html).not.toContain("登录只用于保护个人数据");
+  expect(html).not.toContain("生成结果前，不需要先理解所有配置项");
   expect(html).not.toContain('data-schedule-view="compact"');
   expect(html).not.toContain('data-schedule-view="list"');
   expect(html).not.toContain("正在加载基建计算器");
@@ -62,6 +66,9 @@ test("an anonymous cold start probes the shared session once and does not touch 
   await expect(page.getByText("登录网站账号", { exact: true })).toBeVisible();
   await expect(page.getByText("导入自己的 BOX", { exact: true })).toBeVisible();
   await expect(page.getByText("生成第一份方案", { exact: true })).toBeVisible();
+  await expect(page.getByText("从可执行的排班开始", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("把你的 BOX 变成今天就能照着换的三班方案", { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/登录只用于保护个人数据|生成结果前，不需要先理解所有配置项/)).toHaveCount(0);
   const onboardingSteps = page.getByRole("list", { name: "生成个人排班的步骤" }).locator(":scope > li");
   await expect(onboardingSteps).toHaveCount(3);
   await expect(onboardingSteps.locator("article.infra-room-surface")).toHaveCount(3);
@@ -87,7 +94,36 @@ test("the onboarding cards reuse the Skland technical grid and can be reopened a
 
   const onboardingList = page.getByRole("list", { name: "生成个人排班的步骤" });
   const cards = onboardingList.locator(":scope > li");
+  const startPanel = page.getByRole("region", { name: "生成排班起步区" });
+  const sidebarInset = page.locator('[data-slot="sidebar-inset"]');
   await expect(cards).toHaveCount(3);
+
+  const expectFullScreenAndCentered = async (viewportHeight: number, mobile: boolean) => {
+    const geometry = await page.evaluate(() => {
+      const panel = document.querySelector<HTMLElement>('[data-calculator-start-panel]')?.getBoundingClientRect();
+      const inset = document.querySelector<HTMLElement>('[data-slot="sidebar-inset"]')?.getBoundingClientRect();
+      const list = document.querySelector<HTMLElement>('ol[aria-label="生成个人排班的步骤"]')?.getBoundingClientRect();
+      const topbar = document.querySelector<HTMLElement>('[data-app-topbar]')?.getBoundingClientRect();
+      if (!panel || !inset || !list) throw new Error("Onboarding geometry is unavailable.");
+      return {
+        panel: { left: panel.left, right: panel.right, top: panel.top, bottom: panel.bottom, height: panel.height },
+        inset: { left: inset.left, right: inset.right, top: inset.top },
+        topbarBottom: topbar?.bottom ?? null,
+        listCenter: list.left + list.width / 2,
+        panelCenter: panel.left + panel.width / 2,
+      };
+    });
+    expect(geometry.panel.left).toBeCloseTo(geometry.inset.left, 0);
+    expect(geometry.panel.right).toBeCloseTo(geometry.inset.right, 0);
+    expect(geometry.panel.top).toBeCloseTo(mobile ? geometry.topbarBottom ?? 0 : geometry.inset.top, 0);
+    expect(geometry.panel.bottom).toBeGreaterThanOrEqual(viewportHeight - 1);
+    expect(geometry.panel.height).toBeGreaterThanOrEqual(viewportHeight - (mobile ? 56 : 0) - 1);
+    expect(geometry.listCenter).toBeCloseTo(geometry.panelCenter, 0);
+    await expect(startPanel).toBeVisible();
+    await expect(sidebarInset).toBeVisible();
+  };
+
+  await expectFullScreenAndCentered(844, true);
 
   const mobileBoxes = await cards.evaluateAll((elements) => elements.map((element) => {
     const box = element.getBoundingClientRect();
@@ -105,6 +141,7 @@ test("the onboarding cards reuse the Skland technical grid and can be reopened a
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1);
 
   await page.setViewportSize({ width: 768, height: 900 });
+  await expectFullScreenAndCentered(900, false);
   const tabletBoxes = await cards.evaluateAll((elements) => elements.map((element) => {
     const box = element.getBoundingClientRect();
     return { left: box.left, top: box.top, width: box.width };
@@ -120,6 +157,7 @@ test("the onboarding cards reuse the Skland technical grid and can be reopened a
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1);
 
   await page.setViewportSize({ width: 1440, height: 900 });
+  await expectFullScreenAndCentered(900, false);
   const desktopBoxes = await cards.evaluateAll((elements) => elements.map((element) => {
     const box = element.getBoundingClientRect();
     return { top: box.top, width: box.width };
@@ -1991,9 +2029,10 @@ test("account settings revokes every session and returns to the app", async ({ p
   await page.goto("/");
   await page.getByRole("button", { name: "账号管理", exact: true }).click();
 
-  await expect(page.locator("[data-account-management]")).toBeVisible();
-  await expect(page.getByText("test@example.com", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "退出全部设备" }).click();
+  const accountManagement = page.locator("[data-account-management]");
+  await expect(accountManagement).toBeVisible();
+  await expect(page.getByText("test@example.com", { exact: true }).last()).toBeVisible();
+  await page.getByRole("button", { name: "退出全部设备" }).last().click();
   await expect.poll(() => revokeRequests).toBe(1);
   await expect(page.locator("[data-account-management]")).toHaveCount(0);
   await expect(page.locator("[data-calculator-controls]")).toBeVisible();
@@ -2126,12 +2165,11 @@ test("defers a portrait far below the mobile viewport until it approaches view",
 
   const deferredPortrait = page.locator('[data-schedule-view="list"] img[alt="嘉辛塔"]');
   await expect(deferredPortrait).toHaveAttribute("loading", "lazy");
-  const position = await deferredPortrait.evaluate((element) => {
+  const viewportHeight = await page.evaluate(() => window.innerHeight);
+  await expect.poll(() => deferredPortrait.evaluate((element) => {
     window.scrollTo(0, 0);
-    const box = element.getBoundingClientRect();
-    return { top: box.top, viewportHeight: window.innerHeight };
-  });
-  expect(position.top).toBeGreaterThan(position.viewportHeight * 2);
+    return element.getBoundingClientRect().top;
+  })).toBeGreaterThan(viewportHeight * 2);
   await page.waitForTimeout(300);
   expect(requestedPortraits).toHaveLength(3);
   expect(requestedPortraits.some((url) => url.includes("/4237_jcinta.webp?"))).toBe(false);
@@ -3552,7 +3590,8 @@ test("the compact mobile navigation stays pinned while the account control belon
   await expect.poll(async () => (await page.locator("[data-app-content]").boundingBox())?.y ?? -1).toBeCloseTo(0, 0);
 });
 
-test("all primary pages share the calculator top content offset", async ({ page }) => {
+test("the empty calculator is full-screen while other primary pages keep one content offset", async ({ page }) => {
+  test.setTimeout(60_000);
   await mockApis(page, { sklandConfigured: true, sklandSnapshot: authenticatedSklandSnapshot });
   await seedPreferences(page);
 
@@ -3564,6 +3603,7 @@ test("all primary pages share the calculator top content offset", async ({ page 
     await page.setViewportSize(viewport);
     await page.goto("/");
     const calculatorTop = (await page.locator('[data-primary-page="calculator"]').boundingBox())?.y ?? -1;
+    const regularPageTops: number[] = [];
 
     for (const destination of [
       { name: "练卡建议", pageKey: "training", root: "[data-training-page]" },
@@ -3580,8 +3620,13 @@ test("all primary pages share the calculator top content offset", async ({ page 
       await expect(pageRoot).toBeVisible();
       await waitForOwnAnimations(page.locator(`[data-primary-page="${destination.pageKey}"]`));
       const pageTop = (await page.locator(`[data-primary-page="${destination.pageKey}"]`).boundingBox())?.y ?? -1;
-      expect(pageTop, `${viewport.width}px ${destination.name}`).toBeCloseTo(calculatorTop, 0);
+      regularPageTops.push(pageTop);
     }
+
+    for (const [index, pageTop] of regularPageTops.entries()) {
+      expect(pageTop, `${viewport.width}px regular page ${index + 1}`).toBeCloseTo(regularPageTops[0], 0);
+    }
+    expect(regularPageTops[0] - calculatorTop, `${viewport.width}px full-screen inset`).toBeCloseTo(16, 0);
   }
 });
 
