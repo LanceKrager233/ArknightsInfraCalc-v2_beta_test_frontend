@@ -12,11 +12,11 @@ import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { estimateDailyProduction, type DailyProductionAmount, type DailyProductionEstimate, type DailyProductionUnavailableReason } from "@/daily-production";
-import { manufacturePoolReady, profileEfficiency } from "@/efficiency";
+import { manufacturePoolReady } from "@/efficiency";
 import { cn } from "@/lib/utils";
 import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
 import { PRODUCT_ICON_URLS } from "@/product-assets";
-import { formatPlanDuration, relativeMetricDelta, rotationMetricValue, type RotationMetricKind } from "@/rotation-presentation";
+import { formatPlanDuration, relativeMetricDelta, type RotationMetricKind } from "@/rotation-presentation";
 import { countShiftPlacementAdjustments } from "@/skland";
 import type { BaseBlueprint, MaaJson, RotationJson, ShiftComparison, UserProfile } from "@/types";
 
@@ -31,6 +31,38 @@ function severityClass(severity: "ok" | "warn" | "critical") {
   if (severity === "critical") return "bg-red-100 text-red-800";
   if (severity === "warn") return "bg-amber-100 text-amber-800";
   return "bg-emerald-100 text-emerald-800";
+}
+
+function improvementComparison(delta: number | undefined): {
+  state: "positive" | "negative" | "neutral";
+  description: string;
+  badge: string;
+} {
+  if (delta === undefined || !Number.isFinite(delta)) {
+    return { state: "neutral", description: "暂无可比方案", badge: "暂无对比" };
+  }
+  const rounded = Math.round(delta * 10) / 10;
+  if (rounded > 0) {
+    return { state: "positive", description: `领先推荐方案 ${compactNumber(rounded)}%`, badge: "领先" };
+  }
+  if (rounded < 0) {
+    return { state: "negative", description: `距推荐方案 ${compactNumber(Math.abs(rounded))}%`, badge: "可提升" };
+  }
+  return { state: "neutral", description: "与推荐方案持平", badge: "持平" };
+}
+
+function domainComparison(gapRatio: number): string {
+  if (!Number.isFinite(gapRatio)) return "暂无可比方案";
+  const rounded = Math.round(gapRatio * 1000) / 10;
+  if (rounded > 0) return `领先推荐组合 ${compactNumber(rounded)}%`;
+  if (rounded < 0) return `距推荐组合 ${compactNumber(Math.abs(rounded))}%`;
+  return "已达到推荐水平";
+}
+
+function domainStatus(severity: "ok" | "warn" | "critical"): string {
+  if (severity === "critical") return "优先调整";
+  if (severity === "warn") return "可继续优化";
+  return "状态良好";
 }
 
 function dailyNumber(value: number | null): string {
@@ -92,10 +124,10 @@ export function PlanResultSummary({
   const currentRotation = profile?.rotation;
   const baselineRotation = profile?.baseline_rotation;
   const efficiencyMetrics = [
-    { kind: "trade" as const, label: "24h 贸易", value: rotation?.daily.trade ?? currentRotation?.daily_trade_efficiency ?? currentRotation?.daily_trade, baseline: baselineRotation?.daily_trade_efficiency ?? baselineRotation?.daily_trade, suffix: "×" },
-    { kind: "manu" as const, label: "24h 制造", value: rotation?.daily.manu ?? currentRotation?.daily_manufacture_efficiency ?? currentRotation?.daily_manu, baseline: baselineRotation?.daily_manufacture_efficiency ?? baselineRotation?.daily_manu, suffix: "%" },
-    { kind: "power" as const, label: "24h 发电", value: rotation?.daily.power ?? currentRotation?.daily_power_efficiency ?? currentRotation?.daily_power, baseline: baselineRotation?.daily_power_efficiency ?? baselineRotation?.daily_power, suffix: "%" },
-  ].filter((metric): metric is { kind: RotationMetricKind; label: string; value: number; baseline: number | undefined; suffix: string } => typeof metric.value === "number");
+    { kind: "trade" as const, label: "贸易产线", value: rotation?.daily.trade ?? currentRotation?.daily_trade_efficiency ?? currentRotation?.daily_trade, baseline: baselineRotation?.daily_trade_efficiency ?? baselineRotation?.daily_trade },
+    { kind: "manu" as const, label: "制造产线", value: rotation?.daily.manu ?? currentRotation?.daily_manufacture_efficiency ?? currentRotation?.daily_manu, baseline: baselineRotation?.daily_manufacture_efficiency ?? baselineRotation?.daily_manu },
+    { kind: "power" as const, label: "发电产线", value: rotation?.daily.power ?? currentRotation?.daily_power_efficiency ?? currentRotation?.daily_power, baseline: baselineRotation?.daily_power_efficiency ?? baselineRotation?.daily_power },
+  ].filter((metric): metric is { kind: RotationMetricKind; label: string; value: number; baseline: number | undefined } => typeof metric.value === "number");
   const production = rotation ? estimateDailyProduction({ layout, maa, rotation }) : null;
   const productGroups = production ? [
     {
@@ -227,11 +259,11 @@ export function PlanResultSummary({
         </div>
       </motion.section>
 
-      <Drawer open={drawerOpen} onOpenChange={setDrawerOpen} onCloseComplete={handleDrawerCloseComplete} title="排班结果详情" description="日产物组成、原效率与当前进驻状态诊断。" width={560}>
+      <Drawer open={drawerOpen} onOpenChange={setDrawerOpen} onCloseComplete={handleDrawerCloseComplete} title="排班结果详情" description="查看日产物、产线提升空间和当前进驻匹配。" width={560}>
         <div className="flex h-full min-h-0 flex-col">
           <Tabs value={activeDetailSection} onValueChange={(value) => setDetailSection(value as DetailSection)} className="min-h-0 flex-1 gap-0">
             <TabsList variant="line" className="w-full justify-start gap-1 border-b border-border/70 px-4 py-0" aria-label="结果详情分类">
-              <TabsTrigger value="efficiency" className="min-h-11 flex-none px-3">产出与效率</TabsTrigger>
+              <TabsTrigger value="efficiency" className="min-h-11 flex-none px-3">产出与提升</TabsTrigger>
               {comparison ? <TabsTrigger value="comparison" className="min-h-11 flex-none px-3">当前状态匹配</TabsTrigger> : null}
             </TabsList>
             <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pb-6" data-plan-details-section={activeDetailSection}>
@@ -390,28 +422,26 @@ function ProductionDetails({ production }: { production: DailyProductionEstimate
   );
 }
 
-function EfficiencyDetails({ profile, rotation, layout, metrics, production }: { profile?: UserProfile; rotation?: RotationJson; layout: BaseBlueprint; metrics: Array<{ kind: RotationMetricKind; label: string; value: number; baseline: number | undefined; suffix: string }>; production: DailyProductionEstimate | null }) {
+function EfficiencyDetails({ profile, rotation, layout, metrics, production }: { profile?: UserProfile; rotation?: RotationJson; layout: BaseBlueprint; metrics: Array<{ kind: RotationMetricKind; label: string; value: number; baseline: number | undefined }>; production: DailyProductionEstimate | null }) {
   const shouldReduceMotion = useReducedMotion();
   const summary = profile?.summary;
   const domains = profile?.domains ?? [];
   return (
-    <section className="pt-4" aria-label="效率详情" data-efficiency-details>
+    <section className="pt-4" aria-label="产出与提升详情" data-efficiency-details>
       <ProductionDetails production={production} />
       <div className="mt-5 border-t border-border/70 pt-4">
-        <h3 className="text-sm font-semibold">原效率与基准</h3>
+        <h3 className="text-sm font-semibold">产线提升空间</h3>
       </div>
       <div className="mt-2 grid gap-2 sm:grid-cols-3" data-efficiency-insights>
         {metrics.map((metric, index) => {
-          const digits = metric.kind === "trade" ? 3 : 1;
-          const value = rotationMetricValue(metric.kind, metric.value);
-          const baseline = typeof metric.baseline === "number" ? rotationMetricValue(metric.kind, metric.baseline) : undefined;
           const delta = typeof metric.baseline === "number" ? relativeMetricDelta(metric.value, metric.baseline) : undefined;
-          return <motion.article key={metric.kind} className={cn("relative overflow-hidden border px-3 py-3", delta === undefined ? "border-border/70 bg-muted/25" : delta >= 0 ? "border-emerald-800/20 bg-emerald-50/55" : "border-red-800/20 bg-red-50/60")} data-insight-state={delta === undefined ? "neutral" : delta >= 0 ? "positive" : "negative"} initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: shouldReduceMotion ? 0 : 0.34, delay: shouldReduceMotion ? 0 : index * 0.055, ease: MOTION_EASE_OUT }}><span className={cn("absolute inset-y-0 left-0 w-0.5", delta === undefined ? "bg-[#313131]/25" : delta >= 0 ? "bg-emerald-500" : "bg-red-500")} aria-hidden="true" /><span className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">{metric.label}</span><strong className="font-technical mt-1 block text-2xl leading-none tabular-nums">{compactNumber(value, digits)}{metric.suffix}</strong><div className="mt-3 flex flex-wrap items-center justify-between gap-1 text-[11px] text-muted-foreground"><span>{baseline === undefined ? "暂无参考" : `参考 ${compactNumber(baseline, digits)}${metric.suffix}`}</span>{delta === undefined ? <span className="bg-muted px-1.5 py-0.5">趋势未知</span> : <b className={cn("px-1.5 py-0.5", delta >= 0 ? "bg-emerald-700 text-emerald-50" : "bg-red-700 text-red-50")}>{delta >= 0 ? "+" : ""}{compactNumber(delta)}%</b>}</div></motion.article>;
+          const comparison = improvementComparison(delta);
+          return <motion.article key={metric.kind} className={cn("relative overflow-hidden border px-3 py-3", comparison.state === "neutral" ? "border-border/70 bg-muted/25" : comparison.state === "positive" ? "border-emerald-800/20 bg-emerald-50/55" : "border-red-800/20 bg-red-50/60")} data-insight-state={comparison.state} initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: shouldReduceMotion ? 0 : 0.34, delay: shouldReduceMotion ? 0 : index * 0.055, ease: MOTION_EASE_OUT }}><span className={cn("absolute inset-y-0 left-0 w-0.5", comparison.state === "neutral" ? "bg-[#313131]/25" : comparison.state === "positive" ? "bg-emerald-500" : "bg-red-500")} aria-hidden="true" /><span className="block text-[11px] font-semibold tracking-[0.08em] text-muted-foreground">{metric.label}</span><strong className="mt-2 block text-sm leading-5">{comparison.description}</strong><span className={cn("mt-3 inline-flex px-1.5 py-0.5 text-[11px] font-semibold", comparison.state === "neutral" ? "bg-muted text-muted-foreground" : comparison.state === "positive" ? "bg-emerald-700 text-emerald-50" : "bg-red-700 text-red-50")}>{comparison.badge}</span></motion.article>;
         })}
       </div>
-      {summary ? <dl className="mt-4 flex flex-wrap gap-x-4 gap-y-1 border-y border-border/70 py-2 text-xs"><div className="flex gap-1"><dt className="text-muted-foreground">候选池</dt><dd className="font-number font-semibold">贸易 {summary.trade_pool_ready} · 制造 {manufacturePoolReady(summary) ?? "—"}</dd></div><div className="flex gap-1"><dt className="text-muted-foreground">中枢</dt><dd className="font-number font-semibold">Lv.{layout.rooms.find((room) => room.kind === "control_center")?.level ?? "—"}</dd></div><div className="flex gap-1"><dt className="text-muted-foreground">班次</dt><dd className="font-number font-semibold">{rotation?.shifts.length ?? 0}</dd></div><div className="flex gap-1"><dt className="text-muted-foreground">可用干员</dt><dd className="font-number font-semibold">{summary.owned} / 进阶 {summary.tier_up_owned}</dd></div></dl> : null}
-      {domains.length ? <div className="mt-5 border-t border-border/70 pt-4"><h3 className="text-sm font-semibold">领域指标</h3><div className="mt-2 grid gap-1">{[...domains].sort((a, b) => ({ critical: 0, warn: 1, ok: 2 })[a.severity] - ({ critical: 0, warn: 1, ok: 2 })[b.severity]).map((domain) => { const current = profileEfficiency(domain.current); const baseline = profileEfficiency(domain.baseline); return <div key={domain.id} className="grid gap-2 border-b border-border/60 py-3 text-xs sm:grid-cols-[minmax(0,1fr)_auto]"><div className="min-w-0"><strong className="block truncate">{domain.label}</strong>{domain.current.operators.length ? <span className="mt-0.5 block text-muted-foreground">{domain.current.operators.join(" / ")}</span> : null}{domain.current.mechanic_equivalent_efficiency !== undefined || domain.baseline.mechanic_equivalent_efficiency !== undefined ? <span className="mt-1 block text-[10px] text-muted-foreground">机制等效 当前 {domain.current.mechanic_equivalent_efficiency === undefined ? "—" : compactNumber(domain.current.mechanic_equivalent_efficiency, 3)} · 参考 {domain.baseline.mechanic_equivalent_efficiency === undefined ? "—" : compactNumber(domain.baseline.mechanic_equivalent_efficiency, 3)}</span> : null}</div><div className="flex items-center justify-between gap-2 sm:block sm:text-right"><span className="tabular-nums">当前 {current === undefined ? "—" : compactNumber(current, 2)} · 基准 {baseline === undefined ? "—" : compactNumber(baseline, 2)}</span><span className={cn("ml-2 px-1.5 py-0.5 font-semibold", severityClass(domain.severity))}>{domain.gap_ratio >= 0 ? "+" : ""}{compactNumber(domain.gap_ratio * 100)}%</span></div></div>; })}</div></div> : null}
-      {profile?.actions.length ? <div className="mt-5 border-t border-border/70 pt-4"><h3 className="text-sm font-semibold">建议</h3><div className="mt-1">{profile.actions.map((action, index) => <RecommendationCard key={`${action.domain_id}-${action.operator}-${index}`} action={action} variant="compact" index={index} />)}</div></div> : null}
+      {summary ? <dl className="mt-4 flex flex-wrap gap-x-4 gap-y-1 border-y border-border/70 py-2 text-xs" aria-label="账号准备度"><div className="flex gap-1"><dt className="text-muted-foreground">候选干员</dt><dd className="font-number font-semibold">贸易 {summary.trade_pool_ready} · 制造 {manufacturePoolReady(summary) ?? "—"}</dd></div><div className="flex gap-1"><dt className="text-muted-foreground">中枢</dt><dd className="font-number font-semibold">Lv.{layout.rooms.find((room) => room.kind === "control_center")?.level ?? "—"}</dd></div><div className="flex gap-1"><dt className="text-muted-foreground">班次</dt><dd className="font-number font-semibold">{rotation?.shifts.length ?? 0}</dd></div><div className="flex gap-1"><dt className="text-muted-foreground">可用干员</dt><dd className="font-number font-semibold">{summary.owned} / 进阶 {summary.tier_up_owned}</dd></div></dl> : null}
+      {domains.length ? <div className="mt-5 border-t border-border/70 pt-4"><h3 className="text-sm font-semibold">设施组合提升空间</h3><div className="mt-2 grid gap-1">{[...domains].sort((a, b) => ({ critical: 0, warn: 1, ok: 2 })[a.severity] - ({ critical: 0, warn: 1, ok: 2 })[b.severity]).map((domain) => <div key={domain.id} className="grid gap-2 border-b border-border/60 py-3 text-xs sm:grid-cols-[minmax(0,1fr)_auto]" data-domain-state={domain.severity}><div className="min-w-0"><strong className="block truncate">{domain.label}</strong><span className="mt-0.5 block text-muted-foreground">当前干员：{domain.current.operators.length ? domain.current.operators.join(" / ") : "暂无可用组合"}</span></div><div className="flex items-center justify-between gap-2 sm:block sm:text-right"><span className="tabular-nums">{domainComparison(domain.gap_ratio)}</span><span className={cn("ml-2 px-1.5 py-0.5 font-semibold", severityClass(domain.severity))}>{domainStatus(domain.severity)}</span></div></div>)}</div></div> : null}
+      {profile?.actions.length ? <div className="mt-5 border-t border-border/70 pt-4"><h3 className="text-sm font-semibold">下一步建议</h3><div className="mt-1">{profile.actions.map((action, index) => <RecommendationCard key={`${action.domain_id}-${action.operator}-${index}`} action={action} variant="compact" index={index} />)}</div></div> : null}
       {profile?.flags.length || profile?.narration_hints.length ? <div className="mt-5 flex flex-wrap gap-1.5 border-t border-border/70 pt-4">{[...(profile?.flags ?? []), ...(profile?.narration_hints ?? [])].map((flag) => <span key={flag} className="bg-muted px-2 py-1 text-xs text-muted-foreground">{flag}</span>)}</div> : null}
     </section>
   );

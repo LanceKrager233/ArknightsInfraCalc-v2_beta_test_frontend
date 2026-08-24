@@ -225,7 +225,7 @@ export function TrainingAdvice({
                     <span>会客室 Lv<span className="font-number">{context.meeting_room_max_level}</span></span>
                   ) : null}
                   {context?.has_originium_shard_factory != null ? (
-                    <span>源石厂 {context.has_originium_shard_factory ? "是" : "否"}</span>
+                    <span>搓玉 {context.has_originium_shard_factory ? "是" : "否"}</span>
                   ) : null}
                 </div>
               ) : (
