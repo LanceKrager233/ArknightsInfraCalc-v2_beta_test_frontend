@@ -62,6 +62,8 @@ test("an anonymous cold start probes the shared session once and does not touch 
   await expect(page.getByText("登录网站账号", { exact: true })).toBeVisible();
   await expect(page.getByText("导入自己的 BOX", { exact: true })).toBeVisible();
   await expect(page.getByText("生成第一份方案", { exact: true })).toBeVisible();
+  await expect(page.locator("[data-onboarding-card]")).toHaveCount(3);
+  await expect(page.locator("[data-onboarding-card] [data-infra-technical-card]")).toHaveCount(3);
   await expect(page.getByRole("dialog", { name: "登录网站账号" })).toHaveCount(0);
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByText(/正在恢复网站账号|正在确认网站账号|正在打开账号登录/)).toHaveCount(0);
@@ -75,6 +77,71 @@ test("an anonymous cold start probes the shared session once and does not touch 
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "登录网站账号" })).toHaveCount(0);
   await expect(importTrigger).toBeFocused();
+});
+
+test("the onboarding cards reuse the Skland technical grid and can be reopened after dismissal", async ({ page }) => {
+  await mockApis(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  const cards = page.locator("[data-onboarding-card]");
+  await expect(cards).toHaveCount(3);
+
+  const mobileBoxes = await cards.evaluateAll((elements) => elements.map((element) => {
+    const box = element.getBoundingClientRect();
+    return { left: box.left, top: box.top, width: box.width };
+  }));
+  expect(mobileBoxes[0].left).toBeCloseTo(mobileBoxes[1].left, 0);
+  expect(mobileBoxes[1].left).toBeCloseTo(mobileBoxes[2].left, 0);
+  expect(mobileBoxes[0].width).toBeCloseTo(mobileBoxes[2].width, 0);
+  expect(mobileBoxes[1].top).toBeGreaterThan(mobileBoxes[0].top);
+  expect(mobileBoxes[2].top).toBeGreaterThan(mobileBoxes[1].top);
+  let dimensions = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1);
+
+  await page.setViewportSize({ width: 768, height: 900 });
+  const tabletBoxes = await cards.evaluateAll((elements) => elements.map((element) => {
+    const box = element.getBoundingClientRect();
+    return { left: box.left, top: box.top, width: box.width };
+  }));
+  expect(tabletBoxes[0].top).toBeCloseTo(tabletBoxes[1].top, 0);
+  expect(tabletBoxes[0].width).toBeCloseTo(tabletBoxes[1].width, 0);
+  expect(tabletBoxes[2].top).toBeGreaterThan(tabletBoxes[0].top);
+  expect(tabletBoxes[2].width).toBeGreaterThan(tabletBoxes[0].width * 1.8);
+  dimensions = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1);
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const desktopBoxes = await cards.evaluateAll((elements) => elements.map((element) => {
+    const box = element.getBoundingClientRect();
+    return { top: box.top, width: box.width };
+  }));
+  expect(desktopBoxes[0].top).toBeCloseTo(desktopBoxes[1].top, 0);
+  expect(desktopBoxes[1].top).toBeCloseTo(desktopBoxes[2].top, 0);
+  expect(desktopBoxes[0].width).toBeCloseTo(desktopBoxes[2].width, 0);
+
+  dimensions = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1);
+
+  await page.getByRole("button", { name: "暂时跳过引导" }).click();
+  await expect(page.locator('[data-calculator-start-panel][data-onboarding-active="false"]')).toBeVisible();
+  await expect(page.locator("[data-onboarding-card-grid]")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "重新查看三步起步卡" })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("arknights-infra-calc-beta-onboarding-v1"))).toBe("dismissed");
+
+  await page.getByRole("button", { name: "重新查看三步起步卡" }).click();
+  await expect(page.locator('[data-calculator-start-panel][data-onboarding-active="true"]')).toBeVisible();
+  await expect(page.locator("[data-onboarding-card]")).toHaveCount(3);
+  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("arknights-infra-calc-beta-onboarding-v1"))).toBeNull();
 });
 
 test("an authenticated personal plan stays disabled while the planner is unavailable", async ({ page }) => {
@@ -1184,6 +1251,8 @@ async function mockApis(
 
 async function openSklandOverview(page: Page) {
   await page.getByRole("button", { name: "森空岛状态中心", exact: true }).click();
+  await expect(page.locator("[data-skland-page]")).toBeVisible();
+  await expect(page.locator('[data-slot="dialog-overlay"]')).toHaveCount(0);
 }
 
 async function seedPreferences(page: Page) {
@@ -2846,11 +2915,9 @@ test("plan completion reveals status, metrics, and schedule once without resetti
   }
 
   await page.setViewportSize({ width: 768, height: 900 });
-  await expect.poll(() => auxiliaryGrid.evaluate((element) => ({
-    columns: getComputedStyle(element).gridTemplateColumns.split(" ").length,
-    rows: new Set(Array.from(element.children).map((child) => child.getBoundingClientRect().y)).size,
-    fits: element.scrollWidth <= element.clientWidth + 1,
-  }))).toEqual({ columns: 2, rows: 2, fits: true });
+  await expect(board.locator('[data-schedule-view="list"]')).toBeVisible();
+  await expect(board.locator('[data-schedule-view="compact"]')).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(board.locator('[data-schedule-view="list"]')).toBeVisible();
