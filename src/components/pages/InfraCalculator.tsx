@@ -38,10 +38,12 @@ function Panel({ children, className = "", action, title, icon }: {
 }) {
   return (
     <section className={cn("min-w-0 py-5", className)}>
-      <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        {title || icon ? <div className="flex min-w-0 items-start gap-2">{icon}<h2 className="text-sm font-semibold tracking-tight">{title}</h2></div> : null}
-        {action ? <div className={cn("ms-auto min-w-0 max-sm:w-full", !title && !icon && "w-full")}>{action}</div> : null}
-      </header>
+      {title || icon || action ? (
+        <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          {title || icon ? <div className="flex min-w-0 items-start gap-2">{icon}<h2 className="text-sm font-semibold tracking-tight">{title}</h2></div> : null}
+          {action ? <div className={cn("ms-auto min-w-0 max-sm:w-full", !title && !icon && "w-full")}>{action}</div> : null}
+        </header>
+      ) : null}
       <div>{children}</div>
     </section>
   );
@@ -144,24 +146,16 @@ function CalculatorStartPanel({
 
   return (
     <section
-      className="relative isolate min-h-[420px] overflow-hidden border-y border-[#313131]/12 bg-[#f7f5ec] px-4 py-7 sm:px-6 sm:py-9 lg:px-8 lg:py-11"
-      aria-labelledby="calculator-start-title"
+      className="relative isolate flex min-h-[calc(100svh-3.5rem)] items-center overflow-hidden bg-[#f7f5ec] px-4 py-8 sm:px-6 md:min-h-svh lg:px-8"
+      aria-label="生成排班起步区"
       data-calculator-start-panel
       data-onboarding-active={showOnboarding ? "true" : "false"}
     >
       <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-[34%] bg-[linear-gradient(135deg,transparent_0_38%,rgb(49_49_49/0.035)_38%_62%,transparent_62%)] lg:block" aria-hidden="true" />
-      <div className="relative mx-auto max-w-5xl">
-        <p className="text-xs font-semibold tracking-[0.14em] text-[#016e65]">从可执行的排班开始</p>
-        <h2 id="calculator-start-title" className="mt-2 max-w-2xl text-[clamp(1.5rem,3vw,2.35rem)] font-semibold leading-[1.12] tracking-[-0.035em] text-[#272a2b]">
-          {showOnboarding ? "把你的 BOX 变成今天就能照着换的三班方案" : "导入 BOX，或先用全角色示例查看完整方案"}
-        </h2>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-[#313131]/64">
-          登录只用于保护个人数据；全角色示例与技能查询无需账号。生成结果前，不需要先理解所有配置项。
-        </p>
-
+      <div className="relative mx-auto flex w-full max-w-5xl flex-col justify-center">
         {showOnboarding ? (
           <ol
-            className="mt-7 grid gap-3 md:grid-cols-2 xl:grid-cols-3"
+            className="grid w-full gap-3 md:grid-cols-2 xl:grid-cols-3"
             aria-label="生成个人排班的步骤"
           >
             {steps.map((step, index) => {
@@ -188,9 +182,9 @@ function CalculatorStartPanel({
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex min-h-6 items-center gap-2">
                           <span className="h-5 w-1 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
-                          <h3 className="text-xs font-medium tracking-wide text-white/66">
+                          <p className="text-xs font-medium tracking-wide text-white/66">
                             <span className="font-number">0{index + 1}</span> · {step.eyebrow}
-                          </h3>
+                          </p>
                         </div>
                         <span
                           className={cn(
@@ -202,9 +196,9 @@ function CalculatorStartPanel({
                           {statusLabel}
                         </span>
                       </div>
-                      <p className="mt-5 text-xl font-semibold tracking-[-0.025em] text-[var(--room-accent)]">
+                      <h2 className="mt-5 text-xl font-semibold tracking-[-0.025em] text-[var(--room-accent)]">
                         {step.title}
-                      </p>
+                      </h2>
                       <p className="mt-2 text-xs leading-5 text-white/58">{step.description}</p>
                     </div>
                   </article>
@@ -214,7 +208,10 @@ function CalculatorStartPanel({
           </ol>
         ) : null}
 
-        <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center" data-calculator-controls>
+        <div className={cn(
+          "flex flex-col justify-center gap-3 sm:flex-row sm:flex-wrap sm:items-center",
+          showOnboarding && "mt-7",
+        )} data-calculator-controls>
           <Button
             type="button"
             size="lg"
@@ -256,13 +253,13 @@ function CalculatorStartPanel({
               {accountControl}
             </div>
           ) : null}
-          {!hasPersonalBox && accountControl ? accountControl : null}
+          {!hasPersonalBox && accountControl ? <div className="self-center">{accountControl}</div> : null}
           {showOnboarding ? (
-            <Button type="button" variant="ghost" className="min-h-11 sm:ms-auto" onClick={onDismissOnboarding}>
+            <Button type="button" variant="ghost" className="min-h-11" onClick={onDismissOnboarding}>
               暂时跳过引导
             </Button>
           ) : (
-            <Button type="button" variant="ghost" className="min-h-11 sm:ms-auto" onClick={onRestartOnboarding}>
+            <Button type="button" variant="ghost" className="min-h-11" onClick={onRestartOnboarding}>
               重新查看三步起步卡
             </Button>
           )}
@@ -435,7 +432,10 @@ export function InfraCalculator(props: InfraCalculatorProps) {
       >
         <section className="min-w-0">
           <Panel
-            className="min-h-[calc(100vh-112px)]"
+            className={cn(
+              "min-h-[calc(100vh-112px)]",
+              !scheduleResult && "py-0",
+            )}
             action={scheduleResult ? (
               <div
                 className="grid w-full grid-cols-[minmax(14rem,1fr)_auto_auto] items-center gap-2 max-sm:grid-cols-[auto_auto_minmax(0,1fr)]"

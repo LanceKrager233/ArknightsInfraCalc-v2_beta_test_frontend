@@ -1578,7 +1578,9 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         />
 
       <div
-        className="app-content-track py-4"
+        className={page === "calculator" && !scheduleResult
+          ? "w-full flex-1"
+          : "app-content-track py-4"}
         data-app-content
         inert={!hasRestoredSession}
         aria-busy={!hasRestoredSession}
