@@ -55,17 +55,19 @@ test("a 768px cold start keeps the compact workbench inside the viewport", async
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1);
 });
 
-test("Rainyun logo stays at the page footer's right edge and opens safely", async ({ page }) => {
+test("Rainyun computing service credit stays at the page footer's right edge and opens safely", async ({ page }) => {
   await mockApis(page);
   await seedPreferences(page);
   await page.goto("/");
 
-  const link = page.getByRole("link", { name: "访问雨云官网（在新标签页打开）" });
+  const link = page.getByRole("link", { name: "由雨云提供计算服务（在新标签页打开雨云官网）" });
   const image = link.locator("img");
   await expect(link).toHaveAttribute("href", "https://www.rainyun.com/riic_");
   await expect(link).toHaveAttribute("target", "_blank");
   await expect(link).toHaveAttribute("rel", /noopener/);
   await expect(link).toHaveAttribute("rel", /noreferrer/);
+  await expect(link).toContainText("由");
+  await expect(link).toContainText("提供计算服务");
   await expect(image).toHaveAttribute("src", /rainyun-logo\.png/);
   await expect.poll(() => image.evaluate((element) => {
     const logo = element as HTMLImageElement;
@@ -97,7 +99,7 @@ test("Rainyun logo stays at the page footer's right edge and opens safely", asyn
       };
     });
     expect(geometry.height).toBeGreaterThanOrEqual(44 - 0.01);
-    expect(geometry.logoWidth).toBeCloseTo(viewport.width < 640 ? 96 : 112, 0);
+    expect(geometry.logoWidth).toBeCloseTo(viewport.width < 640 ? 56 : 64, 0);
     expect(geometry.right).toBeCloseTo(geometry.footerRight - geometry.footerPaddingRight, 0);
   }
 });
@@ -2206,10 +2208,17 @@ test("two-shift output drives product estimates, room formulas, and profile deta
   await expect(detailsSheet.locator('[data-production-detail="shards"]')).toContainText("制造环节");
   await expect(detailsSheet.locator('[data-production-detail="orundum"]')).toContainText("限制环节：合成玉订单");
   await expect(detailsSheet.locator("[data-production-method]")).toHaveCount(0);
-  await expect(detailsSheet.getByText("24h 贸易", { exact: true }).locator("..")).toContainText(/参考 4\.968×\s*\+6\.4%/);
-  await expect(detailsSheet.getByText("24h 制造", { exact: true }).locator("..")).toContainText(/参考 850%\s*\+7\.9%/);
+  await expect(detailsSheet.getByRole("heading", { name: "产线提升空间" })).toBeVisible();
+  await expect(detailsSheet.getByText("贸易产线", { exact: true }).locator("..")).toContainText("领先推荐方案 6.4%");
+  await expect(detailsSheet.getByText("制造产线", { exact: true }).locator("..")).toContainText("领先推荐方案 7.9%");
   await expect(detailsSheet.locator('[data-efficiency-insights] [data-insight-state="positive"]')).toHaveCount(3);
-  await expect(page.getByText("机制等效 当前 1.42 · 参考 1.31", { exact: true })).toBeVisible();
+  await expect(detailsSheet.getByRole("heading", { name: "设施组合提升空间" })).toBeVisible();
+  await expect(detailsSheet.getByText("领先推荐组合 10.7%", { exact: true })).toBeVisible();
+  await expect(detailsSheet.getByText("状态良好", { exact: true })).toBeVisible();
+  await expect(detailsSheet.getByText("下一步建议", { exact: true })).toBeVisible();
+  await expect(detailsSheet.getByText("原效率与基准", { exact: true })).toHaveCount(0);
+  await expect(detailsSheet.getByText("领域指标", { exact: true })).toHaveCount(0);
+  await expect(detailsSheet.getByText(/机制等效|当前 1\.42|参考 1\.31/)).toHaveCount(0);
   await expect(detailsSheet.locator('[data-recommendation-card="compact"]')).toHaveCount(1);
   await page.keyboard.press("Escape");
   await expect(page.locator('[data-slot="drawer-root"]')).toHaveCount(0);
@@ -3891,9 +3900,9 @@ test("calculator owns scheduling controls and training advice uses a single tech
 });
 
 for (const scenario of [
-  { status: "shown", expectedSlot: "training-newbie-list" },
-  { status: "complete", expectedSlot: "training-newbie-complete" },
-  { status: "skipped_by_efficiency", expectedSlot: "training-newbie-skipped" },
+  { status: "shown", expectedSlot: "training-newbie-list", hasFactory: true },
+  { status: "complete", expectedSlot: "training-newbie-complete", hasFactory: false },
+  { status: "skipped_by_efficiency", expectedSlot: "training-newbie-skipped", hasFactory: true },
 ] as const) {
   test(`structured training advice obeys newbie status ${scenario.status}`, async ({ page }) => {
     const structuredAdviceResult = {
@@ -3901,7 +3910,7 @@ for (const scenario of [
       trainingAdvice: {
         schema_version: 2,
         context: {
-          has_originium_shard_factory: true,
+          has_originium_shard_factory: scenario.hasFactory,
           engineering_robot_count: 12,
           trade_average_efficiency_percent: 31,
           manufacturing_average_efficiency_percent: 26,
@@ -3955,6 +3964,8 @@ for (const scenario of [
     await page.goto("/");
     await page.getByRole("button", { name: "练卡建议" }).click();
     await expect(page.getByRole("heading", { name: "练卡建议", exact: true })).toBeVisible();
+    await expect(page.getByText(`搓玉 ${scenario.hasFactory ? "是" : "否"}`, { exact: true })).toBeVisible();
+    await expect(page.getByText(/源石厂 [是否]/)).toHaveCount(0);
 
     if (scenario.expectedSlot === "training-newbie-list") {
       await expect(page.locator("[data-training-newbie-list]")).toBeVisible();

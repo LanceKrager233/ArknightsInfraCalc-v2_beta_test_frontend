@@ -1517,10 +1517,11 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
           href="https://www.rainyun.com/riic_"
           target="_blank"
           rel="noopener noreferrer"
-          aria-label="访问雨云官网（在新标签页打开）"
+          aria-label="由雨云提供计算服务（在新标签页打开雨云官网）"
           data-rainyun-link
-          className="ml-auto inline-flex min-h-11 shrink-0 items-center rounded-sm px-1 opacity-70 outline-none transition-[opacity,transform] duration-180 ease-[var(--motion-ease-out)] hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-foreground/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100 max-sm:mt-1"
+          className="ml-auto inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-1 text-[11px] opacity-70 outline-none transition-[opacity,transform] duration-180 ease-[var(--motion-ease-out)] hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-foreground/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.96] motion-reduce:transition-none motion-reduce:active:scale-100 max-sm:mt-1"
         >
+          <span>由</span>
           <img
             src="/images/partners/rainyun-logo.png"
             alt=""
@@ -1528,8 +1529,9 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
             height={390}
             loading="eager"
             decoding="async"
-            className="h-auto w-24 sm:w-28"
+            className="h-auto w-14 sm:w-16"
           />
+          <span>提供计算服务</span>
         </a>
       </footer>
 
