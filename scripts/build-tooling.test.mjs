@@ -169,7 +169,7 @@ test("the critical calculator board stays initial while the compact view loads o
   const components = await readRepoFile("src/components.tsx");
   assert.match(components, /useState<ScheduleViewMode \| null>\(null\)/);
   assert.match(components, /useState<boolean \| null>\(null\)/);
-  assert.match(components, /window\.matchMedia\("\(min-width: 768px\)"\)/);
+  assert.match(components, /window\.matchMedia\("\(min-width: 1024px\)"\)/);
   assert.match(components, /viewMode !== "compact"[\s\S]{0,300}loadClientFeature\("compactScheduleView"\)/);
   assert.match(lazyLoader, /case "compactScheduleView":[\s\S]{0,100}import\("@\/components\/CompactScheduleView"\)/);
   assert.doesNotMatch(components, /import \{ CompactScheduleView \} from "@\/components\/CompactScheduleView"/);
@@ -185,7 +185,7 @@ test("heavy account, operator, and scrollbar modules stay behind runtime boundar
   const components = await readRepoFile("src/components.tsx");
   const scrollbar = await readRepoFile("src/components/ui/page-scrollbar.tsx");
 
-  assert.match(app, /useWebsiteSessionIdentity/);
+  assert.match(app, /useWebsiteSession/);
   assert.doesNotMatch(app, /authClient\.useSession/);
   assert.doesNotMatch(schedule, /operatorPresentationFor/);
   assert.doesNotMatch(components, /from "@\/operatorPortraits"/);

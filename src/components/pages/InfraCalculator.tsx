@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, FlaskConical, HeartPulse, Keyboard, Loader2, Play, Search, Settings2, X } from "lucide-react";
+import { Check, Download, Ellipsis, FlaskConical, HeartPulse, Keyboard, Loader2, Play, Search, Settings2, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { ScheduleBoard, ShiftTabs } from "@/components";
@@ -12,6 +12,7 @@ import type { FactoryRecipe, TradeOrder } from "@/blueprint";
 import { loadClientFeature } from "@/client-lazy-loader";
 import { cn } from "@/lib/utils";
 import type { ShiftDirection } from "@/motion";
+import { onboardingStepStatuses } from "@/onboarding";
 import type { RoomRow } from "@/schedule";
 import type {
   BaseBlueprint,
@@ -48,11 +49,13 @@ function Panel({ children, className = "", action, title, icon }: {
 
 function RunButton({
   canRun,
+  hasBox,
   plannerReady,
   requiresAccount,
   onRun,
 }: {
   canRun: boolean;
+  hasBox: boolean;
   plannerReady: boolean;
   requiresAccount: boolean;
   onRun: () => void;
@@ -66,14 +69,164 @@ function RunButton({
     <Button
       size="sm"
       className="h-9 min-w-0 max-sm:h-11 max-sm:px-3 max-sm:text-xs"
-      aria-label={canRun ? "生成排班" : unavailableLabel}
-      title={!canRun ? unavailableLabel : undefined}
+      aria-label={canRun || (requiresAccount && hasBox && plannerReady) ? "生成排班" : unavailableLabel}
+      title={!canRun && !(requiresAccount && hasBox && plannerReady) ? unavailableLabel : undefined}
       onClick={onRun}
-      disabled={!canRun}
+      disabled={!canRun && !(requiresAccount && hasBox && plannerReady)}
     >
       <Play />
-      <span>{canRun ? "生成排班" : "导入后生成"}</span>
+      <span>{requiresAccount && hasBox ? "登录后生成" : canRun ? "生成排班" : "导入后生成"}</span>
     </Button>
+  );
+}
+
+function CalculatorStartPanel({
+  websiteAuthenticated,
+  hasPersonalBox,
+  hasSampleBox,
+  showOnboarding,
+  sampleLoading,
+  loading,
+  plannerReady,
+  accountControl,
+  onStartPersonalFlow,
+  onLoadSample,
+  onRun,
+  onOpenSetup,
+  onDismissOnboarding,
+}: {
+  websiteAuthenticated: boolean;
+  hasPersonalBox: boolean;
+  hasSampleBox: boolean;
+  showOnboarding: boolean;
+  sampleLoading: boolean;
+  loading: boolean;
+  plannerReady: boolean;
+  accountControl?: ReactNode;
+  onStartPersonalFlow: () => void;
+  onLoadSample: () => Promise<boolean>;
+  onRun: () => void;
+  onOpenSetup: () => void;
+  onDismissOnboarding: () => void;
+}) {
+  const statuses = onboardingStepStatuses({
+    authenticated: websiteAuthenticated,
+    hasPersonalBox,
+    hasSuccessfulPlan: false,
+  });
+  const steps = [
+    ["登录网站账号", websiteAuthenticated ? "已登录" : "保护个人 BOX 与排班记录"],
+    ["导入自己的 BOX", hasPersonalBox ? "已导入" : "支持 MAA JSON 与兼容表格"],
+    ["生成第一份方案", "得到三班排班与 MAA 文件"],
+  ] as const;
+  const personalActionLabel = !websiteAuthenticated
+    ? hasPersonalBox ? "登录并继续生成" : "登录并导入 BOX"
+    : hasPersonalBox && !plannerReady ? "排班服务未就绪" : hasPersonalBox ? "生成第一份方案" : "导入自己的 BOX";
+  const personalActionAriaLabel = hasPersonalBox ? "生成排班" : "配置Box与布局";
+  const personalPlanUnavailable = websiteAuthenticated && hasPersonalBox && !plannerReady;
+
+  return (
+    <section
+      className="relative isolate min-h-[420px] overflow-hidden border-y border-[#313131]/12 bg-[#f7f5ec] px-4 py-7 sm:px-6 sm:py-9 lg:px-8 lg:py-11"
+      aria-labelledby="calculator-start-title"
+      data-calculator-start-panel
+      data-onboarding-active={showOnboarding ? "true" : "false"}
+    >
+      <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-[34%] bg-[linear-gradient(135deg,transparent_0_38%,rgb(49_49_49/0.035)_38%_62%,transparent_62%)] lg:block" aria-hidden="true" />
+      <div className="relative mx-auto max-w-5xl">
+        <p className="text-xs font-semibold tracking-[0.14em] text-[#016e65]">从可执行的排班开始</p>
+        <h2 id="calculator-start-title" className="mt-2 max-w-2xl text-[clamp(1.5rem,3vw,2.35rem)] font-semibold leading-[1.12] tracking-[-0.035em] text-[#272a2b]">
+          {showOnboarding ? "把你的 BOX 变成今天就能照着换的三班方案" : "导入 BOX，或先用全角色示例查看完整方案"}
+        </h2>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-[#313131]/64">
+          登录只用于保护个人数据；全角色示例与技能查询无需账号。生成结果前，不需要先理解所有配置项。
+        </p>
+
+        {showOnboarding ? (
+          <ol className="mt-7 grid gap-px border border-[#313131]/12 bg-[#313131]/12 lg:grid-cols-3" aria-label="生成个人排班的步骤">
+            {steps.map(([title, description], index) => {
+              const status = statuses[index];
+              return (
+                <li
+                  key={title}
+                  className={cn(
+                    "grid min-w-0 grid-cols-[2rem_minmax(0,1fr)] gap-3 bg-[#fffdf5] px-4 py-4 sm:px-5",
+                    status === "current" && "bg-white",
+                  )}
+                  data-onboarding-step={index + 1}
+                  data-step-status={status}
+                >
+                  <span
+                    className={cn(
+                      "font-number grid size-8 place-items-center border border-[#313131]/18 text-xs font-semibold text-[#313131]/50",
+                      status === "complete" && "border-[#016e65] bg-[#016e65] text-white",
+                      status === "current" && "border-[#ffd501] bg-[#ffd501] text-[#272a2b]",
+                    )}
+                    aria-hidden="true"
+                  >
+                    {status === "complete" ? <Check className="size-4" /> : `0${index + 1}`}
+                  </span>
+                  <span className="min-w-0">
+                    <strong className="block text-sm font-semibold text-[#272a2b]">{title}</strong>
+                    <span className="mt-1 block text-xs leading-5 text-[#313131]/58">{description}</span>
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        ) : null}
+
+        <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center" data-calculator-controls>
+          <Button
+            type="button"
+            size="lg"
+            className="min-h-11 sm:min-w-44"
+            aria-label={personalActionAriaLabel}
+            title={personalPlanUnavailable ? "排班服务尚未就绪" : undefined}
+            disabled={loading || personalPlanUnavailable}
+            onClick={hasPersonalBox && websiteAuthenticated ? onRun : onStartPersonalFlow}
+          >
+            {loading && hasPersonalBox ? <Loader2 className="animate-spin" /> : <Play />}
+            {loading && hasPersonalBox ? "正在生成第一份方案…" : personalActionLabel}
+          </Button>
+          <Button
+            type="button"
+            size="lg"
+            variant="outline"
+            className="min-h-11 bg-white/72 sm:min-w-44"
+            aria-label={hasSampleBox ? "生成排班" : "全角色导入"}
+            disabled={sampleLoading || loading || (hasSampleBox && !plannerReady)}
+            onClick={hasSampleBox ? onRun : () => void onLoadSample()}
+          >
+            {sampleLoading || (loading && hasSampleBox) ? <Loader2 className="animate-spin" /> : <FlaskConical />}
+            {sampleLoading ? "正在载入示例…" : loading && hasSampleBox ? "正在生成示例…" : hasSampleBox ? "生成示例排班" : "先看全角色示例"}
+          </Button>
+          {hasPersonalBox ? (
+            <div className="inline-flex min-w-0 max-sm:[&_[data-skland-account-control]]:rounded-l-none" data-calculator-setup-group>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className={accountControl
+                  ? "h-9 rounded-r-none max-sm:h-11"
+                  : "h-9 max-sm:h-11"}
+                aria-label="配置Box与布局"
+                onClick={onOpenSetup}
+              >
+                <Settings2 />调整 BOX 与布局
+              </Button>
+              {accountControl}
+            </div>
+          ) : null}
+          {!hasPersonalBox && accountControl ? accountControl : null}
+          {showOnboarding ? (
+            <Button type="button" variant="ghost" className="min-h-11 sm:ms-auto" onClick={onDismissOnboarding}>
+              暂时跳过引导
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -91,13 +244,20 @@ export interface InfraCalculatorProps {
   sampleLoading: boolean;
   loading: boolean;
   canRun: boolean;
+  hasBox: boolean;
+  hasPersonalBox: boolean;
+  hasSampleBox: boolean;
   plannerReady: boolean;
+  websiteAuthenticated: boolean;
+  showOnboarding: boolean;
   animatePlanEntrance: boolean;
   animateEmptyScheduleEntrance: boolean;
   onPlanEntranceConsumed: (revision: string) => void;
   requiresAccount?: boolean;
   accountControl?: ReactNode;
   onLoadSample: () => Promise<boolean>;
+  onStartPersonalFlow: () => void;
+  onDismissOnboarding: () => void;
   onOpenSetup: () => void;
   onRun: () => void;
   onCancelRun: () => void;
@@ -118,8 +278,8 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     activePlan, closestComparison,
     resultClearNotice,
     feedbackResult,
-    sampleLoading, loading, canRun, plannerReady, animatePlanEntrance, animateEmptyScheduleEntrance, onPlanEntranceConsumed, requiresAccount = false, accountControl,
-    onLoadSample, onOpenSetup, onRun, onCancelRun,
+    sampleLoading, loading, canRun, hasBox, hasPersonalBox, hasSampleBox, plannerReady, websiteAuthenticated, showOnboarding, animatePlanEntrance, animateEmptyScheduleEntrance, onPlanEntranceConsumed, requiresAccount = false, accountControl,
+    onLoadSample, onStartPersonalFlow, onDismissOnboarding, onOpenSetup, onRun, onCancelRun,
     onSetActiveShift, onMarkIssue, onPerformanceIssue,
     onFactoryRecipeChange, onTradeOrderChange,
     onDownloadMaa,
@@ -173,6 +333,43 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     </div>
   );
 
+  const renderSearch = () => (
+    <div className="flex min-w-0 items-center gap-2 max-sm:col-span-3">
+      <label className="relative block min-w-0 flex-1">
+        <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+        <Input
+          ref={searchInputRef}
+          value={operatorQuery}
+          onChange={(event) => setOperatorQuery(event.target.value)}
+          placeholder="搜索排班中的干员或房间"
+          aria-label="搜索排班中的干员或房间"
+          className="h-9 pr-10 pl-9 max-sm:h-11"
+        />
+        {operatorQuery ? (
+          <button
+            type="button"
+            onClick={() => { setOperatorQuery(""); searchInputRef.current?.focus(); }}
+            className="absolute top-1/2 right-0 grid size-9 -translate-y-1/2 place-items-center text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FFD800] max-sm:size-11"
+            aria-label="清空排班搜索"
+          >
+            <X className="size-4" aria-hidden="true" />
+          </button>
+        ) : null}
+      </label>
+      <Button
+        type="button"
+        size="icon-lg"
+        variant="outline"
+        className="hidden size-9 sm:inline-flex"
+        aria-label="查看快捷键"
+        title="查看快捷键"
+        onClick={() => setShortcutGuideOpen(true)}
+      >
+        <Keyboard />
+      </Button>
+    </div>
+  );
+
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "k") {
@@ -196,53 +393,33 @@ export function InfraCalculator(props: InfraCalculatorProps) {
         <section className="min-w-0">
           <Panel
             className="min-h-[calc(100vh-112px)]"
-            action={(
+            action={scheduleResult ? (
               <div
-                className="grid w-full grid-cols-[minmax(14rem,1fr)_auto_auto] items-center gap-2 max-sm:grid-cols-2"
+                className="grid w-full grid-cols-[minmax(14rem,1fr)_auto_auto] items-center gap-2 max-sm:grid-cols-[auto_auto_minmax(0,1fr)]"
                 data-calculator-controls
               >
-                <div className="flex min-w-0 items-center gap-2 max-sm:col-span-2">
-                  <label className="relative block min-w-0 flex-1">
-                    <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                    <Input
-                      ref={searchInputRef}
-                      value={operatorQuery}
-                      onChange={(event) => setOperatorQuery(event.target.value)}
-                      placeholder="搜索排班中的干员或房间"
-                      aria-label="搜索排班中的干员或房间"
-                      className="h-9 pr-10 pl-9 max-sm:h-11"
-                    />
-                    {operatorQuery ? (
-                      <button
-                        type="button"
-                        onClick={() => { setOperatorQuery(""); searchInputRef.current?.focus(); }}
-                        className="absolute top-1/2 right-0 grid size-9 -translate-y-1/2 place-items-center text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FFD800] max-sm:size-11"
-                        aria-label="清空排班搜索"
-                      >
-                        <X className="size-4" aria-hidden="true" />
-                      </button>
-                    ) : null}
-                  </label>
-                  <Button
-                    type="button"
-                    size="icon-lg"
-                    variant="outline"
-                    className="size-9 max-sm:size-11"
-                    aria-label="查看快捷键"
-                    title="查看快捷键"
-                    onClick={() => setShortcutGuideOpen(true)}
-                  >
-                    <Keyboard />
-                  </Button>
-                </div>
-                <div className="inline-flex min-w-0" data-calculator-setup-group>
+                {renderSearch()}
+                <details className="relative min-w-0 sm:hidden" data-calculator-more-tools>
+                  <summary className="flex h-11 cursor-pointer list-none items-center justify-center gap-2 border border-border bg-background px-3 text-sm font-medium marker:content-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD800]">
+                    <Ellipsis className="size-4" aria-hidden="true" />更多工具
+                  </summary>
+                  <div className="absolute left-0 top-[calc(100%+0.35rem)] z-30 grid w-[min(18rem,calc(100vw-1.5rem))] gap-2 border border-border bg-background p-2 shadow-lg">
+                    <Button type="button" variant="ghost" className="h-11 justify-start" onClick={onOpenSetup}>
+                      <Settings2 />配置Box与布局
+                    </Button>
+                    <Button type="button" variant="ghost" className="h-11 justify-start" onClick={() => setShortcutGuideOpen(true)}>
+                      <Keyboard />查看快捷键
+                    </Button>
+                  </div>
+                </details>
+                <div className="contents sm:inline-flex sm:min-w-0" data-calculator-setup-group>
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
                     className={accountControl
-                      ? "h-9 min-w-0 rounded-r-none max-sm:h-11 max-sm:flex-1 max-sm:justify-start"
-                      : "h-9 min-w-0 max-sm:h-11 max-sm:flex-1 max-sm:justify-start"}
+                      ? "h-9 min-w-0 rounded-r-none max-sm:hidden"
+                      : "h-9 min-w-0 max-sm:hidden"}
                     aria-label="配置Box与布局"
                     onClick={onOpenSetup}
                   >
@@ -256,9 +433,9 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                     <Loader2 className="animate-spin" />
                     取消计算
                   </Button>
-                ) : <RunButton canRun={canRun} plannerReady={plannerReady} requiresAccount={requiresAccount} onRun={onRun} />}
+                ) : <RunButton canRun={canRun} hasBox={hasBox} plannerReady={plannerReady} requiresAccount={requiresAccount} onRun={onRun} />}
               </div>
-            )}
+            ) : null}
           >
             {scheduleResult ? (
               <>
@@ -279,7 +456,23 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                 </Suspense>
               </>
             ) : null}
-            {rows.length > 0 ? <ScheduleBoard
+            {!scheduleResult ? (
+              <CalculatorStartPanel
+                websiteAuthenticated={websiteAuthenticated}
+                hasPersonalBox={hasPersonalBox}
+                hasSampleBox={hasSampleBox}
+                showOnboarding={showOnboarding}
+                sampleLoading={sampleLoading}
+                loading={loading}
+                plannerReady={plannerReady}
+                accountControl={accountControl}
+                onStartPersonalFlow={onStartPersonalFlow}
+                onLoadSample={onLoadSample}
+                onRun={onRun}
+                onOpenSetup={onOpenSetup}
+                onDismissOnboarding={onDismissOnboarding}
+              />
+            ) : rows.length > 0 ? <ScheduleBoard
               rows={rows}
               layout={layout}
               planRevision={result?.diagnosticId}

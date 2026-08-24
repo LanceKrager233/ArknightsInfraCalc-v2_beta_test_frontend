@@ -1,5 +1,10 @@
 import WorkbenchApp from "@/App";
+import { WebsiteSessionProvider } from "@/website-session";
 
 export default function WorkbenchLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <WorkbenchApp>{children}</WorkbenchApp>;
+  return (
+    <WebsiteSessionProvider>
+      <WorkbenchApp>{children}</WorkbenchApp>
+    </WebsiteSessionProvider>
+  );
 }

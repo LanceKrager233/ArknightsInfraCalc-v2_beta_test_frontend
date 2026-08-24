@@ -18,7 +18,7 @@ import { loadClientFeature } from "@/client-lazy-loader";
 import { preloadProductIcons } from "@/product-assets";
 import { WorkbenchContext } from "@/workbench-context";
 import { WORKBENCH_PAGE_PATHS, workbenchHref, workbenchPageFromPathname, type AppPage } from "@/workbench-routes";
-import { useWebsiteSessionIdentity } from "@/website-session";
+import { useWebsiteSession } from "@/website-session";
 
 import {
   deleteAllSklandAccountData,
@@ -45,7 +45,15 @@ import {
   updateTradeOrder,
 } from "./blueprint";
 import { copyText, downloadJson } from "./download";
-import { ONBOARDING_STORAGE_KEY, initialSetupStep, shouldAutoOpenSetup, type SetupStep } from "./onboarding";
+import {
+  ONBOARDING_COMPLETED_VALUE,
+  ONBOARDING_DISMISSED_VALUE,
+  ONBOARDING_STORAGE_KEY,
+  initialSetupStep,
+  resolveOnboardingPreference,
+  type OnboardingPreference,
+  type SetupStep,
+} from "./onboarding";
 import { readOperboxFile, readOperboxText } from "./operbox";
 import { normalizeOperboxEntries } from "./operbox-normalization";
 import { effectiveFiammettaSetting, resolvePlanPresentationLayout } from "./plan-presentation";
@@ -115,6 +123,7 @@ const ProductChangeConfirmModal = lazy(() => loadComponents().then((module) => (
 type ProductChange =
   | { type: "factory"; roomId: string; recipe: FactoryRecipe }
   | { type: "trade"; roomId: string; order: TradeOrder };
+type WebsiteAuthIntent = "account" | "run" | "setup" | "skland";
 
 type SklandFullRestoreResult =
   | { session: SklandSessionData; error?: never }
@@ -206,17 +215,20 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const page = workbenchPageFromPathname(pathname);
-  const { data: websiteSession, isPending: websiteSessionPending, refetch: refetchWebsiteSession } = useWebsiteSessionIdentity();
+  const { data: websiteSession, isPending: websiteSessionPending, refetch: refetchWebsiteSession } = useWebsiteSession();
   const defaultPreset = PRESETS[0];
   const defaultLayout = buildBlueprint(defaultPreset);
   const hasRenderedCalculator = useRef(false);
   const revealedPlanRevisions = useRef(new Set<string>());
   const websiteAuthReturnFocusRef = useRef<HTMLElement | null>(null);
+  const websiteAuthIntentRef = useRef<WebsiteAuthIntent | null>(null);
+  const websiteIntentContinuationRef = useRef<(intent: WebsiteAuthIntent) => void>(() => undefined);
   const websiteAuthFocusReturnTimerRef = useRef<number | null>(null);
   const [websiteAuthReloadKey, setWebsiteAuthReloadKey] = useState(0);
   const [websiteAuthDialogOpen, setWebsiteAuthDialogOpen] = useState(false);
   const [websiteAuthDialogMounted, setWebsiteAuthDialogMounted] = useState(false);
   const [hasRestoredSession, setHasRestoredSession] = useState(false);
+  const [onboardingPreference, setOnboardingPreference] = useState<OnboardingPreference>("active");
   const [preset, setPreset] = useState<PresetDef>(defaultPreset);
   const [layout, setLayout] = useState<BaseBlueprint>(defaultLayout);
   const powerBudget = useMemo(() => computePowerBudget(layout), [layout]);
@@ -238,7 +250,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const [sklandBindingSummary, setSklandBindingSummary] = useState<SklandBindingSummary>(emptySklandBindingSummary);
   const [sklandConfigured, setSklandConfigured] = useState(false);
   const [sklandDisabledReason, setSklandDisabledReason] = useState<string | null>(null);
-  const [sklandSessionLoading, setSklandSessionLoading] = useState(CLIENT_SKLAND_ENABLED);
+  const [sklandSessionLoading, setSklandSessionLoading] = useState(false);
   const [sklandError, setSklandError] = useState<DisplayError | null>(null);
   const [sklandBusy, setSklandBusy] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
@@ -254,7 +266,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const initialLocalLayoutBackup = useRef<BaseBlueprint | null>(null);
   const skipNextPersistence = useRef(false);
   const hadPersistedSession = useRef(false);
-  const leavingAccountAfterLogout = useRef(false);
   const statusLoadingAccount = useRef<string | null>(null);
   const sklandRestoreGuard = useRef(createSklandRestoreGuard());
   const sklandFullRestore = useRef<{
@@ -348,6 +359,9 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     [sklandAccounts, sklandActiveAccountId]
   );
   const accountCanUseCurrentBox = boxSource === "sample" || Boolean(websiteSession);
+  const hasBox = Boolean(operbox?.length);
+  const hasPersonalBox = hasBox && boxSource !== "sample";
+  const hasSampleBox = hasBox && boxSource === "sample";
   const canRun = Boolean(operbox && operbox.length > 0 && cliReady && accountCanUseCurrentBox);
   const sklandBindingCount = sklandBindingSummary.totalCount;
   const websiteUserId = websiteSession?.user.id ?? null;
@@ -448,6 +462,10 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     try {
       const restored = loadPersistedSession(window.localStorage);
       hadPersistedSession.current = Boolean(restored);
+      setOnboardingPreference(resolveOnboardingPreference(
+        window.localStorage.getItem(ONBOARDING_STORAGE_KEY),
+        Boolean(restored?.result),
+      ));
       const warningDismissed = window.localStorage.getItem(RESULT_CLEAR_WARNING_DISMISSED_KEY) === "1";
       setResultClearWarningDismissed(warningDismissed);
       if (restored) {
@@ -512,14 +530,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   }, [hasRestoredSession, preset, layout, operbox, fileName, boxSource, layoutDirty, layoutSource, localLayoutBackup, rotationProfile, fiammettaEnabled, result, activeShift]);
 
   useEffect(() => {
-    if (!hasRestoredSession || typeof window === "undefined") return;
-    if (shouldAutoOpenSetup(window.localStorage.getItem(ONBOARDING_STORAGE_KEY), Boolean(initialOperbox.current?.length))) {
-      setSetupInitialStep("box");
-      setSetupOpen(true);
-    }
-  }, [hasRestoredSession]);
-
-  useEffect(() => {
     let cancelled = false;
     if (!hasRestoredSession) return;
     void getHealth()
@@ -546,7 +556,12 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   }, [hasRestoredSession]);
 
   useEffect(() => {
-    if (!CLIENT_SKLAND_ENABLED) return;
+    if (
+      !CLIENT_SKLAND_ENABLED
+      || !hasRestoredSession
+      || websiteSessionPending
+      || !websiteUserId
+    ) return;
     const existingRestore = sklandFullRestore.current?.reloadKey === websiteAuthReloadKey
       ? sklandFullRestore.current
       : null;
@@ -580,7 +595,17 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [websiteAuthReloadKey]);
+  }, [hasRestoredSession, websiteAuthReloadKey, websiteSessionPending, websiteUserId]);
+
+  useEffect(() => {
+    if (websiteSessionPending || !websiteSession || !websiteAuthDialogOpen) return;
+    const intent = websiteAuthIntentRef.current;
+    if (!intent) return;
+    websiteAuthIntentRef.current = null;
+    websiteAuthReturnFocusRef.current = null;
+    setWebsiteAuthDialogOpen(false);
+    websiteIntentContinuationRef.current(intent);
+  }, [websiteAuthDialogOpen, websiteSession, websiteSessionPending]);
 
   useEffect(() => {
     if (!hasRestoredSession || websiteSessionPending) return;
@@ -668,23 +693,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, [hasRestoredSession, websiteAuthReloadKey, websiteSessionPending, websiteUserId]);
-
-  useEffect(() => {
-    if (websiteSessionPending) return;
-    if (page !== "account") leavingAccountAfterLogout.current = false;
-    if (websiteSession) {
-      if (websiteAuthDialogOpen) {
-        websiteAuthReturnFocusRef.current = null;
-        setWebsiteAuthDialogOpen(false);
-        router.push(workbenchHref("account"));
-      }
-      return;
-    }
-    if (page === "account") {
-      if (!leavingAccountAfterLogout.current) setWebsiteAuthDialogOpen(true);
-      router.replace(workbenchHref("calculator"));
-    }
-  }, [page, router, websiteAuthDialogOpen, websiteSession, websiteSessionPending]);
 
   useEffect(() => {
     if (
@@ -876,6 +884,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       setActiveShift(0);
       const finalizedResult = response;
       setResult(finalizedResult);
+      completeOnboarding();
       setLayout((current) => resolvePlanPresentationLayout(current, response));
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
@@ -1146,12 +1155,24 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     }
   }
 
-  function markOnboardingSeen() {
+  function persistOnboardingPreference(value: OnboardingPreference) {
+    setOnboardingPreference(value);
     try {
-      window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "1");
-    } catch (error) {
-      console.warn("Failed to persist onboarding state", error);
+      window.localStorage.setItem(
+        ONBOARDING_STORAGE_KEY,
+        value === "completed" ? ONBOARDING_COMPLETED_VALUE : ONBOARDING_DISMISSED_VALUE,
+      );
+    } catch {
+      // The current page can still honor the preference when storage is unavailable.
     }
+  }
+
+  function dismissOnboarding() {
+    persistOnboardingPreference("dismissed");
+  }
+
+  function completeOnboarding() {
+    persistOnboardingPreference("completed");
   }
 
   function openSetup() {
@@ -1161,14 +1182,10 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
 
   function handleSetupOpenChange(next: boolean) {
     setSetupOpen(next);
-    if (!next) {
-      setInputError(null);
-      markOnboardingSeen();
-    }
+    if (!next) setInputError(null);
   }
 
   function closeSetup() {
-    markOnboardingSeen();
     setInputError(null);
     setSetupOpen(false);
   }
@@ -1180,14 +1197,18 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   }
 
   function handleAppPageChange(nextPage: AppPage, trigger?: HTMLElement): boolean {
-    if (nextPage === "account" && !websiteSession) {
-      if (websiteSessionPending) return true;
-      websiteAuthReturnFocusRef.current = trigger ?? null;
-      setWebsiteAuthDialogOpen(true);
+    if ((nextPage === "account" || nextPage === "skland") && !websiteSession) {
+      requestWebsiteAccount(nextPage, trigger);
       return false;
     }
     if (nextPage === "calculator") hasRenderedCalculator.current = true;
     return true;
+  }
+
+  function requestWebsiteAccount(intent: WebsiteAuthIntent, trigger?: HTMLElement | null) {
+    websiteAuthIntentRef.current = intent;
+    websiteAuthReturnFocusRef.current = trigger ?? document.activeElement as HTMLElement | null;
+    setWebsiteAuthDialogOpen(true);
   }
 
   function handleWebsiteAuthDialogOpenChange(open: boolean) {
@@ -1197,6 +1218,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     }
     setWebsiteAuthDialogOpen(open);
     if (open) return;
+    websiteAuthIntentRef.current = null;
     const trigger = websiteAuthReturnFocusRef.current;
     websiteAuthReturnFocusRef.current = null;
     websiteAuthFocusReturnTimerRef.current = window.setTimeout(() => {
@@ -1215,11 +1237,11 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
 
   async function handleWebsiteSessionChanged(authenticated: boolean) {
     beginSklandStateChange();
-    leavingAccountAfterLogout.current = !authenticated;
-    websiteAuthReturnFocusRef.current = null;
-    setWebsiteAuthDialogOpen(false);
-    router.push(workbenchHref(authenticated ? "account" : "calculator"));
     if (!authenticated) {
+      websiteAuthIntentRef.current = null;
+      websiteAuthReturnFocusRef.current = null;
+      setWebsiteAuthDialogOpen(false);
+      router.push(workbenchHref("calculator"));
       setSklandAccounts([]);
       setSklandActiveAccountId(null);
       setSklandBindingSummary(emptySklandBindingSummary());
@@ -1230,6 +1252,45 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     await refetchWebsiteSession();
     setWebsiteAuthReloadKey((current) => current + 1);
   }
+
+  function handleStartPersonalFlow() {
+    if (!websiteSession) {
+      requestWebsiteAccount(hasPersonalBox ? "run" : "setup");
+      return;
+    }
+    if (hasPersonalBox) {
+      void handleRun();
+      return;
+    }
+    openSetup();
+  }
+
+  function handleProtectedRun() {
+    if (hasPersonalBox && !websiteSession) {
+      requestWebsiteAccount("run");
+      return;
+    }
+    if (!canRun) return;
+    void handleRun();
+  }
+
+  function requireWebsiteAccountFromSetup() {
+    setSetupOpen(false);
+    requestWebsiteAccount("setup");
+  }
+
+  websiteIntentContinuationRef.current = (intent) => {
+    if (intent === "setup") {
+      setSetupInitialStep("box");
+      setSetupOpen(true);
+      return;
+    }
+    if (intent === "run") {
+      if (cliReady) void handleRun();
+      return;
+    }
+    router.push(workbenchHref(intent === "skland" ? "skland" : "account"));
+  };
 
   function useSklandSnapshotFromSetup() {
     if (sklandScheduleSnapshot) applySklandSnapshot(sklandScheduleSnapshot);
@@ -1332,6 +1393,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       setResult(null);
       setActiveShift(0);
       setResultClearWarningDismissed(false);
+      setOnboardingPreference("active");
       setStorageNotice(null);
       clearIssueState();
     } catch {
@@ -1387,7 +1449,12 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       sampleLoading,
       loading,
       canRun,
+      hasBox,
+      hasPersonalBox,
+      hasSampleBox,
       plannerReady: cliReady,
+      websiteAuthenticated: Boolean(websiteSession),
+      showOnboarding: onboardingPreference === "active" && !result,
       animatePlanEntrance,
       animateEmptyScheduleEntrance,
       onPlanEntranceConsumed: (revision: string) => revealedPlanRevisions.current.add(revision),
@@ -1400,8 +1467,10 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         />
       ) : undefined,
       onLoadSample: handleLoadSample,
+      onStartPersonalFlow: handleStartPersonalFlow,
+      onDismissOnboarding: dismissOnboarding,
       onOpenSetup: openSetup,
-      onRun: handleRun,
+      onRun: handleProtectedRun,
       onCancelRun: handleCancelRun,
       onSetActiveShift: setActiveShift,
       onMarkIssue: handleMarkIssue,
@@ -1519,9 +1588,9 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
           rel="noopener noreferrer"
           aria-label="由雨云提供计算服务（在新标签页打开雨云官网）"
           data-rainyun-link
-          className="ml-auto inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-1 text-[11px] opacity-70 outline-none transition-[opacity,transform] duration-180 ease-[var(--motion-ease-out)] hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-foreground/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.96] motion-reduce:transition-none motion-reduce:active:scale-100 max-sm:mt-1"
+          className="ml-auto inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-1 text-[11px] leading-none opacity-70 outline-none transition-[opacity,transform] duration-180 ease-[var(--motion-ease-out)] hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-foreground/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.96] motion-reduce:transition-none motion-reduce:active:scale-100 max-sm:mt-1"
         >
-          <span>由</span>
+          <span className="block leading-none" data-rainyun-copy>由</span>
           <img
             src="/images/partners/rainyun-logo.png"
             alt=""
@@ -1529,9 +1598,9 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
             height={390}
             loading="eager"
             decoding="async"
-            className="h-auto w-14 sm:w-16"
+            className="block h-5 w-14 object-contain sm:h-[23px] sm:w-16"
           />
-          <span>提供计算服务</span>
+          <span className="block leading-none" data-rainyun-copy>提供计算服务</span>
         </a>
       </footer>
 
@@ -1573,6 +1642,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         resultClearWarningDismissed={resultClearWarningDismissed}
         onMaaFile={handleFile}
         onMaaPaste={handleMaaPaste}
+        onRequireWebsiteAccount={requireWebsiteAccountFromSetup}
         presets={PRESETS}
         preset={preset}
         layout={layout}

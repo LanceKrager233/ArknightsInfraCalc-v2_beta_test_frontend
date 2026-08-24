@@ -1,56 +1,75 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  createContext,
+  createElement,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
-export interface WebsiteSessionIdentity {
-  user: {
-    id: string;
-  };
+import {
+  requestWebsiteSession,
+  type WebsiteSessionData,
+} from "@/website-session-data";
+
+export { parseWebsiteSession, type WebsiteSessionData } from "@/website-session-data";
+
+interface WebsiteSessionContextValue {
+  data: WebsiteSessionData | null;
+  isPending: boolean;
+  refetch: () => Promise<void>;
 }
 
-export function parseWebsiteSessionIdentity(value: unknown): WebsiteSessionIdentity | null {
-  if (!value || typeof value !== "object") return null;
-  const user = "user" in value ? value.user : null;
-  if (!user || typeof user !== "object" || !("id" in user) || typeof user.id !== "string" || !user.id) {
-    return null;
-  }
-  return { user: { id: user.id } };
+const WebsiteSessionContext = createContext<WebsiteSessionContextValue | null>(null);
+let initialWebsiteSessionRequest: Promise<WebsiteSessionData | null> | null = null;
+
+function loadInitialWebsiteSession(): Promise<WebsiteSessionData | null> {
+  initialWebsiteSessionRequest ??= requestWebsiteSession();
+  return initialWebsiteSessionRequest;
 }
 
-export function useWebsiteSessionIdentity() {
-  const [data, setData] = useState<WebsiteSessionIdentity | null>(null);
+export function WebsiteSessionProvider({ children }: { children: ReactNode }) {
+  const [data, setData] = useState<WebsiteSessionData | null>(null);
   const [isPending, setIsPending] = useState(true);
-  const requestGeneration = useRef(0);
-  const mounted = useRef(true);
-
   const refetch = useCallback(async () => {
-    const generation = ++requestGeneration.current;
     setIsPending(true);
-    try {
-      const response = await fetch("/api/auth/get-session", {
-        cache: "no-store",
-        credentials: "include",
-        headers: { accept: "application/json" },
-      });
-      if (!response.ok) throw new Error(`Website session request failed with ${response.status}`);
-      const session = parseWebsiteSessionIdentity(await response.json());
-      if (mounted.current && generation === requestGeneration.current) setData(session);
-      return session;
-    } catch {
-      return null;
-    } finally {
-      if (mounted.current && generation === requestGeneration.current) setIsPending(false);
-    }
+    const request = requestWebsiteSession();
+    initialWebsiteSessionRequest = request;
+    const next = await request;
+    if (initialWebsiteSessionRequest !== request) return;
+    initialWebsiteSessionRequest = Promise.resolve(next);
+    setData(next);
+    setIsPending(false);
   }, []);
 
   useEffect(() => {
-    mounted.current = true;
-    void refetch();
+    let cancelled = false;
+    const request = loadInitialWebsiteSession();
+    void request.then((next) => {
+      if (cancelled || initialWebsiteSessionRequest !== request) return;
+      setData(next);
+      setIsPending(false);
+    });
     return () => {
-      mounted.current = false;
-      requestGeneration.current += 1;
+      cancelled = true;
     };
-  }, [refetch]);
+  }, []);
 
-  return { data, isPending, refetch };
+  const value = useMemo<WebsiteSessionContextValue>(() => ({
+    data,
+    isPending,
+    refetch,
+  }), [data, isPending, refetch]);
+
+  return createElement(WebsiteSessionContext.Provider, { value }, children);
+}
+
+export function useWebsiteSession(): WebsiteSessionContextValue {
+  const value = useContext(WebsiteSessionContext);
+  if (!value) throw new Error("网站 Session 必须在 WebsiteSessionProvider 内使用。");
+  return value;
 }

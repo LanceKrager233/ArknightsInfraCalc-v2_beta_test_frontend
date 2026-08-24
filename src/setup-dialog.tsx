@@ -15,7 +15,7 @@ import { RotationSettings } from "@/components/RotationSettings";
 import { FiammettaSettings } from "@/components/FiammettaSettings";
 import { WizardSteps } from "@/components/interior/wizard-steps";
 import { hasSetupConfigurationChanged } from "@/setup-configuration";
-import { authClient } from "@/lib/auth-client";
+import { useWebsiteSession } from "@/website-session";
 
 import type { FactoryRecipe, PowerBudget, TradeOrder } from "./blueprint";
 import { FileDrop, LayoutEditor, PresetSelector } from "./components";
@@ -49,6 +49,7 @@ type SetupDialogProps = {
   onUseSklandSnapshot?: () => void;
   onMaaFile: (file: File) => Promise<boolean>;
   onMaaPaste: () => boolean;
+  onRequireWebsiteAccount: () => void;
   presets: PresetDef[];
   preset: PresetDef;
   layout: BaseBlueprint;
@@ -104,6 +105,7 @@ export function SetupDialog({
   onUseSklandSnapshot,
   onMaaFile,
   onMaaPaste,
+  onRequireWebsiteAccount,
   presets,
   preset,
   layout,
@@ -125,8 +127,7 @@ export function SetupDialog({
   onFinish,
   onSkip,
 }: SetupDialogProps) {
-  const { data: websiteSession } = authClient.useSession();
-  const [authNotice, setAuthNotice] = useState<string | null>(null);
+  const { data: websiteSession } = useWebsiteSession();
   const [step, setStep] = useState<SetupStep>(initialStep);
   const [stepDirection, setStepDirection] = useState(0);
   const [needsFacilityReview, setNeedsFacilityReview] = useState(false);
@@ -194,7 +195,7 @@ export function SetupDialog({
 
   async function importMaaFile(file: File) {
     if (!websiteSession) {
-      setAuthNotice("请先前往账号管理登录，再导入 MAA 数据。");
+      onRequireWebsiteAccount();
       return;
     }
     if (await onMaaFile(file)) {
@@ -206,7 +207,7 @@ export function SetupDialog({
 
   function importMaaPaste() {
     if (!websiteSession) {
-      setAuthNotice("请先前往账号管理登录，再导入 MAA 数据。");
+      onRequireWebsiteAccount();
       return;
     }
     if (onMaaPaste()) {
@@ -228,7 +229,7 @@ export function SetupDialog({
 
   function handleOpenSkland() {
     if (!websiteSession) {
-      setAuthNotice("请先登录网站账号，再使用第三方同步。");
+      onRequireWebsiteAccount();
       return;
     }
     pendingExternalReviewRef.current = true;
@@ -373,19 +374,31 @@ export function SetupDialog({
                         ) : null}
                       </TabsContent> : null}
                       <TabsContent value="maa" className="grid gap-3 pt-4">
-                        {!websiteSession ? <Alert><AlertDescription>MAA 导入需要先登录已验证的网站账号；全角色导入和技能查询仍可匿名使用。</AlertDescription></Alert> : null}
-                        <FileDrop fileName={boxSource === "maa" ? fileName : null} onFile={(file) => void importMaaFile(file)} />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className="min-h-11 w-fit"
-                          aria-expanded={showMaaPaste}
-                          aria-controls="setup-maa-paste"
-                          onClick={() => setShowMaaPaste((current) => !current)}
-                        >
-                          {showMaaPaste ? "收起 JSON" : "粘贴 JSON"}
-                        </Button>
-                        {showMaaPaste ? (
+                        {!websiteSession ? (
+                          <Alert>
+                            <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                              <span>MAA 导入需要先登录已验证的网站账号；全角色示例和技能查询仍可匿名使用。</span>
+                              <Button type="button" size="sm" className="min-h-11 shrink-0" onClick={onRequireWebsiteAccount}>
+                                登录后导入
+                              </Button>
+                            </AlertDescription>
+                          </Alert>
+                        ) : (
+                          <>
+                            <FileDrop fileName={boxSource === "maa" ? fileName : null} onFile={(file) => void importMaaFile(file)} />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              className="min-h-11 w-fit"
+                              aria-expanded={showMaaPaste}
+                              aria-controls="setup-maa-paste"
+                              onClick={() => setShowMaaPaste((current) => !current)}
+                            >
+                              {showMaaPaste ? "收起 JSON" : "粘贴 JSON"}
+                            </Button>
+                          </>
+                        )}
+                        {websiteSession && showMaaPaste ? (
                           <div id="setup-maa-paste" className="grid gap-2">
                             <Label htmlFor="setup-maa-json">JSON 内容</Label>
                             <Textarea
@@ -405,7 +418,6 @@ export function SetupDialog({
                       </TabsContent>
                     </Tabs>
                     {inputError ? <p id="setup-box-error" className="mt-3 text-sm text-destructive" role="alert">{inputError}</p> : null}
-                    {authNotice ? <p className="mt-3 text-sm text-destructive" role="alert">{authNotice}</p> : null}
                   </section>
                 ) : null}
 
