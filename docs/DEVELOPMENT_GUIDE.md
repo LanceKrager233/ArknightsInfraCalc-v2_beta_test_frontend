@@ -9,7 +9,7 @@
 以下产品约束必须作为 UI 回归项保留：
 
 - 未生成结果时突出“导入自己的 BOX”和“先看全角色示例”；搜索、导出、班次与折叠控制只在有结果后出现。
-- production 保持“基建计算器 / 练卡建议 / 技能查询 / 账号管理”四个一级导航；development 额外显示“森空岛状态中心”，production 不得请求森空岛 API。
+- production 只有显式启用森空岛时才显示“森空岛状态中心”并请求对应 API；关闭时保持“基建计算器 / 练卡建议 / 技能查询 / 账号管理”四个一级导航。development 默认显示森空岛，也可显式关闭。
 - 1024px 及以上默认使用“一图流布局”；768–1023px 和手机端默认“列表式布局”，手机端继续显示禁用态的“一图流布局”。
 - 加工站继续使用现有“暂不显示”按钮和交互。
 
@@ -165,8 +165,8 @@ type ApiFailure = {
 | `SKLAND_SESSION_SECRET` | 森空岛 HttpOnly 会话加密密钥，至少 32 字节 |
 | `SKLAND_PUBLIC_ORIGIN` | 森空岛会话写请求的公开 HTTP(S) Origin |
 | `SKLAND_ALLOW_INSECURE_HTTP` | 仅限可信临时环境；允许非 localhost 使用不安全 HTTP |
-| `APP_DEPLOYMENT_ENV` | `production`或`development`；production 强制移除森空岛访问面 |
-| `SKLAND_FEATURE_ENABLED` | dev/local 可设为`0`主动关闭；不能在 production 开启 |
+| `APP_DEPLOYMENT_ENV` | `production`或`development`；production 的森空岛默认失败关闭，仅由`SKLAND_FEATURE_ENABLED=1`开启 |
+| `SKLAND_FEATURE_ENABLED` | production 仅精确值`1`开启；development/local 可设为`0`主动关闭 |
 | `DATABASE_URL` | Next runtime PostgreSQL 连接串，仅授予 `public` 认证表与 `app` 业务表 DML |
 | `DATABASE_MIGRATION_URL` | release 执行仓库内 migration 的 DDL 连接串 |
 | `BETTER_AUTH_SECRET` | 网站 Session 签名密钥，至少 32 字节且长期稳定 |
@@ -187,12 +187,13 @@ type ApiFailure = {
 BETA_DEBUG_TOOLS_ENABLED=0
 BETA_RATE_LIMIT_ENABLED=1
 BETA_TRUST_PROXY_HEADERS=1
-BETA_PUBLIC_ORIGIN=https://你的公开域名
+BETA_PUBLIC_ORIGIN=https://riic.autos
 APP_DEPLOYMENT_ENV=production
-SKLAND_FEATURE_ENABLED=0
+SKLAND_FEATURE_ENABLED=1
+SKLAND_PUBLIC_ORIGIN=https://riic.autos
 ```
 
-dev 站点使用`APP_DEPLOYMENT_ENV=development`与`SKLAND_FEATURE_ENABLED=1`，并额外配置`SKLAND_SESSION_SECRET`、`SKLAND_PUBLIC_ORIGIN`。两个站点必须使用不同的应用根目录、systemd 服务、内部端口、公开 Origin 和持久化目录。
+production 显式启用森空岛时还必须保留既有长期稳定的`SKLAND_SESSION_SECRET`；若要关闭，改为`SKLAND_FEATURE_ENABLED=0`并重新构建发布。dev 站点使用`APP_DEPLOYMENT_ENV=development`与`SKLAND_FEATURE_ENABLED=1`，并额外配置自己的`SKLAND_SESSION_SECRET`、`SKLAND_PUBLIC_ORIGIN`。两个站点必须使用不同的应用根目录、systemd 服务、内部端口、公开 Origin 和持久化目录。
 
 认证与数据库的首次上线、最小权限和恢复演练见[网站账号与 PostgreSQL 上线手册](./AUTHENTICATION_DATABASE.md)。CI 使用临时 PostgreSQL 先执行已提交 migration，再运行注册、验证、登录、密码重置、Session 撤销与封禁集成测试；邮件由测试回调捕获，不发送真实邮件。
 
@@ -244,8 +245,8 @@ GitHub Actions 在面向`main`或`develop`的 PR 和 push 上使用 Node 22。`C
 
 完整 WebKit E2E 作为 Safari 兼容性回归每日定时运行，也可通过`workflow_dispatch`手动触发。它不阻塞逐次 PR 与发布；涉及响应式、触控或 Safari 行为的改动仍应在提交前运行`npm run test:e2e:webkit`。
 
-`main`和`develop`使用相同分类规则。只有受保护分支 push、`quality`成功且`deploy_required=true`时，部署工作流才使用 GitHub Environments `production`和`development`中的 SSH Secrets 与部署 Variables 发布对应站点；PR、文档、测试和非发布型 CI 变更不创建服务器 release。工作流先验证两个服务器 helper 是`root:root 0755`普通文件且显式契约版本兼容，再从`/var/cache/arknights-infra-deploy/repository.git`增量准备准确 SHA 的发布包；production/development 使用独立 refs 和共享`flock`。helper 在 GitHub 网络、缓存或锁的临时故障时返回`75`；Runner 随后优先读取对应服务器缓存 ref，并发送从该 ref 到已验证 SHA 的增量 Git bundle，缓存 ref 不可用时才使用上一次 push SHA。服务器校验并导入缓存，只有 bundle 基线或传输不可用时才上传完整发布包。SHA、tree、路径、helper 契约和 bundle HEAD 等完整性错误都直接失败。`DEPLOY_DEBUG_TOOLS_ENABLED`和`DEPLOY_RATE_LIMIT_ENABLED`集中管理 dev 的服务端诊断字段与限流，production 则固定为调试关闭、限流开启。production-profile 门禁会故意反向设置森空岛、调试和限流变量，确认 production 的强制策略不可被误配置绕过。
-Production client isolation scans static JavaScript and public HTML/RSC; production-profile separately verifies hidden UI, absent requests and health fields, and the API 404 boundary. Whenever runtime scope selects the full gate, both checks remain required.
+`main`和`develop`使用相同分类规则。只有受保护分支 push、`quality`成功且`deploy_required=true`时，部署工作流才使用 GitHub Environments `production`和`development`中的 SSH Secrets 与部署 Variables 发布对应站点；PR、文档、测试和非发布型 CI 变更不创建服务器 release。工作流先验证两个服务器 helper 是`root:root 0755`普通文件且显式契约版本兼容，再从`/var/cache/arknights-infra-deploy/repository.git`增量准备准确 SHA 的发布包；production/development 使用独立 refs 和共享`flock`。helper 在 GitHub 网络、缓存或锁的临时故障时返回`75`；Runner 随后优先读取对应服务器缓存 ref，并发送从该 ref 到已验证 SHA 的增量 Git bundle，缓存 ref 不可用时才使用上一次 push SHA。服务器校验并导入缓存，只有 bundle 基线或传输不可用时才上传完整发布包。SHA、tree、路径、helper 契约和 bundle HEAD 等完整性错误都直接失败。`DEPLOY_DEBUG_TOOLS_ENABLED`和`DEPLOY_RATE_LIMIT_ENABLED`集中管理 dev 的服务端诊断字段与限流，production 则固定为调试关闭、限流开启。production-profile 门禁显式开启森空岛并故意反向设置调试和限流变量，确认生产森空岛访问面存在，同时安全策略不可被误配置绕过。
+Production client boundary checks scan static JavaScript and public HTML/RSC and require the artifacts to match the resolved Skland switch. The production profile separately verifies explicitly enabled UI, health fields and API access while keeping debug disabled and rate limiting enabled. Whenever runtime scope selects the full gate, both checks remain required.
 
 production 和 dev 的 Funnel Nginx 分别只监听`127.0.0.1:4176`与`127.0.0.1:4274`。公网访问由 Tailscale Funnel 的 8443 与 443 HTTPS 入口提供；用`tailscale funnel status`核对持久化配置、公开地址和实际目标。production 另有受 Host 限制的`0.0.0.0:4174`直连/IP 兼容 vhost，它不是 Funnel 目标，不得作为公开 Origin 或发布健康检查地址。服务器 80 端口只重定向到 production HTTPS，不要把两个回环应用端口重新暴露到公网。Actions 部署用户使用独立密钥，sudo 只允许固定的`/usr/local/sbin/arknights-infra-deploy`。root 所有的 deploy runner 和`/usr/local/sbin/arknights-infra-prepare-release`必须保持 LF、普通文件和`root:root 0755`；二者用`--contract-version`报告当前接口版本，文件 SHA-256只作安装/回滚审计。prepare helper 以`arkdeploy`运行，不新增 sudo 权限；缓存根必须由该用户拥有且不能被 group/other 写入。
 

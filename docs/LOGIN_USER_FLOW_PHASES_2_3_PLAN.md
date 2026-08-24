@@ -170,7 +170,7 @@ type TrainingAdviceFilter =
   - 匹配率。
   - 需要替换、移入、移出的关键房间。
   - 无排班结果时显示“先生成排班”，不触发自动求解。
-- 完整状态页仍只在 development 可见；production 构建继续不包含森空岛文案、URL 或 App Scheme。
+- 完整状态页在显式启用森空岛的 production 与 development 均可见；关闭构建继续不包含森空岛文案、URL 或 App Scheme。
 
 #### 代码范围
 

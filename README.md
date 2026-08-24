@@ -1,6 +1,6 @@
 # 明日方舟基建排班助手
 
-导入干员数据，配置基建设施和换班方式，生成多班次排班、效率概览与练卡建议，并可导出到 MAA。求解由服务端长驻的 `infra-cli serve` 完成，本仓库不实现排班算法和效率公式。线上环境只提供 MAA/兼容文件导入；dev 环境额外提供森空岛同步。
+导入干员数据，配置基建设施和换班方式，生成多班次排班、效率概览与练卡建议，并可导出到 MAA。求解由服务端长驻的 `infra-cli serve` 完成，本仓库不实现排班算法和效率公式。所有环境都提供 MAA/兼容文件导入；显式开启森空岛的环境还提供二维码同步。
 
 ## 本地开发
 
@@ -52,11 +52,11 @@ npm run dev
 
 产品页面不再提供 `/?beta` 调试入口，也不会向排班请求传播 beta 参数或展示 CLI 输出。`BETA_DEBUG_TOOLS_ENABLED=1` 仅保留给本地直接调用 `/api/plan?beta=1` 的服务端排障；production 即使误设为 `1` 也会强制关闭调试字段。hydration、接口泄露、错误码、限流和响应式排查流程见[开发指南](./docs/DEVELOPMENT_GUIDE.md#服务端诊断)和[上线产品化报告](./docs/FRONTEND_PRODUCTION_READINESS_REPORT.md#开发调试环境使用指南)。
 
-## Box 导入与 dev 森空岛登录
+## Box 导入与森空岛登录
 
-所有环境均支持上传或粘贴 MAA 的 `Arknights_OperBox_Export.json`。dev 环境还支持森空岛同步：用户分别同意本站服务条款与隐私政策后，页面会自动显示二维码，使用森空岛 App 扫码即可完成授权；本项目不提供账号密码登录。旧的一图流 xlsx 仍保留为兼容入口，243 全精二样例可从首页的“全角色导入”直接载入。
+所有环境均支持上传或粘贴 MAA 的 `Arknights_OperBox_Export.json`。森空岛开关启用时，用户分别同意本站服务条款与隐私政策后，页面会自动显示二维码，使用森空岛 App 扫码即可完成授权；本项目不提供账号密码登录。旧的一图流 xlsx 仍保留为兼容入口，243 全精二样例可从首页的“全角色导入”直接载入。
 
-网站账号与森空岛状态使用两个独立的侧边栏页面：“账号管理”提供注册、登录、邮箱验证码、找回密码、设备退出和销户；development 的“森空岛状态中心”保留“概览 / 基建”页签，并负责扫码绑定与七天续期。同一浏览器最多保留 5 个森空岛账号。生成二维码前必须分别同意[本站服务条款](./src/app/terms/page.tsx)与[本站隐私政策](./src/app/privacy/page.tsx)。登录成功后，状态中心会按隐私政策列明的白名单直接读取 Box、设施、当前进驻、头像、理智、任务、公招、皮肤、活动和游戏进度等完整状态，并展示已接入界面的数据，不再设置二次授权；传给排班流程的仍只有求解所需最小字段。具体范围与排除项见 [森空岛数据能力矩阵](docs/SKLAND_DATA_CAPABILITIES.md)。
+网站账号与森空岛状态使用两个独立的侧边栏页面：“账号管理”提供注册、登录、邮箱验证码、找回密码、设备退出和销户；启用后的“森空岛状态中心”保留“概览 / 基建”页签，并负责扫码绑定与七天续期。同一浏览器最多保留 5 个森空岛账号。生成二维码前必须分别同意[本站服务条款](./src/app/terms/page.tsx)与[本站隐私政策](./src/app/privacy/page.tsx)。登录成功后，状态中心会按隐私政策列明的白名单直接读取 Box、设施、当前进驻、头像、理智、任务、公招、皮肤、活动和游戏进度等完整状态，并展示已接入界面的数据，不再设置二次授权；传给排班流程的仍只有求解所需最小字段。具体范围与排除项见 [森空岛数据能力矩阵](docs/SKLAND_DATA_CAPABILITIES.md)。
 
 启用森空岛登录前必须配置至少 32 字节、长期保持不变的会话密钥：
 
@@ -76,12 +76,12 @@ $env:BETA_TRUST_PROXY_HEADERS = "1"
 
 `BETA_PUBLIC_ORIGIN`保护全部公开写接口，`SKLAND_PUBLIC_ORIGIN`继续保护森空岛会话流。每个森空岛账号的凭证会使用 AES-256-GCM 加密后写入独立的 HttpOnly Cookie，另有一个加密索引 Cookie 记录当前账号；凭证从扫码成功起固定保存 7 天，刷新、读取会话或切换角色不会续期。PostgreSQL 只额外保存 HMAC 化的森空岛绑定标识、对应网站用户和授权时间，让森空岛状态中心与管理后台区分“有效授权”和“待扫码续期”；绑定标记不会因七天到期自动删除，也不保存森空岛 UID、昵称、Box 或令牌。扫码临时凭据和登录凭证都不会写入浏览器存储、运行记录或反馈包，完整状态快照也只停留在页面内存。状态中心提供退出当前账号和“删除全部森空岛数据”，两者会解除相应绑定，后者还会清除可关联的服务端运行记录与反馈，并保留独立导入的 MAA 数据和手动布局。localhost 可使用 HTTP 开发；非 localhost 环境默认必须通过 HTTPS 访问，否则只禁用森空岛入口，MAA 导入和求解仍可使用。仅在临时、可信的 HTTP 测试环境中可以显式设置 `SKLAND_ALLOW_INSECURE_HTTP=1`；此时登录流量不会受到 HTTPS 保护。
 
-`APP_DEPLOYMENT_ENV=production`会强制关闭森空岛，不能被`SKLAND_FEATURE_ENABLED=1`覆盖。线上构建不会渲染相关入口、不会发起会话请求，公开健康检查不含相关能力字段，`/api/skland/*`统一返回 404。未声明部署目标的`next build`同样按 production 关闭；本地`next dev`默认保持兼容。
-Production compilation also removes Skland copy, API URLs, and the app scheme from browser assets. `npm run test:production-client` scans static JavaScript and public HTML/RSC to prevent regressions.
+`APP_DEPLOYMENT_ENV=production`默认对森空岛失败关闭，只有同时精确设置`SKLAND_FEATURE_ENABLED=1`才会在构建产物、健康检查和`/api/skland/*`访问面启用。未设置、空值、`0`或其他值都不会开启；本地`next dev`默认保持兼容，也可用`0`关闭。production 的调试工具与限流策略仍分别强制为关闭和开启，不受该开关影响。
+`npm run test:production-client`会扫描静态 JavaScript 与公开 HTML/RSC：关闭构建必须剔除森空岛文案、API URL 和 App Scheme，显式开启构建则必须完整保留三类边界。该命令必须使用与`npm run build`相同的`APP_DEPLOYMENT_ENV`和`SKLAND_FEATURE_ENABLED`。
 
 ## 网站账号与数据库
 
-MAA JSON / xlsx 与 development 森空岛能力要求先登录已验证的网站账号；全角色样例、技能查询、配置和样例求解仍可匿名使用。网站账号使用 Better Auth、PostgreSQL 和 Resend；注册邮箱使用 6 位验证码验证，验证码 10 分钟过期且只保存哈希，密码重置继续使用一小时有效链接。数据库与认证实例在真实请求时惰性初始化，因此没有数据库或认证密钥时仍可完成 production build。`/api/auth/*` 使用 Better Auth 原生协议，不套公共 API 信封；应用自有管理和业务接口仍使用统一信封。
+MAA JSON / xlsx 与已启用的森空岛能力要求先登录已验证的网站账号；全角色样例、技能查询、配置和样例求解仍可匿名使用。网站账号使用 Better Auth、PostgreSQL 和 Resend；注册邮箱使用 6 位验证码验证，验证码 10 分钟过期且只保存哈希，密码重置继续使用一小时有效链接。数据库与认证实例在真实请求时惰性初始化，因此没有数据库或认证密钥时仍可完成 production build。`/api/auth/*` 使用 Better Auth 原生协议，不套公共 API 信封；应用自有管理和业务接口仍使用统一信封。
 
 业务数据使用 PostgreSQL `app` schema 与受保护文件目录混合保存。功能开关启用后，运行与反馈只双写白名单摘要；CLI 请求响应、命令和 stdout/stderr 仍只在文件目录保留 7 天。登录用户确认当前版本政策后会自动同步布局、设置、最近排班和应用层信封加密的 MAA Box；普通云端数据滚动保留 30 天，最多固定 5 条排班长期保留。森空岛 UID、昵称、Box、凭据和完整状态不会进入业务数据库，森空岛来源也不会进入共享排班缓存。部署与回填顺序见[业务数据存储与分阶段启用手册](./docs/BUSINESS_DATA_STORAGE.md)。
 
@@ -115,7 +115,7 @@ chmod +x bin/infra-cli
 
 | 分支 | GitHub Environment | 部署目标 | 森空岛 |
 | --- | --- | --- | --- |
-| `main` | `production` | 线上站点 | 强制关闭 |
+| `main` | `production` | 线上站点 | 仅显式`SKLAND_FEATURE_ENABLED=1`开启 |
 | `develop` | `development` | dev 站点 | 开启，可由环境变量主动关闭 |
 
 推送到两个分支都会先执行`Frontend quality`，但`Change scope`会先用保守白名单判断实际影响范围。`quality`汇总检查始终存在；它要求被选中的 Job 成功，并核对未选中的 Job 确实是`skipped`，因此不会因 workflow 级路径过滤而让受保护分支永久等待。
@@ -151,11 +151,11 @@ Variables：
 - `DEPLOY_DEBUG_TOOLS_ENABLED`：dev 可设为`1`，production 会强制改为`0`
 - `DEPLOY_RATE_LIMIT_ENABLED`：通常保持`1`；production 会强制开启
 
-服务器需要预先创建两套 systemd 服务、Nginx 站点和独立持久化目录。每套应用根目录的`shared/.env.local`保存该环境的非仓库配置；dev 在其中配置森空岛密钥和 Origin，production 不需要森空岛密钥。SSH 部署账号只应获得运行发布脚本所需的最小免密 sudo 权限。`develop`首次启用前应从已验证的`main`创建，并为两个分支启用必须通过`Frontend quality`的保护规则。
+服务器需要预先创建两套 systemd 服务、Nginx 站点和独立持久化目录。每套应用根目录的`shared/.env.local`保存该环境的非仓库配置；启用森空岛的环境都必须配置独立或既有的长期稳定会话密钥及正确 Origin。SSH 部署账号只应获得运行发布脚本所需的最小免密 sudo 权限。`develop`首次启用前应从已验证的`main`创建，并为两个分支启用必须通过`Frontend quality`的保护规则。
 
 增量发布还需要一次性以 root 将已评审提交中的两个 helper 按`root:root 0755`原子安装到`/usr/local/sbin`，并创建`arkdeploy:arkdeploy 0750`的`/var/cache/arknights-infra-deploy`。首次启用时以当前 production release 和准确的 commit/tree 运行 prepare helper，并设置`ARKNIGHTS_INFRA_SEED_RELEASE_DIR=/opt/arknights-infra/current`；helper 会逐个核对并导入未变化的本地 blob，只从 GitHub 补取元数据及被构建改写的少量文件。演练生成的`/tmp`发布包验证后删除，不调用 root 部署 runner，也不重启服务。
 
-当前两个站点都通过 Tailscale Funnel 提供公网 HTTPS：production 为`https://instance-pi2ohhfj.tail2dca9.ts.net:8443`并转发到专用回环 Nginx `127.0.0.1:4176`，dev 为`https://instance-pi2ohhfj.tail2dca9.ts.net`并转发到`127.0.0.1:4274`；两个 Next 内部端口`127.0.0.1:4175`和`127.0.0.1:4275`也不直接开放公网。production 的`0.0.0.0:4174`是受 Host 限制的直连/IP 兼容 vhost，不是 Funnel 目标，也不应写入公开 Origin 或发布健康检查。服务器 80 端口只将请求`308`重定向到 production HTTPS。两个 GitHub Environment 的`DEPLOY_PUBLIC_HEALTH_URL`必须分别使用对应 HTTPS 地址，`shared/.env.local`中的公开 Origin 也必须与各自入口一致并保持`SKLAND_ALLOW_INSECURE_HTTP=0`。使用`tailscale funnel status`检查公网转发；Funnel 不可用时不要回退到明文公网端口，可临时使用 SSH 隧道做只读诊断。
+production 主入口统一为`https://riic.autos`，`https://ark.riic.autos`只做永久跳转；现有`https://instance-pi2ohhfj.tail2dca9.ts.net:8443`继续作为 Tailscale Funnel 兼容入口并转发到专用回环 Nginx`127.0.0.1:4176`。dev 继续使用`https://instance-pi2ohhfj.tail2dca9.ts.net`并转发到`127.0.0.1:4274`；两个 Next 内部端口`127.0.0.1:4175`和`127.0.0.1:4275`都不直接开放公网。production 的`0.0.0.0:4174`是受 Host 限制的直连/IP 兼容 vhost，不是主域名或 Funnel 目标，也不应写入公开 Origin。服务器 80 端口只将请求`308`重定向到`https://riic.autos`。production GitHub Environment 的`DEPLOY_PUBLIC_HEALTH_URL`必须使用`https://riic.autos/api/health`；`BETTER_AUTH_URL`、`BETA_PUBLIC_ORIGIN`和`SKLAND_PUBLIC_ORIGIN`也必须统一为主域名并保持`SKLAND_ALLOW_INSECURE_HTTP=0`。
 
 Actions 使用独立`arkdeploy`密钥，并且 sudo 仅允许调用服务器上 root 所有的`/usr/local/sbin/arknights-infra-deploy`。prepare helper 不使用 sudo；两个固定脚本当前使用契约版本`1`，工作流检查普通文件、`root:root 0755`和版本一致性，并把服务器文件 SHA-256写入审计摘要。兼容的内部修改不要求在 main/develop 部署之间切换脚本；不兼容升级必须先通过完整 PR 门禁，再以 root 原子安装并复核 owner/mode/version/hash，最后才合并。现有 root SSH 私钥不会进入 GitHub。Git 缓存只保存公开仓库对象和两个环境 ref，临时 bundle 在 helper 退出时清理；两者都不保存 Environment Secrets、应用配置或用户数据。
 

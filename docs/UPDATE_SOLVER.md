@@ -219,7 +219,7 @@ systemctl is-active arknights-infra
 ss -ltnp 'sport = :4175'
 curl -fsS http://127.0.0.1:4175/api/health
 curl -fsS \
-  -H 'Host: instance-pi2ohhfj.tail2dca9.ts.net:8443' \
+  -H 'Host: riic.autos' \
   -H 'X-Forwarded-Proto: https' \
   http://127.0.0.1:4176/api/health
 journalctl -u arknights-infra -n 80 --no-pager
@@ -243,7 +243,7 @@ journalctl -u arknights-infra -n 120 --no-pager
 `plan_contract_sha256` 仅进入私有运行记录和反馈归因，不参与路由或健康判定；
 因此 schema 文件的 LF/CRLF 字节差异不会触发 legacy。
 
-然后在 production 公网 HTTPS `https://instance-pi2ohhfj.tail2dca9.ts.net:8443/` 载入 Full E2 并生成一次排班，
+然后在 production 公网 HTTPS `https://riic.autos/` 载入 Full E2 并生成一次排班，
 确认 `infra-cli serve` 的真实调用链正常。若前端仍可通过 legacy 模式完成求解，则不应仅为切换内部协议而绕过核心仓库测试门禁更新二进制。
 
 ## 4. 手动回滚

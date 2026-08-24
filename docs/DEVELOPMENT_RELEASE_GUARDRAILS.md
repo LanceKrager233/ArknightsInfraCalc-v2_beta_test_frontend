@@ -145,7 +145,7 @@ flowchart LR
 
 - `current`和 `.release-sha`指向预期完整 SHA，systemd active 且没有重启循环；
 - 内部端口和对应 Nginx 入口返回成功信封，`plannerReady:true`；
-- production 强制 `debugTools:false`、`rateLimit:true`且没有森空岛访问面；
+- production 强制 `debugTools:false`、`rateLimit:true`；森空岛访问面必须与显式`SKLAND_FEATURE_ENABLED`构建开关一致；
 - Full E2 真实产生三班，刷新可恢复，并能下载 MAA；
 - 最小反馈成功，运行记录与反馈 `meta.json.solver`使用同一私有 observation；
 - 公共 health/plan/feedback 递归不含 hash、CLI 路径、PID、stdout/stderr 或 debug 对象；

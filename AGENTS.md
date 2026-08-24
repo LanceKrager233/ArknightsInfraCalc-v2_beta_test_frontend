@@ -6,7 +6,7 @@
 
 本仓库是“明日方舟基建排班助手”的 Next.js 前端与轻量服务端，不是核心求解器仓库。产品主流程包括：
 
-- 线上环境导入 MAA JSON / 兼容的一图流 xlsx；dev 环境还可通过森空岛二维码登录同步干员与基建状态。
+- 所有环境导入 MAA JSON / 兼容的一图流 xlsx；显式启用森空岛的环境还可通过二维码登录同步干员与基建状态。
 - 配置 243、153、333、252、342 布局、设施等级、制造配方和贸易订单。
 - 调用长驻的 `infra-cli serve` 生成三班排班、效率概览和练卡建议。
 - 展示森空岛当前基建状态，比较当前进驻与排班计划，并导出 MAA JSON。
@@ -126,8 +126,8 @@ UI 控件优先组合 `src/components/ui/*` 中的现有 primitive。不要另�
 - 所有公开写请求必须保留同源校验、请求体大小限制和适当限流。只有在明确的本地测试中关闭限流；不要用重复请求压测线上实例。
 - 反馈必须要求用户同意，并保持最小化：公开响应只有 `feedbackId` 和 `savedAt`，不要把文件路径、Box、debug bundle 或内部诊断内容回传给浏览器。
 - 森空岛只提供二维码授权流程，不添加账号密码、短信验证码代填或绕过官方授权的登录方式。
-- `APP_DEPLOYMENT_ENV=production`必须从页面、客户端请求、健康检查字段和公开 API 访问面强制移除森空岛能力；该限制不能被`SKLAND_FEATURE_ENABLED=1`覆盖。dev 使用`APP_DEPLOYMENT_ENV=development`保留森空岛能力。
-- Production browser artifacts must not contain Skland UI copy, `/api/skland` URLs, or the `skland://` app scheme; run `npm run test:production-client` after changing client boundaries.
+- `APP_DEPLOYMENT_ENV=production`时森空岛必须失败关闭，只有显式设置`SKLAND_FEATURE_ENABLED=1`才能从页面、客户端请求、健康检查字段和公开 API 访问面启用；未设置、空值或其他值均不得开启。development/local 默认保留森空岛能力，并可显式设置`0`关闭。
+- Production browser artifacts must match the resolved Skland switch: disabled builds must not contain Skland UI copy, `/api/skland` URLs, or the `skland://` app scheme, while explicitly enabled builds must retain all three boundaries. Run `npm run test:production-client` with the same deployment variables used for `npm run build` after changing client boundaries.
 - production 必须强制关闭服务端调试字段并启用限流，不能被`BETA_DEBUG_TOOLS_ENABLED=1`或`BETA_RATE_LIMIT_ENABLED=0`覆盖；dev 可由部署环境集中管理这两个开关，但产品页面始终不提供调试入口。
 - `SKLAND_SESSION_SECRET` 必须至少 32 字节且长期稳定。森空岛会话使用 AES-256-GCM 封装在 HttpOnly Cookie 中；凭据不得进入 localStorage、CLI 运行记录、反馈包、console 或公开响应。
 - 非 localhost 的森空岛请求默认要求 HTTPS。`SKLAND_ALLOW_INSECURE_HTTP=1` 仅允许临时、可信的本地或内网测试，绝不能作为生产默认值。
@@ -173,8 +173,8 @@ Worker 能力只由`protocol_version`和`plan_schema_version`判断；`plan_cont
 | `SKLAND_PUBLIC_ORIGIN` | 森空岛会话流的可信 Origin |
 | `BETA_TRUST_PROXY_HEADERS` | 为 `1` 时信任反向代理的来源/IP 头 |
 | `SKLAND_ALLOW_INSECURE_HTTP` | 仅可信临时测试允许非 HTTPS 森空岛请求 |
-| `APP_DEPLOYMENT_ENV` | `production`或`development`；production 强制关闭森空岛 |
-| `SKLAND_FEATURE_ENABLED` | dev/local 可设为`0`关闭；不能在 production 开启 |
+| `APP_DEPLOYMENT_ENV` | `production`或`development`；production 的森空岛默认失败关闭 |
+| `SKLAND_FEATURE_ENABLED` | production 仅精确值`1`开启；development/local 可设为`0`关闭 |
 | `LEGAL_OPERATOR_NAME` | 覆盖服务条款和隐私政策中的运营者署名 |
 | `LEGAL_CONTACT_EMAIL` | 可选的法律联系邮箱 |
 | `LEGAL_CONTACT_URL` | 覆盖法律页面中的联系链接 |
@@ -262,7 +262,7 @@ npm run dev
 - Full E2、配置流程、生成排班、三班切换和 MAA 下载。
 - 键盘焦点、Dialog 关闭后焦点恢复、`role="status"` / `role="alert"` 和移动端约 44px 触控目标。
 - “一图流布局”仍可见且保持当前禁用状态；加工站“暂不显示”和恢复交互不丢失。
-- dev 保持森空岛一级导航、登录和状态中心；production 不显示任何森空岛入口、不发起相关请求，法律页和健康检查也不暴露相关文案或字段。
+- production 显式启用后与 dev 一样保留森空岛一级导航、登录、状态中心、法律文案和健康字段；关闭时不得显示入口、发起请求或暴露相关文案与字段。
 - v5 会话及旧版本迁移刷新后无 hydration 错误，持久化数据不含内部字段。
 
 真实 CLI 冒烟还要确认：
@@ -303,8 +303,10 @@ production systemd: arknights-infra
 production internal Next: 127.0.0.1:4175
 production Funnel nginx: 127.0.0.1:4176
 production direct-IP nginx: 0.0.0.0:4174 (Host-restricted compatibility listener; not the Funnel target)
-production public HTTPS: https://instance-pi2ohhfj.tail2dca9.ts.net:8443 (Tailscale Funnel to 127.0.0.1:4176)
-production HTTP redirect: port 80 redirects to public HTTPS
+production public HTTPS: https://riic.autos
+production legacy HTTPS: https://ark.riic.autos redirects to https://riic.autos
+production Tailscale Funnel compatibility: https://instance-pi2ohhfj.tail2dca9.ts.net:8443 to 127.0.0.1:4176
+production HTTP redirect: port 80 redirects to https://riic.autos
 production persistent storage: /var/lib/arknights-infra
 
 development branch: develop
