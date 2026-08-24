@@ -42,6 +42,7 @@ import { PRIVACY_VERSION, TERMS_VERSION } from "@/legal-policy";
 import { clearLocalProductData } from "@/persistence";
 import { CloudDataPanel } from "@/components/cloud/CloudDataPanel";
 import type { CloudWorkspaceData, SavedPlanData } from "@/types";
+import { useWebsiteSession } from "@/website-session";
 
 type AuthMode = "signin" | "signup" | "forgot";
 type AuthStep = "details" | "verify" | "complete";
@@ -81,7 +82,7 @@ export function WebsiteAccountPanel({
   onRestoreSavedPlan,
   onCloudDataChanged,
 }: WebsiteAccountPanelProps) {
-  const { data: session, isPending, refetch } = authClient.useSession();
+  const { data: session, isPending, refetch } = useWebsiteSession();
   const [mode, setMode] = useState<AuthMode>("signin");
   const [step, setStep] = useState<AuthStep>("details");
   const [name, setName] = useState("");

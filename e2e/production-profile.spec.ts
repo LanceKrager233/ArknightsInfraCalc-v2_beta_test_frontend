@@ -28,9 +28,11 @@ test("production profile removes Skland UI, requests, health data, and API acces
   await page.getByRole("button", { name: "基建计算器", exact: true }).click();
 
   await page.getByRole("button", { name: "配置Box与布局" }).first().click();
-  await expect(page.getByRole("dialog")).toBeVisible();
+  const setupGate = page.getByRole("dialog", { name: "登录网站账号" });
+  await expect(setupGate).toBeVisible();
+  await expect(setupGate.getByText("继续使用受账号保护的数据导入与排班功能。", { exact: true })).toBeVisible();
   await expect(page.getByText("森空岛", { exact: false })).toHaveCount(0);
-  await expect(page.getByText("上传练度 JSON / XLSX", { exact: true })).toBeVisible();
+  await expect(page.getByText("上传练度 JSON / XLSX", { exact: true })).toHaveCount(0);
 
   const sklandPageResponse = await request.get("/skland");
   expect(sklandPageResponse.status()).toBe(404);

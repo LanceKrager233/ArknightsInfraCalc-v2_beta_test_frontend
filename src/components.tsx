@@ -1386,7 +1386,7 @@ export function ScheduleBoard({
   const shouldReduceMotion = useReducedMotion();
 
   useLayoutEffect(() => {
-    const mq = window.matchMedia("(min-width: 768px)");
+    const mq = window.matchMedia("(min-width: 1024px)");
     const syncViewMode = (canUseCompactLayout: boolean) => {
       setSupportsCompactLayout(canUseCompactLayout);
       const nextViewMode = canUseCompactLayout
@@ -1480,7 +1480,7 @@ export function ScheduleBoard({
         <div className="flex flex-wrap items-center gap-2">
           {supportsCompactLayout && viewMode ? (
             <Tabs
-              className="max-md:hidden"
+              className="hidden lg:block"
               value={viewMode}
               onValueChange={(value) => {
                 const nextViewMode = value as ScheduleViewMode;

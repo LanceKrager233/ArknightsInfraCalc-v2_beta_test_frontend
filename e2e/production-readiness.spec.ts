@@ -34,19 +34,76 @@ test("cold HTML contains the workbench shell instead of only the client loading 
   expect(response.status()).toBe(200);
   const html = await response.text();
   expect(html).toContain("data-calculator-controls");
-  expect(html).toContain("data-schedule-view-pending");
+  expect(html).toContain("data-calculator-start-panel");
   expect(html).not.toContain('data-schedule-view="compact"');
   expect(html).not.toContain('data-schedule-view="list"');
   expect(html).not.toContain("正在加载基建计算器");
 });
 
-test("a 768px cold start keeps the compact workbench inside the viewport", async ({ page }) => {
+test("an anonymous cold start probes the shared session once and does not touch Skland", async ({ page }) => {
+  await page.unroute("**/api/auth/get-session");
+  let sessionRequests = 0;
+  const sklandRequests: string[] = [];
+  page.on("request", (request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (pathname === "/api/auth/get-session") sessionRequests += 1;
+    if (pathname.startsWith("/api/skland/")) sklandRequests.push(pathname);
+  });
+  await page.route("**/api/auth/get-session", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: "null",
+  }));
+  await mockApis(page, { sklandConfigured: true });
+  await page.goto("/");
+
+  await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
+  await expect(page.locator('[data-calculator-start-panel][data-onboarding-active="true"]')).toBeVisible();
+  await expect(page.getByText("登录网站账号", { exact: true })).toBeVisible();
+  await expect(page.getByText("导入自己的 BOX", { exact: true })).toBeVisible();
+  await expect(page.getByText("生成第一份方案", { exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "登录网站账号" })).toHaveCount(0);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByText(/正在恢复网站账号|正在确认网站账号|正在打开账号登录/)).toHaveCount(0);
+  await expect.poll(() => sessionRequests).toBe(1);
+  await page.waitForTimeout(100);
+  expect(sklandRequests).toEqual([]);
+
+  const importTrigger = page.getByRole("button", { name: "配置Box与布局" });
+  await importTrigger.click();
+  await expect(page.getByRole("dialog", { name: "登录网站账号" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "登录网站账号" })).toHaveCount(0);
+  await expect(importTrigger).toBeFocused();
+});
+
+test("an authenticated personal plan stays disabled while the planner is unavailable", async ({ page }) => {
+  await mockApis(page, { plannerReady: false });
+  await seedV4Session(page, null, { boxSource: "maa" });
+  let planRequests = 0;
+  await page.route("**/api/plan", (route) => {
+    planRequests += 1;
+    return route.abort();
+  });
+  await page.goto("/");
+
+  const runButton = page.getByRole("button", { name: "生成排班" }).first();
+  await expect(runButton).toBeDisabled();
+  await expect(runButton).toContainText("排班服务未就绪");
+  await expect(runButton).toHaveAttribute("title", "排班服务尚未就绪");
+  expect(planRequests).toBe(0);
+});
+
+test("a 768px solved plan defaults to list layout and stays inside the viewport", async ({ page }) => {
   await mockApis(page);
   await seedPreferences(page);
   await page.setViewportSize({ width: 768, height: 900 });
   await page.goto("/");
   await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
-  await expect(page.getByRole("tab", { name: "一图流布局" })).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("button", { name: "全角色导入" }).click();
+  await page.getByRole("button", { name: "生成排班" }).click();
+  await expect(page.locator('[data-schedule-view="list"]')).toBeVisible();
+  await expect(page.getByRole("tab", { name: "一图流布局" })).toHaveCount(0);
 
   const dimensions = await page.evaluate(() => ({
     clientWidth: document.documentElement.clientWidth,
@@ -87,12 +144,16 @@ test("Rainyun computing service credit stays at the page footer's right edge and
     const geometry = await link.evaluate((element) => {
       const linkBox = element.getBoundingClientRect();
       const logoBox = element.querySelector("img")?.getBoundingClientRect();
+      const copyBoxes = Array.from(element.querySelectorAll<HTMLElement>("[data-rainyun-copy]"))
+        .map((copy) => copy.getBoundingClientRect());
       const footer = element.closest("footer");
       const footerBox = footer?.getBoundingClientRect();
       const footerStyle = footer ? getComputedStyle(footer) : null;
       return {
         height: linkBox.height,
         logoWidth: logoBox?.width ?? Number.NaN,
+        logoCenterY: logoBox ? logoBox.top + logoBox.height / 2 : Number.NaN,
+        copyCenterYs: copyBoxes.map((copy) => copy.top + copy.height / 2),
         right: linkBox.right,
         footerRight: footerBox?.right ?? Number.NaN,
         footerPaddingRight: Number.parseFloat(footerStyle?.paddingRight ?? "0"),
@@ -100,6 +161,9 @@ test("Rainyun computing service credit stays at the page footer's right edge and
     });
     expect(geometry.height).toBeGreaterThanOrEqual(44 - 0.01);
     expect(geometry.logoWidth).toBeCloseTo(viewport.width < 640 ? 56 : 64, 0);
+    for (const copyCenterY of geometry.copyCenterYs) {
+      expect(Math.abs(copyCenterY - geometry.logoCenterY)).toBeLessThanOrEqual(1);
+    }
     expect(geometry.right).toBeCloseTo(geometry.footerRight - geometry.footerPaddingRight, 0);
   }
 });
@@ -961,6 +1025,7 @@ async function mockApis(
     sklandSessionDelayMs?: number;
     sklandSummaryDelayMs?: number;
     sklandSessionFailure?: boolean;
+    plannerReady?: boolean;
   } = {}
 ) {
   await page.route("**/api/health", (route) => route.fulfill({
@@ -971,7 +1036,7 @@ async function mockApis(
       success: true,
       data: {
         status: "ready",
-        plannerReady: true,
+        plannerReady: options.plannerReady ?? true,
         skland: {
           available: Boolean(options.sklandConfigured),
           message: options.sklandConfigured ? null : "当前未开放森空岛登录，可使用 MAA 导入。",
@@ -1624,20 +1689,15 @@ for (const viewport of [
   });
 }
 
-test("website login keeps one compact loading state across deferred UI and session loading", async ({ page }) => {
+test("website login lazy-loads its UI without probing the shared session again", async ({ page }) => {
   await page.addInitScript(() => {
     window.requestIdleCallback = () => 1;
     window.cancelIdleCallback = () => undefined;
   });
   await page.unroute("**/api/auth/get-session");
   let sessionRequests = 0;
-  let releaseSession: (() => void) | undefined;
-  const sessionGate = new Promise<void>((resolve) => {
-    releaseSession = resolve;
-  });
   await page.route("**/api/auth/get-session", async (route) => {
     sessionRequests += 1;
-    if (sessionRequests > 2) await sessionGate;
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -1662,7 +1722,7 @@ test("website login keeps one compact loading state across deferred UI and sessi
   await seedPreferences(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
-  await expect.poll(() => sessionRequests).toBe(2);
+  await expect.poll(() => sessionRequests).toBe(1);
   await page.waitForTimeout(100);
 
   await page.getByRole("button", { name: "账号管理", exact: true }).click();
@@ -1699,10 +1759,8 @@ test("website login keeps one compact loading state across deferred UI and sessi
   await page.unroute("**/_next/static/chunks/*.js");
   await expect(loadingDialog).toHaveCount(0);
   const accountDialog = page.getByRole("dialog", { name: "登录网站账号" });
-  const sessionLoading = accountDialog.locator("[data-website-account-loading]");
-  await expect.poll(() => sessionRequests).toBeGreaterThan(2);
-  await expect(sessionLoading).toBeVisible();
-  await expect(sessionLoading).toContainText("正在加载登录界面…");
+  await expect(accountDialog.locator("[data-website-account-panel]")).toBeVisible();
+  expect(sessionRequests).toBe(1);
   await expect(accountDialog.locator('[data-slot="skeleton"]')).toHaveCount(0);
   await expect(accountDialog.locator("[data-account-action-cards]")).toHaveCount(0);
   await expect(page.getByRole("dialog")).toHaveCount(1);
@@ -1711,11 +1769,8 @@ test("website login keeps one compact loading state across deferred UI and sessi
   await expect(accountDialog).toHaveCount(0);
   await expect(page.getByRole("button", { name: "账号管理", exact: true })).toBeFocused();
   await page.getByRole("button", { name: "账号管理", exact: true }).click();
-  await expect(sessionLoading).toBeVisible();
-
-  releaseSession?.();
-  await expect(page.locator("[data-website-account-panel]")).toBeVisible();
-  await expect(sessionLoading).toHaveCount(0);
+  await expect(accountDialog.locator("[data-website-account-panel]")).toBeVisible();
+  expect(sessionRequests).toBe(1);
 });
 
 test("website login opens account management after the gated navigation dialog", async ({ page }) => {
@@ -1758,6 +1813,36 @@ test("website login opens account management after the gated navigation dialog",
   expect(websiteAvatarBox?.height).toBeCloseTo(56, 0);
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(websiteAvatar).toHaveAttribute("data-fluid-orb-motion", /^(still|fallback)$/);
+});
+
+test("website login resumes the protected personal plan intent", async ({ page }) => {
+  let authenticated = false;
+  await page.unroute("**/api/auth/get-session");
+  await page.route("**/api/auth/get-session", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: authenticated ? JSON.stringify({
+      session: { id: "signed-in-session", token: "token", userId: "signed-in-user", expiresAt: new Date(Date.now() + 3_600_000).toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+      user: { id: "signed-in-user", name: "新用户", email: "signed-in@example.test", emailVerified: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    }) : "null",
+  }));
+  await page.route("**/api/auth/sign-in/email", (route) => {
+    authenticated = true;
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ redirect: false, token: "token", user: { id: "signed-in-user", name: "新用户", email: "signed-in@example.test", emailVerified: true } }) });
+  });
+  await mockApis(page);
+  await seedV4Session(page, null, { boxSource: "maa" });
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "生成排班" }).click();
+  const accountPanel = page.locator("[data-website-account-panel]");
+  await accountPanel.getByRole("textbox", { name: "邮箱", exact: true }).fill("signed-in@example.test");
+  await accountPanel.getByLabel("密码", { exact: true }).fill("secure-password-1");
+  await accountPanel.getByRole("button", { name: "登录", exact: true }).click();
+
+  await expect(page.getByRole("dialog", { name: "登录网站账号" })).toHaveCount(0);
+  await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
+  await expect(page.getByRole("button", { name: "导出到 MAA" })).toBeEnabled();
 });
 
 test("website account Fluid Orb keeps its CSS fallback without WebGL", async ({ page }) => {
@@ -1867,7 +1952,11 @@ test("anonymous MAA data cannot drive planning or training advice", async ({ pag
   await page.goto("/");
 
   await expect(page.locator("[data-calculator-controls]")).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole("button", { name: "请先登录网站账号" })).toBeDisabled();
+  const protectedRun = page.getByRole("button", { name: "生成排班" });
+  await expect(protectedRun).toBeEnabled();
+  await protectedRun.click();
+  await expect(page.getByRole("dialog", { name: "登录网站账号" })).toBeVisible();
+  await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "练卡建议" }).click();
   await expect(page.locator('[data-primary-page="training"]')).toBeVisible({ timeout: 15_000 });
   await expect(page.locator("[data-training-page]")).toBeVisible({ timeout: 45_000 });
@@ -1933,21 +2022,27 @@ test("defers a portrait far below the mobile viewport until it approaches view",
   await mockApis(page);
   await seedV4Session(page, lazyPortraitPlanData);
   await page.addInitScript(() => {
+    const styleId = "deferred-portrait-test-style";
     const installDeferredPortraitStyle = () => {
       const target = document.head ?? document.documentElement;
       if (!target) return false;
-      const style = document.createElement("style");
-      style.textContent = '[data-room-group="processing"] { margin-top: 3000px !important; }';
-      target.append(style);
+      let style = document.getElementById(styleId) as HTMLStyleElement | null;
+      if (!style) {
+        style = document.createElement("style");
+        style.id = styleId;
+        style.textContent = '[data-room-group="processing"] { margin-top: 3000px !important; }';
+      }
+      if (!style.isConnected) target.append(style);
       return true;
     };
-    if (!installDeferredPortraitStyle()) {
-      const observer = new MutationObserver(() => {
-        if (!installDeferredPortraitStyle()) return;
-        observer.disconnect();
-      });
-      observer.observe(document, { childList: true, subtree: true });
-    }
+    installDeferredPortraitStyle();
+    const observer = new MutationObserver(installDeferredPortraitStyle);
+    observer.observe(document, { childList: true, subtree: true });
+    window.addEventListener("DOMContentLoaded", installDeferredPortraitStyle, { once: true });
+    window.addEventListener("load", () => {
+      installDeferredPortraitStyle();
+      observer.disconnect();
+    }, { once: true });
   });
   await page.setViewportSize({ width: 390, height: 844 });
   const requestedPortraits: string[] = [];
@@ -1960,8 +2055,8 @@ test("defers a portrait far below the mobile viewport until it approaches view",
 
   const deferredPortrait = page.locator('[data-schedule-view="list"] img[alt="嘉辛塔"]');
   await expect(deferredPortrait).toHaveAttribute("loading", "lazy");
-  await expect(deferredPortrait).toBeVisible();
   const position = await deferredPortrait.evaluate((element) => {
+    window.scrollTo(0, 0);
     const box = element.getBoundingClientRect();
     return { top: box.top, viewportHeight: window.innerHeight };
   });
@@ -2407,11 +2502,8 @@ test("Skland calculator keeps the schedule visible before and after sidebar navi
   const runButton = page.getByRole("button", { name: "生成排班" });
   await expect(runButton).toBeEnabled();
 
-  const waitingBoard = page.locator("[data-plan-board]");
-  await expect(waitingBoard).toBeVisible();
-  await expect(waitingBoard).toHaveCSS("opacity", "1");
-  await expect(waitingBoard).not.toHaveAttribute("data-plan-revision");
-  await expect(waitingBoard).toContainText("控制中枢");
+  await expect(page.locator("[data-plan-board]")).toHaveCount(0);
+  await expect(page.locator("[data-calculator-start-panel]")).toBeVisible();
 
   await runButton.click();
   await expect(page.locator('[data-slot="live-activity"]')).toHaveAttribute("data-activity-phase", "success");
@@ -2536,7 +2628,7 @@ test("100% Skland match does not count fatigue-only notices as adjustments", asy
   await page.goto("/");
 
   await expect(page.locator("[data-skland-account-control]")).toBeVisible();
-  await expect(page.locator("[data-plan-board] > *")).toHaveCSS("opacity", "1");
+  await expect(page.locator("[data-plan-board]")).toHaveCount(0);
   const runButton = page.getByRole("button", { name: "生成排班" });
   await expect(runButton).toBeEnabled();
   await runButton.click();
@@ -2553,50 +2645,24 @@ test("100% Skland match does not count fatigue-only notices as adjustments", asy
   }
 });
 
-test("empty calculator returns directly to the compact view with one coherent entrance", async ({ page, browserName }) => {
-  await page.emulateMedia({ reducedMotion: "no-preference" });
+test("empty calculator returns directly to the inline start panel without loading a schedule", async ({ page }) => {
   await mockApis(page);
   await seedPreferences(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 
-  await expect(page.locator('[data-schedule-view="compact"]')).toBeVisible({ timeout: 45_000 });
+  await expect(page.locator("[data-calculator-start-panel]")).toBeVisible({ timeout: 45_000 });
+  await expect(page.locator("[data-schedule-view]")).toHaveCount(0);
   await expect(page.locator("[data-compact-schedule-skeleton]")).toHaveCount(0);
   await page.getByRole("button", { name: "练卡建议", exact: true }).click();
   await expect(page.locator("[data-training-page]")).toBeVisible({ timeout: 45_000 });
   await expect(page.getByText("ADVICE QUEUE · 00", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "前往生成排班", exact: true })).toHaveCSS("border-radius", "22px");
-
-  await page.evaluate(() => {
-    const root = document.documentElement;
-    root.setAttribute("data-compact-skeleton-seen", "false");
-    const observer = new MutationObserver((records) => {
-      const skeletonWasAdded = records.some((record) => Array.from(record.addedNodes).some((node) => (
-        node instanceof Element
-        && (node.matches("[data-compact-schedule-skeleton]") || node.querySelector("[data-compact-schedule-skeleton]"))
-      )));
-      if (!skeletonWasAdded) return;
-      root.setAttribute("data-compact-skeleton-seen", "true");
-      observer.disconnect();
-    });
-    const content = document.querySelector("[data-app-content]");
-    if (content) observer.observe(content, { childList: true, subtree: true });
-    window.setTimeout(() => observer.disconnect(), 5_000);
-  });
-
-  if (browserName === "webkit") {
-    await armTransientStyleCapture(page, '[data-schedule-view="compact"]', "empty-compact-return");
-  } else {
-    await armMotionCapture(page, '[data-schedule-view="compact"]', "empty-compact-return", 280);
-  }
   await page.getByRole("button", { name: "基建计算器", exact: true }).click();
 
-  const compactView = page.locator('[data-schedule-view="compact"]');
-  await expect(compactView).toBeVisible();
+  await expect(page.locator("[data-calculator-start-panel]")).toBeVisible();
+  await expect(page.locator("[data-schedule-view]")).toHaveCount(0);
   await expect(page.locator("[data-compact-schedule-skeleton]")).toHaveCount(0);
-  await expect(page.locator("html")).toHaveAttribute("data-compact-skeleton-seen", "false");
-  if (browserName === "webkit") await expectCapturedStyleMotion(page, "empty-compact-return");
-  else await expectCapturedMotion(page, "empty-compact-return", 280);
 });
 
 test("plan completion reveals status, metrics, and schedule once without resetting board state", async ({ page, browserName }) => {
@@ -2625,12 +2691,8 @@ test("plan completion reveals status, metrics, and schedule once without resetti
 
   await page.getByRole("button", { name: "全角色导入" }).click();
   const listTab = page.getByRole("tab", { name: "列表式布局" });
-  await listTab.click();
-  const dormitorySection = page.locator('section[aria-label="宿舍"]');
-  await dormitorySection.locator('button[aria-expanded="true"]').click();
-  await dormitorySection.getByRole("button", { name: "暂不显示" }).click();
-  const restoreHidden = page.getByRole("button").filter({ hasText: "恢复已隐藏" });
-  await expect(restoreHidden).toBeVisible();
+  await expect(listTab).toHaveCount(0);
+  await expect(page.locator("[data-plan-board]")).toHaveCount(0);
 
   if (browserName === "webkit") {
     await armTransientStyleCapture(page, '[data-activity-phase="running"]', "loading-status");
@@ -2648,11 +2710,6 @@ test("plan completion reveals status, metrics, and schedule once without resetti
   if (browserName === "webkit") await expectCapturedStyleMotion(page, "loading-status");
   else await expectCapturedMotion(page, "loading-status", 260);
 
-  const boardBeforePlan = page.locator("[data-plan-board]");
-  await boardBeforePlan.evaluate((element) => {
-    element.setAttribute("data-motion-sentinel", "stable");
-  });
-
   if (browserName === "webkit") {
     await armTransientStyleCapture(page, "[data-plan-summary]", "plan-summary");
     await armTransientStyleCapture(page, "[data-plan-metric]", "plan-metrics");
@@ -2667,14 +2724,18 @@ test("plan completion reveals status, metrics, and schedule once without resetti
   await expect(summary).toBeVisible();
   await expect(summary).toHaveAttribute("data-plan-entrance", "animated");
   await expect(board).toHaveAttribute("data-plan-revision", diagnosticId);
+  await listTab.click();
   const listTrainingRoom = board.locator('[data-schedule-view="list"] [data-room-group="training"]');
   await expect(listTrainingRoom).toBeVisible();
   await expect(listTrainingRoom.locator('[data-position="训练位"]')).toContainText("Training-A");
   await expect(listTrainingRoom.locator('[data-position="协助位"]')).toContainText("Trainer-A");
   await expect(listTrainingRoom).not.toContainText("不参与 MAA 导出");
-  await expect(board).toHaveAttribute("data-motion-sentinel", "stable");
   expect(await board.evaluate((element) => element.getAnimations().filter((animation) => animation.playState === "running").length)).toBe(0);
   await expect(listTab).toHaveAttribute("aria-selected", "true");
+  const dormitorySection = page.locator('section[aria-label="宿舍"]');
+  await dormitorySection.locator('button[aria-expanded="true"]').click();
+  await dormitorySection.getByRole("button", { name: "暂不显示" }).click();
+  const restoreHidden = page.getByRole("button").filter({ hasText: "恢复已隐藏" });
   await expect(restoreHidden).toBeVisible();
 
   if (browserName === "webkit") {
@@ -2684,8 +2745,6 @@ test("plan completion reveals status, metrics, and schedule once without resetti
     await expectCapturedMotion(page, "plan-summary", 460, 40);
     await expectCapturedMotionDelays(page, "plan-metrics", 360, [100, 150, 215, 280]);
   }
-  await expect(status).toContainText("排班已生成");
-
   const renderingBudget = await page.evaluate(() => {
     const summaryElement = document.querySelector<HTMLElement>("[data-plan-summary]")!;
     const boardElement = document.querySelector<HTMLElement>("[data-plan-board]")!;
@@ -2825,9 +2884,7 @@ test("reduced motion keeps feedback timing while removing movement, clipping, an
   await expect(page.locator('[data-slot="live-activity"] .animate-spin')).toHaveCount(0);
 
   const board = page.locator("[data-plan-board]");
-  await board.evaluate((element) => {
-    element.setAttribute("data-motion-sentinel", "stable");
-  });
+  await expect(board).toHaveCount(0);
 
   if (browserName === "webkit") {
     await armTransientStyleCapture(page, "[data-plan-summary]", "reduced-summary");
@@ -2841,7 +2898,7 @@ test("reduced motion keeps feedback timing while removing movement, clipping, an
   const summary = page.locator("[data-plan-summary]");
   await expect(summary).toBeVisible();
   await expect(summary).toHaveAttribute("data-plan-entrance", "animated");
-  await expect(board).toHaveAttribute("data-motion-sentinel", "stable");
+  await expect(board).toHaveAttribute("data-plan-revision", diagnosticId);
   expect(await board.evaluate((element) => element.getAnimations().filter((animation) => animation.playState === "running").length)).toBe(0);
   if (browserName === "webkit") {
     await expectCapturedStyleMotion(page, "reduced-summary");
@@ -3003,6 +3060,7 @@ test("dialog and mobile sheet motion preserve direction, exit timing, and focus"
   await expect(setupDialog).toHaveCount(0);
   await expect(setupTrigger).toBeFocused();
 
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole("tab", { name: "列表式布局" }).click();
   const issueTrigger = page.getByRole("button", { name: /反馈排班问题/ }).first();
   await issueTrigger.click();
@@ -3050,10 +3108,10 @@ test("shared action buttons keep their geometry after WebKit interactions", asyn
 
   const importButton = page.getByRole("button", { name: "全角色导入" });
   await importButton.click();
-  await expectButtonGeometryStable(importButton);
 
   const planButton = page.getByRole("button", { name: "生成排班" });
   await expect(planButton).toBeEnabled();
+  await expectButtonGeometryStable(planButton);
   await planButton.click();
   await expect(page.getByText("排班已生成")).toBeVisible();
   await expectButtonGeometryStable(planButton);
@@ -3121,42 +3179,11 @@ test("Full E2 stays in place and completes generation, shifts, MAA export, and f
   await expect(fullE2).toBeVisible();
   await fullE2.click();
   await expect(page.getByText("先导入干员数据")).toHaveCount(0);
-  await page.getByRole("tab", { name: "列表式布局" }).click();
-
-  const productControlLayouts = await Promise.all([
-    page.getByRole("group", { name: /贸易站 1 订单/ }).first(),
-    page.getByRole("group", { name: /制造站 1 配方/ }).first(),
-  ].map(async (controls) => {
-    await expect(controls).toBeVisible();
-    return controls.evaluate((element) => {
-      const style = getComputedStyle(element);
-      return {
-        columns: style.gridTemplateColumns,
-        columnGap: style.columnGap,
-        rowGap: style.rowGap,
-      };
-    });
-  }));
-  expect(productControlLayouts).toEqual([
-    { columns: "90px 90px", columnGap: "8px", rowGap: "10px" },
-    { columns: "90px 90px", columnGap: "8px", rowGap: "10px" },
-  ]);
-
-  await page.setViewportSize({ width: 390, height: 844 });
-  const mobileFactoryControls = page.getByRole("group", { name: /制造站 1 配方/ }).first();
-  await expect(mobileFactoryControls).toBeVisible();
-  const mobileFactoryLayout = await mobileFactoryControls.evaluate((element) => ({
-    columns: getComputedStyle(element).gridTemplateColumns.split(" ").length,
-    rowPositions: Array.from(element.children).map((child) => child.getBoundingClientRect().y),
-    fits: element.scrollWidth <= element.clientWidth,
-  }));
-  expect(mobileFactoryLayout.columns).toBe(3);
-  expect(new Set(mobileFactoryLayout.rowPositions).size).toBe(1);
-  expect(mobileFactoryLayout.fits).toBe(true);
-  await page.setViewportSize({ width: 1440, height: 900 });
-
+  await expect(page.getByRole("tab", { name: "列表式布局" })).toHaveCount(0);
   await page.getByRole("button", { name: "生成排班" }).click();
   await expect(page.getByText("排班已生成")).toBeVisible();
+  await page.getByRole("tab", { name: "列表式布局" }).click();
+
   const secondShift = page.getByRole("tab", { name: /第 2 班 · 6h/ });
   await secondShift.click();
   await expect(secondShift).toHaveAttribute("aria-selected", "true");
@@ -3328,7 +3355,9 @@ test("scheduled product changes require destructive confirmation and rerun with 
   releaseRerun?.();
   await expect(confirmation).toBeHidden();
   await expect(page.getByText("排班已生成")).toBeVisible();
-  await expect(tradeControls.getByRole("button", { name: "开采协力" })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("tab", { name: "列表式布局" }).click();
+  const updatedTradeControls = page.getByRole("group", { name: "贸易站 1 订单" });
+  await expect(updatedTradeControls.getByRole("button", { name: "开采协力" })).toHaveAttribute("aria-pressed", "true");
 });
 
 test("responsive navigation and the two locked areas keep their current behavior", async ({ page }) => {
@@ -3367,27 +3396,32 @@ test("responsive navigation and the two locked areas keep their current behavior
   await keepHiddenButton.click();
   await expect(page.getByRole("button", { name: /恢复已隐藏.*1/ })).toBeVisible();
 
-  for (const viewport of [
-    { width: 768, height: 900 },
-    { width: 1440, height: 900 },
-  ]) {
-    await page.setViewportSize(viewport);
-    await page.reload();
-    await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
-    await expect(page.locator('[data-slot="live-activity"]')).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "全角色导入" })).toBeVisible();
-    await expect(compactViewTab).toBeEnabled();
-    await expect(compactViewTab).toHaveAttribute("aria-selected", "true");
-  }
+  await page.setViewportSize({ width: 768, height: 900 });
+  await page.reload();
+  await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
+  await expect(page.locator('[data-slot="live-activity"]')).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "全角色导入" })).toBeVisible();
+  await expect(compactViewTab).toHaveCount(0);
+  await expect(listViewTab).toHaveCount(0);
+  await expect(page.locator('[data-schedule-view="list"]')).toBeVisible();
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.reload();
+  await expect(compactViewTab).toBeEnabled();
+  await expect(compactViewTab).toHaveAttribute("aria-selected", "true");
   await listViewTab.click();
   await expect(listViewTab).toHaveAttribute("aria-selected", "true");
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(compactViewTab).toHaveCount(0);
   await expect(page.locator('[data-schedule-view="list"]')).toBeVisible();
   await page.setViewportSize({ width: 768, height: 900 });
-  await expect(listViewTab).toHaveAttribute("aria-selected", "true");
+  await expect(listViewTab).toHaveCount(0);
+  await expect(compactViewTab).toHaveCount(0);
+  await expect(page.locator('[data-schedule-view="list"]')).toBeVisible();
   await page.reload();
-  await expect(compactViewTab).toHaveAttribute("aria-selected", "true");
+  await expect(listViewTab).toHaveCount(0);
+  await expect(compactViewTab).toHaveCount(0);
+  await expect(page.locator('[data-schedule-view="list"]')).toBeVisible();
 
   await expect(page.getByRole("button", { name: "基建计算器" })).toBeVisible();
   await expect(page.getByRole("button", { name: "练卡建议" })).toBeVisible();
@@ -3460,7 +3494,7 @@ test("all primary pages share the calculator top content offset", async ({ page 
   ]) {
     await page.setViewportSize(viewport);
     await page.goto("/");
-    const calculatorTop = (await page.locator("[data-calculator-controls]").boundingBox())?.y ?? -1;
+    const calculatorTop = (await page.locator('[data-primary-page="calculator"]').boundingBox())?.y ?? -1;
 
     for (const destination of [
       { name: "练卡建议", pageKey: "training", root: "[data-training-page]" },
@@ -3476,7 +3510,7 @@ test("all primary pages share the calculator top content offset", async ({ page 
       const pageRoot = page.locator(destination.root);
       await expect(pageRoot).toBeVisible();
       await waitForOwnAnimations(page.locator(`[data-primary-page="${destination.pageKey}"]`));
-      const pageTop = (await pageRoot.locator(":scope > :first-child").boundingBox())?.y ?? -1;
+      const pageTop = (await page.locator(`[data-primary-page="${destination.pageKey}"]`).boundingBox())?.y ?? -1;
       expect(pageTop, `${viewport.width}px ${destination.name}`).toBeCloseTo(calculatorTop, 0);
     }
   }
@@ -3589,7 +3623,10 @@ test("setup keeps Box parse errors local and actionable", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
 
-  const setupTrigger = page.getByRole("button", { name: "配置Box与布局" }).first();
+  await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
+  const moreTools = page.locator("[data-calculator-more-tools]");
+  await moreTools.getByText("更多工具", { exact: true }).click();
+  const setupTrigger = moreTools.getByRole("button", { name: "配置Box与布局" });
   await setupTrigger.click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: /第 1 步，共 3 步：干员数据/ }).click();
@@ -3625,8 +3662,10 @@ test("fresh MAA import requires one facility review before completion", async ({
   await seedPreferences(page);
   await page.goto("/");
 
-  await page.getByRole("button", { name: "配置Box与布局" }).first().click();
+  await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
+  await page.getByRole("button", { name: "配置Box与布局" }).click();
   const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
   await dialog.getByRole("tab", { name: "MAA", exact: true }).click();
   await dialog.getByRole("button", { name: "粘贴 JSON", exact: true }).click();
   await dialog.getByLabel("JSON 内容").fill(JSON.stringify(sampleData));
@@ -4069,8 +4108,9 @@ test("schedule visuals use a stable technical canvas and responsive level marker
 
   await listViewTab.click();
   await page.setViewportSize({ width: 768, height: 900 });
-  await expect(compactViewTab).toBeEnabled();
-  await expect(listViewTab).toHaveAttribute("aria-selected", "true");
+  await expect(compactViewTab).toHaveCount(0);
+  await expect(listViewTab).toHaveCount(0);
+  await expect(page.locator('[data-schedule-view="list"]')).toBeVisible();
   const tabletOperatorGrid = page.locator(".infra-list-operator-grid").first();
   await expect(tabletOperatorGrid).toBeVisible();
   const tabletGridSize = await tabletOperatorGrid.evaluate((element) => ({
@@ -4369,17 +4409,35 @@ test("Skland login replaces a scanned QR with progress while authentication fini
   await expect(page.getByRole("status")).toContainText("已扫码，正在等待森空岛 App 确认并完成登录…");
 });
 
-test("Skland full restore starts while website session confirmation is pending and is deduplicated", async ({ page }) => {
+test("Skland restore waits for website authentication and then starts summary and full requests once", async ({ page }) => {
   let releaseWebsiteSession!: () => void;
   const websiteSessionGate = new Promise<void>((resolve) => { releaseWebsiteSession = resolve; });
   let fullSessionRequests = 0;
+  let summarySessionRequests = 0;
   await page.unroute("**/api/auth/get-session");
   await page.route("**/api/auth/get-session", async (route) => {
     await websiteSessionGate;
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ user: { id: "test-user" } }),
+      body: JSON.stringify({
+        session: {
+          id: "test-session",
+          token: "test-token",
+          userId: "test-user",
+          expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        user: {
+          id: "test-user",
+          name: "测试用户",
+          email: "test@example.com",
+          emailVerified: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      }),
     });
   });
   page.on("request", (request) => {
@@ -4387,15 +4445,21 @@ test("Skland full restore starts while website session confirmation is pending a
     if (url.pathname === "/api/skland/accounts" && !url.searchParams.has("mode") && request.method() === "GET") {
       fullSessionRequests += 1;
     }
+    if (url.pathname === "/api/skland/accounts" && url.searchParams.get("mode") === "summary" && request.method() === "GET") {
+      summarySessionRequests += 1;
+    }
   });
   await mockApis(page, { sklandConfigured: true, sklandSnapshot: authenticatedSklandSnapshot });
   await seedPreferences(page);
-  await page.goto("/");
+  const navigation = page.goto("/");
 
-  await expect.poll(() => fullSessionRequests).toBe(1);
+  await page.waitForTimeout(100);
+  expect(fullSessionRequests).toBe(0);
+  expect(summarySessionRequests).toBe(0);
   releaseWebsiteSession();
-  await expect(page.locator("[data-skland-account-avatar]")).toBeVisible();
+  await navigation;
   await expect.poll(() => fullSessionRequests).toBe(1);
+  await expect.poll(() => summarySessionRequests).toBe(1);
 });
 
 test("Skland login loads full status by default and deletion preserves non-Skland data", async ({ page }) => {
@@ -4431,9 +4495,10 @@ test("Skland login loads full status by default and deletion preserves non-Sklan
     "src",
     snapshotWithAvatar.player.avatarUrl
   );
-  await expect(page.locator("[data-skland-account-avatar] [data-remote-avatar-state=\"loading\"]")).toBeVisible();
-  await expect(page.locator("[data-skland-account-avatar] [data-slot=\"skeleton\"]")).toBeVisible();
-  const compactAvatarBox = await page.locator("[data-skland-account-avatar] [data-remote-avatar-state]").boundingBox();
+  const calculatorAccount = page.locator("[data-skland-account-control]:visible");
+  await expect(calculatorAccount.locator('[data-remote-avatar-state="loading"]')).toBeVisible();
+  await expect(calculatorAccount.locator('[data-slot="skeleton"]')).toBeVisible();
+  const compactAvatarBox = await calculatorAccount.locator("[data-remote-avatar-state]").boundingBox();
   expect(compactAvatarBox?.width).toBeCloseTo(42, 0);
   await page.getByRole("button", { name: "Toggle Sidebar" }).click();
   await openSklandOverview(page);
@@ -4552,8 +4617,7 @@ test("Skland status center keeps profile and recruitment in overview and support
   await page.goto("/");
   await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
   const scheduleViewTab = page.getByRole("tab", { name: "列表式布局" });
-  await expect(scheduleViewTab).toBeVisible();
-  const scheduleViewTabHeight = await scheduleViewTab.evaluate((element) => element.getBoundingClientRect().height);
+  await expect(scheduleViewTab).toHaveCount(0);
   await openSklandOverview(page);
   await expect(page.locator("[data-calculator-controls]")).toHaveCount(0);
 
@@ -4589,7 +4653,7 @@ test("Skland status center keeps profile and recruitment in overview and support
   expect(dataControlsBox?.y).toBeGreaterThan(viewTabsBox?.y ?? 0);
   const sklandViewTabHeight = await page.getByRole("tab", { name: "概览", exact: true })
     .evaluate((element) => element.getBoundingClientRect().height);
-  expect(sklandViewTabHeight).toBe(scheduleViewTabHeight);
+  expect(sklandViewTabHeight).toBeCloseTo(26, 0);
   await expect(page.getByRole("tab", { name: "干员", exact: true })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "实时数据", exact: true })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "基建数据", exact: true })).toHaveCount(0);
@@ -5096,8 +5160,12 @@ test("setup routes Skland account actions to the status center", async ({ page }
   await seedPreferences(page);
   await page.goto("/");
 
-  await page.getByRole("button", { name: "配置Box与布局" }).first().click();
+  await expect(page.locator("[data-skland-account-control]")).toBeVisible();
+  await page.locator("[data-calculator-start-panel] [data-calculator-setup-group]")
+    .getByRole("button", { name: "配置Box与布局" })
+    .click();
   const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: /第 1 步，共 3 步：干员数据/ }).click();
   const changeSource = dialog.getByRole("button", { name: "更换", exact: true });
   if (await changeSource.isVisible()) await changeSource.click();
@@ -5148,7 +5216,9 @@ test("settings clears local product data without logging out of Skland", async (
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
 
-  await page.getByRole("button", { name: "配置Box与布局" }).click();
+  await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
+  await page.locator("[data-calculator-more-tools]").getByText("更多工具", { exact: true }).click();
+  await page.locator("[data-calculator-more-tools]").getByRole("button", { name: "配置Box与布局" }).click();
   await page.getByRole("dialog").getByRole("button", { name: /第 1 步，共 3 步：干员数据/ }).click();
   await page.getByText("数据管理", { exact: true }).click();
   const storageCopy = page.getByText("数据在此浏览器保存 30 天。", { exact: true });

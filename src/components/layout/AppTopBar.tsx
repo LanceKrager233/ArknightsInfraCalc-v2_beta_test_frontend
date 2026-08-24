@@ -44,7 +44,7 @@ export function SklandAccountControl({
       type="button"
       size="icon-lg"
       variant="outline"
-      className="relative -ms-px size-9 overflow-hidden rounded-l-none rounded-r-lg bg-background p-0 hover:bg-muted max-sm:size-11"
+      className="relative -ms-px size-9 overflow-hidden rounded-l-none rounded-r-lg bg-background p-0 hover:bg-muted max-sm:size-11 max-sm:rounded-lg"
       onClick={onOpenSkland}
       aria-label={accountLabel}
       title={nickname ?? "森空岛状态中心"}
