@@ -71,6 +71,7 @@ import { closestShift, compareShifts } from "./skland";
 import { emptySklandBindingSummary } from "./skland-binding-state";
 import { createSklandRestoreGuard } from "./skland-restore-guard";
 import { setupConfigurationFingerprint } from "./setup-configuration";
+import { preloadSchedulePortraits } from "./schedule-portrait-preload";
 import { formatSolverDiagnostic } from "./solver-diagnostic";
 import {
   BaseBlueprint,
@@ -1436,6 +1437,9 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     ? displayError(inputErrorCode, inputError)
     : apiError ?? storageNotice;
   const activity = usePlanActivity({ loading, result, error: statusError });
+  useEffect(() => {
+    if (result?.maa) void preloadSchedulePortraits(result.maa);
+  }, [result?.maa]);
   const visiblePlanRevision = scheduleResult?.diagnosticId;
   const animatePlanEntrance = Boolean(
     page === "calculator"
