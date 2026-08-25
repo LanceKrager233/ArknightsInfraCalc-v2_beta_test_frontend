@@ -22,8 +22,9 @@ export const dynamic = "force-dynamic";
 const TELEMETRY_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_EVENTS_PER_REQUEST = 20;
 
-const ALLOWED_TYPES = new Set(["performance", "interaction", "navigation", "error"]);
+const ALLOWED_TYPES = new Set(["performance", "interaction", "navigation", "error", "environment"]);
 const ALLOWED_NAMES = new Set([
+  "device_info",
   "web_vitals_fcp",
   "web_vitals_lcp",
   "web_vitals_cls",
@@ -46,6 +47,16 @@ const ALLOWED_META_KEYS = new Set([
   "count",
   "bytes",
   "shift_index",
+  "device_type",
+  "os",
+  "browser",
+  "screen_width",
+  "screen_height",
+  "dpr",
+  "memory_gb",
+  "cores",
+  "effective_type",
+  "save_data",
 ]);
 
 function validateEvent(value: unknown): { sessionId: string; type: string; name: string; durationMs?: number; value?: number; page?: string; meta?: Record<string, unknown> } | null {
