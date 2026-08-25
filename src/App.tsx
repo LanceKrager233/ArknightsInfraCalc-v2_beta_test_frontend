@@ -14,6 +14,7 @@ import { PrimaryPageTransition } from "@/components/layout/PrimaryPageTransition
 import { SetupDialogSkeleton } from "@/components/setup/SetupDialogSkeleton";
 import { LiveActivity, usePlanActivity } from "@/components/ui/live-activity";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { track } from "@/lib/telemetry";
 import { loadClientFeature } from "@/client-lazy-loader";
 import { preloadProductIcons } from "@/product-assets";
 import { WorkbenchContext } from "@/workbench-context";
@@ -853,6 +854,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
 
   async function runPlanForLayout(planLayout: BaseBlueprint, retryUnavailable = false) {
     if (!operbox) return;
+    track({ type: "interaction", name: "plan_click", page: "calculator" });
     const layoutError = layoutValidationError(planLayout);
     if (layoutError) {
       setApiError(displayError("AIC-LAYOUT-1201", layoutError));
@@ -873,6 +875,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     clearIssueState();
 
     try {
+      track({ type: "interaction", name: "plan_submit", page: "calculator" });
       const response = await computePlan({
         layout: planLayout,
         operbox: normalizeOperboxEntries(operbox),
@@ -881,6 +884,13 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         rotation: rotationProfile,
         fiammetta_enable: effectiveFiammettaEnabled,
       }, { signal: controller.signal });
+      track({ type: "interaction", name: "plan_response", page: "calculator" });
+      track({
+        type: "performance",
+        name: "plan_result",
+        page: "calculator",
+        durationMs: typeof response.durationMs === "number" ? response.durationMs : undefined,
+      });
       setCliReady(true);
       setActiveShift(0);
       const finalizedResult = response;
@@ -1466,7 +1476,10 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       showOnboarding: onboardingPreference === "active" && !result,
       animatePlanEntrance,
       animateEmptyScheduleEntrance,
-      onPlanEntranceConsumed: (revision: string) => revealedPlanRevisions.current.add(revision),
+      onPlanEntranceConsumed: (revision: string) => {
+        revealedPlanRevisions.current.add(revision);
+        track({ type: "interaction", name: "plan_render", page: "calculator" });
+      },
       requiresAccount: !accountCanUseCurrentBox,
       accountControl: CLIENT_SKLAND_ENABLED && activeSklandAccount ? (
         <SklandAccountControl
