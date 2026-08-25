@@ -222,6 +222,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const defaultLayout = buildBlueprint(defaultPreset);
   const hasRenderedCalculator = useRef(false);
   const revealedPlanRevisions = useRef(new Set<string>());
+  const planClickAtRef = useRef<number | null>(null);
   const websiteAuthReturnFocusRef = useRef<HTMLElement | null>(null);
   const websiteAuthIntentRef = useRef<WebsiteAuthIntent | null>(null);
   const websiteIntentContinuationRef = useRef<(intent: WebsiteAuthIntent) => void>(() => undefined);
@@ -854,6 +855,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
 
   async function runPlanForLayout(planLayout: BaseBlueprint, retryUnavailable = false) {
     if (!operbox) return;
+    planClickAtRef.current = performance.now();
     track({ type: "interaction", name: "plan_click", page: "calculator" });
     const layoutError = layoutValidationError(planLayout);
     if (layoutError) {
@@ -1478,7 +1480,16 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       animateEmptyScheduleEntrance,
       onPlanEntranceConsumed: (revision: string) => {
         revealedPlanRevisions.current.add(revision);
-        track({ type: "interaction", name: "plan_render", page: "calculator" });
+        // 只统计"本次生成"的首次渲染；切班次/重挂载不再重复打点。
+        if (planClickAtRef.current !== null) {
+          track({
+            type: "interaction",
+            name: "plan_render",
+            page: "calculator",
+            durationMs: Math.max(0, Math.round(performance.now() - planClickAtRef.current)),
+          });
+          planClickAtRef.current = null;
+        }
       },
       requiresAccount: !accountCanUseCurrentBox,
       accountControl: CLIENT_SKLAND_ENABLED && activeSklandAccount ? (

@@ -4,7 +4,7 @@
 const TELEMETRY_ENDPOINT = "/api/telemetry";
 const FLUSH_INTERVAL_MS = 5_000;
 const FLUSH_BATCH_SIZE = 20;
-const PERFORMANCE_SAMPLE_RATE = 0.1;
+const PERFORMANCE_SAMPLE_RATE = 1;
 
 export type TelemetryType = "performance" | "interaction" | "navigation" | "error";
 

@@ -15,6 +15,7 @@ interface LayoutShiftEntry extends PerformanceEntry {
 export function TelemetryInit() {
   const pathname = usePathname();
   const pageStartRef = useRef<{ page: string; at: number } | null>(null);
+  const clsValueRef = useRef(0);
 
   // 页面停留：路由进入记一次 page_view，切换/隐藏/卸载时补停留时长。
   useEffect(() => {
@@ -27,6 +28,16 @@ export function TelemetryInit() {
         page: start.page,
         durationMs: Math.max(0, Date.now() - start.at),
       });
+      // CLS 只在上报时刻记一次最终累计值。
+      if (clsValueRef.current > 0) {
+        track({
+          type: "performance",
+          name: "web_vitals_cls",
+          page: start.page,
+          value: Math.round(clsValueRef.current * 1000),
+        });
+        clsValueRef.current = 0;
+      }
       pageStartRef.current = final ? null : { page: pathname, at: Date.now() };
     };
     if (!pageStartRef.current) {
@@ -45,9 +56,9 @@ export function TelemetryInit() {
     };
   }, [pathname]);
 
-  // Web Vitals + 长任务（PerformanceObserver 无依赖实现）。
+  // 整页加载性能（FCP/LCP/TTFB）+ 长任务 + CLS 累计：只挂载一次。
   useEffect(() => {
-    const page = pathname;
+    const page = window.location.pathname;
     const trackVital = (name: string, durationMs?: number, value?: number) => {
       track({ type: "performance", name, page, durationMs, value });
     };
@@ -74,13 +85,11 @@ export function TelemetryInit() {
       // 浏览器不支持时跳过。
     }
     try {
-      let cls = 0;
       const layoutShift = new PerformanceObserver((list) => {
         for (const entry of list.getEntries()) {
           const shift = entry as LayoutShiftEntry;
-          if (!shift.hadRecentInput) cls += shift.value;
+          if (!shift.hadRecentInput) clsValueRef.current += shift.value;
         }
-        trackVital("web_vitals_cls", undefined, Math.round(cls * 1000));
       });
       layoutShift.observe({ type: "layout-shift", buffered: true });
     } catch {
@@ -104,7 +113,7 @@ export function TelemetryInit() {
     } catch {
       // 浏览器不支持时跳过。
     }
-  }, [pathname]);
+  }, []);
 
   return null;
 }
