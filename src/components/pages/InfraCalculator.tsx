@@ -124,13 +124,13 @@ function CalculatorStartPanel({
     {
       title: "导入自己的 BOX",
       eyebrow: "干员数据",
-      description: hasPersonalBox ? "个人 BOX 已就绪，可以配置布局并生成方案。" : "支持 MAA JSON 与兼容的一图流表格。",
+      description: hasPersonalBox ? "个人 BOX 已就绪，可以配置布局并生成方案。" : "支持自主上传或第三方同步。",
       group: "trading",
     },
     {
       title: "生成第一份方案",
-      eyebrow: "三班排班",
-      description: "得到三班排班、关键房间提示与 MAA 文件。",
+      eyebrow: "基建排班",
+      description: "得到基建排班、关键房间提示与 MAA 文件。",
       group: "manufacture",
     },
   ] as const;
