@@ -1592,6 +1592,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         <span>非官方、小范围测试中的排班辅助工具</span>
         <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/terms">本站服务条款</Link>
         <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/privacy">本站隐私政策</Link>
+        <a className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/about" data-about-link>关于我们</a>
         <a
           href="https://www.rainyun.com/riic_"
           target="_blank"
