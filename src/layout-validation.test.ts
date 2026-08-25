@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { validateLayoutJson } from "./layout-validation.ts";
+import { isTradeOrderAllowed, normalizeTradeOrderForLevel } from "./trade-order.ts";
 
 function validLayout() {
   return {
@@ -61,4 +62,21 @@ test("342 preset keeps the intended power-safe room levels", () => {
   assert.equal(levels.trade_2, 2);
   assert.equal(levels.dorm_1, 2);
   assert.deepEqual(validateLayoutJson(layout), []);
+});
+
+test("rejects originium orders in level-one and level-two trading posts", () => {
+  for (const level of [1, 2]) {
+    const layout = validLayout();
+    layout.rooms[1].level = level;
+    layout.rooms[1].product = { trade: { order: "originium" } };
+    assert.ok(validateLayoutJson(layout).some((message) => message.includes("仅 3 级贸易站可使用开采协力")));
+  }
+});
+
+test("allows mining cooperation only in level-three trading posts", () => {
+  assert.equal(isTradeOrderAllowed(1, "originium"), false);
+  assert.equal(isTradeOrderAllowed(2, "originium"), false);
+  assert.equal(isTradeOrderAllowed(3, "originium"), true);
+  assert.equal(normalizeTradeOrderForLevel(2, "originium"), "gold");
+  assert.equal(normalizeTradeOrderForLevel(3, "originium"), "originium");
 });

@@ -131,6 +131,8 @@ type CompactScheduleComponent = typeof import("@/components/CompactScheduleView"
 type Option<T extends string> = {
   value: T;
   label: ReactNode;
+  disabled?: boolean;
+  disabledReason?: string;
 };
 
 export function ProductToggleGroup<T extends string>({
@@ -187,6 +189,8 @@ export function ProductToggleGroup<T extends string>({
           <ToggleGroupItem
             key={option.value}
             value={option.value}
+            disabled={option.disabled}
+            title={option.disabledReason}
             size="sm"
             variant="outline"
             className={cn(
@@ -549,12 +553,15 @@ export function LayoutEditor({
                         options={TRADE_ORDER_OPTIONS.map((option) => ({
                           value: option.order,
                           label: option.label,
+                          disabled: option.order === "originium" && room.level < 3,
+                          disabledReason: option.order === "originium" && room.level < 3 ? "开采协力仅限 3 级贸易站" : undefined,
                         }))}
                         columns={2}
                         tone="trade"
                         layout="fill"
                         onChange={(order) => onTradeOrderChange(room.id, order)}
                       />
+                      {room.level < 3 ? <p className="mt-1.5 text-xs text-muted-foreground">开采协力仅限 3 级贸易站。</p> : null}
                     </div>
                   ) : isFactory && activeRecipe ? (
                     <div className="col-span-2 sm:col-span-1">
