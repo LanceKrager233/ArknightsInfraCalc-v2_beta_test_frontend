@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { validateLayoutJson } from "./layout-validation.ts";
+import { isFactoryRecipeAllowed, normalizeFactoryRecipeForLevel } from "./factory-recipe-level.ts";
 
 function validLayout() {
   return {
@@ -61,4 +62,21 @@ test("342 preset keeps the intended power-safe room levels", () => {
   assert.equal(levels.trade_2, 2);
   assert.equal(levels.dorm_1, 2);
   assert.deepEqual(validateLayoutJson(layout), []);
+});
+
+test("rejects originium shard production in level-one and level-two factories", () => {
+  for (const level of [1, 2]) {
+    const layout = validLayout();
+    layout.rooms[2].level = level;
+    layout.rooms[2].product = { factory: { recipe: "originium" } };
+    assert.ok(validateLayoutJson(layout).some((message) => message.includes("仅 3 级制造站可生产源石碎片")));
+  }
+});
+
+test("allows originium shard production only in level-three factories", () => {
+  assert.equal(isFactoryRecipeAllowed(1, "originium"), false);
+  assert.equal(isFactoryRecipeAllowed(2, "originium"), false);
+  assert.equal(isFactoryRecipeAllowed(3, "originium"), true);
+  assert.equal(normalizeFactoryRecipeForLevel(2, "originium"), "gold");
+  assert.equal(normalizeFactoryRecipeForLevel(3, "originium"), "originium");
 });

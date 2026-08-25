@@ -131,6 +131,8 @@ type CompactScheduleComponent = typeof import("@/components/CompactScheduleView"
 type Option<T extends string> = {
   value: T;
   label: ReactNode;
+  disabled?: boolean;
+  disabledReason?: string;
 };
 
 export function ProductToggleGroup<T extends string>({
@@ -187,6 +189,8 @@ export function ProductToggleGroup<T extends string>({
           <ToggleGroupItem
             key={option.value}
             value={option.value}
+            disabled={option.disabled}
+            title={option.disabledReason}
             size="sm"
             variant="outline"
             className={cn(
@@ -564,12 +568,15 @@ export function LayoutEditor({
                         options={FACTORY_RECIPE_OPTIONS.map((option) => ({
                           value: option.recipe,
                           label: option.label,
+                          disabled: option.recipe === "originium" && room.level < 3,
+                          disabledReason: option.recipe === "originium" && room.level < 3 ? "源石碎片仅限 3 级制造站" : undefined,
                         }))}
                         columns={3}
                         tone="factory"
                         layout="fill"
                         onChange={(recipe) => onFactoryRecipeChange(room.id, recipe)}
                       />
+                      {room.level < 3 ? <p className="mt-1.5 text-xs text-muted-foreground">源石碎片仅限 3 级制造站。</p> : null}
                     </div>
                   ) : null}
                 </div>

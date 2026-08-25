@@ -1,4 +1,5 @@
 import type { RoomKind } from "./types";
+import { isFactoryRecipeAllowed } from "./factory-recipe-level.ts";
 
 const MAX_DRONE_CAP = 0xffff_ffff;
 const ROOM_MAX_LEVEL: Record<RoomKind, number> = {
@@ -57,6 +58,7 @@ export function validateLayoutJson(value: unknown): string[] {
     if (room.kind === "factory") {
       const factory = object(room.product) && object(room.product.factory) ? room.product.factory : null;
       if (!factory || !["all", "gold", "battle_record", "originium"].includes(String(factory.recipe))) errors.push(`${label} 缺少有效制造配方。`);
+      if (factory?.recipe === "originium" && !isFactoryRecipeAllowed(Number(room.level), "originium")) errors.push(`${label} 仅 3 级制造站可生产源石碎片。`);
     }
     if (room.kind === "dormitory" && room.dorm_beds !== undefined && (!Number.isInteger(room.dorm_beds) || (room.dorm_beds as number) < 1 || (room.dorm_beds as number) > 5)) {
       errors.push(`${label}.dorm_beds 必须是 1–5 的整数。`);

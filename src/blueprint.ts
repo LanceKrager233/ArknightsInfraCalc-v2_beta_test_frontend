@@ -5,6 +5,7 @@ import layout333 from "./layouts/333.json";
 import layout342 from "./layouts/342.json";
 import { BaseBlueprint, BlueprintRoom, PresetDef, RoomKind, TradeProduct } from "./types";
 import { factoryRecipeFromMaaProduct, type FactoryRecipe } from "./factory-recipes";
+import { isFactoryRecipeAllowed, normalizeFactoryRecipeForLevel } from "./factory-recipe-level.ts";
 
 export { factoryRecipeFromMaaProduct };
 export type { FactoryRecipe } from "./factory-recipes";
@@ -46,6 +47,7 @@ export function updateFactoryRecipe(layout: BaseBlueprint, roomId: string, recip
     scenario: structuredClone(layout.scenario),
     rooms: layout.rooms.map((room) => {
       if (room.id !== roomId || room.kind !== "factory") return structuredClone(room);
+      if (!isFactoryRecipeAllowed(room.level, recipe)) return structuredClone(room);
       return {
         ...structuredClone(room),
         product: { factory: { recipe } },
@@ -79,7 +81,14 @@ export function updateRoomLevel(layout: BaseBlueprint, roomId: string, level: nu
   return {
     ...layout,
     scenario: structuredClone(layout.scenario),
-    rooms: layout.rooms.map((room) => (room.id === roomId ? { ...structuredClone(room), level: nextLevel } : structuredClone(room))),
+    rooms: layout.rooms.map((room) => {
+      if (room.id !== roomId) return structuredClone(room);
+      const nextRoom = { ...structuredClone(room), level: nextLevel };
+      if (nextRoom.kind === "factory") {
+        nextRoom.product = { factory: { recipe: normalizeFactoryRecipeForLevel(nextLevel, factoryRecipeFor(nextRoom)) } };
+      }
+      return nextRoom;
+    }),
   };
 }
 
