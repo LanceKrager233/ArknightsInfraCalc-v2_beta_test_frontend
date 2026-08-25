@@ -71,6 +71,7 @@ import { closestShift, compareShifts } from "./skland";
 import { emptySklandBindingSummary } from "./skland-binding-state";
 import { createSklandRestoreGuard } from "./skland-restore-guard";
 import { setupConfigurationFingerprint } from "./setup-configuration";
+import { formatSolverDiagnostic } from "./solver-diagnostic";
 import {
   BaseBlueprint,
   BoxSource,
@@ -1571,7 +1572,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
           activity={activity}
           onRetry={() => void handleRetry()}
           onCopyDiagnostic={() => {
-            if (activity?.error) void copyText(`${activity.error.code}${activity.error.requestId ? ` · ${activity.error.requestId}` : ""}`);
+            if (activity?.error) void copyText(formatSolverDiagnostic(activity.error));
           }}
         />
 
