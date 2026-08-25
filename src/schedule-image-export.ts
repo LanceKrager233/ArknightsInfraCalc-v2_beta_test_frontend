@@ -73,7 +73,22 @@ async function normalizeModernColors(root: HTMLElement) {
   }
 }
 
-export async function exportScheduleImage({
+async function waitForImages(root: HTMLElement) {
+  const images = Array.from(root.querySelectorAll("img"));
+  await Promise.all(images.map((image) => {
+    if (image.complete) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      const finish = () => resolve();
+      image.addEventListener("load", finish, { once: true });
+      image.addEventListener("error", finish, { once: true });
+      window.setTimeout(finish, 5_000);
+    });
+  }));
+}
+
+export type ScheduleImageCapture = { canvas: HTMLCanvasElement; label: string };
+
+export async function captureScheduleImage({
   board,
   layoutName,
   shiftLabel,
@@ -81,7 +96,7 @@ export async function exportScheduleImage({
   board: HTMLElement;
   layoutName: string;
   shiftLabel: string;
-}) {
+}): Promise<ScheduleImageCapture> {
   await document.fonts.ready;
   const width = scheduleImageWidth(board.getBoundingClientRect().width);
   const wrapper = document.createElement("div");
@@ -133,6 +148,7 @@ export async function exportScheduleImage({
   document.body.append(wrapper);
 
   try {
+    await waitForImages(wrapper);
     await normalizeModernColors(wrapper);
     const { default: html2canvas } = await import("html2canvas");
     const exportWidth = Math.ceil(wrapper.scrollWidth);
@@ -155,17 +171,46 @@ export async function exportScheduleImage({
         if (clonedRoot) await normalizeModernColors(clonedRoot);
       },
     });
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-    if (!blob) throw new Error("图片生成失败。");
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = scheduleImageFileName(layoutName, shiftLabel);
-    document.body.append(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    return { canvas, label: shiftLabel };
   } finally {
     wrapper.remove();
   }
+}
+
+async function downloadCanvas(canvas: HTMLCanvasElement, fileName: string) {
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+  if (!blob) throw new Error("图片生成失败。");
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+export async function exportScheduleImage(input: { board: HTMLElement; layoutName: string; shiftLabel: string }) {
+  const capture = await captureScheduleImage(input);
+  await downloadCanvas(capture.canvas, scheduleImageFileName(input.layoutName, input.shiftLabel));
+}
+
+export async function exportCombinedScheduleImage(layoutName: string, captures: ScheduleImageCapture[]) {
+  if (!captures.length) throw new Error("没有可导出的班次。");
+  const gap = 28;
+  const width = Math.max(...captures.map(({ canvas }) => canvas.width));
+  const height = captures.reduce((total, { canvas }) => total + canvas.height, gap * (captures.length - 1));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("图片画布创建失败。");
+  context.fillStyle = "#f7f5ec";
+  context.fillRect(0, 0, width, height);
+  let y = 0;
+  for (const capture of captures) {
+    context.drawImage(capture.canvas, Math.floor((width - capture.canvas.width) / 2), y);
+    y += capture.canvas.height + gap;
+  }
+  await downloadCanvas(canvas, scheduleImageFileName(layoutName, "全部班次"));
 }

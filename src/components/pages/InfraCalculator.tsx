@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 import type { ShiftDirection } from "@/motion";
 import { onboardingStepStatuses } from "@/onboarding";
 import type { RoomRow } from "@/schedule";
-import { exportScheduleImage } from "@/schedule-image-export";
+import { captureScheduleImage, exportCombinedScheduleImage, exportScheduleImage } from "@/schedule-image-export";
 import type {
   BaseBlueprint,
   FeedbackData,
@@ -358,6 +358,31 @@ export function InfraCalculator(props: InfraCalculatorProps) {
       setImageExporting(false);
     }
   };
+  const handleExportAllImages = async () => {
+    if (!scheduleResult) return;
+    const originalShift = activeShift;
+    const shiftCount = scheduleResult.rotation?.shifts.length ?? scheduleResult.maa.plans.length;
+    setImageExporting(true);
+    setImageExportError(null);
+    setImageExported(false);
+    try {
+      const captures = [];
+      for (let index = 0; index < shiftCount; index += 1) {
+        handleSetActiveShift(index);
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 450));
+        const board = document.querySelector<HTMLElement>("[data-plan-board]");
+        if (!board) throw new Error(`第 ${index + 1} 班排班内容未就绪。`);
+        captures.push(await captureScheduleImage({ board, layoutName: layout.template || "基建排班", shiftLabel: `第 ${index + 1} 班` }));
+      }
+      await exportCombinedScheduleImage(layout.template || "基建排班", captures);
+      setImageExported(true);
+    } catch (error) {
+      setImageExportError(error instanceof Error ? error.message : "图片生成失败，请重试。");
+    } finally {
+      handleSetActiveShift(originalShift);
+      setImageExporting(false);
+    }
+  };
   const renderExportActions = (placement: "desktop" | "mobile") => (
     <div
       className={placement === "desktop"
@@ -383,6 +408,9 @@ export function InfraCalculator(props: InfraCalculatorProps) {
       <Button type="button" size="sm" variant="outline" disabled={!scheduleResult || imageExporting} onClick={() => void handleExportImage()} aria-label="将当前班次导出为 PNG 分享图">
         {imageExporting ? <Loader2 className="animate-spin" /> : <ImageDown />}
         {imageExporting ? "正在生成" : "导出 PNG"}
+      </Button>
+      <Button type="button" size="sm" variant="outline" disabled={!scheduleResult || imageExporting} onClick={() => void handleExportAllImages()} aria-label="将全部班次导出为一张 PNG 长图">
+        <ImageDown />全部班次
       </Button>
     </div>
   );
