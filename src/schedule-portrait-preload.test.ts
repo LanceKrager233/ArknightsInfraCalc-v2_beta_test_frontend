@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { preloadWithConcurrency, scheduleOperatorNames } from "./schedule-portrait-preload.ts";
+import { clearOperatorPortraitCache, OPERATOR_PORTRAIT_CACHE, preloadWithConcurrency, scheduleOperatorNames } from "./schedule-portrait-preload.ts";
 
 test("collects unique operators from every shift and Fiammetta targets", () => {
   const names = scheduleOperatorNames({ title: "test", plans: [
@@ -25,4 +25,16 @@ test("preloads with bounded concurrency and ignores individual failures", async 
   }, 2);
   assert.equal(peak, 2);
   assert.deepEqual(loaded.sort(), [1, 2, 4, 5]);
+});
+
+test("clears only the managed operator portrait cache", async () => {
+  const deleted: string[] = [];
+  const supported = await clearOperatorPortraitCache({
+    delete: async (name) => {
+      deleted.push(name);
+      return true;
+    },
+  });
+  assert.equal(supported, true);
+  assert.deepEqual(deleted, [OPERATOR_PORTRAIT_CACHE]);
 });

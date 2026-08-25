@@ -1,6 +1,27 @@
 import type { MaaJson, MaaOperatorSlot } from "./types.ts";
 
 const PRELOAD_CONCURRENCY = 6;
+export const OPERATOR_PORTRAIT_CACHE = "operator-portraits-v1";
+
+let portraitCacheRegistration: Promise<void> | null = null;
+
+async function ensurePortraitCache() {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+  portraitCacheRegistration ??= navigator.serviceWorker
+    .register("/operator-portrait-cache-sw.js", { scope: "/" })
+    .then(() => navigator.serviceWorker.ready)
+    .then(() => undefined)
+    .catch(() => undefined);
+  await portraitCacheRegistration;
+}
+
+export async function clearOperatorPortraitCache(
+  cacheStorage: Pick<CacheStorage, "delete"> | undefined = globalThis.caches,
+): Promise<boolean> {
+  if (!cacheStorage) return false;
+  await cacheStorage.delete(OPERATOR_PORTRAIT_CACHE);
+  return true;
+}
 
 function operatorName(value: string | MaaOperatorSlot | null): string | null {
   if (typeof value === "string") return value.trim() || null;
@@ -58,6 +79,7 @@ function preloadImage(url: string): Promise<void> {
 
 export async function preloadSchedulePortraits(maa: MaaJson) {
   if (typeof Image === "undefined") return;
+  await ensurePortraitCache();
   const { operatorPortraitFor } = await import("./operatorPortraits.ts");
   const urls = [...new Set(scheduleOperatorNames(maa).map((name) => operatorPortraitFor(name)).filter((url): url is string => Boolean(url)))];
   await preloadWithConcurrency(urls, preloadImage);
