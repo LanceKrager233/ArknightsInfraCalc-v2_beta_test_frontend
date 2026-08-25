@@ -15,7 +15,6 @@ import { RotationSettings } from "@/components/RotationSettings";
 import { FiammettaSettings } from "@/components/FiammettaSettings";
 import { WizardSteps } from "@/components/interior/wizard-steps";
 import { hasSetupConfigurationChanged } from "@/setup-configuration";
-import { clearOperatorPortraitCache } from "@/schedule-portrait-preload";
 import { useWebsiteSession } from "@/website-session";
 
 import type { FactoryRecipe, PowerBudget, TradeOrder } from "./blueprint";
@@ -135,8 +134,6 @@ export function SetupDialog({
   const [showImportOptions, setShowImportOptions] = useState(false);
   const [showMaaPaste, setShowMaaPaste] = useState(false);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
-  const [portraitCacheBusy, setPortraitCacheBusy] = useState(false);
-  const [portraitCacheNotice, setPortraitCacheNotice] = useState<string | null>(null);
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
   const [openingConfigurationKey, setOpeningConfigurationKey] = useState(configurationKey);
   const wasOpenRef = useRef(false);
@@ -434,35 +431,11 @@ export function SetupDialog({
 
                 <details className="setup-quiet-details">
                   <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">数据管理</summary>
-                  <div className="grid gap-3 py-3">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <span className="text-xs text-muted-foreground">排班头像会缓存在此浏览器，减少下次切班等待。</span>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="min-h-11"
-                        disabled={portraitCacheBusy}
-                        onClick={() => {
-                          setPortraitCacheBusy(true);
-                          setPortraitCacheNotice(null);
-                          void clearOperatorPortraitCache()
-                            .then((supported) => setPortraitCacheNotice(
-                              supported ? "头像缓存已清除，下次排班时会重新下载。" : "当前浏览器不支持独立头像缓存。",
-                            ))
-                            .catch(() => setPortraitCacheNotice("头像缓存清除失败，请检查站点存储权限。"))
-                            .finally(() => setPortraitCacheBusy(false));
-                        }}
-                      >
-                        <Trash2 />{portraitCacheBusy ? "正在清除…" : "清除头像缓存"}
-                      </Button>
-                    </div>
-                    {portraitCacheNotice ? <p className="text-xs text-muted-foreground" role="status">{portraitCacheNotice}</p> : null}
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
-                      <span className="text-xs text-muted-foreground">布局、干员数据和排班记录在此浏览器保存 <span className="font-number">30</span> 天。</span>
-                      <Button type="button" variant="outline" className="min-h-11" onClick={() => setClearConfirmOpen(true)}>
-                        <Trash2 />清除本地数据
-                      </Button>
-                    </div>
+                  <div className="flex flex-wrap items-center justify-between gap-3 py-3">
+                    <span className="text-xs text-muted-foreground">数据在此浏览器保存 <span className="font-number">30</span> 天。</span>
+                    <Button type="button" variant="outline" className="min-h-11" onClick={() => setClearConfirmOpen(true)}>
+                      <Trash2 />清除本地数据
+                    </Button>
                   </div>
                 </details>
               </motion.div>
