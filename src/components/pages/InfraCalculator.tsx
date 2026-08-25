@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, Ellipsis, FlaskConical, HeartPulse, Keyboard, Loader2, Play, Search, Settings2, X } from "lucide-react";
+import { Download, Ellipsis, FlaskConical, HeartPulse, ImageDown, Keyboard, Loader2, Play, Search, Settings2, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { ScheduleBoard, ShiftTabs } from "@/components";
@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import type { ShiftDirection } from "@/motion";
 import { onboardingStepStatuses } from "@/onboarding";
 import type { RoomRow } from "@/schedule";
+import { exportScheduleImage } from "@/schedule-image-export";
 import type {
   BaseBlueprint,
   FeedbackData,
@@ -317,6 +318,9 @@ export function InfraCalculator(props: InfraCalculatorProps) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [shiftDirection, setShiftDirection] = useState<ShiftDirection>(0);
   const [fiammettaPortrait, setFiammettaPortrait] = useState<string | null>(null);
+  const [imageExporting, setImageExporting] = useState(false);
+  const [imageExportError, setImageExportError] = useState<string | null>(null);
+  const [imageExported, setImageExported] = useState(false);
   const fiammettaTarget = activePlan?.Fiammetta?.enable
     ? (Array.isArray(activePlan.Fiammetta.target) ? activePlan.Fiammetta.target[0] : activePlan.Fiammetta.target)
     : undefined;
@@ -334,6 +338,25 @@ export function InfraCalculator(props: InfraCalculatorProps) {
   const handleSetActiveShift = (nextShift: number) => {
     setShiftDirection(nextShift === activeShift ? 0 : nextShift > activeShift ? 1 : -1);
     onSetActiveShift(nextShift);
+  };
+  const handleExportImage = async () => {
+    const board = document.querySelector<HTMLElement>("[data-plan-board]");
+    if (!board || !scheduleResult) return;
+    setImageExporting(true);
+    setImageExportError(null);
+    setImageExported(false);
+    try {
+      await exportScheduleImage({
+        board,
+        layoutName: layout.template || "基建排班",
+        shiftLabel: `第 ${activeShift + 1} 班`,
+      });
+      setImageExported(true);
+    } catch (error) {
+      setImageExportError(error instanceof Error ? error.message : "图片生成失败，请重试。");
+    } finally {
+      setImageExporting(false);
+    }
   };
   const renderExportActions = (placement: "desktop" | "mobile") => (
     <div
@@ -356,6 +379,10 @@ export function InfraCalculator(props: InfraCalculatorProps) {
       </Button>
       <Button type="button" size="sm" variant="outline" disabled={!result?.maa} onClick={onDownloadMaa}>
         <Download />导出到 MAA
+      </Button>
+      <Button type="button" size="sm" variant="outline" disabled={!scheduleResult || imageExporting} onClick={() => void handleExportImage()} aria-label="将当前班次导出为 PNG 分享图">
+        {imageExporting ? <Loader2 className="animate-spin" /> : <ImageDown />}
+        {imageExporting ? "正在生成" : "导出 PNG"}
       </Button>
     </div>
   );
@@ -546,6 +573,8 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               反馈已提交，编号：{feedbackResult.feedbackId}
             </div>
           ) : null}
+          {imageExportError ? <p className="mt-3 text-sm text-destructive" role="alert">{imageExportError}</p> : null}
+          {imageExported ? <p className="mt-3 text-sm text-emerald-700" role="status">PNG 分享图已生成并开始下载。</p> : null}
         </section>
       </section>
 
