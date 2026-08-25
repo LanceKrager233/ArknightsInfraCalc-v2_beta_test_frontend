@@ -7,6 +7,7 @@ import { ScheduleBoard, ShiftTabs } from "@/components";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PlanResultSummarySkeleton } from "@/components/PlanResultSummarySkeleton";
+import { DroneYieldCalculator } from "@/components/DroneYieldCalculator";
 
 import type { FactoryRecipe, TradeOrder } from "@/blueprint";
 import { loadClientFeature } from "@/client-lazy-loader";
@@ -541,6 +542,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               </div>
             )}
           </Panel>
+          {scheduleResult && rows.length ? <DroneYieldCalculator rows={rows} /> : null}
           {feedbackResult ? (
             <div className="mt-3 border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700" role="status">
               反馈已提交，编号：{feedbackResult.feedbackId}
