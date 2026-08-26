@@ -320,6 +320,21 @@ export function estimateDailyProduction({
     }
   });
 
+  // 轮换周期归一化：abc_12_12_12 等 36 小时周期（3×12h）折算回 24 小时等效每日产量。
+  // 现有公式按 duration_hours / 24 加权，36h 周期会算成 1.5 天，这里整体乘 24/总时长。
+  const totalDurationHours = rotation.shifts.reduce(
+    (sum, shift) => sum + (Number.isFinite(shift.duration_hours) ? shift.duration_hours : 0),
+    0,
+  );
+  const normalizeScale = totalDurationHours > 0 ? 24 / totalDurationHours : 1;
+  if (normalizeScale !== 1) {
+    for (const amount of [lmdOrders, gold, experience, shards, orundumTrade]) {
+      amount.natural *= normalizeScale;
+      amount.drones *= normalizeScale;
+    }
+    droneTrade *= normalizeScale;
+  }
+
   const lmdOrderAmount = finalizedAmount(lmdOrders);
   const goldAmount = finalizedAmount(gold);
   const experienceAmount = finalizedAmount(experience);
