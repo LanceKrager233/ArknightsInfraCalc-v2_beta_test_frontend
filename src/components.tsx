@@ -971,8 +971,8 @@ export function RoomEfficiencyReadout({
       </div>
       {details && value.details.length ? (
         <div className="font-technical mt-1 flex max-h-9 flex-wrap gap-x-2 gap-y-0.5 overflow-hidden text-xs leading-4 tracking-[0.01em] text-white/60 max-sm:max-h-none">
-          {value.details.map((detail) => (
-            <span key={`${detail.kind}-${detail.label}`} className={detail.kind === "cross-station" ? "font-semibold text-[#C8F75A]" : undefined}>
+          {value.details.map((detail, index) => (
+            <span key={`${detail.kind ?? ""}-${detail.label ?? ""}-${index}`} className={detail.kind === "cross-station" ? "font-semibold text-[#C8F75A]" : undefined}>
               {value.formula ? <>{detail.operator ? `${detail.operator} ` : ""}<span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>{detail.label ? ` ${detail.label}` : ""}</> : <>{detail.label} <span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span></>}
             </span>
           ))}
@@ -1002,9 +1002,9 @@ function RoomEfficiencyDetails({
       )}
       title={value.details.map((detail) => detail.label ? `${detail.label} ${detail.value}` : detail.value).join(" · ")}
     >
-      {value.details.map((detail) => (
+      {value.details.map((detail, index) => (
         <span
-          key={`${detail.kind}-${detail.label}`}
+          key={`${detail.kind ?? ""}-${detail.label ?? ""}-${index}`}
           className={cn(
             "whitespace-nowrap",
             detail.kind === "cross-station" && "font-semibold text-[#C8F75A]"
