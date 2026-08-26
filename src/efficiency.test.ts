@@ -33,7 +33,7 @@ test("trade formula uses base + equivalent + global and marks the equivalent mul
     { label: "", value: "103%", operator: "=" },
     { label: "技能效率", value: "72%", operator: "+" },
     { label: "跨设施", value: "17%", operator: "+", kind: "cross-station" },
-    { label: "等效", value: "1.78", operator: "×" },
+    { label: "", value: "等效 178% 技能效率", operator: "" },
   ]);
 });
 
