@@ -131,7 +131,15 @@ function tradeOrder(room: ShiftRoom): TradeOrder {
 }
 
 function finalEfficiency(efficiency: RoomEfficiency | undefined): number | null {
-  return finite(efficiency?.final_efficiency) ? efficiency.final_efficiency : null;
+  if (!efficiency) return null;
+  // serve 新输出：最终效率 = total_efficiency × order_multiplier（非贸易房倍率为 1）。
+  const total = finite(efficiency.total_efficiency) ? efficiency.total_efficiency : undefined;
+  if (total !== undefined) {
+    const order = finite(efficiency.order_multiplier) ? efficiency.order_multiplier : 1;
+    return total * order;
+  }
+  // 旧输出兜底：final_efficiency 本身已是含倍率最终值。
+  return finite(efficiency.final_efficiency) ? efficiency.final_efficiency : null;
 }
 
 function powerBonus(efficiency: RoomEfficiency | undefined): number | null {

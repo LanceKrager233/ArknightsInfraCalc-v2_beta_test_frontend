@@ -58,7 +58,7 @@ function fixture({
       weighted_manu: 0,
       weighted_power: 0,
     })),
-    daily: { trade: null, manu: null, power: null },
+    daily: { trade: null, manufacture: null, power: null },
   };
   return { layout, maa, rotation };
 }

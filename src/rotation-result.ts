@@ -45,6 +45,12 @@ function normalizedRoomLine(value: unknown): RotationRoomLine {
   if (!isObject(value)) return { room_id: "" };
 
   const usesWorkerFields = [
+    "total_efficiency",
+    "order_multiplier",
+    "base_efficiency",
+    "equivalent_efficiency",
+    "global_efficiency",
+    "trade_equivalent_efficiency",
     "trade_efficiency",
     "trade_skill_efficiency",
     "trade_display_efficiency",
@@ -157,7 +163,7 @@ export function normalizeRotationResult({
         ?? profileDaily.daily_trade_efficiency
         ?? profileDaily.daily_trade
       ),
-      manu: nullableNumber(
+      manufacture: nullableNumber(
         daily.manufacture
         ?? daily.manu
         ?? rotation.daily_manufacture_efficiency
@@ -170,6 +176,17 @@ export function normalizeRotationResult({
         ?? profileDaily.daily_power_efficiency
         ?? profileDaily.daily_power
       ),
+      ...(isObject(daily.production)
+        ? {
+            production: {
+              lmd: finiteNumber(daily.production.lmd) ?? 0,
+              pure_gold: finiteNumber(daily.production.pure_gold) ?? 0,
+              battle_records: finiteNumber(daily.production.battle_records) ?? 0,
+              originium_shards: finiteNumber(daily.production.originium_shards) ?? 0,
+              orundum: finiteNumber(daily.production.orundum) ?? 0,
+            },
+          }
+        : {}),
     },
   };
 }

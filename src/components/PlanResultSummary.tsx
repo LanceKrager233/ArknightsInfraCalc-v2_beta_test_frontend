@@ -69,6 +69,10 @@ function dailyNumber(value: number | null): string {
   return value === null ? "—" : Math.round(value).toLocaleString("zh-CN");
 }
 
+function dailyAmount(value: number): { value: number; natural: number; drones: number; unavailableReason?: undefined } {
+  return { value, natural: value, drones: 0 };
+}
+
 type ProductionDetailProduct = {
   id: string;
   label: string;
@@ -125,24 +129,27 @@ export function PlanResultSummary({
   const baselineRotation = profile?.baseline_rotation;
   const efficiencyMetrics = [
     { kind: "trade" as const, label: "贸易产线", value: rotation?.daily.trade ?? currentRotation?.daily_trade_efficiency ?? currentRotation?.daily_trade, baseline: baselineRotation?.daily_trade_efficiency ?? baselineRotation?.daily_trade },
-    { kind: "manu" as const, label: "制造产线", value: rotation?.daily.manu ?? currentRotation?.daily_manufacture_efficiency ?? currentRotation?.daily_manu, baseline: baselineRotation?.daily_manufacture_efficiency ?? baselineRotation?.daily_manu },
+    { kind: "manu" as const, label: "制造产线", value: rotation?.daily.manufacture ?? currentRotation?.daily_manufacture_efficiency ?? currentRotation?.daily_manu, baseline: baselineRotation?.daily_manufacture_efficiency ?? baselineRotation?.daily_manu },
     { kind: "power" as const, label: "发电产线", value: rotation?.daily.power ?? currentRotation?.daily_power_efficiency ?? currentRotation?.daily_power, baseline: baselineRotation?.daily_power_efficiency ?? baselineRotation?.daily_power },
   ].filter((metric): metric is { kind: RotationMetricKind; label: string; value: number; baseline: number | undefined } => typeof metric.value === "number");
   const production = rotation ? estimateDailyProduction({ layout, maa, rotation }) : null;
+  // 求解器直接提供的每日产物（已按周期折算 24h 平均）；纯金按 500 单位 = 1 枚换算。
+  const solverDaily = rotation?.daily?.production ?? null;
+  const solverGoldUnits = solverDaily ? Math.floor(solverDaily.pure_gold / 500) : null;
   const productGroups = production ? [
     {
       id: "experience",
-      primary: { id: "experience", label: "经验", unit: "经验", icon: PRODUCT_ICON_URLS.experience, amount: production.experience },
+      primary: { id: "experience", label: "经验", unit: "经验", icon: PRODUCT_ICON_URLS.experience, amount: solverDaily ? dailyAmount(solverDaily.battle_records) : production.experience },
     },
     {
       id: "lmd",
-      primary: { id: "lmd-orders", label: "龙门币", unit: "龙门币", icon: PRODUCT_ICON_URLS.lmdOrders, amount: production.lmdOrders },
-      supporting: { id: "gold", label: "赤金", unit: "枚", icon: PRODUCT_ICON_URLS.gold, amount: production.gold },
+      primary: { id: "lmd-orders", label: "龙门币", unit: "龙门币", icon: PRODUCT_ICON_URLS.lmdOrders, amount: solverDaily ? dailyAmount(solverDaily.lmd) : production.lmdOrders },
+      supporting: { id: "gold", label: "赤金", unit: "枚", icon: PRODUCT_ICON_URLS.gold, amount: solverDaily && solverGoldUnits !== null ? dailyAmount(solverGoldUnits) : production.gold },
     },
     {
       id: "orundum",
-      primary: { id: "orundum", label: "合成玉", unit: "合成玉", icon: PRODUCT_ICON_URLS.orundum, amount: production.orundum },
-      supporting: { id: "shards", label: "源石碎片", unit: "枚", icon: PRODUCT_ICON_URLS.shards, amount: production.shards },
+      primary: { id: "orundum", label: "合成玉", unit: "合成玉", icon: PRODUCT_ICON_URLS.orundum, amount: solverDaily ? dailyAmount(solverDaily.orundum) : production.orundum },
+      supporting: { id: "shards", label: "源石碎片", unit: "枚", icon: PRODUCT_ICON_URLS.shards, amount: solverDaily ? dailyAmount(solverDaily.originium_shards) : production.shards },
     },
   ] : [];
   const adjustmentCount = countShiftPlacementAdjustments(comparison);

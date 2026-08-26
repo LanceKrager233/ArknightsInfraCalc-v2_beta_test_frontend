@@ -706,7 +706,7 @@ export function PlanTelemetry({
     {
       kind: "manu" as const,
       label: "24h 制造",
-      value: rotation?.daily.manu ?? currentProfileRotation?.daily_manufacture_efficiency ?? currentProfileRotation?.daily_manu,
+      value: rotation?.daily.manufacture ?? currentProfileRotation?.daily_manufacture_efficiency ?? currentProfileRotation?.daily_manu,
       baseline: baselineProfileRotation?.daily_manufacture_efficiency ?? baselineProfileRotation?.daily_manu,
       suffix: "%",
     },

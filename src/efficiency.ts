@@ -43,10 +43,22 @@ export function normalizeServeRoomEfficiency(line: Record<string, unknown>): Rot
   const powerSkill = finiteNumber(line.power_skill_efficiency);
   const powerDisplay = finiteNumber(line.power_display_efficiency);
   const final = explicitFinal ?? trade ?? manufacture ?? power;
+  const totalEfficiency = finiteNumber(line.total_efficiency);
+  const orderMultiplier = finiteNumber(line.order_multiplier);
+  const baseEfficiency = finiteNumber(line.base_efficiency);
+  const equivalentEfficiency = finiteNumber(line.equivalent_efficiency);
+  const globalEfficiency = finiteNumber(line.global_efficiency);
+  const tradeEquivalent = finiteNumber(line.trade_equivalent_efficiency);
 
   return {
     room_id: typeof line.room_id === "string" ? line.room_id : "",
     ...(final !== undefined ? { final_efficiency: final } : {}),
+    ...(totalEfficiency !== undefined ? { total_efficiency: totalEfficiency } : {}),
+    ...(orderMultiplier !== undefined ? { order_multiplier: orderMultiplier } : {}),
+    ...(baseEfficiency !== undefined ? { base_efficiency: baseEfficiency } : {}),
+    ...(equivalentEfficiency !== undefined ? { equivalent_efficiency: equivalentEfficiency } : {}),
+    ...(globalEfficiency !== undefined ? { global_efficiency: globalEfficiency } : {}),
+    ...(tradeEquivalent !== undefined ? { trade_equivalent_efficiency: tradeEquivalent } : {}),
     ...(trade !== undefined ? { trade_score: trade } : {}),
     ...(tradeSkill !== undefined ? { trade_skill_pct: tradeSkill * 100 } : {}),
     ...(tradeDisplay !== undefined ? { trade_display_pct: tradeDisplay * 100 } : {}),
@@ -75,6 +87,32 @@ export function presentRoomEfficiency(
   if (!efficiency) return null;
 
   if (group === "trading") {
+    // 新 serve 输出优先：总效率 = 基础 + 等效 + 全局；有等效倍率时标注"等效 × 倍率"。
+    const base = efficiency.base_efficiency;
+    const equivalent = efficiency.equivalent_efficiency;
+    const global = efficiency.global_efficiency;
+    const tradeEquivalent = efficiency.trade_equivalent_efficiency;
+    if (base !== undefined && equivalent !== undefined) {
+      const globalValue = global ?? 0;
+      const total = base + equivalent + globalValue;
+      const details: EfficiencyDetail[] = [
+        { label: "", value: percent(base * 100), operator: "=" },
+        formulaTerm("技能效率", equivalent * 100),
+        ...(global !== undefined && Math.abs(global) >= 0.000_5
+          ? [formulaTerm("跨设施", global * 100, "cross-station")]
+          : []),
+        ...(tradeEquivalent !== undefined && Math.abs(tradeEquivalent - 1) >= 0.000_5
+          ? [{ label: "等效", value: formatNumber(tradeEquivalent, 2), operator: "×" }]
+          : []),
+      ];
+      return {
+        primaryLabel: "",
+        primaryValue: percent(total * 100),
+        includesCrossStation: global !== undefined && Math.abs(global) >= 0.000_5,
+        formula: true,
+        details,
+      };
+    }
     const skill = efficiency.trade_skill_pct;
     const display = efficiency.trade_display_pct;
     const additive = display ?? efficiency.trade_pct ?? skill;
@@ -117,6 +155,28 @@ export function presentRoomEfficiency(
   }
 
   if (group === "manufacture") {
+    // 新 serve 输出优先：制造站无等效倍率，总效率 = 基础 + 等效 + 全局。
+    const base = efficiency.base_efficiency;
+    const equivalent = efficiency.equivalent_efficiency;
+    const global = efficiency.global_efficiency;
+    if (base !== undefined && equivalent !== undefined) {
+      const globalValue = global ?? 0;
+      const total = base + equivalent + globalValue;
+      const details: EfficiencyDetail[] = [
+        { label: "", value: percent(base * 100), operator: "=" },
+        formulaTerm("技能效率", equivalent * 100),
+        ...(global !== undefined && Math.abs(global) >= 0.000_5
+          ? [formulaTerm("跨设施", global * 100, "cross-station")]
+          : []),
+      ];
+      return {
+        primaryLabel: "",
+        primaryValue: percent(total * 100),
+        includesCrossStation: global !== undefined && Math.abs(global) >= 0.000_5,
+        formula: true,
+        details,
+      };
+    }
     const skill = efficiency.manu_prod_skill;
     const display = efficiency.manu_display_pct;
     const final = efficiency.final_efficiency !== undefined

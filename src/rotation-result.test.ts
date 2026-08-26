@@ -37,7 +37,7 @@ test("plan.compute rotation keeps the worker profile and daily summary while whi
   });
 
   assert.equal(rotation.profile, "fiammetta_8_8_4_4");
-  assert.deepEqual(rotation.daily, { trade: 5.288, manu: 9.175, power: 3.552 });
+  assert.deepEqual(rotation.daily, { trade: 5.288, manufacture: 9.175, power: 3.552 });
   assert.deepEqual(rotation.shifts[0], {
     index: 3,
     duration_hours: 4,
@@ -85,7 +85,7 @@ test("legacy rotation falls back through result and profile fields", () => {
   });
 
   assert.equal(rotation.profile, "main_backup_12_12");
-  assert.deepEqual(rotation.daily, { trade: 4.2, manu: 8.4, power: 3.1 });
+  assert.deepEqual(rotation.daily, { trade: 4.2, manufacture: 8.4, power: 3.1 });
   assert.equal(rotation.shifts[0].duration_hours, 12);
   assert.equal(rotation.shifts[1].duration_hours, 12);
   assert.deepEqual(rotation.shifts[0].scores.room_lines[0], {
@@ -135,5 +135,5 @@ test("missing summaries use the profile snapshot and requested profile", () => {
   });
 
   assert.equal(rotation.profile, "abyssal_7_5_7_5");
-  assert.deepEqual(rotation.daily, { trade: 3, manu: 6, power: 2 });
+  assert.deepEqual(rotation.daily, { trade: 3, manufacture: 6, power: 2 });
 });

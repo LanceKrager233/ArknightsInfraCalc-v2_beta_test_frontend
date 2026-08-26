@@ -56,7 +56,7 @@ const result = {
     narration_hints: [],
   },
   maa: { title: "排班", plans: [] },
-  rotation: { profile: DEFAULT_ROTATION_PROFILE, shifts: [], daily: { trade: null, manu: null, power: null } },
+  rotation: { profile: DEFAULT_ROTATION_PROFILE, shifts: [], daily: { trade: null, manufacture: null, power: null } },
   trainingAdvice: {
     schema_version: 2 as const,
     context: {},
@@ -110,7 +110,7 @@ function resultWithShifts(count: number, rotationProfile: RotationProfile = DEFA
         weighted_manu: 0,
         weighted_power: 0,
       })),
-      daily: { trade: 1, manu: 2, power: 3 },
+      daily: { trade: 1, manufacture: 2, power: 3 },
     },
   };
 }
