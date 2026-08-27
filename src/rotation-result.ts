@@ -41,6 +41,29 @@ function nullableNumber(value: unknown): number | null {
   return finiteNumber(value) ?? null;
 }
 
+function normalizedDailyProduction(value: unknown): RotationJson["daily"]["production"] | undefined {
+  if (!isObject(value)) return undefined;
+  const lmd = finiteNumber(value.lmd);
+  const pureGold = finiteNumber(value.pure_gold);
+  const battleRecords = finiteNumber(value.battle_records);
+  const originiumShards = finiteNumber(value.originium_shards);
+  const orundum = finiteNumber(value.orundum);
+  if (
+    lmd === undefined || lmd < 0
+    || pureGold === undefined || pureGold < 0
+    || battleRecords === undefined || battleRecords < 0
+    || originiumShards === undefined || originiumShards < 0
+    || orundum === undefined || orundum < 0
+  ) return undefined;
+  return {
+    lmd,
+    pure_gold: pureGold,
+    battle_records: battleRecords,
+    originium_shards: originiumShards,
+    orundum,
+  };
+}
+
 function normalizedRoomLine(value: unknown): RotationRoomLine {
   if (!isObject(value)) return { room_id: "" };
 
@@ -148,6 +171,7 @@ export function normalizeRotationResult({
         : fallbackProfile;
   const rawShifts = shifts ?? (Array.isArray(rotation.shifts) ? rotation.shifts : []);
   const fallbackDurations = rotationOption(rotationProfile).durations;
+  const production = normalizedDailyProduction(daily.production);
 
   return {
     profile: rotationProfile,
@@ -176,17 +200,7 @@ export function normalizeRotationResult({
         ?? profileDaily.daily_power_efficiency
         ?? profileDaily.daily_power
       ),
-      ...(isObject(daily.production)
-        ? {
-            production: {
-              lmd: finiteNumber(daily.production.lmd) ?? 0,
-              pure_gold: finiteNumber(daily.production.pure_gold) ?? 0,
-              battle_records: finiteNumber(daily.production.battle_records) ?? 0,
-              originium_shards: finiteNumber(daily.production.originium_shards) ?? 0,
-              orundum: finiteNumber(daily.production.orundum) ?? 0,
-            },
-          }
-        : {}),
+      ...(production ? { production } : {}),
     },
   };
 }

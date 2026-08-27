@@ -102,7 +102,7 @@ export function presentRoomEfficiency(
           ? [formulaTerm("跨设施", global * 100, "cross-station")]
           : []),
         ...(tradeEquivalent !== undefined && Math.abs(tradeEquivalent - 1) >= 0.000_5
-          ? [{ label: "", value: `等效 ${formatNumber(tradeEquivalent * 100, 0)}% 技能效率`, operator: "" }]
+          ? [{ label: "", value: `等效 ${formatNumber(tradeEquivalent * 100, 0)}% 技能效率` }]
           : []),
       ];
       return {

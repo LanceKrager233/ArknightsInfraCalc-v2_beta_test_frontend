@@ -410,6 +410,9 @@ test("old v4 results migrate a missing rotation profile from the saved setting",
   const legacyResult = JSON.parse(JSON.stringify(resultWithShifts(4))) as Record<string, Record<string, unknown>>;
   delete legacyResult.profile.rotation_profile;
   delete legacyResult.rotation.profile;
+  const legacyDaily = legacyResult.rotation.daily as Record<string, unknown>;
+  legacyDaily.manu = legacyDaily.manufacture;
+  delete legacyDaily.manufacture;
   storage.setItem(SESSION_KEY_V4, JSON.stringify({
     version: 4,
     savedAt: new Date(now).toISOString(),
@@ -427,6 +430,8 @@ test("old v4 results migrate a missing rotation profile from the saved setting",
 
   const migrated = loadPersistedSession(storage, now);
   assert.equal(migrated?.result?.rotation.profile, "fiammetta_8_8_4_4");
+  assert.equal(migrated?.result?.rotation.daily.manufacture, 2);
+  assert.equal("manu" in (migrated?.result?.rotation.daily ?? {}), false);
   assert.equal(migrated?.activeShift, 3);
 });
 
