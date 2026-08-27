@@ -61,7 +61,6 @@ test("manufacture formula still uses new fields when global is absent (zero skip
     { label: "", value: "102%", operator: "=" },
     { label: "技能效率", value: "130%", operator: "+" },
   ]);
-  assert.equal(result?.includesCrossStation, false);
 });
 
 test("manufacture formula puts the final result before proven additive terms", () => {
@@ -72,7 +71,7 @@ test("manufacture formula puts the final result before proven additive terms", (
   });
 
   assert.equal(result?.primaryValue, "236%");
-  assert.equal(result?.primaryLabel, "");
+  assert.equal(result?.primaryLabel, undefined);
   assert.deepEqual(result?.details, [
     { label: "", value: "100%", operator: "=" },
     { label: "纯技能", value: "130%", operator: "+" },

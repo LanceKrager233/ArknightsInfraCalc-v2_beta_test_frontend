@@ -4422,8 +4422,13 @@ test("automatic first-party telemetry sends only the disclosed browser whitelist
   await mockApis(page, { telemetryBatches });
   await page.goto("/");
   await expect.poll(() => page.evaluate(() => window.localStorage.getItem("arknights-infra-telemetry-session"))).not.toBeNull();
+  await page.getByRole("button", { name: "练卡建议", exact: true }).click();
+  await expect(page).toHaveURL(/\/training$/);
+  await expect(page.locator("[data-training-page]")).toBeVisible();
   await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
-  await expect.poll(() => telemetryBatches.flat().length).toBeGreaterThan(0);
+  await expect.poll(() => telemetryBatches.flat().some((event) => (
+    event.name === "page_view" && event.page === "/training"
+  ))).toBe(true);
 
   const events = telemetryBatches.flat();
   const allowedKeys = new Set(["sessionId", "type", "name", "durationMs", "value", "page", "meta"]);
@@ -4434,6 +4439,10 @@ test("automatic first-party telemetry sends only the disclosed browser whitelist
     expect(event).not.toHaveProperty("dataOwnerTag");
   }
   expect(events.some((event) => event.name === "device_info")).toBe(true);
+  expect(events).toEqual(expect.arrayContaining([
+    expect.objectContaining({ name: "page_view", page: "/" }),
+    expect.objectContaining({ name: "page_view", page: "/training" }),
+  ]));
   expect(new Set(events.map((event) => event.sessionId)).size).toBe(1);
 });
 
