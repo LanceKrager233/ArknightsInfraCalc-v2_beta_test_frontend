@@ -1,21 +1,16 @@
-// 轻量埋点 SDK：批量 + sendBeacon，性能事件采样 10%，不阻塞主线程。
+// 轻量埋点 SDK：批量 + sendBeacon，当前记录全部性能事件，不阻塞主线程。
 // 只采集白名单事件；字段校验在服务端 /api/telemetry 完成。
+
+import {
+  TELEMETRY_SESSION_STORAGE_KEY,
+  type TelemetryInput,
+  type TelemetryType,
+} from "@/telemetry-contract";
 
 const TELEMETRY_ENDPOINT = "/api/telemetry";
 const FLUSH_INTERVAL_MS = 5_000;
 const FLUSH_BATCH_SIZE = 20;
 const PERFORMANCE_SAMPLE_RATE = 1;
-
-export type TelemetryType = "performance" | "interaction" | "navigation" | "error" | "environment";
-
-export type TelemetryInput = {
-  type: TelemetryType;
-  name: string;
-  durationMs?: number;
-  value?: number;
-  page?: string;
-  meta?: Record<string, string | number | boolean>;
-};
 
 /** 设备环境快照：会话级一条，不随每条事件重复上报。 */
 function collectDeviceInfo(): Record<string, string | number | boolean> {
@@ -69,23 +64,22 @@ function collectDeviceInfo(): Record<string, string | number | boolean> {
 
 type QueuedEvent = TelemetryInput & {
   sessionId: string;
-  createdAt: number;
 };
 
 const queue: QueuedEvent[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
+let fallbackSessionId: string | null = null;
 
 function getSessionId(): string {
   try {
-    const key = "arknights-infra-telemetry-session";
-    let value = window.localStorage.getItem(key);
+    let value = window.localStorage.getItem(TELEMETRY_SESSION_STORAGE_KEY);
     if (!value) {
       value = crypto.randomUUID();
-      window.localStorage.setItem(key, value);
+      window.localStorage.setItem(TELEMETRY_SESSION_STORAGE_KEY, value);
     }
     return value;
   } catch {
-    return "unknown";
+    return fallbackSessionId ??= crypto.randomUUID();
   }
 }
 
@@ -106,7 +100,6 @@ export function track(input: TelemetryInput): void {
   queue.push({
     ...input,
     sessionId: getSessionId(),
-    createdAt: Date.now(),
   });
   if (queue.length >= FLUSH_BATCH_SIZE) {
     void flushTelemetry();

@@ -255,7 +255,7 @@ export const telemetryEvent = appSchema.table("telemetry_event", {
   /** 浏览器会话标识（前端生成，游客也有）。 */
   sessionId: text("session_id").notNull(),
   /** 登录网站用户；游客为 null。 */
-  userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
+  userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
   /** 森空岛来源账号的 HMAC（服务端从会话取，可空）。 */
   dataOwnerTag: text("data_owner_tag"),
   /** performance | interaction | navigation | error */
@@ -272,6 +272,7 @@ export const telemetryEvent = appSchema.table("telemetry_event", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 }, (table) => [
   index("telemetry_event_created_at_idx").on(table.createdAt),
+  index("telemetry_event_expires_at_idx").on(table.expiresAt),
   index("telemetry_event_type_created_at_idx").on(table.type, table.createdAt),
   index("telemetry_event_name_created_at_idx").on(table.name, table.createdAt),
   index("telemetry_event_user_created_at_idx").on(table.userId, table.createdAt),
