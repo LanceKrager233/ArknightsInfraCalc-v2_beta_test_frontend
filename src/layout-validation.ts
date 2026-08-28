@@ -1,5 +1,6 @@
 import type { RoomKind } from "./types";
 import { isFactoryRecipeAllowed } from "./factory-recipe-level.ts";
+import { isTradeOrderAllowed } from "./trade-order.ts";
 
 const MAX_DRONE_CAP = 0xffff_ffff;
 const ROOM_MAX_LEVEL: Record<RoomKind, number> = {
@@ -54,6 +55,7 @@ export function validateLayoutJson(value: unknown): string[] {
     if (room.kind === "trade_post") {
       const trade = object(room.product) && object(room.product.trade) ? room.product.trade : null;
       if (!trade || !["gold", "originium"].includes(String(trade.order))) errors.push(`${label} 缺少有效贸易订单。`);
+      if (trade?.order === "originium" && !isTradeOrderAllowed(Number(room.level), "originium")) errors.push(`${label} 仅 3 级贸易站可使用开采协力。`);
     }
     if (room.kind === "factory") {
       const factory = object(room.product) && object(room.product.factory) ? room.product.factory : null;

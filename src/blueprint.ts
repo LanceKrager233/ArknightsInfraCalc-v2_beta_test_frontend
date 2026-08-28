@@ -6,6 +6,7 @@ import layout342 from "./layouts/342.json";
 import { BaseBlueprint, BlueprintRoom, PresetDef, RoomKind, TradeProduct } from "./types";
 import { factoryRecipeFromMaaProduct, type FactoryRecipe } from "./factory-recipes";
 import { isFactoryRecipeAllowed, normalizeFactoryRecipeForLevel } from "./factory-recipe-level.ts";
+import { isTradeOrderAllowed, normalizeTradeOrderForLevel } from "./trade-order.ts";
 
 export { factoryRecipeFromMaaProduct };
 export type { FactoryRecipe } from "./factory-recipes";
@@ -62,6 +63,7 @@ export function updateTradeOrder(layout: BaseBlueprint, roomId: string, order: T
     scenario: structuredClone(layout.scenario),
     rooms: layout.rooms.map((room) => {
       if (room.id !== roomId || room.kind !== "trade_post") return structuredClone(room);
+      if (!isTradeOrderAllowed(room.level, order)) return structuredClone(room);
       return {
         ...structuredClone(room),
         product: { trade: { order } },
@@ -86,6 +88,8 @@ export function updateRoomLevel(layout: BaseBlueprint, roomId: string, level: nu
       const nextRoom = { ...structuredClone(room), level: nextLevel };
       if (nextRoom.kind === "factory") {
         nextRoom.product = { factory: { recipe: normalizeFactoryRecipeForLevel(nextLevel, factoryRecipeFor(nextRoom)) } };
+      } else if (nextRoom.kind === "trade_post") {
+        nextRoom.product = { trade: { order: normalizeTradeOrderForLevel(nextLevel, tradeOrderFor(nextRoom)) } };
       }
       return nextRoom;
     }),

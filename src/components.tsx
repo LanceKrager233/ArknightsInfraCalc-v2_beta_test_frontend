@@ -553,12 +553,15 @@ export function LayoutEditor({
                         options={TRADE_ORDER_OPTIONS.map((option) => ({
                           value: option.order,
                           label: option.label,
+                          disabled: option.order === "originium" && room.level < 3,
+                          disabledReason: option.order === "originium" && room.level < 3 ? "开采协力仅限 3 级贸易站" : undefined,
                         }))}
                         columns={2}
                         tone="trade"
                         layout="fill"
                         onChange={(order) => onTradeOrderChange(room.id, order)}
                       />
+                      {room.level < 3 ? <p className="mt-1.5 text-xs text-muted-foreground">开采协力仅限 3 级贸易站。</p> : null}
                     </div>
                   ) : isFactory && activeRecipe ? (
                     <div className="col-span-2 sm:col-span-1">
@@ -713,7 +716,7 @@ export function PlanTelemetry({
     {
       kind: "manu" as const,
       label: "24h 制造",
-      value: rotation?.daily.manu ?? currentProfileRotation?.daily_manufacture_efficiency ?? currentProfileRotation?.daily_manu,
+      value: rotation?.daily.manufacture ?? currentProfileRotation?.daily_manufacture_efficiency ?? currentProfileRotation?.daily_manu,
       baseline: baselineProfileRotation?.daily_manufacture_efficiency ?? baselineProfileRotation?.daily_manu,
       suffix: "%",
     },
@@ -978,8 +981,8 @@ export function RoomEfficiencyReadout({
       </div>
       {details && value.details.length ? (
         <div className="font-technical mt-1 flex max-h-9 flex-wrap gap-x-2 gap-y-0.5 overflow-hidden text-xs leading-4 tracking-[0.01em] text-white/60 max-sm:max-h-none">
-          {value.details.map((detail) => (
-            <span key={`${detail.kind}-${detail.label}`} className={detail.kind === "cross-station" ? "font-semibold text-[#C8F75A]" : undefined}>
+          {value.details.map((detail, index) => (
+            <span key={`${detail.kind ?? ""}-${detail.label ?? ""}-${index}`} className={detail.kind === "cross-station" ? "font-semibold text-[#C8F75A]" : undefined}>
               {value.formula ? <>{detail.operator ? `${detail.operator} ` : ""}<span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>{detail.label ? ` ${detail.label}` : ""}</> : <>{detail.label} <span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span></>}
             </span>
           ))}
@@ -1009,9 +1012,9 @@ function RoomEfficiencyDetails({
       )}
       title={value.details.map((detail) => detail.label ? `${detail.label} ${detail.value}` : detail.value).join(" · ")}
     >
-      {value.details.map((detail) => (
+      {value.details.map((detail, index) => (
         <span
-          key={`${detail.kind}-${detail.label}`}
+          key={`${detail.kind ?? ""}-${detail.label ?? ""}-${index}`}
           className={cn(
             "whitespace-nowrap",
             detail.kind === "cross-station" && "font-semibold text-[#C8F75A]"

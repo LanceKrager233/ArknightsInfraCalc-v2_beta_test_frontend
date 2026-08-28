@@ -65,6 +65,7 @@ test("an anonymous cold start probes the shared session once and does not touch 
   await expect(page.locator('[data-calculator-start-panel][data-onboarding-active="true"]')).toBeVisible();
   await expect(page.getByText("登录网站账号", { exact: true })).toBeVisible();
   await expect(page.getByText("导入自己的 BOX", { exact: true })).toBeVisible();
+  await expect(page.getByText("支持自主上传或第三方同步。", { exact: true })).toBeVisible();
   await expect(page.getByText("生成第一份方案", { exact: true })).toBeVisible();
   await expect(page.getByText("从可执行的排班开始", { exact: true })).toHaveCount(0);
   await expect(page.getByText("把你的 BOX 变成今天就能照着换的三班方案", { exact: true })).toHaveCount(0);
@@ -653,7 +654,12 @@ const planData = {
       weighted_manu: 0,
       weighted_power: 0,
     })),
-    daily: { trade: 0, manu: 0, power: 0 },
+    daily: {
+      trade: 0,
+      manufacture: 0,
+      power: 0,
+      production: { lmd: 34_254, pure_gold: 53_000, battle_records: 22_400, originium_shards: 48, orundum: 360 },
+    },
   },
   durationMs: 42,
   diagnosticId,
@@ -691,7 +697,7 @@ function rotationResultData({
         weighted_manu: 0,
         weighted_power: 0,
       })),
-      daily: { trade: 5.288, manu: 9.175, power: 3.552 },
+      daily: { trade: 5.288, manufacture: 9.175, power: 3.552 },
     },
   };
 }
@@ -763,6 +769,10 @@ const twoShiftPlanData = {
   },
   rotation: {
     ...twoShiftPlanBase.rotation,
+    daily: {
+      ...twoShiftPlanBase.rotation.daily,
+      production: { lmd: 34_254, pure_gold: 53_000, battle_records: 22_400, originium_shards: 48, orundum: 360 },
+    },
     shifts: twoShiftPlanBase.rotation.shifts.map((shift) => ({
       ...shift,
       scores: {
@@ -1172,6 +1182,7 @@ async function mockApis(
     sklandSummaryDelayMs?: number;
     sklandSessionFailure?: boolean;
     plannerReady?: boolean;
+    telemetryBatches?: Array<Array<Record<string, unknown>>>;
   } = {}
 ) {
   await page.route("**/api/health", (route) => route.fulfill({
@@ -1326,6 +1337,17 @@ async function mockApis(
       requestId,
     }),
   }));
+  await page.route("**/api/telemetry", async (route) => {
+    const body = route.request().postDataJSON() as { events?: Array<Record<string, unknown>> };
+    const events = Array.isArray(body.events) ? body.events : [];
+    options.telemetryBatches?.push(events);
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "X-Request-Id": requestId },
+      body: JSON.stringify({ success: true, data: { accepted: events.length }, requestId }),
+    });
+  });
 }
 
 async function openSklandOverview(page: Page) {
@@ -1559,7 +1581,7 @@ for (const viewport of [
       return fulfill(route, {
         current: consentCurrent,
         termsVersion: "2026-08-21-cloud-workspace",
-        privacyVersion: "2026-08-21-cloud-workspace",
+        privacyVersion: "2026-08-27-detailed-telemetry",
         acceptedAt: consentCurrent ? timestamp : null,
         revokedAt: null,
         cloudSyncEnabled: true,
@@ -2109,7 +2131,8 @@ test("anonymous MAA data cannot drive planning or training advice", async ({ pag
   await page.getByRole("button", { name: "练卡建议" }).click();
   await expect(page.locator('[data-primary-page="training"]')).toBeVisible({ timeout: 15_000 });
   await expect(page.locator("[data-training-page]")).toBeVisible({ timeout: 45_000 });
-  await expect(page.getByRole("heading", { name: "登录后查看 MAA 练卡建议" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "登录后查看练卡建议" })).toBeVisible();
+  await expect(page.getByText("当前数据来自自主上传或第三方同步。请前往账号管理登录；匿名状态仍可改用全角色样例生成建议。", { exact: true })).toBeVisible();
   await expect(page.locator("[data-training-advice-list]")).toHaveCount(0);
 });
 
@@ -2379,6 +2402,7 @@ test("two-shift output drives product estimates, room formulas, and profile deta
   await expect(shiftTabs.first()).toHaveAttribute("aria-label", /主力 上班 · 替补 休息/);
 
   const dailyProducts = page.locator("[data-daily-production-summary]");
+  await expect(dailyProducts).toHaveAttribute("data-production-source", "solver");
   await expect(page.getByText("PLAN ONLINE", { exact: true })).toHaveCount(0);
   await expect(dailyProducts.locator("[data-daily-product-group]")).toHaveCount(3);
   await expect(dailyProducts.locator("[data-daily-product-group]").nth(0)).toHaveAttribute("data-daily-product-group", "experience");
@@ -2437,6 +2461,7 @@ test("two-shift output drives product estimates, room formulas, and profile deta
   const detailsSheet = page.locator('[data-slot="drawer-content"]');
   await expect(detailsSheet).toBeVisible();
   await expect(detailsSheet.getByRole("heading", { name: "预计日产物" })).toBeVisible();
+  await expect(detailsSheet.locator("[data-production-details]")).toHaveAttribute("data-production-source", "solver");
   await expect(detailsSheet.getByText("DAILY OUTPUT", { exact: true })).toHaveCount(0);
   await expect(detailsSheet.getByText("完整精度汇总 · 显示取整", { exact: true })).toHaveCount(0);
   await expect(detailsSheet.locator("[data-production-group]").nth(0)).toHaveAttribute("data-production-group", "experience");
@@ -2449,7 +2474,12 @@ test("two-shift output drives product estimates, room formulas, and profile deta
   await expect(detailsSheet.locator('[data-production-group="orundum"] [data-production-detail]').nth(0)).toHaveAttribute("data-production-detail", "orundum");
   await expect(detailsSheet.locator('[data-production-group="orundum"] [data-production-detail]').nth(1)).toHaveAttribute("data-production-detail", "shards");
   await expect(detailsSheet.locator('[data-production-detail="shards"]')).toContainText("制造环节");
-  await expect(detailsSheet.locator('[data-production-detail="orundum"]')).toContainText("限制环节：合成玉订单");
+  await expect(detailsSheet.locator('[data-production-detail="experience"]')).toContainText(/求解器日产量.*22,400 经验/s);
+  await expect(detailsSheet.locator('[data-production-detail="lmd-orders"]')).toContainText(/求解器日产量.*34,254 龙门币/s);
+  await expect(detailsSheet.locator('[data-production-detail="gold"]')).toContainText(/求解器日产量.*106 枚/s);
+  await expect(detailsSheet.locator('[data-production-detail="orundum"]')).toContainText(/求解器日产量.*360 合成玉/s);
+  await expect(detailsSheet.locator('[data-production-detail="shards"]')).toContainText(/求解器日产量.*48 枚/s);
+  await expect(detailsSheet.getByText(/限制环节：/)).toHaveCount(0);
   await expect(detailsSheet.locator("[data-production-method]")).toHaveCount(0);
   await expect(detailsSheet.getByRole("heading", { name: "产线提升空间" })).toBeVisible();
   await expect(detailsSheet.getByText("贸易产线", { exact: true }).locator("..")).toContainText("领先推荐方案 6.4%");
@@ -4368,7 +4398,9 @@ test("publishes the site terms and privacy policy with upstream policy links", a
   await page.setViewportSize({ width: 390, height: 844 });
   await gotoStable(page, "/privacy");
   await expect(page.getByRole("heading", { name: "隐私政策", level: 1 })).toBeVisible();
-  await expect(page.getByText("版本与生效日期：2026-08-21")).toBeVisible();
+  await expect(page.getByText("版本与生效日期：2026-08-27")).toBeVisible();
+  await expect(page.getByText(/第一方体验分析会自动记录/)).toBeVisible();
+  await expect(page.getByText(/30 天到期/)).toBeVisible();
   await expect(page.getByText("可露希尔基建终端项目维护者", { exact: false })).toBeVisible();
   await expect(page.getByRole("link", { name: "森空岛使用许可及服务协议" })).toHaveAttribute(
     "href",
@@ -4385,6 +4417,35 @@ test("publishes the site terms and privacy policy with upstream policy links", a
   await expect(page.getByText(/非官方、非商业工具/)).toBeVisible();
 });
 
+test("automatic first-party telemetry sends only the disclosed browser whitelist", async ({ page }) => {
+  const telemetryBatches: Array<Array<Record<string, unknown>>> = [];
+  await mockApis(page, { telemetryBatches });
+  await page.goto("/");
+  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("arknights-infra-telemetry-session"))).not.toBeNull();
+  await page.getByRole("button", { name: "练卡建议", exact: true }).click();
+  await expect(page).toHaveURL(/\/training$/);
+  await expect(page.locator("[data-training-page]")).toBeVisible();
+  await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+  await expect.poll(() => telemetryBatches.flat().some((event) => (
+    event.name === "page_view" && event.page === "/training"
+  ))).toBe(true);
+
+  const events = telemetryBatches.flat();
+  const allowedKeys = new Set(["sessionId", "type", "name", "durationMs", "value", "page", "meta"]);
+  for (const event of events) {
+    expect(Object.keys(event).every((key) => allowedKeys.has(key))).toBe(true);
+    expect(event).not.toHaveProperty("createdAt");
+    expect(event).not.toHaveProperty("userId");
+    expect(event).not.toHaveProperty("dataOwnerTag");
+  }
+  expect(events.some((event) => event.name === "device_info")).toBe(true);
+  expect(events).toEqual(expect.arrayContaining([
+    expect.objectContaining({ name: "page_view", page: "/" }),
+    expect.objectContaining({ name: "page_view", page: "/training" }),
+  ]));
+  expect(new Set(events.map((event) => event.sessionId)).size).toBe(1);
+});
+
 test("Skland login centers the QR on every viewport and starts after explicit consent", async ({ page }) => {
   await mockApis(page, { sklandConfigured: true });
   let qrStartRequests = 0;
@@ -4395,7 +4456,7 @@ test("Skland login centers the QR on every viewport and starts after explicit co
         termsAccepted: true,
         privacyAccepted: true,
         termsVersion: "2026-08-21-cloud-workspace",
-        privacyVersion: "2026-08-21-cloud-workspace",
+        privacyVersion: "2026-08-27-detailed-telemetry",
       },
     });
     return route.fulfill({
@@ -5374,6 +5435,8 @@ test("settings clears local product data without logging out of Skland", async (
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
+  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("arknights-infra-telemetry-session"))).not.toBeNull();
+  const telemetrySessionBeforeClear = await page.evaluate(() => window.localStorage.getItem("arknights-infra-telemetry-session"));
 
   await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
   await page.locator("[data-calculator-more-tools]").getByText("更多工具", { exact: true }).click();
@@ -5396,8 +5459,10 @@ test("settings clears local product data without logging out of Skland", async (
     v3: window.localStorage.getItem("arknights-infra-calc-beta-session-v3"),
     v4: window.localStorage.getItem("arknights-infra-calc-session-v4"),
     v5: window.localStorage.getItem("arknights-infra-calc-session-v5"),
+    telemetry: window.localStorage.getItem("arknights-infra-telemetry-session"),
     onboarding: window.localStorage.getItem("arknights-infra-calc-beta-onboarding-v1"),
   }));
-  expect(stored).toEqual({ v2: null, v3: null, v4: null, v5: null, onboarding: null });
+  expect({ ...stored, telemetry: undefined }).toEqual({ v2: null, v3: null, v4: null, v5: null, telemetry: undefined, onboarding: null });
+  expect(stored.telemetry).not.toBe(telemetrySessionBeforeClear);
   expect(logoutRequests).toBe(0);
 });
