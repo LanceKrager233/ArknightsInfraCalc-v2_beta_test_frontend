@@ -2,9 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
+import { normalizeProductForLevel } from "./factory-recipes.ts";
 import { validateLayoutJson } from "./layout-validation.ts";
-import { isFactoryRecipeAllowed, normalizeFactoryRecipeForLevel } from "./factory-recipe-level.ts";
-import { isTradeOrderAllowed, normalizeTradeOrderForLevel } from "./trade-order.ts";
 
 function validLayout() {
   return {
@@ -75,11 +74,11 @@ test("rejects originium shard production in level-one and level-two factories", 
 });
 
 test("allows originium shard production only in level-three factories", () => {
-  assert.equal(isFactoryRecipeAllowed(1, "originium"), false);
-  assert.equal(isFactoryRecipeAllowed(2, "originium"), false);
-  assert.equal(isFactoryRecipeAllowed(3, "originium"), true);
-  assert.equal(normalizeFactoryRecipeForLevel(2, "originium"), "gold");
-  assert.equal(normalizeFactoryRecipeForLevel(3, "originium"), "originium");
+  const layout = validLayout();
+  layout.rooms[2].product = { factory: { recipe: "originium" } };
+  assert.deepEqual(validateLayoutJson(layout), []);
+  assert.equal(normalizeProductForLevel(2, "originium"), "gold");
+  assert.equal(normalizeProductForLevel(3, "originium"), "originium");
 });
 
 test("rejects originium orders in level-one and level-two trading posts", () => {
@@ -92,9 +91,9 @@ test("rejects originium orders in level-one and level-two trading posts", () => 
 });
 
 test("allows mining cooperation only in level-three trading posts", () => {
-  assert.equal(isTradeOrderAllowed(1, "originium"), false);
-  assert.equal(isTradeOrderAllowed(2, "originium"), false);
-  assert.equal(isTradeOrderAllowed(3, "originium"), true);
-  assert.equal(normalizeTradeOrderForLevel(2, "originium"), "gold");
-  assert.equal(normalizeTradeOrderForLevel(3, "originium"), "originium");
+  const layout = validLayout();
+  layout.rooms[1].product = { trade: { order: "originium" } };
+  assert.deepEqual(validateLayoutJson(layout), []);
+  assert.equal(normalizeProductForLevel(2, "originium"), "gold");
+  assert.equal(normalizeProductForLevel(3, "originium"), "originium");
 });

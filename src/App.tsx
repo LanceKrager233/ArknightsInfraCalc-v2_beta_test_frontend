@@ -1066,9 +1066,9 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
 
   function productChangeLabel(change: ProductChange) {
     if (change.type === "factory") {
-      return FACTORY_RECIPE_OPTIONS.find((option) => option.recipe === change.recipe)?.label;
+      return FACTORY_RECIPE_OPTIONS.find((option) => option.value === change.recipe)?.label;
     }
-    return TRADE_ORDER_OPTIONS.find((option) => option.order === change.order)?.label;
+    return TRADE_ORDER_OPTIONS.find((option) => option.value === change.order)?.label;
   }
 
   function showResultClearNotice(label: string | undefined) {
