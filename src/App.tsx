@@ -72,7 +72,6 @@ import { closestShift, compareShifts } from "./skland";
 import { emptySklandBindingSummary } from "./skland-binding-state";
 import { createSklandRestoreGuard } from "./skland-restore-guard";
 import { setupConfigurationFingerprint } from "./setup-configuration";
-import { scheduleNextShiftPortraitPreload } from "./schedule-portrait-preload";
 import { formatSolverDiagnostic } from "./solver-diagnostic";
 import {
   BaseBlueprint,
@@ -1451,7 +1450,15 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const activity = usePlanActivity({ loading, result, error: statusError });
   useEffect(() => {
     if (page !== "calculator" || !result?.maa) return;
-    return scheduleNextShiftPortraitPreload(result.maa, activeShift);
+    let cancelled = false;
+    let cancelPreload: (() => void) | undefined;
+    void loadClientFeature("schedulePortraitPreload").then((module) => {
+      if (!cancelled) cancelPreload = module.scheduleNextShiftPortraitPreload(result.maa, activeShift);
+    });
+    return () => {
+      cancelled = true;
+      cancelPreload?.();
+    };
   }, [activeShift, page, result?.maa]);
   const visiblePlanRevision = scheduleResult?.diagnosticId;
   const animatePlanEntrance = Boolean(
