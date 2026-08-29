@@ -1,12 +1,12 @@
 # 网站账号、登录与 PostgreSQL 技术及运维手册
 
-本文说明当前网站账号系统的真实实现、数据库用途、登录生命周期、安全边界、开发方式和服务器运维流程。内容已按 2026-08-21 的当前代码核对；当本文与代码不一致时，以 Drizzle Schema、已提交 migration、认证配置和部署脚本为准。
+本文说明当前网站账号系统的真实实现、数据库用途、登录生命周期、安全边界、开发方式和服务器运维流程。内容已按 2026-08-27 的当前代码核对；当本文与代码不一致时，以 Drizzle Schema、已提交 migration、认证配置和部署脚本为准。
 
 不要把本文示例中的占位值直接投入使用，也不要把生成的密钥、连接串、Resend Key、Cookie、验证码、重置链接或真实邮件写入 Git、Issue、日志或聊天记录。
 
 ## 快速结论
 
-- PostgreSQL 的 `public` schema 保存网站账号、Session、验证、认证限流和不含森空岛身份明文的绑定；`app` schema 保存按开关启用的业务摘要、云端工作区和共享缓存。
+- PostgreSQL 的 `public` schema 保存网站账号、Session、验证、认证限流和不含森空岛身份明文的绑定；`app` schema 保存按开关启用的业务摘要、云端工作区、共享缓存和 30 天第一方埋点明细。
 - 当前政策同意并启用云同步后，布局、设置、公开排班和应用层信封加密的 MAA Box 可以入库。森空岛 UID/昵称、森空岛 Box/凭据和完整状态始终禁止入库。
 - 登录使用 Better Auth 的邮箱密码模式。注册后必须输入 6 位邮箱验证码，验证成功也不会自动登录；密码重置使用一小时有效链接。
 - production 与 development 使用独立 PostgreSQL 容器、卷、账号、连接串、Better Auth 密钥和邮件配置。
@@ -37,6 +37,9 @@ flowchart LR
   B -->|当前政策同意后同步| W[/api/workspace 与 /api/account/saved-plans]
   W -->|白名单数据与 MAA Box 密文| P
 
+  B -->|自动第一方明细埋点| T[/api/telemetry]
+  T -->|浏览器分析 ID / 可选账号 ID / 可选森空岛 HMAC| P
+
   M[发布 helper] -->|DATABASE_MIGRATION_URL| G[已提交 Drizzle migration]
   G --> P
   M -->|DATABASE_URL| H[认证就绪检查]
@@ -55,6 +58,7 @@ flowchart LR
 | `src/app/api/admin/users*`、`src/app/api/admin/plan-runs*`、`src/app/api/admin/feedback*` | 应用自有管理员搜索、封禁、Session 撤销、角色管理与业务记录管理 |
 | `src/server/skland/bindings.ts` | HMAC 化森空岛绑定记录的写入、统计与清理 |
 | `src/server/business-records.ts`、`src/server/workspace.ts`、`src/server/plan-cache.ts` | 最小运行/反馈摘要、账号云端工作区和共享排班缓存 |
+| `src/lib/telemetry.ts`、`src/components/telemetry/TelemetryRuntime.ts`、`src/app/api/telemetry/route.ts`、`src/server/telemetry.ts` | 浏览器埋点队列与性能运行时、公开写接口、严格白名单和 30 天明细映射 |
 | `drizzle/*.sql` | 生产实际执行、可审查且按顺序追加的 SQL migration |
 | `scripts/migrate-db.mts` | 使用 migration 账号执行已提交 migration |
 | `scripts/check-auth-readiness.mts` | 使用 runtime 账号检查认证/业务表及已启用功能的密钥配置 |
@@ -73,8 +77,9 @@ flowchart LR
 | `verification` | Better Auth 一次性验证记录 | `identifier` 有索引；邮箱验证码显式配置为哈希存储、10 分钟过期、最多尝试 5 次且成功后不能复用 |
 | `rateLimit` | Better Auth 的持久化限流键、次数和最后请求时间 | `key` 唯一；这与应用 API 在 `api-contract.ts` 中的限流是两个独立层次 |
 | `skland_binding` | HMAC 化绑定键、网站用户 ID、首次创建和最近扫码授权时间 | 主键不含森空岛 UID 明文；同一森空岛账号不能绑定到两个网站账号；用户删除时级联删除 |
+| `app.telemetry_event` | 稳定浏览器分析会话 ID、事件/页面/性能与设备白名单、可选网站用户和森空岛 HMAC | 服务端接收时间起 30 天到期；网站用户外键级联删除；不保存 IP、完整 User-Agent、请求正文、Box 或凭据 |
 
-`app` schema 的十张业务表、保留策略、回填、加密和分阶段开关见[业务数据存储与分阶段启用手册](./BUSINESS_DATA_STORAGE.md)。runtime 对两个 schema 都只有 DML；migration 账号负责 DDL；完整加密备份同时覆盖两个 schema。
+`app` schema 的业务表、保留策略、回填、加密和分阶段开关见[业务数据存储与分阶段启用手册](./BUSINESS_DATA_STORAGE.md)。runtime 对两个 schema 都只有 DML；migration 账号负责 DDL；完整加密备份同时覆盖两个 schema。
 
 Drizzle 还会维护 `drizzle.__drizzle_migrations` 元数据，用于判断哪些 migration 已执行。不要手工修改这张表，也不要重命名已经发布的 migration。
 
@@ -185,6 +190,7 @@ PostgreSQL 保存网站账号、数据库 Session、验证记录、Better Auth �
 | `GET/POST/DELETE /api/account/data-consent` | 项目统一信封；要求网站 Session；写操作要求同源；云同步开关关闭时返回功能不可用 |
 | `GET/PUT /api/workspace` | 项目统一信封；要求网站 Session 与当前政策同意；写操作要求同源 |
 | `GET /api/account/saved-plans`、`PATCH/DELETE /api/account/saved-plans/[id]` | 账号排班历史；项目统一信封；要求网站 Session 与当前政策同意；写操作要求同源 |
+| `POST /api/telemetry` | 自动第一方明细埋点；项目统一信封；允许匿名，同源请求会关联可用的网站 Session 和森空岛 HMAC；写操作要求同源并限流 |
 
 `POST /api/plan` 只负责即时求解；账号历史使用 `/api/account/saved-plans`，避免以单复数区分完全不同的动作。旧 `/api/plans*` 暂时兼容并返回 `Deprecation: true` 与 successor `Link`。求解成功时服务端从白名单结果确定自动配方，保存带结果 SHA-256 及用户域 Box HMAC 绑定的最小计算上下文（布局、换班方式与菲亚梅塔设置）；workspace 只有在诊断 ID、用户归属、结果摘要、计算上下文和 MAA Box 全部一致时才接受该结果。绑定首次验证后由用户自己的 saved plan 继续自证，因此固定排班不依赖 30 天后会过期的运行摘要；缺少可信上下文的旧记录或 Box 已变化的历史排班不得与当前工作区拼接恢复，任何 HMAC 都不会出现在公共响应中。
 
@@ -324,7 +330,7 @@ RESEND_API_KEY=<development Resend API key>
 AUTH_EMAIL_FROM=可露希尔基建终端 <noreply@yeyouchuan.me>
 ```
 
-同时保留 development 已有的 `APP_DEPLOYMENT_ENV=development`、`BETA_PUBLIC_ORIGIN`、`SKLAND_PUBLIC_ORIGIN`、`SKLAND_SESSION_SECRET` 等配置。当前 development 的浏览器 Origin 是 `https://instance-pi2ohhfj.tail2dca9.ts.net`，`BETTER_AUTH_URL`、`BETA_PUBLIC_ORIGIN` 和 `SKLAND_PUBLIC_ORIGIN` 都必须与它一致，并保持 `SKLAND_ALLOW_INSECURE_HTTP=0`。SSH 隧道只用于数据库运维，不改变网站 Origin。以后更换 dev 域名时，将三个 Origin 一起改为浏览器实际访问的 HTTPS Origin；不要填写内部 Next 或 nginx 端口，也绝不能复用 production 的公网 Origin。
+同时保留 development 已有的 `APP_DEPLOYMENT_ENV=development`、`BETA_PUBLIC_ORIGIN`、`SKLAND_PUBLIC_ORIGIN`、`SKLAND_SESSION_SECRET` 等配置。当前 development 的浏览器 Origin 是 `https://instance-pi2ohhfj.tail2dca9.ts.net`；`BETTER_AUTH_URL`、`BETA_PUBLIC_ORIGIN` 和 `SKLAND_PUBLIC_ORIGIN` 必须与它一致，GitHub development Environment 的 `DEPLOY_PUBLIC_HEALTH_URL` 必须使用同一 Origin 的 `/api/health`，并保持 `SKLAND_ALLOW_INSECURE_HTTP=0`。Funnel 的 443 端口必须只把根路径转发到 `127.0.0.1:4274`；不得保留把 `/_next`、`/api`、`/checks` 或 `/quality` 转发到其他服务的路径级覆盖，否则 HTML、静态资源和 API 会来自不同应用。SSH 隧道只用于数据库运维，不改变网站 Origin。以后更换 dev 域名时，将四项配置一起改为浏览器实际访问的 HTTPS Origin；不要填写内部 Next 或 nginx 端口，也绝不能复用 production 的公网 Origin。
 
 `BETTER_AUTH_SECRET` 可以用 `openssl rand -hex 32` 生成。它与 `SKLAND_SESSION_SECRET` 必须不同；两者都要长期稳定，轮换会使现有会话失效。
 
