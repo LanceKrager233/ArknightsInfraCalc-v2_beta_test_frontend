@@ -72,7 +72,7 @@ import { closestShift, compareShifts } from "./skland";
 import { emptySklandBindingSummary } from "./skland-binding-state";
 import { createSklandRestoreGuard } from "./skland-restore-guard";
 import { setupConfigurationFingerprint } from "./setup-configuration";
-import { clearOperatorPortraitCache, preloadSchedulePortraits } from "./schedule-portrait-preload";
+import { scheduleNextShiftPortraitPreload } from "./schedule-portrait-preload";
 import { formatSolverDiagnostic } from "./solver-diagnostic";
 import {
   BaseBlueprint,
@@ -286,8 +286,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const [cliReady, setCliReady] = useState(false);
   const [apiError, setApiError] = useState<DisplayError | null>(null);
   const [storageNotice, setStorageNotice] = useState<DisplayError | null>(null);
-  const [portraitCacheBusy, setPortraitCacheBusy] = useState(false);
-  const [portraitCacheNotice, setPortraitCacheNotice] = useState<string | null>(null);
   const [activeShift, setActiveShift] = useState(0);
   const [issueDraftKind, setIssueDraftKind] = useState<FeedbackKind>("room_issue");
   const [issueDraftRow, setIssueDraftRow] = useState<RoomRow | null>(null);
@@ -1452,8 +1450,9 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     : apiError ?? storageNotice;
   const activity = usePlanActivity({ loading, result, error: statusError });
   useEffect(() => {
-    if (result?.maa) void preloadSchedulePortraits(result.maa);
-  }, [result?.maa]);
+    if (page !== "calculator" || !result?.maa) return;
+    return scheduleNextShiftPortraitPreload(result.maa, activeShift);
+  }, [activeShift, page, result?.maa]);
   const visiblePlanRevision = scheduleResult?.diagnosticId;
   const animatePlanEntrance = Boolean(
     page === "calculator"
@@ -1624,24 +1623,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/terms">本站服务条款</Link>
         <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/privacy">本站隐私政策</Link>
         <a className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/about" data-about-link>关于我们</a>
-        <button
-          type="button"
-          className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground disabled:cursor-wait disabled:opacity-60"
-          disabled={portraitCacheBusy}
-          onClick={() => {
-            setPortraitCacheBusy(true);
-            setPortraitCacheNotice(null);
-            void clearOperatorPortraitCache()
-              .then((supported) => setPortraitCacheNotice(
-                supported ? "头像缓存已清除，下次排班时会重新下载。" : "当前浏览器不支持独立头像缓存。",
-              ))
-              .catch(() => setPortraitCacheNotice("头像缓存清除失败，请检查站点存储权限。"))
-              .finally(() => setPortraitCacheBusy(false));
-          }}
-        >
-          {portraitCacheBusy ? "正在清除头像缓存…" : "清除头像缓存"}
-        </button>
-        {portraitCacheNotice ? <span className="basis-full" role="status">{portraitCacheNotice}</span> : null}
         <a
           href="https://www.rainyun.com/riic_"
           target="_blank"

@@ -1,14 +1,34 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { clearOperatorPortraitCache, OPERATOR_PORTRAIT_CACHE, preloadWithConcurrency, scheduleOperatorNames } from "./schedule-portrait-preload.ts";
+import {
+  nextShiftPortraitUrls,
+  preloadWithConcurrency,
+  scheduleIdleTask,
+  shouldPreloadPortraits,
+} from "./schedule-portrait-preload.ts";
 
-test("collects unique operators from every shift and Fiammetta targets", () => {
-  const names = scheduleOperatorNames({ title: "test", plans: [
-    { name: "1", rooms: { trading: [{ operators: ["能天使", { name: "德克萨斯" }, null] }] }, Fiammetta: { enable: true, target: "菲亚梅塔" } },
-    { name: "2", rooms: { manufacture: [{ operators: ["能天使", "白面鸮"] }] } },
-  ] });
-  assert.deepEqual(names, ["能天使", "德克萨斯", "菲亚梅塔", "白面鸮"]);
+test("collects only next-shift portrait URLs that are absent from the active shift", () => {
+  const portraitByName: Record<string, string> = {
+    shared: "/shared.webp",
+    "active-alias": "/alias.webp",
+    "next-alias": "/alias.webp",
+    "active-target": "/active-target.webp",
+    "next-only": "/next-only.webp",
+    "next-target": "/next-target.webp",
+    "later-only": "/later-only.webp",
+  };
+  let receivedUnexpectedArguments = false;
+  const urls = nextShiftPortraitUrls({ title: "test", plans: [
+    { name: "1", rooms: { trading: [{ operators: ["shared", { name: "active-alias" }, null] }] }, Fiammetta: { enable: true, target: "active-target" } },
+    { name: "2", rooms: { manufacture: [{ operators: ["shared", "next-alias", "next-only", "next-only"] }] }, Fiammetta: { enable: true, target: ["next-target", "shared"] } },
+    { name: "3", rooms: { power: [{ operators: ["later-only"] }] } },
+  ] }, 0, (name, ...rest: unknown[]) => {
+    receivedUnexpectedArguments ||= rest.length > 0;
+    return portraitByName[name];
+  });
+  assert.deepEqual(urls, ["/next-only.webp", "/next-target.webp"]);
+  assert.equal(receivedUnexpectedArguments, false);
 });
 
 test("preloads with bounded concurrency and ignores individual failures", async () => {
@@ -27,14 +47,40 @@ test("preloads with bounded concurrency and ignores individual failures", async 
   assert.deepEqual(loaded.sort(), [1, 2, 4, 5]);
 });
 
-test("clears only the managed operator portrait cache", async () => {
-  const deleted: string[] = [];
-  const supported = await clearOperatorPortraitCache({
-    delete: async (name) => {
-      deleted.push(name);
-      return true;
+test("stops starting new portrait loads after cancellation", async () => {
+  const controller = new AbortController();
+  const started: number[] = [];
+  await preloadWithConcurrency([1, 2, 3], async (item) => {
+    started.push(item);
+    controller.abort();
+  }, 2, controller.signal);
+  assert.deepEqual(started, [1]);
+});
+
+test("skips speculative portraits for data-saving and slow connections", () => {
+  assert.equal(shouldPreloadPortraits(), true);
+  assert.equal(shouldPreloadPortraits({ effectiveType: "4g" }), true);
+  assert.equal(shouldPreloadPortraits({ saveData: true, effectiveType: "4g" }), false);
+  assert.equal(shouldPreloadPortraits({ effectiveType: "3g" }), false);
+  assert.equal(shouldPreloadPortraits({ effectiveType: "2g" }), false);
+});
+
+test("cancels queued idle work before it can start", () => {
+  let queued: (() => void) | undefined;
+  let cancelledHandle: number | undefined;
+  let runs = 0;
+  const cancel = scheduleIdleTask(() => { runs += 1; }, {
+    requestIdleCallback: (callback) => {
+      queued = callback;
+      return 17;
     },
+    cancelIdleCallback: (handle) => { cancelledHandle = handle; },
+    setTimeout,
+    clearTimeout,
   });
-  assert.equal(supported, true);
-  assert.deepEqual(deleted, [OPERATOR_PORTRAIT_CACHE]);
+
+  cancel();
+  queued?.();
+  assert.equal(cancelledHandle, 17);
+  assert.equal(runs, 0);
 });
