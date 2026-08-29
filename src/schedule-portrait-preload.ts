@@ -60,7 +60,7 @@ export function nextShiftPortraitUrls(
   return [...new Set(
     planOperatorNames(nextPlan)
       .map((name) => portraitFor(name))
-      .filter((url): url is string => Boolean(url) && !currentUrls.has(url)),
+      .filter((url): url is string => typeof url === "string" && !currentUrls.has(url)),
   )];
 }
 
