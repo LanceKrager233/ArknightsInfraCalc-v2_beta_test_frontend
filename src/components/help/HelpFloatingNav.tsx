@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
 
 const helpLinks = [
+  { href: "/help/beginner", zh: ["新手教程", "Box、抄作业与换班视频"], en: ["Beginner Tutorials", "Box, scheduling, and shift videos"] },
   { href: "/help", zh: messageRecord("zh", "components_help_HelpFloatingNav_content").value as [string, string], en: messageRecord("en", "components_help_HelpFloatingNav_content").value as [string, string] },
   { href: "/help/import-operators", zh: messageRecord("zh", "components_help_HelpFloatingNav_content2").value as [string, string], en: messageRecord("en", "components_help_HelpFloatingNav_content2").value as [string, string] },
   { href: "/help/owned-operators", zh: messageRecord("zh", "components_help_HelpFloatingNav_content3").value as [string, string], en: messageRecord("en", "components_help_HelpFloatingNav_content3").value as [string, string] },

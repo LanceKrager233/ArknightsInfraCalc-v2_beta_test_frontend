@@ -447,7 +447,7 @@ export function WebsiteAccountPanel({
             </div>
           ) : null}
           {step === "details" ? (
-            <form onSubmit={submitDetails} className={`grid grid-rows-[1fr_auto] ${mode === "forgot" ? "h-full min-h-0" : "min-h-full"}`}>
+            <form noValidate onSubmit={submitDetails} className={`grid grid-rows-[1fr_auto] ${mode === "forgot" ? "h-full min-h-0" : "min-h-full"}`}>
               <div className="grid content-start gap-4 px-5 py-6 sm:px-8 sm:py-8">
                 {mode === "signup" ? (
                   <div className="grid gap-1.5">

@@ -64,7 +64,8 @@ const STAGES: ManualOperboxStage[] = ["none", "e0-low", "e0", "e1", "e2"];
 
 const STAGE_COLOR: Record<ManualOperboxStage, string> = {
   none: "#71717A",
-  e0: "#22BBFF",`n  "e0-low": "#A3A3A3",
+  e0: "#22BBFF",
+  "e0-low": "#A3A3A3",
   e1: "#B8F03A",
   e2: "#FFD800",
 };
@@ -92,7 +93,8 @@ function initialStages(operbox: OperBoxEntry[] | null): Record<string, ManualOpe
 function stageLabel(stage: ManualOperboxStage, locale: AppLocale): string {
   const en = locale === "en";
   if (stage === "none") return localize_components_setup_ManualOperboxPicker.text(en, "unowned");
-  if (stage === "e0") return localize_components_setup_ManualOperboxPicker.text(en, "e0");`n  if (stage === "e0-low") return locale === "en" ? "E0 below max" : "精0非30";
+  if (stage === "e0") return localize_components_setup_ManualOperboxPicker.text(en, "e0");
+  if (stage === "e0-low") return locale === "en" ? "E0 below max" : "精0非30";
   if (stage === "e1") return localize_components_setup_ManualOperboxPicker.text(en, "e1");
   return localize_components_setup_ManualOperboxPicker.text(en, "e2");
 }
