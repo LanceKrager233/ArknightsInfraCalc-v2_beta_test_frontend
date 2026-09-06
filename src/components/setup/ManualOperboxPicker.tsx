@@ -181,7 +181,11 @@ const ManualOperatorCard = memo(function ManualOperatorCard({
         aria-label={localize_components_setup_ManualOperboxPicker.text(en, "ownershipAndEliteStage", { displayName: displayName })}
         className={cn("grid grid-cols-4", compact ? "col-span-2 gap-1 sm:col-span-1" : "gap-1.5")}
       >
-        {STAGES.filter((option) => option !== "e0-low" || operator.rarity <= 2).map((option) => {
+        {STAGES.filter((option) => {
+          if (operator.rarity <= 2) return option === "none" || option === "e0-low" || option === "e0";
+          if (operator.rarity === 3) return option !== "e0-low" && option !== "e2";
+          return option !== "e0-low";
+        }).map((option) => {
           const requestedElite = option === "e2" ? 2 : option === "e1" ? 1 : 0;
           const disabled = (option === "e0-low" && operator.rarity > 2) || (option !== "none" && option !== "e0-low" && requestedElite > maxElite);
           const selected = stage === option;
