@@ -183,4 +183,3 @@ test("skips only alternate Amiya forms with or without building records, retaini
   await writeFile(localePath, JSON.stringify(locale));
   await assert.rejects(generateAssets(options), /干员集合不一致/);
 });
-
