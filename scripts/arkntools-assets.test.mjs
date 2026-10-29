@@ -150,3 +150,37 @@ test("blocks managed file removals unless explicitly confirmed", async (t) => {
   );
   assert.equal((await checkGeneratedAssets(output)).counts.operators, 2);
 });
+
+test("skips only alternate Amiya forms with or without building records, retaining base Amiya", async (t) => {
+  const root = await makeTemp(t);
+  const source = path.join(root, "source");
+  await createSource(source, ["002_amiya"]);
+  const characterPath = path.join(source, "assets/data/character.json");
+  const localePath = path.join(source, "assets/locales/cn/character.json");
+  const buildingPath = path.join(source, "assets/data/building.json");
+  const characters = JSON.parse(await readFile(characterPath, "utf8"));
+  const locale = JSON.parse(await readFile(localePath, "utf8"));
+  const building = JSON.parse(await readFile(buildingPath, "utf8"));
+  for (const id of ["1001_amiya2", "1037_amiya3"]) {
+    characters[id] = characters["002_amiya"];
+    locale[id] = locale["002_amiya"];
+  }
+  await writeFile(characterPath, JSON.stringify(characters));
+  await writeFile(localePath, JSON.stringify(locale));
+  const options = { sourceRoot: source, sourceSha: SOURCE_SHA, portraitsRoot: path.join(source, "portraits"), portraitsSha: PORTRAITS_SHA, outputRoot: path.join(root, "output") };
+  for (const includeBuildingRecords of [false, true]) {
+    if (includeBuildingRecords) {
+      for (const id of ["1001_amiya2", "1037_amiya3"]) building.char[id] = building.char["002_amiya"];
+      await writeFile(buildingPath, JSON.stringify(building));
+    }
+    await generateAssets(options);
+    const catalog = JSON.parse(await readFile(path.join(options.outputRoot, "src/generated/arkntools/operator-catalog.json"), "utf8"));
+    assert.deepEqual(catalog.map(({ id }) => id), ["char_002_amiya"]);
+  }
+  characters["999_unexpected"] = characters["002_amiya"];
+  locale["999_unexpected"] = "Unexpected missing building record";
+  await writeFile(characterPath, JSON.stringify(characters));
+  await writeFile(localePath, JSON.stringify(locale));
+  await assert.rejects(generateAssets(options), /干员集合不一致/);
+});
+

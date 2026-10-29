@@ -9,6 +9,12 @@ export const ARKNTOOLS_REPOSITORY = "https://github.com/arkntools/arknights-tool
 export const ARKNIGHTS_GAME_RESOURCE_REPOSITORY = "https://github.com/yuanyan3060/ArknightsGameResource";
 export const GENERATED_VERSION = 1;
 
+// Alternate Amiya forms share the base operator's infrastructure identity.
+const EXCLUDED_OPERATOR_IDS = new Set(["1001_amiya2", "1037_amiya3"]);
+const withoutAlternateAmiya = (entries) => Object.fromEntries(
+  Object.entries(entries).filter(([id]) => !EXCLUDED_OPERATOR_IDS.has(id)),
+);
+
 const MANAGED_PATHS = [
   "public/images/operator-portraits",
   "public/images/building-skills",
@@ -146,17 +152,20 @@ async function loadSource(sourceRoot, sourceSha, portraitsRoot, portraitsSha) {
   assert(typeof portraitsSha === "string" && portraitsSha, "必须提供头像来源 commit。");
   const resolvedSource = path.resolve(sourceRoot);
   const resolvedPortraits = path.resolve(portraitsRoot);
-  const [characterData, buildingData, characterLocale, buildingLocale] = await Promise.all([
+  const [rawCharacterData, buildingData, rawCharacterLocale, buildingLocale] = await Promise.all([
     readJson(path.join(resolvedSource, SOURCE_PATHS.characterData), "干员数据"),
     readJson(path.join(resolvedSource, SOURCE_PATHS.buildingData), "基建数据"),
     readJson(path.join(resolvedSource, SOURCE_PATHS.characterLocale), "干员中文本地化"),
     readJson(path.join(resolvedSource, SOURCE_PATHS.buildingLocale), "基建中文本地化"),
   ]);
 
-  assert(isObject(characterData), "干员数据根节点必须是对象。");
-  assert(isObject(characterLocale), "干员本地化根节点必须是对象。");
+  assert(isObject(rawCharacterData), "干员数据根节点必须是对象。");
+  assert(isObject(rawCharacterLocale), "干员本地化根节点必须是对象。");
   assert(isObject(buildingData) && isObject(buildingData.char) && isObject(buildingData.buff?.data), "基建数据结构不完整。");
   assert(isObject(buildingLocale?.buff?.name) && isObject(buildingLocale?.buff?.description), "基建本地化结构不完整。");
+  const characterData = withoutAlternateAmiya(rawCharacterData);
+  const characterLocale = withoutAlternateAmiya(rawCharacterLocale);
+  buildingData.char = withoutAlternateAmiya(buildingData.char);
   sameKeys(characterData, characterLocale, "干员数据", "干员本地化");
   sameKeys(characterData, buildingData.char, "干员数据", "基建技能映射");
 
