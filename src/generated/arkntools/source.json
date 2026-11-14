@@ -2,16 +2,16 @@
   "version": 1,
   "source": {
     "repository": "https://github.com/arkntools/arknights-toolbox-data",
-    "commit": "46f811944319354238a8ef3cc71966038d124355"
+    "commit": "e8236e81d6e5b1f4b0773729db00d63e76db659a"
   },
   "portraitsSource": {
     "repository": "https://github.com/yuanyan3060/ArknightsGameResource",
-    "commit": "44d7474aec681cb71d74f97d19c384e0a966adc2"
+    "commit": "62fe51e6cd7faa5c1698e05f8cf63ed61cf6a7ac"
   },
   "counts": {
-    "operators": 425,
-    "buildingSkills": 747,
-    "portraits": 425,
-    "buildingSkillIcons": 521
+    "operators": 438,
+    "buildingSkills": 778,
+    "portraits": 438,
+    "buildingSkillIcons": 542
   }
 }
