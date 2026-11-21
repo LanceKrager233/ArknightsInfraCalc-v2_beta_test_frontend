@@ -5078,6 +5078,34 @@
     ]
   },
   {
+    "id": "char_393_toledo",
+    "name": "德·托莱多",
+    "rarity": 5,
+    "profession": 5,
+    "position": 10,
+    "portrait": "/images/operator-portraits/393_toledo.png",
+    "buildingSkills": [
+      {
+        "index": 1,
+        "id": "hire_spd_cost_113",
+        "elite": 0,
+        "level": 1
+      },
+      {
+        "index": 2,
+        "id": "hire_spd_cost_122",
+        "elite": 2,
+        "level": 1
+      },
+      {
+        "index": 3,
+        "id": "dorm_hireToRecAll_002",
+        "elite": 2,
+        "level": 1
+      }
+    ]
+  },
+  {
     "id": "char_394_hadiya",
     "name": "哈蒂娅",
     "rarity": 5,
@@ -7554,6 +7582,56 @@
     ]
   },
   {
+    "id": "char_4169_caledo",
+    "name": "镜匠",
+    "rarity": 5,
+    "profession": 3,
+    "position": 9,
+    "portrait": "/images/operator-portraits/4169_caledo.png",
+    "buildingSkills": [
+      {
+        "index": 1,
+        "id": "workshop_formula_probability_1111",
+        "elite": 0,
+        "level": 1
+      },
+      {
+        "index": 2,
+        "id": "workshop_formula_probability_1121",
+        "elite": 2,
+        "level": 1
+      },
+      {
+        "index": 3,
+        "id": "workshop_formula_drop_050",
+        "elite": 2,
+        "level": 1
+      }
+    ]
+  },
+  {
+    "id": "char_4170_hdbell",
+    "name": "行铃",
+    "rarity": 4,
+    "profession": 7,
+    "position": 9,
+    "portrait": "/images/operator-portraits/4170_hdbell.png",
+    "buildingSkills": [
+      {
+        "index": 1,
+        "id": "recycle_spd&cost_001",
+        "elite": 0,
+        "level": 1
+      },
+      {
+        "index": 2,
+        "id": "recycle_spd&cost_011",
+        "elite": 2,
+        "level": 1
+      }
+    ]
+  },
+  {
     "id": "char_4171_wulfen",
     "name": "钼铅",
     "rarity": 5,
@@ -8288,6 +8366,72 @@
     ]
   },
   {
+    "id": "char_4217_makoto",
+    "name": "结城理",
+    "rarity": 6,
+    "profession": 7,
+    "position": 9,
+    "portrait": "/images/operator-portraits/4217_makoto.png",
+    "buildingSkills": [
+      {
+        "index": 1,
+        "id": "control_prod_spd_999",
+        "elite": 0,
+        "level": 1
+      },
+      {
+        "index": 2,
+        "id": "manu_prod_spd&bd_000",
+        "elite": 2,
+        "level": 1
+      }
+    ]
+  },
+  {
+    "id": "char_4218_aigis",
+    "name": "埃癸斯",
+    "rarity": 5,
+    "profession": 2,
+    "position": 10,
+    "portrait": "/images/operator-portraits/4218_aigis.png",
+    "buildingSkills": [
+      {
+        "index": 1,
+        "id": "power_rec_spd_P2_999",
+        "elite": 0,
+        "level": 1
+      },
+      {
+        "index": 2,
+        "id": "meet_spd&bd_999",
+        "elite": 2,
+        "level": 1
+      }
+    ]
+  },
+  {
+    "id": "char_4219_yukari",
+    "name": "岳羽由加莉",
+    "rarity": 5,
+    "profession": 5,
+    "position": 10,
+    "portrait": "/images/operator-portraits/4219_yukari.png",
+    "buildingSkills": [
+      {
+        "index": 1,
+        "id": "hire_spd_cost_999",
+        "elite": 0,
+        "level": 1
+      },
+      {
+        "index": 2,
+        "id": "train_spd_doubleProf3_999",
+        "elite": 2,
+        "level": 1
+      }
+    ]
+  },
+  {
     "id": "char_422_aurora",
     "name": "极光",
     "rarity": 5,
@@ -8306,6 +8450,28 @@
         "id": "train_spd&profession2_130",
         "elite": 2,
         "level": 1
+      }
+    ]
+  },
+  {
+    "id": "char_4220_kormr",
+    "name": "虎狼丸",
+    "rarity": 1,
+    "profession": 1,
+    "position": 9,
+    "portrait": "/images/operator-portraits/4220_kormr.png",
+    "buildingSkills": [
+      {
+        "index": 1,
+        "id": "dorm_rec_all_999",
+        "elite": 0,
+        "level": 1
+      },
+      {
+        "index": 2,
+        "id": "meet_spd&exchange_999",
+        "elite": 0,
+        "level": 30
       }
     ]
   },
@@ -8558,6 +8724,56 @@
     ]
   },
   {
+    "id": "char_4231_clemnt",
+    "name": "克莱门莎",
+    "rarity": 6,
+    "profession": 1,
+    "position": 9,
+    "portrait": "/images/operator-portraits/4231_clemnt.png",
+    "buildingSkills": [
+      {
+        "index": 1,
+        "id": "meet_spd&cost_110",
+        "elite": 0,
+        "level": 1
+      },
+      {
+        "index": 2,
+        "id": "meet_spd&cost_char_000",
+        "elite": 2,
+        "level": 1
+      }
+    ]
+  },
+  {
+    "id": "char_4232_hbound",
+    "name": "旅骨",
+    "rarity": 5,
+    "profession": 7,
+    "position": 10,
+    "portrait": "/images/operator-portraits/4232_hbound.png",
+    "buildingSkills": [
+      {
+        "index": 1,
+        "id": "recycle_spd&cost_000",
+        "elite": 0,
+        "level": 1
+      },
+      {
+        "index": 2,
+        "id": "recycle_spd&cost_010",
+        "elite": 2,
+        "level": 1
+      },
+      {
+        "index": 3,
+        "id": "workshop_formula_device_080",
+        "elite": 2,
+        "level": 1
+      }
+    ]
+  },
+  {
     "id": "char_4234_pedro",
     "name": "佩德洛",
     "rarity": 5,
@@ -8640,6 +8856,106 @@
       {
         "index": 2,
         "id": "meet_spd_023",
+        "elite": 2,
+        "level": 1
+      }
+    ]
+  },
+  {
+    "id": "char_4244_tocka",
+    "name": "冻河",
+    "rarity": 6,
+    "profession": 5,
+    "position": 10,
+    "portrait": "/images/operator-portraits/4244_tocka.png",
+    "buildingSkills": [
+      {
+        "index": 1,
+        "id": "trade_ord_spd&share_100",
+        "elite": 0,
+        "level": 1
+      },
+      {
+        "index": 2,
+        "id": "trade_ord_spd&share_110",
+        "elite": 2,
+        "level": 1
+      },
+      {
+        "index": 3,
+        "id": "dorm_rec_all&unfull_100",
+        "elite": 0,
+        "level": 1
+      }
+    ]
+  },
+  {
+    "id": "char_4245_alga",
+    "name": "奥尔佳",
+    "rarity": 5,
+    "profession": 1,
+    "position": 9,
+    "portrait": "/images/operator-portraits/4245_alga.png",
+    "buildingSkills": [
+      {
+        "index": 1,
+        "id": "meet_spd&sami_200",
+        "elite": 0,
+        "level": 1
+      },
+      {
+        "index": 2,
+        "id": "meet_spd&sami_210",
+        "elite": 2,
+        "level": 1
+      }
+    ]
+  },
+  {
+    "id": "char_4246_dminon",
+    "name": "国度",
+    "rarity": 6,
+    "profession": 7,
+    "position": 9,
+    "portrait": "/images/operator-portraits/4246_dminon.png",
+    "buildingSkills": [
+      {
+        "index": 1,
+        "id": "recycle_spd&cost_100",
+        "elite": 0,
+        "level": 1
+      },
+      {
+        "index": 2,
+        "id": "recycle_spd&cost_110",
+        "elite": 2,
+        "level": 1
+      },
+      {
+        "index": 3,
+        "id": "power_rec_spd_018",
+        "elite": 0,
+        "level": 1
+      }
+    ]
+  },
+  {
+    "id": "char_4247_oxi",
+    "name": "塔露拉",
+    "rarity": 6,
+    "profession": 1,
+    "position": 9,
+    "portrait": "/images/operator-portraits/4247_oxi.png",
+    "buildingSkills": [
+      {
+        "index": 1,
+        "id": "train_spd_doubleProf_302",
+        "elite": 0,
+        "level": 1
+      },
+      {
+        "index": 2,
+        "id": "train_spd_branches_000",
         "elite": 2,
         "level": 1
       }
